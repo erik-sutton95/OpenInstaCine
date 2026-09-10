@@ -18,6 +18,12 @@ official app. Confirm the logger before relying on it. Apple supplies
 [Bluetooth logging profile](https://developer.apple.com/feedback-assistant/profiles-and-logs/).
 Wireshark can read supported [PacketLogger/HCI formats](https://wiki.wireshark.org/Bluetooth).
 
+On this Mac, PacketLogger 26.0.0 is installed and its live window names the
+connected iPhone. Save snapshots into the take's `captures/` directory; its Save
+command opens a save sheet even after a prior save, so verify the resulting file
+and capture times. The downloaded Apple profile specifies removal after four
+days; verify live packet reception rather than assuming it remains installed.
+
 Nordic requires appropriate keys or pairing capture conditions to decode an
 encrypted BLE link; LE Secure Connections is not automatically decrypted just
 because its pairing was captured. See [Nordic's pairing guidance](https://docs.nordicsemi.com/r/bundle/nrfutil/page/nrfutil-ble-sniffer/guides/common_sniffing_actions.html/sniffing-the-pairing-procedure-of-a-connection).
@@ -106,6 +112,12 @@ Check these before interpreting the payload:
 If Wi-Fi credential requests have encrypted UCD2 payloads, stop treating their
 ciphertext as protobuf or a static password. Implement the source-backed crypto
 negotiation for our own session, then validate an authenticated response.
+
+The read-only `tools/ucd2.py` module verifies the source-backed checksum and
+reassembles a single directional UCD2 stream. Use separate instances for each
+connection and direction, resetting on disconnect. It retains incomplete tails,
+counts rejected headers/checksums, and leaves encrypted messages opaque. Run
+`just check` for its offline tests; it does not identify GATT roles automatically.
 
 ## Take 2: network handoff and preview
 

@@ -53,8 +53,23 @@ child running; this is recorded in its metadata. It was stopped, and the new
 helper uses process-group shutdown.
 
 **No local Luna GATT handshake or command has been captured or reproduced yet.**
-The camera firmware, official-app version, existing authorization state, and
-iPhone logger type still need recording.
+The owner confirmed the Luna is already paired to the iPhone and placed the
+sniffer beside the camera. The next take is an ordinary reconnect, preserving
+that existing authorization.
+
+The downloaded profile is Apple's `Bluetooth Logging for iOS`
+(`com.apple.bluetooth.logging`), configured to remove itself after four days.
+PacketLogger 26.0.0 nevertheless demonstrably receives current iPhone HCI and ACL
+traffic in this session; a reinstall has not been required. Its device metadata
+reports iOS 26.6.1 (23G83). Paired phone and profile identifiers stay local.
+The installed official app is Insta360 2.33.0, build 30451, queried from the phone.
+The camera firmware and successful camera-specific handshake still need recording.
+
+`tools/ucd2.py` now provides read-only checksum validation, fragmented-frame
+reassembly, and plain-message header parsing. Seven offline tests cover the
+external captured checksum fixture, arbitrary split points, coalesced frames,
+corruption, size rejection, greeting preservation, and opaque encrypted payloads.
+This is analysis tooling; no camera commands or crypto session are implemented.
 
 ## Connection milestone order
 

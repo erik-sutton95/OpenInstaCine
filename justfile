@@ -19,5 +19,6 @@ ble-mark session action:
 check:
     python3 -m py_compile tools/ble_lab.py
     python3 tools/ble_lab.py --help > /dev/null
+    python3 -m unittest discover -s tools -p 'test_*.py'
     git diff --check
     git diff --cached --check
