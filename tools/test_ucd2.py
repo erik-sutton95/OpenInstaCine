@@ -28,6 +28,10 @@ def synthetic_frame(kind=4, payload=b"", extension=b""):
 
 
 class FramingTests(unittest.TestCase):
+    def test_stream_sized_checksum_regression(self):
+        # Independently computed by the prior 32-bit-round implementation.
+        self.assertEqual(checksum(bytes(range(256)) * 256), 0x582A0F28)
+
     def test_local_luna_greeting_and_live_start(self):
         frames = Reassembler().feed(LUNA_GREETING + LUNA_LIVE_START)
         self.assertEqual([f.frame_type for f in frames], [5, 4])

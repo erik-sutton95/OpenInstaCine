@@ -110,8 +110,9 @@ the sessions, and both encrypted replies in each session authenticate correctly.
 | --- | --- | --- | --- |
 | `20260910T221355Z-own-ble-bootstrap` | 22:13:55–22:14:34 | 7 / 29 | New identity, camera approval, credentials read |
 | `20260910T222232Z-own-ble-bootstrap` | 22:22:32–22:22:54 | 6 / 10 | Saved identity, status 0, credentials read |
+| `20260910T225718262725Z-luna-ble` | 22:57:18–22:57:21 | 6 / 10 | Saved tool after camera wake, status 0, credentials read |
 
-Both have two encrypted requests/replies, **zero checksum failures**, and no
+All three have two encrypted requests/replies, **zero checksum failures**, and no
 incomplete receive tail. The camera returns a 21-byte SSID and 8-byte password;
 values remain private. The raw client logs' SHA-256 hashes are:
 
@@ -119,11 +120,15 @@ values remain private. The raw client logs' SHA-256 hashes are:
 | --- | --- |
 | First take `wire.jsonl` | `00856628a7e2a0fb8901ffdf748553318af2653a03a970dbb3949f8878c7d8b2` |
 | Reconnect `wire.jsonl` | `3cb502edf6f4966769f322b50647e65cc30ab16c2d49fade81f081f6e3a23640` |
+| Saved tool `wire.jsonl` | `9290c3b9e831b294c366a73c94ef23ce1fcfb6a0e9df565e33cfca585ee86a6c` |
 
 The saved lab tool is refactored from the successful experimental script. Its
-final hardware rerun is pending: two subsequent scans found no advertising
-camera, so neither reached service discovery. This does not invalidate the two
-successful experimental sessions above or establish powered-off wakeup behavior.
+final hardware rerun **passed after the owner woke the camera**, completing in
+about 3.52 seconds without another approval. Its source SHA-256 was
+`094735149896aab1fa1ea05141e1c3e5af227fdf8275514c0a1ee018379298f9`.
+The preceding failed scans remain recorded; neither reached service discovery.
+This demonstrates reconnect after the reported wake/power-on action, without
+establishing a controlled full power-cycle or remote-wakeup test.
 Its offline checks cover independent Node/WebCrypto crypto fixtures, malformed
 protobuf, key-exchange errors/invalid curve points, authenticated-response
 requirements, camera errors, and private identity/credential persistence. Run
@@ -135,9 +140,10 @@ write size, other GATT channels, Android/iOS native-client behavior, or other
 Insta360 models.
 
 The official-app [TCP/HEVC capture](luna-reconnect-2026-09-11.md) establishes the
-network endpoint and decoded first picture separately. Joining the AP with our
-client, sustained independent preview, recovery, controls and media remain the
-next experiments. Shared monitor UI integration follows the existing
+network endpoint and decoded first picture separately. Our Mac subsequently
+joined the returned AP and reached its listeners, as recorded in the
+[own-network report](luna-own-network-2026-09-11.md). Independent TCP preview,
+recovery, controls and media remain the next experiments. Shared monitor UI integration follows the existing
 [engine extraction plan](../shared-engine-integration.md).
 
 ## Repeat the lab

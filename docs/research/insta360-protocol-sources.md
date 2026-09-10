@@ -243,7 +243,8 @@ The source-based protocol path is presently better aligned with a reusable monit
 
 The list below was the initial research plan. Our GATT discovery, first approval,
 warm BLE reconnect, and encrypted credential retrieval are now complete. The
-official-app TCP/first-picture take is decoded. Own-client Wi-Fi/preview, native
+official-app TCP/first-picture take is decoded and our Mac joined the camera AP.
+Own-client TCP/preview, native
 platforms, rejection/reboot/recovery and camera controls remain outstanding.
 
 1. **Identity and GATT:** powered-on advertising, manufacturer data, address behavior, service discovery, characteristic properties, CCCD writes, ATT MTU, first notification, and device/app/firmware versions.

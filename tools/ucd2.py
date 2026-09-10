@@ -8,13 +8,27 @@ from dataclasses import dataclass
 import struct
 
 
+def _checksum_table() -> tuple[int, ...]:
+    result = []
+    for byte in range(256):
+        value = byte << 24
+        for _ in range(8):
+            value = ((value << 1) ^ (0x04C11DB7 if value & 0x80000000 else 0)) & 0xFFFFFFFF
+        result.append(value)
+    return tuple(result)
+
+
+_CHECKSUM_TABLE = _checksum_table()
+
+
 def checksum(data: bytes) -> int:
-    """Compute the UCD2 word-fed checksum, not conventional CRC-32."""
+    """UCD2 word-fed checksum: four byte-table rounds per input byte, not CRC-32."""
     value = 0xFFFFFFFF
+    table = _CHECKSUM_TABLE
     for byte in data:
         value ^= byte
-        for _ in range(32):
-            value = ((value << 1) ^ (0x04C11DB7 if value & 0x80000000 else 0)) & 0xFFFFFFFF
+        for _ in range(4):
+            value = ((value << 8) & 0xFFFFFFFF) ^ table[value >> 24]
     return value
 
 

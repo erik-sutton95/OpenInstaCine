@@ -9,11 +9,12 @@ in an Insta360 `CameraBackend` adapter.
 **Current stage: verified BLE bootstrap and protocol tooling.** Our Mac client
 negotiates encryption, obtains camera approval, reads Wi-Fi credentials, and
 reconnects with its own saved identity. The official app's TCP startup and ten
-HEVC preview frames are also captured and decoded. Independent Wi-Fi preview
-and the native apps remain to be implemented.
+HEVC preview frames are also captured and decoded. Our Wi-Fi/TCP preview tool
+awaits hardware verification; the native apps remain to be implemented.
 
 - [Protocol sources and command research](docs/research/insta360-protocol-sources.md)
 - [Verified BLE handshake and repeatable client](docs/research/luna-ble-bootstrap-2026-09-11.md)
+- [Own Wi-Fi handoff and preview lab](docs/research/luna-own-network-2026-09-11.md)
 - [First verified reconnect and decoded HEVC preview](docs/research/luna-reconnect-2026-09-11.md)
 - [Hardware evidence and next milestones](docs/protocol-notes.md)
 - [Capture workflow](docs/capture-guide.md)
@@ -33,6 +34,11 @@ Leave the camera awake and the official app disconnected. The first command
 requests touchscreen approval for our own client identity; subsequent connections
 reuse it. Credentials are saved privately in `.local/luna-wifi.json`, never
 printed. This lab does not yet join the AP or start preview.
+
+After joining the camera AP, `just luna-preview 20` runs the separate TCP preview
+experiment (`just luna-preview 20 netcat` for the system transport on this Mac).
+Its complete live sequence is tested against a simulated camera; hardware preview
+verification is pending. Wi-Fi association and listener reachability are verified.
 
 ## Passive capture tools
 

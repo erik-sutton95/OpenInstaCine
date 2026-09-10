@@ -10,6 +10,9 @@ Ultra v1.0.288. See the [BLE proof](research/luna-ble-bootstrap-2026-09-11.md).
 Separately, 226 official-app TCP UCD2 frames pass checksum validation and ten
 1280×720 HEVC/BT.709 preview frames decode successfully in the
 [network take](research/luna-reconnect-2026-09-11.md).
+The saved BLE tool also passed after the owner woke the camera. The Mac then
+joined the returned AP and reached its HTTP/TCP listeners; independent UCD2
+preview is pending in the [network lab](research/luna-own-network-2026-09-11.md).
 
 ## Evidence levels
 
@@ -28,13 +31,13 @@ moving a claim into code or public documentation.
 
 | Concern | Current evidence | Next proof |
 | --- | --- | --- |
-| BLE to Wi-Fi handoff | BLE credential retrieval reproduced; official-app TCP path observed | Join the returned AP with our client |
+| BLE to Wi-Fi handoff | BLE credential retrieval and Mac association to returned AP reproduced | Complete own TCP authorization and preview |
 | Device identity | Observed model/firmware; serial suffix matches BE80 advertiser | Repeat after restart and with other models |
 | GATT BE80 / BE81 write / BE82 notify | Discovered and used on Mac; CoreBluetooth MTU 515 | Raw ATT/MTU capture; multi-chunk writes; native phone clients |
 | UCD2 framing and protobuf | Reproduced BLE request/reply correlation; TCP capture decoded | Sustained session, malformed/recovery cases on hardware |
 | Crypto negotiation and session keys | Reproduced fresh P-256/AES-GCM keys and authenticated replies in two sessions | Native ports and disconnect/rekey recovery |
 | First authorization and cached reconnect | Reproduced own UUID, initiator 1, approval then status 0 reconnect | Rejection, timeout, camera reboot, initiator 2 |
-| Wi-Fi credentials and AP startup | Reproduced encrypted GetOptions [36,37,43] credential read | Join actual AP; establish whether additional AP-start commands are ever needed |
+| Wi-Fi credentials and AP startup | Encrypted GetOptions [36,37,43] credential read and AP join succeed | Establish AP lifetime, sleep/wake and startup requirements |
 | Camera IP, control port, media endpoints | Observed 192.168.42.1 TCP 6666 and HTTP 80 | Own-client session and endpoint semantics |
 | Live enable, codec, packetization | Observed command 1; decoded 1280×720 HEVC/BT.709, 25 fps, ten frames | Own-client live feed and sustained/recovery tests |
 | Record, exposure, WB, format, battery, storage | Public command leads | Isolated changes with request/reply/status and on-camera confirmation |
@@ -77,15 +80,17 @@ the TCP authorization sequence. The later independent client supplies the BLE
 credential acquisition evidence.
 
 `tools/ucd2.py` now provides read-only checksum validation, fragmented-frame
-reassembly, and plain-message header parsing. Eight offline tests cover the
+reassembly, and plain-message header parsing. Nine offline tests cover the
 external captured checksum fixture, arbitrary split points, coalesced frames,
 corruption, size rejection, greeting preservation, opaque encrypted payloads,
-and reviewed greeting/live-start fixtures from this Luna capture.
+reviewed greeting/live-start fixtures from this Luna capture, and a stream-sized
+checksum regression after accelerating the checksum for network reception.
 `tools/luna_wire.py` adds the bootstrap protobuf subset and scheme-3 crypto;
 `tools/luna_ble.py` supplies the repeatable connection lab. Ten additional tests
 cover independent crypto fixtures, malformed protobuf, key-exchange error enums,
 invalid keys, encrypted-response enforcement and private identity persistence.
-Run `just lab-check` for all 18 checks. These are lab tools, not native app code.
+`tools/luna_tcp.py` adds a bounded live experiment with two simulated-camera tests.
+Run `just lab-check` for all 21 checks. These are lab tools, not native app code.
 
 ## Connection milestone order
 
