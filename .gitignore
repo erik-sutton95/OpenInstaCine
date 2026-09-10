@@ -1,0 +1,25 @@
+# Hardware captures and private research inputs remain local.
+captures/
+.local/
+vendor/
+ref/
+*.pcap
+*.pcapng
+*.pklg
+*.btsnoop
+btsnoop_hci.log
+*.trace
+*.mobileconfig
+*.local.xcconfig
+*.local.properties
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+.build/
+DerivedData/
