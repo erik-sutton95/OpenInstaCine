@@ -4,13 +4,10 @@ Protocol provenance and hardware evidence: docs/research/luna-ble-bootstrap-2026
 This deliberately implements only the bootstrap's protobuf subset.
 """
 
+from __future__ import annotations
+
 import os
 import struct
-
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from ucd2 import Frame, Message, checksum
 
@@ -107,11 +104,16 @@ def encryption_schemes(data: bytes) -> list[int]:
 
 
 def derive_key(shared_secret: bytes) -> bytes:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
     return HKDF(algorithm=hashes.SHA256(), length=16, salt=b"UCD2-ENCRYPT",
                 info=b"AES-SESSION-KEY").derive(shared_secret)
 
 
 def complete_key_exchange(private_key, reply: bytes) -> bytes:
+    from cryptography.hazmat.primitives.asymmetric import ec
+
     # EncryptErrorCode differs from authorization result: NONE is 1, not 0.
     if one(reply, 1, 0) != 1:
         raise ValueError("Camera key exchange did not report ENCRYPT_ERROR_NONE (1)")
@@ -130,6 +132,8 @@ def encode_frame(sequence: int, payload: bytes, key: bytes | None = None) -> byt
     if key is None:
         packet = header + payload
     else:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
         nonce = os.urandom(12)
         encrypted = AESGCM(key).encrypt(nonce, payload, header)
         packet = header + bytes.fromhex("401d03") + nonce + encrypted[-16:] + encrypted[:-16]
@@ -146,6 +150,8 @@ def decode_message(frame: Frame, key: bytes | None = None) -> Message | None:
         raise ValueError("Unknown UCD2 header extension")
     if key is None or len(key) != 16:
         raise ValueError("No negotiated scheme-3 key")
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
     payload = AESGCM(key).decrypt(frame.raw[15:27], frame.payload + frame.raw[27:43],
                                   frame.raw[:12])
     if len(payload) < 9:

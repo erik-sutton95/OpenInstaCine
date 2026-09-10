@@ -3,6 +3,12 @@
 Date: 2026-09-11 Europe/Stockholm. Camera: Luna Ultra **v1.0.288**.
 This follows the [successful saved-tool BLE run](luna-ble-bootstrap-2026-09-11.md).
 
+**Later result, same session:** own TCP authorization, live preview, decoded
+picture, acknowledged stop and repeated live connection now work through system
+Python. A Mac live window ran for over four minutes. See the
+[Mac preview report](../mac-preview.md) for final evidence and launcher usage.
+The initial failures below remain as the diagnostic record.
+
 ## Verified on the Mac
 
 After our saved BLE identity was recognized and fresh credentials were decrypted,
@@ -59,12 +65,12 @@ start may have reached the camera, then closes the connection and helper process
 With the camera awake, official app disconnected and the Mac joined to its AP:
 
 ```sh
-just luna-preview 20 netcat  # macOS system TCP transport for this lab environment
-# Normal Python socket transport on hosts where it can reach the camera:
-just luna-preview 20
+just luna-preview 20        # macOS system Python, verified on hardware
+just luna-view              # BLE + Wi-Fi + live display launcher
 ```
 
-The tool does not associate Wi-Fi automatically. Its default destination is the
+The bounded capture tool does not associate Wi-Fi automatically; `luna-view`
+does. The default destination is the
 observed 192.168.42.1:6666. Raw directional bytes, message/media metadata, the
 candidate HEVC elementary stream and checksummed artifact manifest remain under
 private `captures/`. A `preview-captured` result means video-substream bytes were

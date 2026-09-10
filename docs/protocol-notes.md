@@ -12,7 +12,9 @@ Separately, 226 official-app TCP UCD2 frames pass checksum validation and ten
 [network take](research/luna-reconnect-2026-09-11.md).
 The saved BLE tool also passed after the owner woke the camera. The Mac then
 joined the returned AP and reached its HTTP/TCP listeners; independent UCD2
-preview is pending in the [network lab](research/luna-own-network-2026-09-11.md).
+preview subsequently succeeded in the [Mac viewer](mac-preview.md): 467 decoded
+frames in the bounded take, then a displayed feed for over four minutes with
+acknowledged stop and a repeated full connection.
 
 ## Evidence levels
 
@@ -31,15 +33,15 @@ moving a claim into code or public documentation.
 
 | Concern | Current evidence | Next proof |
 | --- | --- | --- |
-| BLE to Wi-Fi handoff | BLE credential retrieval and Mac association to returned AP reproduced | Complete own TCP authorization and preview |
+| BLE to Wi-Fi handoff | Complete Mac BLE → AP → TCP authorization → live preview reproduced | Native iOS/Android integration and recovery |
 | Device identity | Observed model/firmware; serial suffix matches BE80 advertiser | Repeat after restart and with other models |
 | GATT BE80 / BE81 write / BE82 notify | Discovered and used on Mac; CoreBluetooth MTU 515 | Raw ATT/MTU capture; multi-chunk writes; native phone clients |
 | UCD2 framing and protobuf | Reproduced BLE request/reply correlation; TCP capture decoded | Sustained session, malformed/recovery cases on hardware |
 | Crypto negotiation and session keys | Reproduced fresh P-256/AES-GCM keys and authenticated replies in two sessions | Native ports and disconnect/rekey recovery |
 | First authorization and cached reconnect | Reproduced own UUID, initiator 1, approval then status 0 reconnect | Rejection, timeout, camera reboot, initiator 2 |
 | Wi-Fi credentials and AP startup | Encrypted GetOptions [36,37,43] credential read and AP join succeed | Establish AP lifetime, sleep/wake and startup requirements |
-| Camera IP, control port, media endpoints | Observed 192.168.42.1 TCP 6666 and HTTP 80 | Own-client session and endpoint semantics |
-| Live enable, codec, packetization | Observed command 1; decoded 1280×720 HEVC/BT.709, 25 fps, ten frames | Own-client live feed and sustained/recovery tests |
+| Camera IP, control port, media endpoints | Own TCP 192.168.42.1:6666 authorization; HTTP 80 reachable | HTTP file-transfer semantics |
+| Live enable, codec, packetization | Own commands 1/2; decoded 1280×720 HEVC/BT.709, 25 fps; 271-second live window | Latency, native decoding, interruption recovery and recording coexistence |
 | Record, exposure, WB, format, battery, storage | Public command leads | Isolated changes with request/reply/status and on-camera confirmation |
 | Gimbal/zoom/tracking | Do not infer support from Pocket or camera hardware | Identify protocol then validate each control/capability |
 | Clip list, download, playback, delete/star | Implementation leads vary | Read/list/download first; exact clip identity and file integrity |
@@ -89,7 +91,8 @@ checksum regression after accelerating the checksum for network reception.
 `tools/luna_ble.py` supplies the repeatable connection lab. Ten additional tests
 cover independent crypto fixtures, malformed protobuf, key-exchange error enums,
 invalid keys, encrypted-response enforcement and private identity persistence.
-`tools/luna_tcp.py` adds a bounded live experiment with two simulated-camera tests.
+`tools/luna_tcp.py` adds bounded capture and a live window with two simulated-camera tests.
+`tools/luna_mac.py` supplies the verified complete Mac launcher.
 Run `just lab-check` for all 21 checks. These are lab tools, not native app code.
 
 ## Connection milestone order

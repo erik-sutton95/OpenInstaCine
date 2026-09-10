@@ -36,10 +36,15 @@ luna-connect name:
 
 # Camera AP must already be joined. Override transport with netcat on this Mac.
 luna-preview seconds="20" transport="socket":
-    .venv/bin/python tools/luna_tcp.py --seconds {{quote(seconds)}} --transport {{quote(transport)}}
+    /usr/bin/python3 tools/luna_tcp.py --seconds {{quote(seconds)}} --transport {{quote(transport)}}
+
+# Mac live window; name is needed only on first setup, then saved privately.
+luna-view name="":
+    /usr/bin/python3 tools/luna_mac.py --name {{quote(name)}}
 
 lab-check: check
     .venv/bin/python -m py_compile tools/luna_wire.py tools/luna_ble.py tools/luna_tcp.py
     .venv/bin/python tools/luna_ble.py --help > /dev/null
     .venv/bin/python tools/luna_tcp.py --help > /dev/null
+    /usr/bin/python3 -m py_compile tools/luna_mac.py tools/luna_tcp.py tools/luna_wire.py tools/ucd2.py
     .venv/bin/python -m unittest discover -s tools -p 'test_luna_*.py'

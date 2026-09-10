@@ -4,6 +4,8 @@ Wire layout and checksum provenance: docs/research/insta360-protocol-sources.md.
 This module does not transmit commands, decrypt sessions, or infer camera support.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 import struct
 

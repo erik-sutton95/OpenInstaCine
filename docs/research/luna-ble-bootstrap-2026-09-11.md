@@ -142,8 +142,9 @@ Insta360 models.
 The official-app [TCP/HEVC capture](luna-reconnect-2026-09-11.md) establishes the
 network endpoint and decoded first picture separately. Our Mac subsequently
 joined the returned AP and reached its listeners, as recorded in the
-[own-network report](luna-own-network-2026-09-11.md). Independent TCP preview,
-recovery, controls and media remain the next experiments. Shared monitor UI integration follows the existing
+[own-network report](luna-own-network-2026-09-11.md). Independent TCP preview and a sustained live window subsequently passed in the
+[Mac viewer](../mac-preview.md). Interruption recovery, controls and media remain
+the next experiments. Shared monitor UI integration follows the existing
 [engine extraction plan](../shared-engine-integration.md).
 
 ## Repeat the lab

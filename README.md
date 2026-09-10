@@ -6,11 +6,14 @@ tools, media, playback, LUTs, and delivery, supplied by one shared engine.
 Insta360 discovery, pairing, transport, camera controls, and capabilities belong
 in an Insta360 `CameraBackend` adapter.
 
-**Current stage: verified BLE bootstrap and protocol tooling.** Our Mac client
-negotiates encryption, obtains camera approval, reads Wi-Fi credentials, and
-reconnects with its own saved identity. The official app's TCP startup and ten
-HEVC preview frames are also captured and decoded. Our Wi-Fi/TCP preview tool
-awaits hardware verification; the native apps remain to be implemented.
+**Current stage: working Mac live preview test.** Our client negotiates BLE
+encryption, reuses camera authorization, joins Wi-Fi and displays the Luna's
+1280×720 HEVC feed at 25 fps. The native apps and shared monitor integration remain
+to be implemented.
+
+Double-click **Open Luna Preview.command**, or run `just luna-view` with the
+camera awake and the Insta360 app disconnected. Close the video window to stop.
+[Mac viewer instructions and verification](docs/mac-preview.md).
 
 - [Protocol sources and command research](docs/research/insta360-protocol-sources.md)
 - [Verified BLE handshake and repeatable client](docs/research/luna-ble-bootstrap-2026-09-11.md)
@@ -35,10 +38,10 @@ requests touchscreen approval for our own client identity; subsequent connection
 reuse it. Credentials are saved privately in `.local/luna-wifi.json`, never
 printed. This lab does not yet join the AP or start preview.
 
-After joining the camera AP, `just luna-preview 20` runs the separate TCP preview
-experiment (`just luna-preview 20 netcat` for the system transport on this Mac).
-Its complete live sequence is tested against a simulated camera; hardware preview
-verification is pending. Wi-Fi association and listener reachability are verified.
+After joining the camera AP, `just luna-preview 20` runs the separate bounded TCP
+capture tool using macOS system Python. The complete live sequence is now verified
+on hardware and against a simulated camera. The `luna-view` launcher handles the
+Wi-Fi association and display together.
 
 ## Passive capture tools
 

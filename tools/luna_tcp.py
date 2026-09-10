@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded Luna TCP preview lab. Requires an already joined camera Wi-Fi network.
+"""Luna TCP capture and live viewer. Requires an already joined camera Wi-Fi network.
 
 Uses our saved BLE-authorized identity. Sends device/status reads, live start/stop
 and heartbeats; never record/delete/format commands. Capture files remain private.
@@ -12,6 +12,7 @@ import contextlib
 import hashlib
 import json
 import os
+import shutil
 import struct
 import time
 from collections import Counter
@@ -36,7 +37,7 @@ def heartbeat(sequence):
 
 
 class Session:
-    def __init__(self, reader, writer, folder):
+    def __init__(self, reader, writer, folder, record_media=True):
         self.reader, self.writer = reader, writer
         self.parser = Reassembler()
         self.pending = {}
@@ -45,11 +46,13 @@ class Session:
         self.failure = None
         self.frames, self.media, self.tick_deltas = Counter(), Counter(), Counter()
         self.first_video = self.last_video = self.last_tick = None
-        self.rx = (folder / "camera.bin").open("xb")
+        self.video_sink = None
+        self.record_media = record_media
+        self.rx = (folder / ("camera.bin" if record_media else "camera-control.bin")).open("xb")
         self.tx = (folder / "client.bin").open("xb")
-        self.video = (folder / "preview.hevc").open("xb")
+        self.video = (folder / "preview.hevc").open("xb") if record_media else None
         self.events = (folder / "events.jsonl").open("x")
-        self.media_events = (folder / "media.jsonl").open("x")
+        self.media_events = (folder / "media.jsonl").open("x") if record_media else None
 
     def event(self, direction, message):
         self.events.write(json.dumps({"utc": utc(), "direction": direction,
@@ -59,8 +62,11 @@ class Session:
     async def receive(self):
         try:
             while data := await self.reader.read(65536):
-                self.rx.write(data)
+                if self.record_media:
+                    self.rx.write(data)
                 for frame in self.parser.feed(data):
+                    if not self.record_media and frame.frame_type != 1:
+                        self.rx.write(frame.raw)
                     self.frames[frame.frame_type] += 1
                     if frame.frame_type == 5:
                         self.greeting.set()
@@ -70,8 +76,9 @@ class Session:
                             raise ValueError("Short media payload")
                         subtype, tick = payload[0], int.from_bytes(payload[1:9], "little")
                         self.media[subtype] += 1
-                        self.media_events.write(json.dumps({"utc": utc(), "subtype": subtype,
-                                                "tick": tick, "bytes": len(payload) - 9}) + "\n")
+                        if self.media_events:
+                            self.media_events.write(json.dumps({"utc": utc(), "subtype": subtype,
+                                                    "tick": tick, "bytes": len(payload) - 9}) + "\n")
                         if subtype == 0x20:
                             now = time.monotonic()
                             self.first_video = self.first_video or now
@@ -79,7 +86,15 @@ class Session:
                             if self.last_tick is not None:
                                 self.tick_deltas[tick - self.last_tick] += 1
                             self.last_tick = tick
-                            self.video.write(payload[9:])
+                            if self.video:
+                                self.video.write(payload[9:])
+                            if self.video_sink:
+                                try:
+                                    self.video_sink.write(payload[9:])
+                                    await asyncio.wait_for(self.video_sink.drain(), 3)
+                                except (BrokenPipeError, ConnectionResetError):
+                                    # Closing the viewer must leave control reception alive for STOP.
+                                    self.video_sink = None
                     elif frame.frame_type == 4:
                         message = frame.plain_message()
                         if message is None:
@@ -141,13 +156,14 @@ class Session:
 
     def close_files(self):
         for output in (self.rx, self.tx, self.video, self.events, self.media_events):
-            output.close()
+            if output:
+                output.close()
 
 
-async def capture(folder, identity, host="192.168.42.1", port=6666, seconds=20, transport="socket"):
+async def capture(folder, identity, host="192.168.42.1", port=6666, seconds=20, transport="socket", view=False):
     summary = {"started_utc": utc(), "state": "tcp-connect", "transport": transport,
-               "requested_seconds": seconds}
-    session = process = None
+               "requested_seconds": seconds, "viewer": view}
+    session = process = player = player_log = None
     tasks = []
     start_attempted = False
     try:
@@ -159,7 +175,7 @@ async def capture(folder, identity, host="192.168.42.1", port=6666, seconds=20, 
         else:
             reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), 6)
             summary["local_address"] = writer.get_extra_info("sockname")[0]
-        session = Session(reader, writer, folder)
+        session = Session(reader, writer, folder, record_media=not view)
         tasks.append(asyncio.create_task(session.receive()))
         summary["state"] = "greeting"
         await session.send(PREFIX)
@@ -182,23 +198,44 @@ async def capture(folder, identity, host="192.168.42.1", port=6666, seconds=20, 
             raise RuntimeError("Saved identity is not authorized over TCP")
         summary["state"] = "capture-status"
         (folder / "capture-status.pb").write_bytes(await session.request(15))
+        if view:
+            executable = shutil.which("ffplay")
+            if not executable:
+                raise RuntimeError("ffplay is required for the Mac viewer")
+            player_log = (folder / "player.log").open("xb")
+            player = await asyncio.create_subprocess_exec(
+                executable, "-hide_banner", "-loglevel", "info", "-nostats",
+                "-window_title", "OpenInstaCine — Luna Ultra · LIVE", "-x", "1280", "-y", "720",
+                "-flags", "low_delay", "-probesize", "32768",
+                "-analyzeduration", "0", "-framedrop", "-sync", "ext", "-an",
+                "-f", "hevc", "-i", "pipe:0", stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL, stderr=player_log)
+            session.video_sink = player.stdin
+            summary["player_pid"] = player.pid
         summary["state"] = "live-start"
         start_attempted = True
         await session.request(1, LIVE_BODY)
         summary["state"] = "receiving-preview"
-        for elapsed in range(seconds):
+        elapsed = 0
+        while seconds == 0 or elapsed < seconds:
             await asyncio.sleep(1)
+            elapsed += 1
+            if player and player.returncode is not None:
+                summary["player_exit"] = player.returncode
+                if player.returncode != 0:
+                    raise RuntimeError("Video player failed")
+                break
             if session.failure:
                 raise session.failure
-            if (elapsed + 1) % 5 == 0:
-                print(f"Preview {elapsed + 1}s; video packets {session.media[0x20]}", flush=True)
+            if elapsed % (30 if view else 5) == 0:
+                print(f"Preview {elapsed}s; video packets {session.media[0x20]}", flush=True)
         summary["state"] = "live-stop"
         await session.request(2)
         start_attempted = False
         summary["stop_acknowledged"] = True
         if not session.media[0x20]:
             raise RuntimeError("No video media received")
-        summary["state"] = "preview-captured"
+        summary["state"] = "viewer-closed" if view else "preview-captured"
     except Exception as error:
         summary.update(failed_stage=summary["state"], state="error", error_type=type(error).__name__)
         if isinstance(error, OSError):
@@ -227,6 +264,22 @@ async def capture(folder, identity, host="192.168.42.1", port=6666, seconds=20, 
                                                    if session.first_video else None),
                            video_tick_deltas=dict(session.tick_deltas))
             session.close_files()
+        if player:
+            if player.stdin:
+                player.stdin.close()
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(player.stdin.wait_closed(), 3)
+            if player.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    player.terminate()
+                try:
+                    await asyncio.wait_for(player.wait(), 3)
+                except asyncio.TimeoutError:
+                    player.kill()
+                    await player.wait()
+            summary["player_exit"] = player.returncode
+        if player_log:
+            player_log.close()
         if process:
             if process.returncode is None:
                 with contextlib.suppress(ProcessLookupError):
@@ -249,11 +302,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="192.168.42.1")
     parser.add_argument("--seconds", type=int, default=20)
+    parser.add_argument("--view", action="store_true", help="Show the live feed; --seconds 0 stays open until the window closes")
     parser.add_argument("--transport", choices=("socket", "netcat"), default="socket",
                         help="netcat uses macOS /usr/bin/nc for TCP I/O")
     args = parser.parse_args()
-    if not 1 <= args.seconds <= 60:
-        parser.error("--seconds must be between 1 and 60")
+    if not (1 <= args.seconds <= 60 or (args.view and args.seconds == 0)):
+        parser.error("--seconds must be 1–60, or 0 with --view")
     identity_file = ROOT / ".local/luna-client-identity.json"
     if not identity_file.exists():
         parser.error("Run the BLE authorization lab first")
@@ -264,11 +318,11 @@ def main():
     print("Session:", folder.relative_to(ROOT), flush=True)
     try:
         summary = asyncio.run(capture(folder, identity, host=args.host,
-                                      seconds=args.seconds, transport=args.transport))
+                                      seconds=args.seconds, transport=args.transport, view=args.view))
     except KeyboardInterrupt:
         return 130
     print("Result:", summary["state"], flush=True)
-    return 0 if summary["state"] == "preview-captured" else 1
+    return 0 if summary["state"] in ("preview-captured", "viewer-closed") else 1
 
 
 if __name__ == "__main__":
