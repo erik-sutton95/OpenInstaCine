@@ -12,6 +12,13 @@ GET_OPTIONS = bytes.fromhex(
     "08 00 02 01 00 00 80 00 00 08 30 08 0f 08 0b 7c 00 8e 7c"
 )
 
+# Local Luna v1.0.288 capture, IP frames 144156 and 144402. Reviewed fixtures:
+# only protocol headers, generic live settings and checksums; no device/client IDs.
+LUNA_GREETING = bytes.fromhex("55434432010c050100000000112834b2")
+LUNA_LIVE_START = bytes.fromhex(
+    "55434432010c0452150000000100024d000080000010012080f702382b500e6001e497c1ce"
+)
+
 
 def synthetic_frame(kind=4, payload=b"", extension=b""):
     """Test-only builder; synthetic fixtures are not hardware observations."""
@@ -21,6 +28,13 @@ def synthetic_frame(kind=4, payload=b"", extension=b""):
 
 
 class FramingTests(unittest.TestCase):
+    def test_local_luna_greeting_and_live_start(self):
+        frames = Reassembler().feed(LUNA_GREETING + LUNA_LIVE_START)
+        self.assertEqual([f.frame_type for f in frames], [5, 4])
+        message = frames[1].plain_message()
+        self.assertEqual((message.code, message.identifier), (1, 77))
+        self.assertEqual(message.body, bytes.fromhex("10012080f702382b500e6001"))
+
     def test_external_checksum_and_message(self):
         self.assertEqual(checksum(GET_OPTIONS[:-4]), 0x7C8E007C)
         frame = Reassembler().feed(GET_OPTIONS)[0]

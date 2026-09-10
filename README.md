@@ -6,11 +6,13 @@ tools, media, playback, LUTs, and delivery, supplied by one shared engine.
 Insta360 discovery, pairing, transport, camera controls, and capabilities belong
 in an Insta360 `CameraBackend` adapter.
 
-**Current stage: protocol discovery and capture tooling.** No app or working
-Luna connection is implemented here yet. Public Luna-specific source provides
-concrete BLE/UCD2 leads; these still need verification on our hardware.
+**Current stage: protocol discovery and capture tooling.** The official app's
+TCP startup and ten HEVC preview frames are captured and decoded. Public
+Luna-specific source provides the BLE bootstrap leads. BLE authorization and
+an independent OpenInstaCine connection are next; app implementation is pending.
 
 - [Protocol sources and command research](docs/research/insta360-protocol-sources.md)
+- [First verified reconnect and decoded HEVC preview](docs/research/luna-reconnect-2026-09-11.md)
 - [Hardware evidence and next milestones](docs/protocol-notes.md)
 - [Capture workflow](docs/capture-guide.md)
 - [Shared monitor architecture](docs/SHARED-MONITOR-ENGINE.md)
