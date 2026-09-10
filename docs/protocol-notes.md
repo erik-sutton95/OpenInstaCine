@@ -4,11 +4,12 @@ Updated: 2026-09-11. Scope: establish the connection protocol needed for an
 Insta360 adapter, with the same evidence-driven progression used by
 OpenPocketCine. This is an investigation ledger, not a completed protocol spec.
 
-**2026-09-11 result:** the first paired reconnect is decoded. The camera reports
-Luna Ultra v1.0.288; 226 TCP UCD2 frames pass checksum validation, and ten
-1280×720 HEVC/BT.709 preview frames decode successfully. See the
-[verified take](research/luna-reconnect-2026-09-11.md). BLE authorization remains
-unverified; no camera UCD2 exchange appeared in this reconnect's Bluetooth logs.
+**2026-09-11 result:** our client independently completes BLE authorization,
+encrypted Wi-Fi credential retrieval and a saved-identity reconnect on Luna
+Ultra v1.0.288. See the [BLE proof](research/luna-ble-bootstrap-2026-09-11.md).
+Separately, 226 official-app TCP UCD2 frames pass checksum validation and ten
+1280×720 HEVC/BT.709 preview frames decode successfully in the
+[network take](research/luna-reconnect-2026-09-11.md).
 
 ## Evidence levels
 
@@ -27,13 +28,13 @@ moving a claim into code or public documentation.
 
 | Concern | Current evidence | Next proof |
 | --- | --- | --- |
-| BLE to Wi-Fi handoff | Documented for Luna | Timestamped official-app connection and matching BLE/IP logs |
-| Device identity | Observed model/firmware response; serial suffix matches BE80 advertiser | Verify GATT table with our own client |
-| GATT BE80 / BE81 write / BE82 notify | Source-backed Luna implementation | Actual service discovery, properties, CCCD, MTU and write mode |
-| UCD2 framing and protobuf | Source-backed | Complete reassembled transactions with length, IDs, type, status |
-| Crypto negotiation and session keys | Source-backed P-256/AES-GCM implementation | Our client negotiates fresh keys and authenticates a response |
-| First authorization and cached reconnect | Source-backed, iOS identity value unknown | Separate initial-approval and reconnect transcripts |
-| Wi-Fi credentials and AP startup | Source-backed options; may be app-encrypted | Decode our session's response; join returned AP |
+| BLE to Wi-Fi handoff | BLE credential retrieval reproduced; official-app TCP path observed | Join the returned AP with our client |
+| Device identity | Observed model/firmware; serial suffix matches BE80 advertiser | Repeat after restart and with other models |
+| GATT BE80 / BE81 write / BE82 notify | Discovered and used on Mac; CoreBluetooth MTU 515 | Raw ATT/MTU capture; multi-chunk writes; native phone clients |
+| UCD2 framing and protobuf | Reproduced BLE request/reply correlation; TCP capture decoded | Sustained session, malformed/recovery cases on hardware |
+| Crypto negotiation and session keys | Reproduced fresh P-256/AES-GCM keys and authenticated replies in two sessions | Native ports and disconnect/rekey recovery |
+| First authorization and cached reconnect | Reproduced own UUID, initiator 1, approval then status 0 reconnect | Rejection, timeout, camera reboot, initiator 2 |
+| Wi-Fi credentials and AP startup | Reproduced encrypted GetOptions [36,37,43] credential read | Join actual AP; establish whether additional AP-start commands are ever needed |
 | Camera IP, control port, media endpoints | Observed 192.168.42.1 TCP 6666 and HTTP 80 | Own-client session and endpoint semantics |
 | Live enable, codec, packetization | Observed command 1; decoded 1280×720 HEVC/BT.709, 25 fps, ten frames | Own-client live feed and sustained/recovery tests |
 | Record, exposure, WB, format, battery, storage | Public command leads | Isolated changes with request/reply/status and on-camera confirmation |
@@ -58,10 +59,12 @@ ad-hoc capture lasted longer than requested because its launcher left a plugin
 child running; this is recorded in its metadata. It was stopped, and the new
 helper uses process-group shutdown.
 
-**No local Luna BLE authorization handshake has been captured or reproduced yet.**
-The owner confirmed the Luna is already paired to the iPhone and placed the
-sniffer beside the camera. The ordinary reconnect take preserved that existing
-authorization and established the network behavior described above.
+The ordinary iPhone reconnect preserved its existing authorization and yielded
+network traffic but no camera BLE transaction. After disconnecting that app,
+our Mac discovered the GATT table and completed its own authorization. The owner
+accepted the prompt, and a second session recognized our saved identity without
+another request. Direct client logs contain both exchanges; the RF sniffer still
+did not follow target ATT, so do not describe these as decoded over-the-air takes.
 
 The downloaded profile is Apple's `Bluetooth Logging for iOS`
 (`com.apple.bluetooth.logging`), configured to remove itself after four days.
@@ -70,25 +73,31 @@ traffic in this session; a reinstall has not been required. Its device metadata
 reports iOS 26.6.1 (23G83). Paired phone and profile identifiers stay local.
 The installed official app is Insta360 2.33.0, build 30451, queried from the phone.
 The subsequent network capture reports camera firmware v1.0.288 and establishes
-the TCP authorization sequence; BLE credential acquisition still needs recording.
+the TCP authorization sequence. The later independent client supplies the BLE
+credential acquisition evidence.
 
 `tools/ucd2.py` now provides read-only checksum validation, fragmented-frame
 reassembly, and plain-message header parsing. Eight offline tests cover the
 external captured checksum fixture, arbitrary split points, coalesced frames,
 corruption, size rejection, greeting preservation, opaque encrypted payloads,
 and reviewed greeting/live-start fixtures from this Luna capture.
-This is analysis tooling; no camera commands or crypto session are implemented.
+`tools/luna_wire.py` adds the bootstrap protobuf subset and scheme-3 crypto;
+`tools/luna_ble.py` supplies the repeatable connection lab. Ten additional tests
+cover independent crypto fixtures, malformed protobuf, key-exchange error enums,
+invalid keys, encrypted-response enforcement and private identity persistence.
+Run `just lab-check` for all 18 checks. These are lab tools, not native app code.
 
 ## Connection milestone order
 
 1. **Fingerprint:** camera identity, advertising, complete GATT table, MTU,
    notification/indication setup, write type and pacing.
-2. **Official-app transcript:** first authorization if still available, then two
-   ordinary reconnects. Compare direction, timing, request IDs, and state.
+2. **Official-app transcript:** TCP reconnect captured; camera BLE transaction
+   missing from that take. Compare future official BLE takes to our own transcript.
 3. **Portable codec:** bounded UCD2 parsing/reassembly, protobuf subset, correlated
    replies, crypto framing, malformed/truncated-frame and independent-vector tests.
-4. **Own session:** discovery → connect → subscribe → negotiate crypto → camera
-   approval → read current Wi-Fi credentials. Generate fresh keys and identity;
+4. **Own session (first approval and warm reconnect reproduced):** discovery →
+   connect → subscribe → negotiate crypto → camera approval → read current
+   Wi-Fi credentials. Generate fresh keys and identity;
    never hardcode another client's captured session. Verify cold and warm paths.
 5. **Network and picture:** join actual AP → connect observed transport → obtain
    first decoded frame → sustained feed → deliberate disconnect/reconnect.

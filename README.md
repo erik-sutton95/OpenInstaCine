@@ -6,23 +6,40 @@ tools, media, playback, LUTs, and delivery, supplied by one shared engine.
 Insta360 discovery, pairing, transport, camera controls, and capabilities belong
 in an Insta360 `CameraBackend` adapter.
 
-**Current stage: protocol discovery and capture tooling.** The official app's
-TCP startup and ten HEVC preview frames are captured and decoded. Public
-Luna-specific source provides the BLE bootstrap leads. BLE authorization and
-an independent OpenInstaCine connection are next; app implementation is pending.
+**Current stage: verified BLE bootstrap and protocol tooling.** Our Mac client
+negotiates encryption, obtains camera approval, reads Wi-Fi credentials, and
+reconnects with its own saved identity. The official app's TCP startup and ten
+HEVC preview frames are also captured and decoded. Independent Wi-Fi preview
+and the native apps remain to be implemented.
 
 - [Protocol sources and command research](docs/research/insta360-protocol-sources.md)
+- [Verified BLE handshake and repeatable client](docs/research/luna-ble-bootstrap-2026-09-11.md)
 - [First verified reconnect and decoded HEVC preview](docs/research/luna-reconnect-2026-09-11.md)
 - [Hardware evidence and next milestones](docs/protocol-notes.md)
 - [Capture workflow](docs/capture-guide.md)
 - [Shared monitor architecture](docs/SHARED-MONITOR-ENGINE.md)
 - [Extraction inventory and integration plan](docs/shared-engine-integration.md)
 
-## Capture tools
+## BLE connection lab
+
+```sh
+just lab-setup
+just luna-authorize 'EXACT_ADVERTISED_NAME'
+just luna-connect 'EXACT_ADVERTISED_NAME'
+just lab-check
+```
+
+Leave the camera awake and the official app disconnected. The first command
+requests touchscreen approval for our own client identity; subsequent connections
+reuse it. Credentials are saved privately in `.local/luna-wifi.json`, never
+printed. This lab does not yet join the AP or start preview.
+
+## Passive capture tools
 
 Requires Python 3.11+, `just`, Wireshark/tshark, and Nordic `nrfutil ble-sniffer`.
 The connected nRF52840 is already flashed as a BLE sniffer. Commands use the
-installed tools; they do not flash the dongle or write camera commands.
+installed tools; these passive capture commands do not flash the dongle or write
+camera commands. The separate connection lab above does send bootstrap commands.
 
 ```sh
 just ble-scan advertisements 20

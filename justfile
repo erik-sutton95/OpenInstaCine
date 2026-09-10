@@ -19,6 +19,22 @@ ble-mark session action:
 check:
     python3 -m py_compile tools/ble_lab.py
     python3 tools/ble_lab.py --help > /dev/null
-    python3 -m unittest discover -s tools -p 'test_*.py'
+    python3 -m unittest discover -s tools -p 'test_ucd2.py'
     git diff --check
     git diff --cached --check
+
+lab-setup:
+    python3 -m venv .venv
+    .venv/bin/python -m pip install -r requirements-lab.txt
+
+# Exact advertised name. Only the first authorization requests a camera prompt.
+luna-authorize name:
+    .venv/bin/python tools/luna_ble.py --name {{quote(name)}} --authorize
+
+luna-connect name:
+    .venv/bin/python tools/luna_ble.py --name {{quote(name)}}
+
+lab-check: check
+    .venv/bin/python -m py_compile tools/luna_wire.py tools/luna_ble.py
+    .venv/bin/python tools/luna_ble.py --help > /dev/null
+    .venv/bin/python -m unittest discover -s tools -p 'test_luna_*.py'

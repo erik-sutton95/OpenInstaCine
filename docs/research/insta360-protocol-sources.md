@@ -1,6 +1,6 @@
 # Insta360 Luna Ultra protocol research
 
-Research date: **2026-09-10**. This is a source review, not a hardware verification report. No commands from this document have been sent to the owner's camera. Record the camera firmware, Insta360 app version, iOS version, and capture identifiers before promoting any item below to locally verified.
+Research date: **2026-09-10**, amended **2026-09-11**. This document records public-source evidence. Local verification is reported separately in the [BLE bootstrap proof](luna-ble-bootstrap-2026-09-11.md) and [TCP/preview capture](luna-reconnect-2026-09-11.md). Our client has now reproduced fresh-key negotiation, first authorization, encrypted credentials and a saved-identity BLE reconnect on Luna Ultra v1.0.288. Unmeasured commands below remain source leads.
 
 ## Findings that change the starting point
 
@@ -15,7 +15,7 @@ A second developer reports actual Luna Ultra Wi-Fi control and monitoring on fir
 | Label | Meaning |
 | --- | --- |
 | Official Luna | Insta360 explicitly documents this behavior for Luna Ultra. |
-| Luna implementation | Luna-specific public source implements it, but we have not verified it on our camera. |
+| Luna implementation | Luna-specific public source implements it; consult the local reports for verification status. |
 | External measurement | Another developer names the camera/firmware and reports measuring it. |
 | Other model | Evidence concerns another Insta360 camera or accessory. |
 | Unknown locally | Requires our own capture or controlled on-device check. |
@@ -39,13 +39,14 @@ A second developer reports actual Luna Ultra Wi-Fi control and monitoring on fir
 | `diamondfsd/luna-ai-cut` | `ad47c16929b1b086c0a369fc2b4b5ece5b63f4df`, 2026-09-09 | Main BLE/TCP implementation reference. Root LICENSE is MIT, copyright 2026 diamondfsd. Preserve attribution if incorporating code. |
 | `Ripwords/insta360-luna-ultra-desktop` | `426d643d302d6818a7d536b815ee15f73bb9c29d`, 2026-08-04 | Hardware measurement reports, command IDs and capture fixtures. No root license was found in the inspected tree; treat as an evidence reference, not code to vendor without resolving permission. |
 | `xaionaro-go/insta360ctl` | `f94193ce03c5af0921a9992bfd1af6bd946150d0`, 2026-03-01 | Older model BLE variants. Predates Luna release; not a Luna implementation. |
+| `iliakonnov/insta360-nas` | `b78dddb9cd9bc2cf632871646c6f5af238e582d4` | Newer community protobuf: crypto/error enums, authorization fields and command names. Used as a schema reference; not vendored. |
 | `Insta360Develop/Insta360-Developer_Docs` | `caa3700d0bf2a1b96317211f64431bcd0dfe11c0`, 2026-09-08 | Current official SDK model/support scope. |
 
 Revision metadata came from the repositories' GitHub commit endpoints; all source links below are pinned where possible. [Luna commit][luna-commit], [desktop commit][desktop-commit], [older CLI commit][old-commit], [official docs commit][docs-commit]. The Luna repository describes itself as a noncommercial project, while its inspected LICENSE grants MIT permissions; do not confuse the project's description with its actual license file. [README][luna-readme], [LICENSE][luna-license].
 
 ## BLE GATT and transport candidate
 
-All entries here are **Luna implementation**, pending our GATT fingerprint. [BLE codec][ble-codec], [Web Bluetooth connection code][ble-browser], [transport][ble-transport].
+Entries originated as **Luna implementation** leads. BE80/BE81/BE82 and write-with-response now match our successful Mac session; its complete discovered table and CoreBluetooth MTU are in the [BLE report](luna-ble-bootstrap-2026-09-11.md). [BLE codec][ble-codec], [Web Bluetooth connection code][ble-browser], [transport][ble-transport].
 
 | Role | UUID / behavior |
 | --- | --- |
@@ -120,6 +121,11 @@ AES-GCM additional authenticated data is exactly bytes `0..11`, including header
 
 ## Application encryption and authorization sequence
 
+The newer [community protobuf schema][new-schema] resolves encryption success to
+`ENCRYPT_ERROR_NONE = 1`; scheme 3 is AES-GCM-128. It also names the newer
+authorization identity and Find My fields. This is community source attribution,
+not an official specification.
+
 This is the sequence in `readWifiCredentials()`, not a proven minimal handshake. It requests encryption only for the **final Wi-Fi GetOptions message**; initialization and authorization messages use the plain builder even after key agreement. [BLE session][ble-session].
 
 | Step | Direction / code | Body / condition |
@@ -128,10 +134,10 @@ This is the sequence in `readWifiCredentials()`, not a proven minimal handshake.
 | 2 | Request 8 (`0x0008`) GET_OPTIONS | Device options `[48,15,11]`. |
 | 3 | Request 240 (`0x00F0`) ENCRYPT_CAPABILITY_QUERY | Empty protobuf; response field 1 supplies schemes, packed or unpacked. Require scheme 3. |
 | 4 | Request 241 (`0x00F1`) ENCRYPT_KEY_EXCHANGE | Field 1 varint = 3; field 2 bytes = uncompressed 65-byte P-256 public key. Encoded prefix `08 03 12 41`, then key. |
-| 5 | Response to key exchange | Field 1 error code; field 2 camera public key. Source checks presence, but ignores parsed error code: our implementation should validate both. |
+| 5 | Response to key exchange | Field 1 error code; field 2 camera public key. Source ignores the error enum; the newer schema establishes **1 = no error**, not 0. Our client validates both. |
 | 6 | Request 8, initialization A | `[30,19,37,22,67,97,89,116,115,114,110,85,156,135,103,150]`. |
 | 7 | Request 8, initialization B | `[149,11,147,167,157,158,180,20,165]`. |
-| 8 | Request 39 (`0x0027`) CHECK_AUTHORIZATION | Field 1 UTF-8 authorization ID; field 2 initiator = 2, named ANDROID_INITIATOR. The iPhone's identity format and initiator remain unknown. |
+| 8 | Request 39 (`0x0027`) CHECK_AUTHORIZATION | Source uses field 1 authorization ID and field 2 Android initiator 2. Our iPhone capture additionally has field 3 device ID, equal to field 1, with initiator **1 = PHONE_IOS**. Our client reproduces this using its own UUID. |
 | 9 | Authorization-check response | Status field 1: 0 → already authorized; 1 → request permission; other → fail in this source. |
 | 10 | If needed: request 86 (`0x0056`) REQUEST_AUTHORIZATION | Field 1 = 1, named WIFI_PASSWORD. Protobuf `08 01`. |
 | 11 | Await asynchronous result | Code 8209 (`0x2011`) or 8228 (`0x2024`); field 1 result, field 2 operation. Source waits 20 seconds. |
@@ -204,7 +210,12 @@ For the shared monitor engine, the vendor layer should deliver timed H.264/H.265
 
 External firmware-1.0.238 measurements report photography color-mode field 35 as Standard=1, I-Log=2, Dolby Vision=5; filter field 18 and strength field 104; Pano photo submode=8. The important lesson is that stale enum values can be accepted and echoed while the camera displays a different setting. Verify writes on the camera screen and actual captured metadata, not merely a protocol success response. [Calibration findings][calibration].
 
-The external project has not mapped gimbal pan/tilt, tap-to-focus, or Deep Track command numbers. It identifies names such as `PHONE_COMMAND_GIMBAL_CONTROL`, `PHONE_COMMAND_OPEN_TRACKING_WITH_RECT`, and focus commands, but names are not numeric IDs or payload schemas. Code 8302 was correlated with pan-limit state there, with the semantic name still an inference. This makes isolated official-app joystick, tracking and focus actions high-value capture targets **after** connection and preview work. [Protocol gap][protocol-gap].
+The external project cited below had not mapped gimbal pan/tilt, tap-to-focus, or Deep Track command numbers. It identifies names such as `PHONE_COMMAND_GIMBAL_CONTROL`, `PHONE_COMMAND_OPEN_TRACKING_WITH_RECT`, and focus commands, but names are not numeric IDs or payload schemas. Code 8302 was correlated with pan-limit state there, with the semantic name still an inference. This makes isolated official-app joystick, tracking and focus actions high-value capture targets **after** connection and preview work. [Protocol gap][protocol-gap].
+
+A newer [command enum][new-schema] supplies candidate IDs **226** gimbal control,
+**230/231** open/close tracking, **237** open tracking with rectangle, **238**
+cancel tracking and **239** get PTZ track state. These are useful capture targets,
+not verified Luna capabilities or safe-to-guess payloads.
 
 Preview I-Log/Dolby Vision behavior, color metadata, camera color-recovery monitoring, lens switching, zoom interpolation, gimbal velocity/position semantics, autofocus, touchscreen coexistence, disconnect/reconnect, and recording-time preview all remain locally unknown. App UI parity does not establish camera feature parity.
 
@@ -229,6 +240,11 @@ The linked EULA, marked 2023-09-21, is proprietary: it grants a limited royalty-
 The source-based protocol path is presently better aligned with a reusable monitoring engine because Luna support and redistribution terms are not established for the official SDK. An SDK inquiry could run separately, without blocking captures or assuming the SDK solves gimbal control.
 
 ## Next evidence to collect
+
+The list below was the initial research plan. Our GATT discovery, first approval,
+warm BLE reconnect, and encrypted credential retrieval are now complete. The
+official-app TCP/first-picture take is decoded. Own-client Wi-Fi/preview, native
+platforms, rejection/reboot/recovery and camera controls remain outstanding.
 
 1. **Identity and GATT:** powered-on advertising, manufacturer data, address behavior, service discovery, characteristic properties, CCCD writes, ATT MTU, first notification, and device/app/firmware versions.
 2. **First official-app connection:** record the on-camera confirmation moment, plain command order, crypto scheme/public-key exchange, authorization ID and initiator, response correlation, and encrypted message boundaries.
@@ -277,3 +293,5 @@ Completion of bootstrap means reproducible discovery → authorization → Wi-Fi
 [sdk-osc]: https://github.com/Insta360Develop/Insta360-Developer_Docs/blob/caa3700d0bf2a1b96317211f64431bcd0dfe11c0/docs/en/sdk/x-ace-go/osc/guide.md
 [sdk-apply]: https://www.insta360.com/sdk/apply
 [sdk-eula]: https://www.insta360.com/support/supportcourse?post_id=20734
+
+[new-schema]: https://github.com/iliakonnov/insta360-nas/blob/b78dddb9cd9bc2cf632871646c6f5af238e582d4/insta360-server/insta360_messages.proto

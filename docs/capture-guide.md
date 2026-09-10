@@ -30,6 +30,30 @@ because its pairing was captured. See [Nordic's pairing guidance](https://docs.n
 The separate UCD2 encryption layer is described in the
 [Luna source research](research/insta360-protocol-sources.md).
 
+## Reproduce our verified BLE bootstrap
+
+The [independent session report](research/luna-ble-bootstrap-2026-09-11.md)
+documents successful approval and saved-identity reconnect. With the camera
+awake and the official app disconnected:
+
+```sh
+just lab-setup
+just luna-authorize 'EXACT_ADVERTISED_NAME'
+just luna-connect 'EXACT_ADVERTISED_NAME'
+```
+
+Only the first authorization needs a camera approval. The client generates its
+own persistent UUID and a fresh P-256 key per connection. It verifies encrypted
+device info, checks authorization, and decrypts Wi-Fi credentials into a private
+0600 file. It does not join Wi-Fi. Keep its `.local/` identity file for reconnects.
+Each run logs wire chunks and a separate message transcript in `captures/`;
+private keys and session keys are not logged. Exit 2 means approval is needed;
+rerun with `--authorize` rather than copying an identity from a phone capture.
+
+Use `just lab-check` to test framing, protobuf, encryption and response handling.
+The passive capture procedure below remains useful for comparing the official
+app and investigating the unresolved nRF target-connection following issue.
+
 ## Prepare and identify the body
 
 1. Put the powered camera and phone close to the dongle. Leave the official app

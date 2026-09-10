@@ -103,14 +103,15 @@ Request 39 contains:
 | --- | --- |
 | 1 | 36-byte UUID-shaped string; value private |
 | 2 | Varint **1** |
-| 3 | Another 36-byte UUID-shaped string; value private |
+| 3 | The same 36-byte UUID string as field 1; value private |
 
 Response 200 contains field 1 = **0**, field 2 = **2**, field 3 = **255**, and
 field 4 as a 36-byte string. Status 0 matches the public schema's authorized
-value. The meaning of the newer response fields and request field 3 is not yet
-established. Public BLE code calls request field 2 an initiator and uses 2 for
-Android; **1 is observed from the iPhone**, with its enum name still inferred.
-[BLE authorization builder](https://github.com/diamondfsd/luna-ai-cut/blob/ad47c16929b1b086c0a369fc2b4b5ece5b63f4df/electron/devices/insta360/lunaBleCodec.ts).
+value. A newer community schema names request field 3 `device_id`, and initiator
+**1 = PHONE_IOS**. Response fields 2/3/4 are `findmy_pair_status`, `findmy_pair_id`
+and `device_id`; pair-status 2 is named paired. These labels resolve the field
+names but do not establish every Find My behavior on this camera.
+[Authorization schema](https://github.com/iliakonnov/insta360-nas/blob/b78dddb9cd9bc2cf632871646c6f5af238e582d4/insta360-server/insta360_messages.proto#L3281).
 
 These TCP messages are plaintext UCD2. This does not disprove the source-backed
 encrypted BLE credential flow. Do not replay the official app's private IDs as
@@ -173,7 +174,10 @@ and 17 timelapse options. [MessageCode schema](https://github.com/Ripwords/insta
 Older constants suggest 157 dark/EIS status, 160 cloud-storage upload status and
 172 download-file list; Luna semantics still need field-level validation.
 [Older command constants](https://github.com/xaionaro-go/insta360ctl/blob/f94193ce03c5af0921a9992bfd1af6bd946150d0/pkg/protocol/messagecode/messagecode.go).
-**217, 225, 242 and 265 remain unnamed.**
+The newer schema names **217** SET_CLOUD_TAB_SHOW, **225** SET_CLOUD_PROMPT_INTERVAL
+and **242** GET_FIRMWARE_VERSIONS. **265 remains unnamed.** These names are source
+attribution; setting effects require separate validation.
+[Newer command enum](https://github.com/iliakonnov/insta360-nas/blob/b78dddb9cd9bc2cf632871646c6f5af238e582d4/insta360-server/insta360_messages.proto#L1246).
 
 The official app sends no record start/stop in this controlled take. Recording,
 zoom, gimbal, focus and tracking are not verified by incidental startup queries.
@@ -187,11 +191,11 @@ does not establish the BLE authorization handshake. Reuse of a saved Wi-Fi path
 is a plausible explanation for the successful paired reconnect, not a proven
 rule about how Insta360 always reconnects.
 
-A subsequent passive Mac/CoreBluetooth scan independently matches the camera's
-name and BE80 service. After the owner disconnects the official app, the next
-experiment is service/characteristic discovery from our Mac client, followed by
-an independently authorized session with fresh keys and identity. The existing
-iPhone pairing remains intact.
+A subsequent Mac/CoreBluetooth experiment discovered the camera's GATT service,
+completed its own authorization with fresh keys and identity, and retrieved
+encrypted Wi-Fi credentials. A second session reused that identity successfully.
+See the separate [BLE session report](luna-ble-bootstrap-2026-09-11.md); it does
+not change the absence of camera ATT in this official-app take.
 
 For the shared engine, these results establish a concrete adapter boundary:
 Insta360 transport/framing → timed HEVC access units → shared native feed sink.
