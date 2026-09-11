@@ -29,16 +29,16 @@ The decryption profile is private under `.local/luna-screen-decrypt-profile/`; i
 
 Both channels have the standard **24-byte KCP segment header**: little-endian conversation ID, command, fragment count, receive window, timestamp, segment sequence, acknowledged sequence boundary, and payload length. Commands `0x51` and `0x52` correspond to PUSH and ACK. A UDP datagram can contain multiple KCP segments. Do not equate datagrams with complete messages, and do not append retransmissions to a video stream. [KCP implementation][kcp]
 
-There is also a short bootstrap exchange outside the ordinary KCP segment format. The [control analysis](luna-screen-udp-control.md) records that exchange and the reconstructed RPC envelope. Its field meanings beyond their observed structure remain partly unknown; no packets have been replayed to the camera.
+There is also a short bootstrap exchange outside the ordinary KCP segment format. The [control analysis](luna-screen-udp-control.md) records that exchange and the reconstructed RPC envelope. **Both envelope CRC16 calculations are now validated** across control, direct reconnect messages, and video. Session and method meanings remain partly unknown; no packets have been replayed to the camera.
 
 For camera-to-screen video, offline reassembly of the selected good-radio-FCS UDP records found:
 
 - 32,837 KCP PUSH segments, comprising **31,542 distinct sequence numbers** and 1,295 exact duplicates; no conflicting payloads for a sequence number and no truncated KCP segment bodies in this extracted set.
-- **1,752 complete, recognizable application messages**. All have the observed 12-byte envelope and an exact 24-bit payload length in bytes 5–7. An additional 1,481 sequence groups have internal/end gaps; 190 contiguous suffix groups lack a recognizable message prefix and are also excluded. A suffix reaching fragment zero is not proof that its first fragment was captured.
+- **1,752 complete, recognizable application messages**. All have the observed 12-byte envelope, an exact 24-bit payload length in bytes 5–7, and valid header/payload CRC16 values in bytes 8–11. An additional 1,481 sequence groups have internal/end gaps; 190 contiguous suffix groups fail envelope validation and are also excluded. A suffix reaching fragment zero is not proof that its first fragment was captured.
 - Each accepted video message has an H.264 Annex-B access-unit delimiter at byte **102**. The preceding 32-bit little-endian value equals the remaining video length for every accepted message.
 - Each accepted access unit contains NAL type **9** (access-unit delimiter) and type **1** (non-IDR coded slice). A wider check of 3,091 available video first fragments also found no SPS, PPS or IDR NALs.
 
-The available messages therefore do **not** suffice to initialize a decoder. `ffprobe` recognizes H.264 but cannot establish picture dimensions or pixel format. The concatenated local `.h264` artifact is an incomplete temporal sequence for analysis, not a playable or validated preview. The offline extractor and summaries are under `.local/luna-screen-video/`.
+The available messages therefore do **not** suffice to initialize a decoder. `ffprobe` recognizes H.264 but cannot establish picture dimensions or pixel format. The concatenated local `.h264` artifact is an incomplete temporal sequence for analysis, not a playable or validated preview. Original offline summaries remain under `.local/luna-screen-video/`; the reusable [capture inspector and wire parser](luna-screen-udp-control.md#reusable-offline-tools) reproduce the reconstruction with both CRC checks and extract 25,343,317 H.264 bytes from the complete messages.
 
 The ongoing KCP sequence numbers and RPC request IDs support the inference that the attach/detach operation resumed an existing logical stream rather than its initial encoder/session setup. The control analysis also found no SPS/PPS in its complete messages. Missing captured segments still limit negative conclusions. A capture that begins before a fresh screen/camera streaming session is the next useful way to obtain decoder configuration and the initial independently decodable picture.
 
@@ -55,6 +55,12 @@ CoreWLAN channel selection requires the Mac to be disassociated. More subtly, **
 For future takes, verify actual recent packet frequencies; interface readback alone is insufficient. Retain management/handshake traffic during target discovery so a changed association is not excluded by an old MAC-only filter. A short discovery pass may use truncated headers; the actual media take requires full packet lengths.
 
 All capture processes from this take were stopped. Wi-Fi power and channel were restored, then System Settings rejoined the normal known network and visibly reported Connected. The Mac regained its original `192.168.1.87` address; Ethernet remained the default route. No camera settings, app binaries or firmware were changed by the tools in this investigation.
+
+## Later startup attempt and remaining handoff
+
+The later private take `20260911T133459Z-luna-screen-cold-start/startup.pcapng` contains 100 packets / 19,424 bytes, with no captured camera IP traffic or EAPOL handshake. The requested physical startup sequence was not confirmed during its capture window. This is an unsuccessful take, not evidence that startup has no handshake or that the camera was powered off. Its capture processes finished, and the normal Wi-Fi connection was restored and verified afterward.
+
+Following the user's request to avoid repeated timed prompts, work continued offline. No further capture is left running. The remaining physical dependency is one capture spanning a **fresh camera/screen encoder session**, beginning before startup and continuing through an updating detached preview. Attach/detach alone previously resumed the old session. The exact Color Recovery/“preview reset to:” selection must be recorded with that take. Coordinate these actions as one handoff when hardware testing resumes; do not treat an expired capture window as operator completion or repeat network interruptions in the meantime.
 
 [decrypt]: https://wiki.wireshark.org/HowToDecrypt802.11
 [kcp]: https://github.com/skywind3000/kcp/blob/b1a7a2101dcbb96017681a500d6b82bbe5a88766/ikcp.c#L789

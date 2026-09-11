@@ -4,7 +4,7 @@ Research date: **2026-09-11**. This note records official hardware/manual eviden
 
 **The detached screen is a justified new capture target: Insta360 documents Wi-Fi image transmission and a separate 2.4 GHz screen radio. Whether that link carries pre-Color-Recovery I-Log remains unknown.** “Pre-LUT” means unconverted I-Log preview values, not sensor RAW.
 
-**Later hardware result:** [the screen reconnect was captured and decrypted](luna-screen-transport-capture-2026-09-11.md). It carries KCP control and H.264 video over two UDP channels. This supersedes the early discovery status below; pre-LUT image encoding remains unverified.
+**Later hardware result:** [the screen reconnect was captured and decrypted](luna-screen-transport-capture-2026-09-11.md). It carries KCP control and H.264 video over two UDP channels. Both envelope CRC16s are solved, and the [offline parser](luna-screen-udp-control.md#reusable-offline-tools) validates 5,999 control messages and 1,752 video messages. This supersedes the early discovery status below; decoder startup data and pre-LUT image encoding remain unverified.
 
 ## Documented radio facts
 

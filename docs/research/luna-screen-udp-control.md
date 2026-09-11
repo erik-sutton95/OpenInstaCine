@@ -24,6 +24,7 @@ Control-channel accounting:
 | Unique camera-to-screen PUSH segments | 2,996 |
 | Complete reconstructed application messages | 5,999 |
 | Reconstructed messages matching the inner length field | 5,999 |
+| Reconstructed messages passing both envelope CRC16 checks | 5,999 |
 
 Several KCP segments can share one UDP datagram, so segment and datagram counts differ. The parser splits every segment, deduplicates by direction/conversation/sequence, orders by sequence, and joins only contiguous descending-fragment chains ending at fragment zero. It does not concatenate captured UDP datagrams or treat radio retries as new application commands.
 
@@ -59,10 +60,26 @@ Every complete reconstructed message has this **12-byte envelope**:
 | 1 | 2 | First little-endian routing value, consistent with a source endpoint |
 | 3 | 2 | Second little-endian routing value, consistent with a destination endpoint |
 | 5 | 3 | Little-endian payload length, exactly total message length minus 12 |
-| 8 | 4 | Unmapped changing value; integrity/checksum semantics unverified |
+| 8 | 2 | Little-endian header CRC16, with both CRC slots zeroed for calculation |
+| 10 | 2 | Little-endian payload CRC16 |
 | 12 | variable | Application payload |
 
-Routing values swap in matching requests and responses. For example, the GUI query goes from `0x0814` to `0x0405`; its response reverses those values. This supports the routing interpretation without identifying the internal processes behind the numbers. Ordinary IEEE CRC-32 variants and selected existing UCD2-checksum candidates did not explain bytes 8–11. **This audit does not claim application-envelope checksum validation.**
+Routing values swap in matching requests and responses. For example, the GUI query goes from `0x0814` to `0x0405`; its response reverses those values. This supports the routing interpretation without identifying the internal processes behind the numbers.
+
+**Envelope integrity is now solved for the captured messages.** Bytes 8–11 are two independent CRC16 values. Both use polynomial `0x1021`, non-reflected processing, effective initial state `0xef4a`, and no final XOR:
+
+```python
+from binascii import crc_hqx
+
+header_crc = crc_hqx(message[:8] + bytes(4), 0xef4a)
+payload_crc = crc_hqx(message[12:], 0xef4a)
+assert header_crc == int.from_bytes(message[8:10], "little")
+assert payload_crc == int.from_bytes(message[10:12], "little")
+```
+
+The header calculation covers the 12-byte envelope header with **both checksum slots zeroed**. The payload calculation includes the ten-byte RPC header. This calculation passes all **5,999 control messages**, spanning 62 distinct header inputs and 40 payload lengths from 10 to 2,651 bytes. Both unique direct reconnect messages below also pass; they were held out from derivation. Independently applying the calculation to **1,752 video messages** validates both CRCs in every case. A separate bitwise implementation agrees with the standard-library calculation, and single-bit corruption checks reject modified headers and payloads.
+
+The split is also supported by 127 identical payloads observed with different routing: the payload CRC stays unchanged while the header CRC changes. Earlier whole-field CRC32/UCD2 candidates failed because they treated these two values as one 32-bit field. This is locally derived wire behavior, not a vendor specification. The effective seed could represent an internal initialization or preamble; it is not evidence of how firmware names the algorithm. CRCs detect corruption, not authenticate commands, and no newly encoded command has been sent to the camera.
 
 Before the first observed KCP control segment, a short exchange uses the same envelope shape directly over UDP:
 
@@ -114,7 +131,7 @@ All 133 GUI state replies contain `pipeline_build_state: 0` and a `pipeline_stat
 
 No recovered control message contains a named Color Recovery/LUT selector. No Annex-B SPS/PPS signature was found in the complete control messages, and the recovered JSON contains no named codec-configuration or extradata field. Binary methods remain largely unmapped, and missing KCP segments limit negative findings. This control capture therefore supplies **no verified decoder initialization parameters, pre-LUT selector or independent color-pipeline setting**.
 
-Readable routing, RPC fields and JSON demonstrate that the recovered control messages are not protected by blanket application-payload encryption once WPA2 is decrypted. This does not establish the cryptographic properties of every binary method, or remove the unknown inner integrity field. Private device-identifying JSON properties were excluded from this note.
+Readable routing, RPC fields and JSON demonstrate that the recovered control messages are not protected by blanket application-payload encryption once WPA2 is decrypted. This does not establish the cryptographic properties of every binary method. The envelope CRCs are independently validated as described above. Private device-identifying JSON properties were excluded from this note.
 
 ## Comparison with public WT/protobuf candidates
 
@@ -122,7 +139,33 @@ The community protobuf contains `WtClientConnectionReq` (client type/device ID),
 
 The captured reconnect envelope is fixed-width binary; the mapped property RPCs use length-prefixed strings and JSON. They are not demonstrated instances of those WT protobuf messages. Likewise, the captured control datagrams are KCP, not bare RTP. A media protocol nested inside another channel requires its own evidence.
 
-The next implementation dependency is a complete initial-session trace: identify connection/session establishment, decode the unknown inner integrity field, obtain codec setup, and map the operations actually required for receiving video. Only decoded image comparisons with Color Recovery's state recorded can answer whether the screen path supplies the requested unconverted I-Log feed.
+The next implementation dependency is a complete initial-session trace: identify connection/session establishment, obtain codec setup, and map the operations actually required for receiving video. Only decoded image comparisons with Color Recovery's state recorded can answer whether the screen path supplies the requested unconverted I-Log feed.
+
+## Reusable offline tools
+
+[`tools/luna_screen_wire.py`](../../tools/luna_screen_wire.py) implements envelope encoding/validation, RPC header decoding, coalesced KCP parsing, capture reassembly and extraction of the measured H.264 layout. It contains no sockets, radio control, camera operations or KCP endpoint implementation. Each assembler covers one conversation, direction and logical session. It handles out-of-order segments, retries and 32-bit sequence wrap, rejects conflicting payloads, and excludes incomplete or CRC-invalid messages. Do not merge separate logical sessions just because their conversation numbers match.
+
+[`tools/luna_screen_capture.py`](../../tools/luna_screen_capture.py) reads an already decrypted, FCS-good TSV from one camera/screen session and prints aggregate results without exposing payloads. Export exactly these eight fields, without a header:
+
+```sh
+WIRESHARK_CONFIG_DIR="$PWD/.local/luna-screen-decrypt-profile" \
+  /Applications/Wireshark.app/Contents/MacOS/tshark \
+  -r captures/20260911T130348Z-luna-screen-confirmed-live/reconnect.pcapng \
+  -Y 'udp && radiotap.flags.badfcs == 0' -T fields \
+  -e frame.number -e frame.time_epoch -e ip.src \
+  -e udp.srcport -e udp.dstport -e udp.payload -e wlan.seq -e wlan.fc.retry \
+  > .local/luna-screen-udp.tsv
+
+python3 tools/luna_screen_capture.py .local/luna-screen-udp.tsv \
+  --source-ip 192.168.42.1 --source-port 6002 --destination-port 6023 \
+  --conversation 0x001e0008
+```
+
+The existing private decryption profile is required for that export; the tool does not obtain credentials or configure Wi-Fi. `!radiotap.flags.badfcs` is not interchangeable with comparison to zero: testing field absence excluded the desired records in this capture. The source IP, port pair and conversation must be matched to the capture, rather than assumed for another model/session.
+
+The CLI's optional `--h264-output .local/screen-analysis.h264` creates an elementary stream and refuses to overwrite an existing file. It concatenates only validated, complete observed access units; capture gaps remain gaps. Its SPS/PPS/IDR inventory is an evidence check, not a decoder or proof of I-Log. No media export is made by default.
+
+Running this tool against the finalized take reproduced **2,857 camera-to-screen control messages**, **3,142 screen-to-camera control messages**, and **1,752 video messages**. The video reconstruction excludes 1,481 incomplete groups and 190 invalid-envelope suffix groups. Synthetic regressions cover an independently generated CRC fixture, byte corruption, truncation, coalesced KCP packets, reordering, retries, sequence wrap, capture gaps, conflicting retransmissions and separation of traffic directions. Run them with `python3 -m unittest discover -s tools -p 'test_luna_screen_wire.py'`; they are also included in `just lab-check`.
 
 Sanitized offline reconstruction and JSON summaries remain in the ignored `.local/luna-screen-udp-control/` directory. The capture, decrypted payload export, keys and device identifiers remain private.
 

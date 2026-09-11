@@ -43,9 +43,10 @@ luna-view name="":
     /usr/bin/python3 tools/luna_mac.py --name {{quote(name)}}
 
 lab-check: check
-    .venv/bin/python -m py_compile tools/luna_wire.py tools/luna_ble.py tools/luna_tcp.py
+    .venv/bin/python -m py_compile tools/luna_wire.py tools/luna_ble.py tools/luna_tcp.py tools/luna_screen_wire.py tools/luna_screen_capture.py
     .venv/bin/python tools/luna_ble.py --help > /dev/null
     .venv/bin/python tools/luna_tcp.py --help > /dev/null
+    .venv/bin/python tools/luna_screen_capture.py --help > /dev/null
     /usr/bin/python3 -m py_compile tools/luna_mac.py tools/luna_tcp.py tools/luna_wire.py tools/ucd2.py
     .venv/bin/python -m unittest discover -s tools -p 'test_luna_*.py'
 
