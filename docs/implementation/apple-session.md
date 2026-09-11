@@ -40,3 +40,16 @@ The portable UCD2 package has its own fixture tests. `CameraBackendFacadeTests` 
 An independent source review of correlation, cancellation, encryption, camera handoff and media lifetime found no remaining blockers after the corrections above. The first complete iOS Simulator app build succeeded; the root task records final native/UI suite and runtime results after integration.
 
 The existing phone is explicitly out of scope for automated launches because the owner is running another process on it. Physical first-install Bluetooth consent and iOS hotspot association require later on-device verification. Simulator replay validates shared decode, rendering and UI against recorded camera packets, not a new hardware connection. Record final build/runtime evidence separately in the root implementation report.
+
+
+## Unavailable controls and retained shell
+
+Capture panels retain the inherited layout and option lists. Each sheet declares the backend capability it requires; unavailable sheets show an explanation, disable camera writes, and omit a selected value instead of seeding plausible camera defaults. The Focus tile stays visible. Shutter Speed / Angle remains a local display preference, but neither unit mode invents an unknown shutter value; angle also requires actual capture frame-rate telemetry.
+
+The AUDIO tool stays visible with an unavailable explanation when `.liveAudio` is absent. Previously saved audio-overlay preferences render an N/A placeholder, and VoiceOver reports unavailable audio instead of claiming silent channels. Playback audio retains its independent decoded source.
+
+Link settings use connection phase, the actual camera-network state, recovery/held-picture state, and an optional source label. Local replay is labeled as such; held pictures and recovery never claim an active camera link. Luna Wi-Fi preview does not claim Bluetooth remains connected after bootstrap, and the link tile does not manufacture signal bars from decoder initialization.
+
+`deleteMediaFiles` returns `true` only after every requested deletion succeeds for the current camera and session generation. Unsupported, empty, stale, cancelled, missing, read-only, or failed selections return `false`; failed assets remain in the catalog. Confirmed items are persisted individually if a later item fails. The player and selection UI use the result before navigating away.
+
+Facade regressions cover capability mappings, unknown shutter units, unavailable audio accessibility, replay/held/active transport labels, failed deletion preserving the catalog, and read-only deletion avoiding the adapter.

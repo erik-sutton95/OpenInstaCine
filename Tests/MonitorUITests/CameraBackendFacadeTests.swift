@@ -149,6 +149,108 @@ final class CameraBackendFacadeTests: XCTestCase {
         session.disconnect()
     }
 
+    func testFailedDeletionKeepsCatalogAndReturnsFalse() async {
+        let backend = SpyBackend(capabilities: [.liveVideo, .cameraMedia])
+        backend.deleteError = CameraBackendError.unavailable("Deletion test failure")
+        let session = CameraSession(backend: backend)
+        session.phase = .live
+        let file = MediaFile(path: "test/clip.mp4", thumbPath: "test/thumb.jpg")
+        session.mediaFiles = [file]
+        session.mediaAssets[file.path] = .init(
+            id: "opaque-asset", filename: "clip.mp4", canDelete: true)
+        let succeeded = await session.deleteMediaFiles([file])
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(backend.deleteCalls, 1)
+        XCTAssertEqual(session.mediaFiles.map(\.path), [file.path])
+        XCTAssertEqual(session.mediaAssets[file.path]?.id, "opaque-asset")
+        XCTAssertNotNil(session.mediaNote)
+        session.disconnect()
+    }
+
+    func testUnavailableOrReadOnlyDeletionNeverReachesCamera() async {
+        let backend = SpyBackend(capabilities: [.liveVideo, .cameraMedia])
+        let session = CameraSession(backend: backend)
+        session.phase = .live
+        let file = MediaFile(path: "test/clip.mp4", thumbPath: "test/thumb.jpg")
+        session.mediaFiles = [file]
+        session.mediaAssets[file.path] = .init(
+            id: "read-only", filename: "clip.mp4", canDelete: false)
+        let succeeded = await session.deleteMediaFiles([file])
+        XCTAssertFalse(succeeded)
+        XCTAssertEqual(backend.deleteCalls, 0)
+        XCTAssertEqual(session.mediaFiles.map(\.path), [file.path])
+        session.disconnect()
+    }
+
+    func testCapturePanelsDeclareTheirRequiredCameraCapabilities() {
+        XCTAssertEqual(CaptureSheet.iso.requiredCapability, .exposure)
+        XCTAssertEqual(CaptureSheet.shutter.requiredCapability, .exposure)
+        XCTAssertEqual(CaptureSheet.exposure.requiredCapability, .exposure)
+        XCTAssertEqual(CaptureSheet.wb.requiredCapability, .whiteBalance)
+        XCTAssertEqual(CaptureSheet.focus.requiredCapability, .focus)
+        XCTAssertEqual(CaptureSheet.audio.requiredCapability, .liveAudio)
+        XCTAssertEqual(CaptureSheet.resolution.requiredCapability, .captureFormat)
+        XCTAssertEqual(CaptureSheet.mode.requiredCapability, .captureFormat)
+        XCTAssertEqual(CaptureSheet.color.requiredCapability, .captureFormat)
+    }
+
+    func testLocalAnglePreferenceDoesNotInventUnknownShutterTelemetry() {
+        var status = CameraStatus()
+        XCTAssertEqual(
+            CaptureAvailabilityCopy.shutterReadout(
+                status: status, usesAngle: true, angleDegrees: 180), "—")
+        status.shutterDenom = 50
+        XCTAssertEqual(
+            CaptureAvailabilityCopy.shutterReadout(
+                status: status, usesAngle: true, angleDegrees: 180), "—")
+        XCTAssertEqual(
+            CaptureAvailabilityCopy.shutterReadout(
+                status: status, usesAngle: false, angleDegrees: 180), "1/50")
+        status.fps = 25
+        XCTAssertEqual(
+            CaptureAvailabilityCopy.shutterReadout(
+                status: status, usesAngle: true, angleDegrees: 180), "180°")
+    }
+
+    func testUnavailableAudioNeverAnnouncesSilentTelemetry() {
+        let panel = AudioAssist.meter(levels: .silent, sensitivity: "Stereo", available: false)
+        XCTAssertEqual(panel.accessibilityValue, AudioAssist.unavailableCopy)
+        XCTAssertFalse(panel.accessibilityValue.contains("silent"))
+    }
+
+    func testReplayAndHeldFramesDoNotClaimActiveCameraTransport() {
+        let replay = MonitorTransportPresentation(
+            phase: .live, sourceLabel: "Local replay", cameraNetwork: false, holdsMonitor: false,
+            recovery: .idle)
+        XCTAssertEqual(replay.title, "Local replay")
+        XCTAssertEqual(replay.transport, "Local replay")
+        XCTAssertFalse(replay.hasActiveCameraLink)
+        let held = MonitorTransportPresentation(
+            phase: .live, sourceLabel: nil, cameraNetwork: true, holdsMonitor: true, recovery: .idle
+        )
+        XCTAssertEqual(held.title, "Picture held")
+        XCTAssertEqual(held.transport, "No active camera link")
+        XCTAssertFalse(held.hasActiveCameraLink)
+        let recovering = MonitorTransportPresentation(
+            phase: .openingDatalink, sourceLabel: nil, cameraNetwork: true, holdsMonitor: true,
+            recovery: .retrying(attempt: 1, maxAttempts: 3))
+        XCTAssertFalse(recovering.hasActiveCameraLink)
+        XCTAssertEqual(recovering.transport, "No active camera link")
+    }
+
+    func testLunaWiFiPreviewDoesNotClaimBluetoothRemainsConnected() {
+        let live = MonitorTransportPresentation(
+            phase: .live, sourceLabel: nil, cameraNetwork: true, holdsMonitor: false,
+            recovery: .idle)
+        XCTAssertTrue(live.hasActiveCameraLink)
+        XCTAssertEqual(live.transport, "Wi-Fi video")
+        let setup = MonitorTransportPresentation(
+            phase: .awaitingApproval, sourceLabel: nil, cameraNetwork: false, holdsMonitor: false,
+            recovery: .idle)
+        XCTAssertFalse(setup.hasActiveCameraLink)
+        XCTAssertEqual(setup.transport, "Bluetooth setup")
+    }
+
     func testDiscardedStateCandidateCannotStealActiveBackendEvents() {
         let backend = SpyBackend(capabilities: [.liveVideo])
         let retained = CameraSession(backend: backend)
@@ -193,6 +295,8 @@ private final class SpyBackend: CameraBackend {
     var didApply: (() -> Void)?
     var disconnectCalls = 0
     var listCalls = 0
+    var deleteCalls = 0
+    var deleteError: Error?
     var listResponse: (() async throws -> [CameraMediaAsset])?
     init(capabilities: CameraCapabilities) { self.capabilities = capabilities }
     func startScan() async throws {}
@@ -204,6 +308,10 @@ private final class SpyBackend: CameraBackend {
     func apply(_ intent: CameraControlIntent) async throws {
         intents.append(intent)
         didApply?()
+    }
+    func deleteMedia(_ asset: CameraMediaAsset) async throws {
+        deleteCalls += 1
+        if let deleteError { throw deleteError }
     }
     func listMedia() async throws -> [CameraMediaAsset] {
         listCalls += 1

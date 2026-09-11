@@ -725,19 +725,25 @@ extension CameraSession {
             progress: { _ in })
         return dest
     }
-    func deleteMediaFiles(_ files: [MediaFile]) async {
+    /// True only when every requested camera deletion completed in this session.
+    /// Callers retain their selection or player on failure so the operator can retry.
+    @discardableResult
+    func deleteMediaFiles(_ files: [MediaFile]) async -> Bool {
+        guard !files.isEmpty else { return false }
         guard canReachCameraMedia else {
             mediaNote = "Deleting camera clips is not connected for this camera yet."
-            return
+            return false
         }
         let token = generation
         let cameraID = mediaCameraID
-        for file in files {
-            guard token == generation, cameraID == mediaCameraID, !Task.isCancelled else { return }
-            guard let asset = mediaAssets[file.path], asset.canDelete else {
-                mediaNote = MediaOperatorCopy.notDeletable
-                continue
-            }
+        // Resolve the whole selection before mutating the camera. A stale or read-only
+        // catalog entry must not turn a partial selection into an apparent success.
+        let assets = files.compactMap { mediaAssets[$0.path] }
+        guard assets.count == files.count, assets.allSatisfy(\.canDelete) else {
+            mediaNote = MediaOperatorCopy.notDeletable
+            return false
+        }
+        for (file, asset) in zip(files, assets) {
             do {
                 try validateMediaContext(generation: token, cameraID: cameraID)
                 try await backend.deleteMedia(asset)
@@ -748,16 +754,19 @@ extension CameraSession {
                 for url in [localURL(for: file), thumbnailURL(for: file)] {
                     if let url { try? FileManager.default.removeItem(at: url) }
                 }
+                // Persist each confirmed result even if a later item fails.
+                persistMediaCatalog()
+                persistAssetCatalog()
             } catch {
                 guard token == generation, cameraID == mediaCameraID, !Task.isCancelled else {
-                    return
+                    return false
                 }
                 mediaNote = error.localizedDescription
-                break
+                return false
             }
         }
-        persistMediaCatalog()
-        persistAssetCatalog()
+        mediaNote = nil
+        return true
     }
     func isFavorite(_ file: MediaFile) -> Bool {
         mediaLocalFavorites.contains(file.path) || file.isStarred
