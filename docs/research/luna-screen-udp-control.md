@@ -4,6 +4,8 @@ Measured **2026-09-11**, using the finalized private capture `20260911T130348Z-l
 
 **The screen control link uses KCP over UDP, carrying a previously unmapped binary RPC protocol with readable JSON state. It is distinct from the phone's TCP/UCD2 protocol.** This capture establishes substantial framing and state-query behavior, but not a complete new-client bootstrap or an independently usable pre-Color-Recovery feed.
 
+**Later startup evidence:** the [confirmed startup take](luna-screen-startup-capture-2026-09-11.md) starts both KCP channels at sequence zero with different conversation IDs, includes SPS/PPS/IDR, and yields a decoded screen picture. A service 2/method 1 reply immediately precedes video, but the corresponding request is missing from that capture. Colour-pipeline and client-start semantics remain unverified.
+
 ## Evidence and capture limits
 
 The camera endpoint is `192.168.42.1:6000`; the screen endpoint is `192.168.42.253:6021`. The separate `6002 ↔ 6023` channel is being analyzed for media and is outside this note's reconstruction scope. Endpoint addresses are observations for this session, not values a future adapter should assume universally.

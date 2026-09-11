@@ -2,6 +2,8 @@
 
 Date: **2026-09-11**. Camera: the user's Luna Ultra; the established camera firmware baseline is v1.0.288, not independently queried during this passive take. Scope: the screen's own wireless connection, with phone camera apps disconnected. This is a packet-analysis result, not an implemented screen client or a verified pre-LUT capability.
 
+**Subsequent result:** a [confirmed startup capture](luna-screen-startup-capture-2026-09-11.md) recovered SPS/PPS/IDR data and a clean **556 × 314, 8-bit** picture. The missing-decoder-setup statements below describe this earlier reconnect take. Pre-LUT encoding remains unresolved.
+
 ## Result
 
 We captured the detached screen's normal attach/detach reconnect, recovered its complete WPA2 handshake, and decrypted its IP traffic using the camera credentials already obtained by our authorized BLE client. The screen uses a **different transport from the phone preview**:
