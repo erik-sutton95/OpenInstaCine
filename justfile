@@ -15,7 +15,7 @@ ble-report capture:
 ble-mark session action:
     python3 tools/ble_lab.py mark {{quote(session)}} {{quote(action)}}
 
-# Research tooling checks. App build/hardware gates will be added with the adapter.
+# Research tooling checks; native gates are listed below.
 check:
     python3 -m py_compile tools/ble_lab.py
     python3 tools/ble_lab.py --help > /dev/null
@@ -48,3 +48,31 @@ lab-check: check
     .venv/bin/python tools/luna_tcp.py --help > /dev/null
     /usr/bin/python3 -m py_compile tools/luna_mac.py tools/luna_tcp.py tools/luna_wire.py tools/ucd2.py
     .venv/bin/python -m unittest discover -s tools -p 'test_luna_*.py'
+
+# Generate the thin Apple application and shared native frameworks.
+apple-generate:
+    xcodegen generate --spec Apps/Apple/project.yml
+
+# Compiles without signing or accessing a connected phone.
+apple-build: apple-generate
+    xcodebuild -project Apps/Apple/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'generic/platform=iOS Simulator' -configuration Debug -derivedDataPath .local/AppleDerivedData CODE_SIGNING_ALLOWED=NO build
+
+apple-test simulator: apple-generate
+    xcodebuild -project Apps/Apple/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'platform=iOS Simulator,id={{simulator}}' -configuration Debug -derivedDataPath .local/AppleDerivedData CODE_SIGNING_ALLOWED=NO test
+
+apple-simulator simulator:
+    bash scripts/apple-simulator.sh {{quote(simulator)}}
+
+# Uses a local recording; never substitutes replay into release builds.
+apple-replay simulator video:
+    bash scripts/apple-simulator.sh {{quote(simulator)}} {{quote(video)}}
+
+core-test:
+    swift test
+    swift test --package-path Adapters/Insta360Protocol
+
+android-build:
+    cd Apps/Android && ./gradlew :app:assembleDebug
+
+android-check:
+    cd Apps/Android && ./gradlew :monitor:testDebugUnitTest :luna-adapter:testDebugUnitTest :app:lintDebug :monitor:lintDebug :luna-adapter:lintDebug

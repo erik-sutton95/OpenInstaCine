@@ -1,0 +1,116 @@
+name: OpenInstaCine
+options:
+  bundleIdPrefix: com.opencapture
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  SharedMonitorEngine:
+    path: ../..
+  Insta360Protocol:
+    path: ../../Adapters/Insta360Protocol
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: "4V4EGQ6LZA"
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: YES
+    SUPPORTS_MACCATALYST: YES
+    TARGETED_DEVICE_FAMILY: "1,2"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) CI_SILENCE_GL_DEPRECATION=1"
+    OTHER_SWIFT_FLAGS: "$(inherited) -Xcc -DCI_SILENCE_GL_DEPRECATION"
+targets:
+  MonitorUI:
+    type: framework
+    platform: iOS
+    sources:
+      - path: ../../Shared/Apple/MonitorUI
+        excludes: [Resources]
+      - path: ../../Shared/Apple/MonitorUI/Resources
+        excludes: [Fonts, Icons]
+        buildPhase: resources
+      - path: ../../Shared/Apple/MonitorUI/Resources/Fonts
+        type: folder
+        buildPhase: resources
+      - path: ../../Shared/Apple/MonitorUI/Resources/Icons
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: SharedMonitorEngine
+        product: OpenPocketViewCore
+      - package: SharedMonitorEngine
+        product: MonitorContracts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.monitorui
+  Insta360Apple:
+    type: framework
+    platform: iOS
+    sources:
+      - ../../Adapters/Insta360Apple/Sources/Insta360Apple
+    dependencies:
+      - package: SharedMonitorEngine
+        product: MonitorContracts
+      - package: Insta360Protocol
+        product: Insta360Protocol
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.insta360adapter
+  OpenInstaCine:
+    type: application
+    platform: iOS
+    sources:
+      - path: OpenInstaCine
+        excludes: ["*.xcconfig", "*.example"]
+    dependencies:
+      - target: MonitorUI
+      - target: Insta360Apple
+      - package: SharedMonitorEngine
+        product: MonitorContracts
+    configFiles:
+      Debug: OpenInstaCine/Frameio.xcconfig
+      Release: OpenInstaCine/Frameio.xcconfig
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine
+        PRODUCT_NAME: OpenInstaCine
+        CODE_SIGN_ENTITLEMENTS: OpenInstaCine/OpenInstaCine.entitlements
+        INFOPLIST_FILE: OpenInstaCine/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: OpenInstaCine
+        INFOPLIST_KEY_CFBundleName: OpenInstaCine
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "OpenInstaCine uses Bluetooth to discover and connect your Insta360 camera."
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "OpenInstaCine receives the live picture over your camera's own Wi-Fi."
+        INFOPLIST_KEY_NSMotionUsageDescription: "OpenInstaCine can use headphone motion with cameras that support gimbal control."
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "OpenInstaCine saves clips you choose to Photos."
+        INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone: YES
+  MonitorUITests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - ../../Tests/MonitorUITests
+    dependencies:
+      - target: OpenInstaCine
+      - target: MonitorUI
+      - package: SharedMonitorEngine
+        product: OpenPocketViewCore
+      - package: SharedMonitorEngine
+        product: MonitorContracts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.monitorui.tests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/OpenInstaCine.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/OpenInstaCine
+        BUNDLE_LOADER: $(TEST_HOST)
+schemes:
+  OpenInstaCine:
+    build:
+      targets:
+        OpenInstaCine: all
+        MonitorUITests: [test]
+    test:
+      targets:
+        - MonitorUITests

@@ -1,0 +1,4 @@
+// Copy to Frameio.local.xcconfig (ignored) for a configured delivery build.
+FRAMEIO_CLIENT_ID =
+FRAMEIO_REDIRECT_URI =
+FRAMEIO_URL_SCHEME = openinstacine

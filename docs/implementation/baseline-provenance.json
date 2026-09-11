@@ -1,0 +1,881 @@
+{
+  "repository": "OpenPocketCine",
+  "commit": "9c4e7334ca4d935c5d467abecaf8f968f7927d84",
+  "files": [
+    {
+      "path": "Shared/Apple/MonitorUI/LiveZoomControls.swift",
+      "source": "ios/OpenPocketCine/LiveZoomControls.swift",
+      "sha256": "ba29ba419c66687dbb7f728c1ecc3fbc5f92ad5eb1df16c92c4b926b657f1fa3"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/AppSettings.swift",
+      "source": "ios/OpenPocketCine/AppSettings.swift",
+      "sha256": "abf75bbc4636c97641aef01d7949a5c8a91cc8491129953cda12638ffb98f3a0"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/HeadphoneMotion.swift",
+      "source": "ios/OpenPocketCine/HeadphoneMotion.swift",
+      "sha256": "121734d649246dbef1710cabc807677ad327cc4ee937685b100b98854531ec39"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Frameio.local.xcconfig.example",
+      "source": "ios/OpenPocketCine/Frameio.local.xcconfig.example",
+      "sha256": "55c118333096f9d1bbec10fdbf9a222fd67d20646fa2536058ddc0b56f2c73a9"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/ConnectionSetupView.swift",
+      "source": "ios/OpenPocketCine/ConnectionSetupView.swift",
+      "sha256": "c6687efce03f4279e62ee7dbbfe2d536ecb5f766718f4671a931913d660e65fa"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/FeedUpscale.swift",
+      "source": "ios/OpenPocketCine/FeedUpscale.swift",
+      "sha256": "74135b03572e54f71d3d8a3eb601350a848529630eb35e5dc750bb621e7accf8"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LivePortraitTopBar.swift",
+      "source": "ios/OpenPocketCine/LivePortraitTopBar.swift",
+      "sha256": "752b8e7259c8711d27bdfd964255ddc67eb45602fdfe7271bd322dd59b427dfc"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/FeedPresentScaler.swift",
+      "source": "ios/OpenPocketCine/FeedPresentScaler.swift",
+      "sha256": "2874a51bffe3947f14326b63b8cdadf38ff2c4cfdaa4f4d00b3532bed5883bae"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LivePortraitModules.swift",
+      "source": "ios/OpenPocketCine/LivePortraitModules.swift",
+      "sha256": "2375ec4983c4c0dc8e10781dead43270f87decd6f130143b18b738788db4599e"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/PlaybackAudio.swift",
+      "source": "ios/OpenPocketCine/PlaybackAudio.swift",
+      "sha256": "b26bac0ddc6f8cbf01be2a4f1219f6342f583d1369c791397c76bacc91b18a1a"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/AppRoot.swift",
+      "source": "ios/OpenPocketCine/AppRoot.swift",
+      "sha256": "fe462a07897601a6580e92abb870bfa03da6b2afb0f1b4dddccd5b2716c9f564"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/MediaLibraryStub.swift",
+      "source": "ios/OpenPocketCine/MediaLibraryStub.swift",
+      "sha256": "256aa9785d2c94dfc950c0663fd950dae28de4de6d06c66b1d990e3e9626e1be"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/GimbalGamepad.swift",
+      "source": "ios/OpenPocketCine/GimbalGamepad.swift",
+      "sha256": "a4093c1ecf8a803b1096a604a59857c216f2547b7b28bd12686d6f82c07c9931"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveViewScreen.swift",
+      "source": "ios/OpenPocketCine/LiveViewScreen.swift",
+      "sha256": "6faefd6f7f31068d1bef08e6dda8fc007e2acdb96fd79bda4c8744d841f7c12b"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/PlaybackFeed.swift",
+      "source": "ios/OpenPocketCine/PlaybackFeed.swift",
+      "sha256": "c7c1a542445fc863ce567bc495314736ec84ac0afb62ad4ffca51b0f0aa75e64"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveMonitorFx.swift",
+      "source": "ios/OpenPocketCine/LiveMonitorFx.swift",
+      "sha256": "fcea03cf03dec724b8a066f0732e55cb6733ba541727f1771467e1a84abc32c2"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveScopes.swift",
+      "source": "ios/OpenPocketCine/LiveScopes.swift",
+      "sha256": "84d12948358889c2f41effb2f2bfd7286bd2843e27491580e8ff008120b7f1d8"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LegalScreens.swift",
+      "source": "ios/OpenPocketCine/LegalScreens.swift",
+      "sha256": "dd90de44a368db1ca30edeb888b030327781d907a31584727a6169e24d4ae9e7"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/ScopeTraceMetalView.swift",
+      "source": "ios/OpenPocketCine/ScopeTraceMetalView.swift",
+      "sha256": "f0c2f7a9e75ebcde2f24c0ababefe4908d19249c8f3c95ca8466f8363baf19d1"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveMonitorLooks.swift",
+      "source": "ios/OpenPocketCine/LiveMonitorLooks.swift",
+      "sha256": "2c1e3aa4dcfee4c7f07b54b9f5e1273f720e9af4b239e17ad84c7bf39378c144"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/PlaybackEffects.swift",
+      "source": "ios/OpenPocketCine/PlaybackEffects.swift",
+      "sha256": "4572c0a04987500976b66222d58ac4eec319fd01371117ebdb1803fbe6ca4d3a"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Branding.swift",
+      "source": "ios/OpenPocketCine/Branding.swift",
+      "sha256": "9b3005ba2bc77d700b9e4358542a1cda9cd4497e001a6e5f72ec1708aff55cc0"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/VideoView.swift",
+      "source": "ios/OpenPocketCine/VideoView.swift",
+      "sha256": "63dc7d7599fa3fa600049f420defa57e1cd2c959abf806785644114a4cb6d7f2"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveRecordButton.swift",
+      "source": "ios/OpenPocketCine/LiveRecordButton.swift",
+      "sha256": "4e32c839e0ec0b7e0d8c310fbb02db49af28c35d983b5c459b5dd1d91ed00418"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LivePortraitSystemBar.swift",
+      "source": "ios/OpenPocketCine/LivePortraitSystemBar.swift",
+      "sha256": "8b5024459256df9e1cfce07e76ecff9603b13358675c2bf1ea9c209f57e5a83e"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveOverlaySlots.swift",
+      "source": "ios/OpenPocketCine/LiveOverlaySlots.swift",
+      "sha256": "60302181732e2512e7f3e84724201a813d0c556761907cb57562da333da2448e"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/MediaDelivery.swift",
+      "source": "ios/OpenPocketCine/MediaDelivery.swift",
+      "sha256": "9a2cc1ed44d60c87b17a99ba7f39d984e01a320a09b3be7c07ffd08a68b272ea"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveAssists.swift",
+      "source": "ios/OpenPocketCine/LiveAssists.swift",
+      "sha256": "21cfceb26453f1857c632c56758e0c7ba18378fd46abfc4664b21ea53379bd27"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/ChromeEditChrome.swift",
+      "source": "ios/OpenPocketCine/ChromeEditChrome.swift",
+      "sha256": "a24e01f55b666cfaabd9cb54f9c9e3a2ee409e7352c479b503583136d60a2f0f"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveLockButton.swift",
+      "source": "ios/OpenPocketCine/LiveLockButton.swift",
+      "sha256": "62ed7fc0c39263ec57150a9b28f6c4e68fdb026ff0f52ead71c81c74683facc8"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveAssistBar.swift",
+      "source": "ios/OpenPocketCine/LiveAssistBar.swift",
+      "sha256": "b824ec4a75a10a84fbc4cc0c05f039a631ac7b6ff36261da0d5137f0fab93e35"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/MediaDeliveryPopup.swift",
+      "source": "ios/OpenPocketCine/MediaDeliveryPopup.swift",
+      "sha256": "bc34c8075552486890a32bbcaa30e4a39560286adfb950544d83b73c4de50202"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveType.swift",
+      "source": "ios/OpenPocketCine/LiveType.swift",
+      "sha256": "69f7c1717474ced3e2d5b4e71ad05e414311a74d68125320690f958fdadfc3e3"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/SavedCameraStore.swift",
+      "source": "ios/OpenPocketCine/SavedCameraStore.swift",
+      "sha256": "5afd2727ebd4707d5ac76d2d7aacbcd3e71311e109350b8375ee224ed2e3b81e"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Frameio.xcconfig",
+      "source": "ios/OpenPocketCine/Frameio.xcconfig",
+      "sha256": "c0e65b10685bafdbe00fd4ad675151e50a86f650b870b2dfef5df22f8e09d50c"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/CaptureControlSheets.swift",
+      "source": "ios/OpenPocketCine/CaptureControlSheets.swift",
+      "sha256": "d6e9e90a613aec2d2f6c19dc4f2948d46add53d6bde6d9eb7e875f67ea0e5e44"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveHeadTrackAxisDials.swift",
+      "source": "ios/OpenPocketCine/LiveHeadTrackAxisDials.swift",
+      "sha256": "7e55ac48c7c4c2c951bcf0bedbc60a763dc970cd02d00821d3ffe67bf1da99e4"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LUTPicker.swift",
+      "source": "ios/OpenPocketCine/LUTPicker.swift",
+      "sha256": "5b36ca86486cdbd390496eb52a94ded688b1569f573aee4cf0f160a8a0ee6dde"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/FeedSuperResolution.swift",
+      "source": "ios/OpenPocketCine/FeedSuperResolution.swift",
+      "sha256": "d661e4d15a85e3ec3e9af3751aae97358f19471b37d69467c032d925a7bc8386"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveMonitorLayout.swift",
+      "source": "ios/OpenPocketCine/LiveMonitorLayout.swift",
+      "sha256": "02746a9d50e44619c7fa7d6eca88c27ff802f78b0174d79b0d1a8d7e3f4db6c5"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/DesignShared.swift",
+      "source": "ios/OpenPocketCine/DesignShared.swift",
+      "sha256": "51f590233f96ff76dde6c5afd0a72d167eb6f6e624ffa9100cb41bbb26e836f1"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/SavedCamerasView.swift",
+      "source": "ios/OpenPocketCine/SavedCamerasView.swift",
+      "sha256": "e8f8860364b8e18f39f710bdfb85ec14bc7e630f9a6de5b6ee068de41c0501ef"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/FeedWorkingRaster.swift",
+      "source": "ios/OpenPocketCine/FeedWorkingRaster.swift",
+      "sha256": "f3963dbde5280b17c7ff5c08236c53a02ea9e536078078eb0f4819f42f8f07ed"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/MediaDeliveryOverlay.swift",
+      "source": "ios/OpenPocketCine/MediaDeliveryOverlay.swift",
+      "sha256": "d9902e4675cec57c5a0096c69cf50ef9d15969f08f8d112eb9e4599b4c000d22"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveTopChrome.swift",
+      "source": "ios/OpenPocketCine/LiveTopChrome.swift",
+      "sha256": "e5ed00e16d7de00b6244886553bb700e5c71da0ddf3cfd1b7adb9f0f7612e0a1"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/DiagnosticCenter.swift",
+      "source": "ios/OpenPocketCine/DiagnosticCenter.swift",
+      "sha256": "8a6f85d1aeca61d5d74ce8077cbf957fdc41976c9e712fc83338ca7119f9f57e"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveCameraControlBar.swift",
+      "source": "ios/OpenPocketCine/LiveCameraControlBar.swift",
+      "sha256": "d5897ca7751a293892fba94ed1eace21f109f522d4a96c848c58609577bad5fa"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/HevcDecoder.swift",
+      "source": "ios/OpenPocketCine/HevcDecoder.swift",
+      "sha256": "1ce82ea03ce7dac1386be45351e7e73ac34bdcac6efb24803dac9ff42b35e9d0"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/SettingsRootView.swift",
+      "source": "ios/OpenPocketCine/SettingsRootView.swift",
+      "sha256": "4be4cf268823203dc0d28d659f9b96f67488bc4ee203726f48267d9dd03b9bcd"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/OpcIcon.swift",
+      "source": "ios/OpenPocketCine/OpcIcon.swift",
+      "sha256": "692ab7507b63361181d135df3823a5e7847d97f06e41b5adfc5af5db2ddc3282"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveFrameSample.swift",
+      "source": "ios/OpenPocketCine/LiveFrameSample.swift",
+      "sha256": "e31811c07f5dd371a81d891765368bc50277ba312289df272a508a2588c63548"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveDispToggle.swift",
+      "source": "ios/OpenPocketCine/LiveDispToggle.swift",
+      "sha256": "1254acd7b5e987f349588aba7072657c67e85f21ffbd9c5808409b9777bd9a81"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveGimbalStick.swift",
+      "source": "ios/OpenPocketCine/LiveGimbalStick.swift",
+      "sha256": "34d5a229a2d7ec6e633f9e47c453e8b4c86713b3125c0bcb3f204f3f0d9fc1df"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveFaceAF.swift",
+      "source": "ios/OpenPocketCine/LiveFaceAF.swift",
+      "sha256": "0bda0bcfb69839309dd75b881689c86e905ecd0d4dd8bb4ef804531369a3485e"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/StartupChrome.swift",
+      "source": "ios/OpenPocketCine/StartupChrome.swift",
+      "sha256": "222ba1cec835e8ef9cb49c4db9330d6d9a7c08e5144bbadb4e6d006142f6d18b"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/ControlLiveLog.swift",
+      "source": "ios/OpenPocketCine/ControlLiveLog.swift",
+      "sha256": "aecbcfefff9abef61d8b49b267d6101f19c11b999265fef8c8eb3a5957192284"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/MonitorRecovery.swift",
+      "source": "ios/OpenPocketCine/MonitorRecovery.swift",
+      "sha256": "225a06cb246a3a199caae4c1ab96563fcd31e4d743ae28d00090eeabd6a4f951"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LiveBatteryCluster.swift",
+      "source": "ios/OpenPocketCine/LiveBatteryCluster.swift",
+      "sha256": "0dc00190d680cd730fe378f02f5c3c32540da432a37efcc50d190b4bf5d3c620"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/ClipColorProfileIO.swift",
+      "source": "ios/OpenPocketCine/ClipColorProfileIO.swift",
+      "sha256": "d33ca76eb29956e43f6f540b853ea4488f439cc6484e7747e5ff16eadbcb75fe"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LucideSVG.swift",
+      "source": "ios/OpenPocketCine/LucideSVG.swift",
+      "sha256": "bc7ce507e8198ba15dc173cb703069db1b507f055cf6a79a158292e8af889cd7"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/LocalVPNProbe.swift",
+      "source": "ios/OpenPocketCine/LocalVPNProbe.swift",
+      "sha256": "bac522076031fd7566fe13386b852eb63c23e6c648413401230d50a201a11110"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/MediaPlayer.swift",
+      "source": "ios/OpenPocketCine/MediaPlayer.swift",
+      "sha256": "aa2721e5beb1372d5fd3f03a655fe7b8690329b06c2d2d2df7dbc724bf55796a"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Frameio/FrameioAuthCoordinator.swift",
+      "source": "ios/OpenPocketCine/Frameio/FrameioAuthCoordinator.swift",
+      "sha256": "24cd1510d0b6141413c2a4e7d357445d8d0a28f6f48ca4b7a08d50506a204ec6"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Frameio/FrameioSession.swift",
+      "source": "ios/OpenPocketCine/Frameio/FrameioSession.swift",
+      "sha256": "b4cc92b9029fbd3806659591fba1f98ecdf018e36ce13b4e995a7b311ad84f51"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Frameio/FrameioOAuth.swift",
+      "source": "ios/OpenPocketCine/Frameio/FrameioOAuth.swift",
+      "sha256": "ae140a5c90425aa8852e56bc920b9b567789fc6dbc82f7189a67af0c98a81548"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Frameio/FrameioModels.swift",
+      "source": "ios/OpenPocketCine/Frameio/FrameioModels.swift",
+      "sha256": "1b8a98c37d51080acfb3725e5b2735a7740027ba1a80625b7f1070ed7049f66f"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Frameio/FrameioClient.swift",
+      "source": "ios/OpenPocketCine/Frameio/FrameioClient.swift",
+      "sha256": "154efa88d4dff69bf8207b2de82f8aae958f556c69ba3f2ef68d9ccbdb7769fc"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/DJI_Official_Pocket4P_DLog2_Rec709_33.cube",
+      "source": "ios/OpenPocketCine/Resources/DJI_Official_Pocket4P_DLog2_Rec709_33.cube",
+      "sha256": "ca19fb2da9ddb82261a6baa86a511ce22bb46a1d6ca5bf50ca4c4dbbd71eb1a1"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/DJI_Official_Nano_DLogM_Rec709_33.cube",
+      "source": "ios/OpenPocketCine/Resources/DJI_Official_Nano_DLogM_Rec709_33.cube",
+      "sha256": "b18162854ab47702068410c33afa98a8cb6eef159fc5a04ce0e65fad0fd8947e"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/DJI_Pocket4P_DLog2_Rec709_33.cube",
+      "source": "ios/OpenPocketCine/Resources/DJI_Pocket4P_DLog2_Rec709_33.cube",
+      "sha256": "e62e39023196ca699a6a95747356b1ce7b6910c04d52c36de7289df021743628"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/DJI_Pocket4P_DLog_Rec709_33.cube",
+      "source": "ios/OpenPocketCine/Resources/DJI_Pocket4P_DLog_Rec709_33.cube",
+      "sha256": "eb24acb42e40d606fc953802f7ff03b6cc088a7e6df97fd58e83f4cf43736851"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/DJI_Official_Pocket4P_DLog_Rec709_33.cube",
+      "source": "ios/OpenPocketCine/Resources/DJI_Official_Pocket4P_DLog_Rec709_33.cube",
+      "sha256": "ca8bc7d3bf382512ed9501137c8b88d1829ae9b22a84965d7d2e1339f615de72"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/DJI_Official_Action6_DLogM_Rec709_33.cube",
+      "source": "ios/OpenPocketCine/Resources/DJI_Official_Action6_DLogM_Rec709_33.cube",
+      "sha256": "1972eb9b05699ba19d4aaa67aaa5fb00b46935c60ba9219183289f79e044cbb2"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/PeakingAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/PeakingAssist.swift",
+      "sha256": "eda76805cb37ece5081e25b980d5d9107c71279640ff6036a602221501b6fb04"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/MirrorAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/MirrorAssist.swift",
+      "sha256": "26044907425719f854a07de1d50b5add3d82b2c77c97fe305a585a68db8251ba"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/HistogramAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/HistogramAssist.swift",
+      "sha256": "0c95d9d541a4a185966a15572a9527a9c3e015de365faf57e05b28b8a1a4c705"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/CrosshairAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/CrosshairAssist.swift",
+      "sha256": "86b81bbe239f33e651f735f7da24b06b69ad5ae54d10cf5f224e02a9ff175dc7"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/GuidesAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/GuidesAssist.swift",
+      "sha256": "93bb75fde85f9a7af02f9569641369a01105c0a1245303d7e855a12372c75dfe"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/TrafficLightsAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/TrafficLightsAssist.swift",
+      "sha256": "961a2b762354c2139aa487184ac9ad61404d6973948d6ff5f44fd0492db50acd"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/FalseColorAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/FalseColorAssist.swift",
+      "sha256": "a782ad9f54b32f8d1ca1f9bd0e58b78670b1ec667504b43c3ec5479e51daf667"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/WaveformAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/WaveformAssist.swift",
+      "sha256": "caf7d9f9909d07067c07324f518c733e1706ba9bfb7068833c287a9d570e3d04"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/VectorscopeAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/VectorscopeAssist.swift",
+      "sha256": "78ca126e669ba8f653776a46bf49f2066fae30e28ac06d855939fcfcfb2c8cc0"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/AudioAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/AudioAssist.swift",
+      "sha256": "14fb8b6b14cecaa94d2b0a9c32b15902b970e102b1b602663fa6b7a56ae2605b"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/AssistLongPressChrome.swift",
+      "source": "ios/OpenPocketCine/Assists/AssistLongPressChrome.swift",
+      "sha256": "077d815efe5dde29f6e0341c8ca3b5f860611fc0e55aedda8d5afd2254c48256"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/GridAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/GridAssist.swift",
+      "sha256": "7c91161d5377f146d9da2f412582872268ef5174e9cbed393ea5cb7184244ee1"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/ZebraAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/ZebraAssist.swift",
+      "sha256": "03d51dd7c3e4189d8796bd04b1936e8e7ad5ebc584b9656aaec57afae3c231c8"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/ParadeAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/ParadeAssist.swift",
+      "sha256": "61e0ea4574cccf843ec8e03408cd6ec7ed303b7a633cf19ec2ea79005639b29f"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Assists/LUTAssist.swift",
+      "source": "ios/OpenPocketCine/Assists/LUTAssist.swift",
+      "sha256": "fa523b8e76323f01ec8dff843dba93babbd1e9080b6d712173052a21f9336e33"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/gimbal.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/gimbal.svg",
+      "sha256": "84fcb86fbf28a921f6e7b2deebfbede57c0b79ae0673367b91f7cfd6afcb068e"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Fonts/IBMPlexSans-Medium.ttf",
+      "source": "ios/OpenPocketCine/Resources/Fonts/IBMPlexSans-Medium.ttf",
+      "sha256": "296bbcdc58d7576041cac510175c24bc629d2c1c45ccd25034cd9903d97d4478"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Fonts/Sora-Bold.ttf",
+      "source": "ios/OpenPocketCine/Resources/Fonts/Sora-Bold.ttf",
+      "sha256": "0ddaf6140b7db9fa56849ebf1ad1acfce8a6346cb1e08788f60050fd00a55e68"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Fonts/OFL-IBMPlexSans.txt",
+      "source": "ios/OpenPocketCine/Resources/Fonts/OFL-IBMPlexSans.txt",
+      "sha256": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Fonts/IBMPlexSans-SemiBold.ttf",
+      "source": "ios/OpenPocketCine/Resources/Fonts/IBMPlexSans-SemiBold.ttf",
+      "sha256": "6e0dcd02fd94e40c85974f328bb5a3521cfb81b59332559911fb08ff228bb176"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Fonts/Sora-Medium.ttf",
+      "source": "ios/OpenPocketCine/Resources/Fonts/Sora-Medium.ttf",
+      "sha256": "050dcca0e6dd5a6f0d43d3441557f1369dbdf16e6c79e9eb7aeaa6393ab7e87e"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Fonts/Sora-SemiBold.ttf",
+      "source": "ios/OpenPocketCine/Resources/Fonts/Sora-SemiBold.ttf",
+      "sha256": "3da7bfbd7219e449a581ef8af09de5dd10c42a531dcc57a4b3a8668a7258235a"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Fonts/IBMPlexSans-Regular.ttf",
+      "source": "ios/OpenPocketCine/Resources/Fonts/IBMPlexSans-Regular.ttf",
+      "sha256": "1fb42ec91b69b3545f15d7cfda148ae20bc2cb17aaed79eea9b7d3941cb71e4d"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Fonts/OFL-Sora.txt",
+      "source": "ios/OpenPocketCine/Resources/Fonts/OFL-Sora.txt",
+      "sha256": "ba0b9729c9428ba79a0459ab8ec575791b51509dbec213e383d0316d37fec299"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Fonts/IBMPlexSans-Bold.ttf",
+      "source": "ios/OpenPocketCine/Resources/Fonts/IBMPlexSans-Bold.ttf",
+      "sha256": "823080c99bf5e226541aeef4c92da2a81a10102e7c54423507551a66ced25441"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/volume-2.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/volume-2.svg",
+      "sha256": "fb404f9c128a0579de67b399177631e5edb3502fdc247ceb30e8b15754b46071"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/crosshair.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/crosshair.svg",
+      "sha256": "ae9ed8583286ea03bffae85bb69aee5227540e588b0370cf185f2141ebe25e8d"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/layout-list.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/layout-list.svg",
+      "sha256": "062ced0bfe4c3fb61b42471ab3d16b3fc26e6b764cb043890caf31e64df58534"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/layout-grid.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/layout-grid.svg",
+      "sha256": "b8903f61d09b1d75e55c71158277d26570962f69c2099446a251871e0a2d6678"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/chevrons-up-down.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/chevrons-up-down.svg",
+      "sha256": "edc561e007cfab9b6b45301a8cb02711fd7c901e53e30ee29c5491b74dbe6bcc"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/circle.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/circle.svg",
+      "sha256": "3a991bd47beaf9874fba6fdf87bbba442970a89b5e6aa391558bc8b0a00a0513"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/smartphone.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/smartphone.svg",
+      "sha256": "f9fdb700b50feb5fc6436f53eb9813e9eb56a9071ac4cdcba69c7f7c1c13877d"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/chevron-down.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/chevron-down.svg",
+      "sha256": "66ea878e72ed3488bb3b464c39dfdccee8d1f78e560dccea40e5e12da0e87e87"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/rotate-cw.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/rotate-cw.svg",
+      "sha256": "ddcfe6d87240475946935e77411cd4d15a06f3d28a9b921bafed224ebe953668"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/signal.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/signal.svg",
+      "sha256": "81f455a4004fd5c9faf5637f15f9b0dbaeed87274c8f46af60e57a9dbb0b6f71"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/contrast.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/contrast.svg",
+      "sha256": "a9f1a6166c479cd3e546625b09686a7e97322c850a9b146f270f912e886c395c"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/maximize.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/maximize.svg",
+      "sha256": "1f790856b0de805ab62e871609f1990b89d227d472022e57a11fde015aad4826"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/chevron-up.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/chevron-up.svg",
+      "sha256": "d09f13fcbef3c493ead7e4663b5ee91804fec38d5edb5e7cc3acfbd547641cf4"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/sliders-vertical.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/sliders-vertical.svg",
+      "sha256": "18b998ba7147e7b92288a599ce204efd1e829b2d0b4abeb74218d62d98051940"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/x.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/x.svg",
+      "sha256": "4a9cdab38fbb96162e7dace28e33f4ca0e49d8963a6162abc3d4691b7d675117"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/lock.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/lock.svg",
+      "sha256": "d2cfe60cac8deaef36442b5c8218c1e61abe18222784b2a370ea090d13fca840"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/refresh-cw.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/refresh-cw.svg",
+      "sha256": "2e10dd403c85a24f163d59fc6151aa21147fe9402e1305dfc8979208caee8944"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/chevron-right.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/chevron-right.svg",
+      "sha256": "2758143d7b2434e4aa7307dfd34405c87909ff4052f21b5f3f40d45224b4f19b"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/sliders-horizontal.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/sliders-horizontal.svg",
+      "sha256": "e43a00e5eb684e6cbb61083bed2528d7a3fa5f265693eb2b5f314cd432aa65f4"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/aperture.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/aperture.svg",
+      "sha256": "4bf4b9978b6f9eeb4421e70762b1bbc70a98ed5bd92e5382f1cd7f72cb5e2252"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/circle-play.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/circle-play.svg",
+      "sha256": "10b5deb7c8fa5587897a1eb3d7ffc3c6c2f7b1b7f9a5b5080050aa529e9eb9ae"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/minimize.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/minimize.svg",
+      "sha256": "7daa304bc3dccac1f100304e66a41139662cc6c0ba3eba67480d97466a9ce02b"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/settings.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/settings.svg",
+      "sha256": "0ae27fd0f81999229e3127ac96c5b32edfea448e291d509e76212b917551d66b"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/download.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/download.svg",
+      "sha256": "3daeee13ded5a3afa2198b1bb4e2262d163922f97d96ac6ff9953e8ed4fe039d"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/catalog.txt",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/catalog.txt",
+      "sha256": "b834dc41b09167456a09057a14839e6fcda1dfa2f6f624dce02254ac75b3d6e9"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/skip-forward.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/skip-forward.svg",
+      "sha256": "f6bdc4b8d453332bafcf1366a48d5ece4bd4f15eced97c85c3676bd22c5cadf9"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/layers.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/layers.svg",
+      "sha256": "ce16d0a955e3581cda17f6b2fd5c5bc2034b405f9cecc31c8ebb8495b4afc1bb"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/radio.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/radio.svg",
+      "sha256": "e55ef723902350caaabb68c8814ba57c4c2d237e0747a5f0520624e6f2f8c861"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/circle-check.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/circle-check.svg",
+      "sha256": "3e519680ab8e2a8ad8f56a340c10d61957d872237aaa868cf324b0900a74f384"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/funnel.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/funnel.svg",
+      "sha256": "288f869330602e29a640099ffc5d6ac01caadad2ef6f8aac1138b8bf91ccd752"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/thermometer.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/thermometer.svg",
+      "sha256": "a56c95062445d52d95c51a77c4959d5a022539a0194205cc2ce2e9ce8f35847b"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/eye-off.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/eye-off.svg",
+      "sha256": "774bcd975c5de781a4ee778c76e5591bcdeb409955f7054847e7e6003da0a520"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/audio-lines.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/audio-lines.svg",
+      "sha256": "3942b8a5d6bccc927a55f857f0d44b90e2663470cd2d569000c9b60c37578dfa"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/plus.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/plus.svg",
+      "sha256": "7f6af73bf1ff6c4bca3f18351c8d1bdec6749c0c2530c4de5da85d520c21df17"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/check.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/check.svg",
+      "sha256": "7f33acc9a77a61659531044525fc008edebe215bf4dcf1c789c8674ad3277db0"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/flip-horizontal-2.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/flip-horizontal-2.svg",
+      "sha256": "f8bbeaa885c8f56758d6d8478da8912679c352e12f371f7333405a8d83f14ee0"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/focus.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/focus.svg",
+      "sha256": "d52fde05ccbd7bf629e05daeb8eadf824c85333aeca78e674db01493bc8b1f10"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/wifi.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/wifi.svg",
+      "sha256": "5c4c795d014fa95d1e1038362df44a0f0f32ded9cb08c833ae72419ebadc9a91"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/info.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/info.svg",
+      "sha256": "bc977a64eb96f3e9c1041ffd09a3fceb70e3e65c02b571f76064062ed31f3cb9"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/palette.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/palette.svg",
+      "sha256": "8e7d3fde990cffd10469ba351f27c50202b057a9bb9af5626322e53fd3abc78c"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/SOURCE.txt",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/SOURCE.txt",
+      "sha256": "34890fb354a1ea2ebe69c529841596d1718a2e1f6f1a14dd4610b05031a6e6cb"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/copy.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/copy.svg",
+      "sha256": "ea80e566c7a12628a447cb53179b19aea4f60b9143e2becd0d0f20bf260e5718"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/zoom-in.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/zoom-in.svg",
+      "sha256": "91206ae20013e2c84f2f5d09db5a7200f11698a84fc4e857b06fab2ce7c933f1"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/image.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/image.svg",
+      "sha256": "619c9db58c879dce6250376ba67d9c9102ca6dbb3b1efb9294c9f180e22273a5"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/scan.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/scan.svg",
+      "sha256": "c77f0e634b2451a14a262a59b61d75bbcea3994b16eeba1f5753e86b33282a4d"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/square.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/square.svg",
+      "sha256": "bd979354f0ab184b95cecf03eedefe40c2dc65830ac6d7e60017b2b25a354acb"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/play.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/play.svg",
+      "sha256": "d7c34786135922a92b6896f6c2384ceeb0346afbf6041dc79982011411409833"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/unplug.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/unplug.svg",
+      "sha256": "469819bc5dbdb54f9c1ccc06415f45c73b995b567016f07fb560af1eeeb0cf2e"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/camera.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/camera.svg",
+      "sha256": "ebbb3178dd80dfd942770a2237fe7bfc3515c55c7daa9d3666933a656d2790e3"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/trash.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/trash.svg",
+      "sha256": "a38b5b9f55c5258ed1096b9d6bab414cce64a72a1213bf9f9b515e7b583ae3fc"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/wifi-off.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/wifi-off.svg",
+      "sha256": "318b290106e55c3505933f434d3663524206c7a44165a89508774fba4fdbaadd"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/circle-plus.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/circle-plus.svg",
+      "sha256": "6fa978530075df975ad05e2742896a1950b74c2b133a0d208891b038a4a41c17"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/star.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/star.svg",
+      "sha256": "c59da86b889569387db28e69ad00a89f96af22863ad9eea9aa12c4876a14338c"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/sun.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/sun.svg",
+      "sha256": "a3955c8b0425fcc5c9ba12d2bdd77fe53b2cd5dd05e7742a56f342e996fb2ef8"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/chart-column.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/chart-column.svg",
+      "sha256": "80664a4c5ca1bca10bcb88c1a99f62593c94d61d72d3a4bbf577eb3f3ea4da57"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/grid-3x3.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/grid-3x3.svg",
+      "sha256": "6c24155397cf0e751c05931bae68e67e4fe0fd58baeb7b29e9f80c90ed1d5194"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/pencil.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/pencil.svg",
+      "sha256": "7e1ca7a6f5c1eb949671df762f2baadd32f5bd841d43153c3a15279af7d78d0c"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/skip-back.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/skip-back.svg",
+      "sha256": "901579624a7d28036a39b3b8bd9e6da0e8cf771a79c67836d8a52b3e2287c031"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/eye.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/eye.svg",
+      "sha256": "5bf90197dd7629cad64a2e48d1186a71559deb6121207d10e3dc5b19ebaffdcf"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/zap.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/zap.svg",
+      "sha256": "4c395891eab4d1e5627c5d414a16db037317cb2f12453de0f3a1130964c6d444"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/share.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/share.svg",
+      "sha256": "be8870646f636f4db03fd2d1d5db4912a1ab03ce2cfcc5daacc15fa8e105dbc2"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/video.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/video.svg",
+      "sha256": "d4fb6587f282c1152b953fe9494cd8ccafdf1e9f44957fbb7fe8dc7af0457597"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/LICENSE.txt",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/LICENSE.txt",
+      "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/ellipsis.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/ellipsis.svg",
+      "sha256": "4f495cc72013ffdfec677f03b33a150f7b4dd741979283fd6853a09024bca112"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/mountain.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/mountain.svg",
+      "sha256": "fced3dd3ffb1472e62a13d92e72633e9c68a4655da3d8aa801bc65a041fe64be"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/volume-x.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/volume-x.svg",
+      "sha256": "59b3477f34d36b7bdccde4ca162f4c93808d5c052c5aafd3e909b031c29201c5"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/upload.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/upload.svg",
+      "sha256": "42816ee1fa0e9d3b82272a97615c1e562b0e9de64780ebf21963bc1db0ceffd1"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/pause.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/pause.svg",
+      "sha256": "f122ec4ea7f5693a0b1baafa9c708b53980dc87b4aacb297c6e6f71c1a4c115c"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/blend.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/blend.svg",
+      "sha256": "0f76939b2becaa51186fa3ecdfed8d734c8fb4e18d04bde0024b472af91ce9fc"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/square-dashed.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/square-dashed.svg",
+      "sha256": "bb7958e30d2658e90c3eaaa01d4808fa7a7427bc1ae1744a0fe016ddda258b2a"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/list-filter.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/list-filter.svg",
+      "sha256": "36b94082bd7f161244c06a27cdeea647cb99ee5b805183cbeaf7ac3155a7103b"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/folder.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/folder.svg",
+      "sha256": "f0d92b94b797a8ab7d4c4ae33c3236c47f64068351b4e14bdb5014ee42898a39"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/timer.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/timer.svg",
+      "sha256": "6771297be65225d462c930865b6f9ee1617aa453885be4c8116a7512a77ac2b6"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/monitor.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/monitor.svg",
+      "sha256": "d1a443233345724859de8e4fb48968ba91e885e12ddbd710701548bd91b39428"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/audio-waveform.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/audio-waveform.svg",
+      "sha256": "d4b6f62b0d72b7ad223f9abeb51e64875e4533123d7898d07acfa74154eb14b3"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/chevron-left.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/chevron-left.svg",
+      "sha256": "83b0681aa38bf55e9d52a1e4b4cced624abe1fe7678ecafda133a574f1161d93"
+    },
+    {
+      "path": "Shared/Apple/MonitorUI/Resources/Icons/lucide/film.svg",
+      "source": "ios/OpenPocketCine/Resources/Icons/lucide/film.svg",
+      "sha256": "85cfa80821b34f512bd401a1249957c9f2f612497602ecc31dff39517823ee52"
+    }
+  ]
+}

@@ -23,3 +23,16 @@ __pycache__/
 *.pyc
 .build/
 DerivedData/
+
+# Native generated output and machine-local settings.
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+.gradle/
+.kotlin/
+.cxx/
+build/
+local.properties
+*.jks
+*.keystore
+.swiftpm/

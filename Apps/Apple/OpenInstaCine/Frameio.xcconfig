@@ -1,0 +1,5 @@
+// Optional Adobe Native App configuration. Tokens never belong in this file.
+FRAMEIO_CLIENT_ID =
+FRAMEIO_REDIRECT_URI =
+FRAMEIO_URL_SCHEME = openinstacine
+#include? "Frameio.local.xcconfig"
