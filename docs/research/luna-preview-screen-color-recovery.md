@@ -57,6 +57,8 @@ All media subtypes were re-examined in the previously recorded firmware **v1.0.2
 
 The audit summary and privately extracted channels are under `.local/luna-stream-audit/`. Some public receiver comments label `0x30` as secondary preview and `0x40` as gyro. Those labels conflict with the structure measured here and must not be used as Luna routing facts. [Community receiver][community-receiver]
 
+An independent Python decoder documents `0x30` as gyro/IMU and `0x40` as a synchronization packet. This corroborates the metadata interpretation of these channels; it does not establish that the scalar's exact Luna meaning is exposure duration. [Decoder callbacks][whitebox-media]
+
 ## External protocol leads, with limits
 
 The reverse-engineered schema declares primary bitrate/resolution fields **6/7**, secondary **9/10**, and `previewStreamNum` **11** in `StartLiveStream`. Field **12** is named `enableRotate`. Field **14** selects transport (USB/Wi-Fi/Bluetooth); its name `source` does not refer to a sensor or ISP processing stage. The current request already contains a secondary-resolution field but omits stream count. Neither a field name nor a default proves whether Luna will emit two streams, or whether either branches before Color Recovery. No declared field in this message explicitly selects a pre-LUT image. [Pinned schema][community-schema]
@@ -92,3 +94,4 @@ Until those observations establish a separate route, the accurate capability sta
 [community-schema]: https://github.com/iliakonnov/insta360-nas/blob/b78dddb9cd9bc2cf632871646c6f5af238e582d4/insta360-server/insta360_messages.proto
 [community-receiver]: https://github.com/Ripwords/insta360-luna-ultra-desktop/blob/426d643d302d6818a7d536b815ee15f73bb9c29d/src-tauri/src/luna.rs
 [community-features]: https://github.com/Ripwords/insta360-luna-ultra-desktop/blob/426d643d302d6818a7d536b815ee15f73bb9c29d/docs/FEATURES.md
+[whitebox-media]: https://insta360.whitebox.aero/api-reference/rtmp-module/#insta360.rtmp.Client.on_gyro_data
