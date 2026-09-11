@@ -82,8 +82,8 @@ xcodebuild -project Apps/Apple/OpenInstaCine.xcodeproj \
 `apple-test`, `apple-simulator` and `apple-replay` require a simulator UUID.
 Replay media and generated indexes stay private and are not bundled with the
 app. Without a replay source, Simulator cannot exercise CoreBluetooth. Mac
-Catalyst is configured as a secondary target; it is not a promised validated
-desktop release.
+Catalyst also builds and has displayed private replay through the shared
+monitor; native live-camera operation on Catalyst still needs validation.
 
 ```sh
 # Native Android APK, inherited monitor tests, protocol tests and lint.
@@ -101,8 +101,11 @@ not establish real-device performance.
 
 The extraction passed 609 shared-core/facade tests and 24 Swift protocol tests.
 Android reports 462 inherited monitor tests plus 9 Luna tests passing, with APK
-and lint verification. Final Apple UI-suite results are recorded separately
-when review completes; this README does not claim that suite is fully passing.
+and lint verification. The Apple UI run completed 406 tests with one optional
+fixture skip and no failures. Simulator and Catalyst review displayed private
+Luna footage through the shared renderer. The final
+[acceptance report](docs/implementation/acceptance.md) records subsequent
+changes and the exact verification state.
 The [adapter review](docs/implementation/apple-adapter-review.md) records
 connection-race fixes and the remaining hardware verification boundary.
 

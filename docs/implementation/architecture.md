@@ -151,6 +151,7 @@ visible in build files rather than hidden in generated binaries.
 | `swift test` | Shared portable behavior, compatibility/JNI facade helpers and module-boundary checks; 609 passed at extraction |
 | `swift test --package-path Adapters/Insta360Protocol` | 24 sanitized fixture, malformed frame, fragmentation, checksum and protobuf/envelope tests |
 | Android JVM tests/build/lint | 462 inherited monitor tests and 9 Luna tests reported passing; arm64 APK/native staging and lint. Does not exercise physical Android radio/network permissions |
+| Apple UI suite and Catalyst build | 406 UI tests completed, one optional fixture skip, no failures. Catalyst build and private replay review also completed; neither proves native camera association |
 | Apple Simulator / Android emulator LOCAL REPLAY | Decoding, real-image scopes, presentation and shared UI from private recorded footage. Does not connect to a camera |
 | Native physical-device run | Still required for first-install Bluetooth/Local Network/Wi-Fi consent, feed startup and sustained reconnect. No phone actions were performed during this implementation review |
 
@@ -159,8 +160,9 @@ See the root [README](../../README.md#build-and-review) for commands. Apple uses
 `just apple-test`, `just apple-simulator` and `just apple-replay`. Android uses
 `Apps/Android/gradlew -p Apps/Android` with `:app:assembleDebug`,
 `:monitor:testDebugUnitTest`, `:luna-adapter:testDebugUnitTest` and each module's
-`lintDebug`. Final Apple UI-suite results must be reported after the run; no
-full-suite pass is asserted by this architecture document.
+`lintDebug`. The final [acceptance report](acceptance.md) records verification
+after subsequent integration changes. The completed Apple test run is logged
+privately in `.local/apple-ui-tests-final.log`.
 
 Apple replay is selected explicitly through the DEBUG `OPENINSTA_REVIEW_INDEX`
 entrypoint; Android uses a DEBUG-only `local_replay` launch flag. Private
