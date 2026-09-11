@@ -356,6 +356,8 @@ class ScopeGeometryTest {
         )
         assertTrue(FalseColorReference.axisLabels(FalseColorScale.STOPS).isEmpty())
         assertEquals("D-Log2", FalseColorReference.curveKeyLabel(CameraCommands.COLOR_DLOG2))
+        assertEquals("I-Log", FalseColorReference.curveKeyLabel(65_536))
+        assertEquals("709", FalseColorReference.curveKeyLabel(CameraCommands.COLOR_NORMAL))
         val ire = FalseColorReference.segments(FalseColorScale.IRE, transfer)
         assertEquals(9, ire.size)
         assertEquals(0.0, ire[0].lowerFraction, 1e-4)

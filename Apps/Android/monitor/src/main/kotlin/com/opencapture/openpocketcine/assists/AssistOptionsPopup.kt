@@ -224,7 +224,7 @@ private fun FalseColorOptions(state: LiveAssistState) {
     SettingsInlineRow(
         "Scale",
         help =
-            "The camera color mode selects D-Log, D-Log2, Rec.709, or HLG automatically. " +
+            "False color measures the source signal before the selected LUT. " +
                 "PStops marks minimum exposure, −3, 18% gray, skin, +2, and three clip-relative " +
                 "highlight levels. IRE uses WAVE-axis monitor ranges. Limits paints only shadow " +
                 "and highlight warnings.",

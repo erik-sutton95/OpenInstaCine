@@ -698,11 +698,12 @@ object FalseColorReference {
     const val MINIMUM_SCENE_STOP = -6.0
 
     fun curveKeyLabel(colorMode: Int): String =
-        when (colorMode) {
-            com.opencapture.openpocketcine.session.CameraCommands.COLOR_HDR -> "HLG"
-            com.opencapture.openpocketcine.session.CameraCommands.COLOR_DLOG -> "D-Log"
-            com.opencapture.openpocketcine.session.CameraCommands.COLOR_DLOG2 -> "D-Log2"
-            else -> "709"
+        when (MonitorTransfer.fromColorMode(colorMode)) {
+            MonitorTransfer.REC709 -> "709"
+            MonitorTransfer.HDR -> "HLG"
+            MonitorTransfer.DLOG -> "D-Log"
+            MonitorTransfer.DLOG2 -> "D-Log2"
+            MonitorTransfer.ILOG -> "I-Log"
         }
 
     fun axisLabels(scale: FalseColorScale): List<String> =
