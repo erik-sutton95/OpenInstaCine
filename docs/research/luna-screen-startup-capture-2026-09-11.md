@@ -108,4 +108,12 @@ Native UI inspection verified both pictures visible. In this comparison the phon
 
 The opened app and media remain under `.local/luna-capture-compare/`. To rebuild the reusable viewer, compile the Swift source and supply three media paths followed by two explicit source captions; metadata is not inferred from filenames.
 
+## Fresh live phone preview with recovery reported On
+
+The user next requested the phone feed live with recovery enabled. The Mac joined the camera AP using the existing credentials and opened the existing `luna_tcp.py --view --seconds 0 --transport netcat` client. This used the camera's phone protocol directly from the Mac; no app was launched on the connected iPhone. The client adds no I-Log conversion LUT and performs no camera colour-setting writes.
+
+Private session: `captures/20260911T144632563651Z-luna-tcp/`, **14:46:32.564–14:48:07.123 UTC**. Firmware readback remains **v1.0.288**. The session received **2,345 video messages over 93.773 seconds**, with predominantly 40-tick intervals, consistent with approximately 25 fps. All received frames passed UCD2 checksum validation; there were zero rejected headers and no receive-buffer remainder. The player exited with status zero, the camera acknowledged live stop, and the normal Mac Wi-Fi connection was restored and visibly verified Connected.
+
+The recovery state is operator-reported from the preceding setup and current request; there is no independently mapped setting readback. The existing live-view mode saves control logs but **does not retain video**, so this session cannot supply an offline colour comparison. The player's unbundled process could not be inspected through the available native-app UI inventory. The operator was asked whether the live picture looked flat, colour-restored, or failed to appear; the visual result is pending. Receipt of valid video and a clean player exit alone does not prove pre-LUT encoding or successful visible rendering.
+
 [wireshark-keys]: https://www.wireshark.org/docs/wsug_html_chunked/Ch80211Keys.html
