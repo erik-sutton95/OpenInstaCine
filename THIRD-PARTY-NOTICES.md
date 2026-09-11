@@ -138,6 +138,16 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## Insta360 Luna I-Log rendering LUT
+
+The unchanged manufacturer-supplied `Luna_I-Log_to_Rec709_BT1886_s33_v2.cube`
+is included as a camera display conversion. It is version 2.0, dated 2026-05-20,
+provided by the user on 2026-09-11. Copyright remains with the provider;
+the application's source-code license does not relicense this resource.
+No separate license accompanied the supplied folder. Source hashes and the
+scope of the included asset are recorded in
+[`Resources/CameraLUTs/README.md`](Resources/CameraLUTs/README.md) and its manifest.
+
 ## Build-resolved dependencies
 
 Android's Gradle catalog records the versions of Kotlin/coroutines, AndroidX/Compose/Media3,

@@ -97,7 +97,8 @@ struct LiveViewScreen: View {
             model.assist.syncLUT(
                 to: model.session.status.colorMode,
                 family: model.session.bodyFamily,
-                cameraName: model.session.connectedCamera?.model.name)
+                cameraName: model.session.connectedCamera?.model.name,
+                previewTransfer: model.session.monitorTransfer)
             model.session.isLocked = interfaceLocked
             gamepad.attach(model: model)
             headphones.attach(model: model)
@@ -849,7 +850,16 @@ private struct LiveFeedPane: View {
             model.assist.syncLUT(
                 to: mode,
                 family: model.session.bodyFamily,
-                cameraName: model.session.connectedCamera?.model.name)
+                cameraName: model.session.connectedCamera?.model.name,
+                previewTransfer: model.session.monitorTransfer)
+        }
+        .onChange(of: model.session.monitorTransfer) { _, transfer in
+            guard !model.session.status.inPlayback else { return }
+            model.assist.syncLUT(
+                to: model.session.status.colorMode,
+                family: model.session.bodyFamily,
+                cameraName: model.session.connectedCamera?.model.name,
+                previewTransfer: transfer)
         }
     }
 }

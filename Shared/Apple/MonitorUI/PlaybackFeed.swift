@@ -261,7 +261,7 @@ final class PlaybackFeedSession: NSObject {
             if effects.falseColor {
                 PocketFalseColorMap.warm(
                     scale: effects.falseColorScale,
-                    mode: effects.colorMode,
+                    transfer: effects.monitorTransfer,
                     hasLUT: effects.lutDimension >= 2)
             }
             lastOverlayOnly = effects.needsOverlayFeed

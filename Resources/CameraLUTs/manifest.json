@@ -1,0 +1,83 @@
+{
+  "source": "User-supplied Luna_Series_I-Log_LUTs, received 2026-09-11",
+  "files": [
+    {
+      "file": "Luna_I-Log_to_Rec2020_HLG_1K_DW203_s33_v2.cube",
+      "sha256": "312332772b49774138967dcb7648921a0fa6bce78ef259d2788942a47dbe13fc",
+      "bytes": 1401703,
+      "dimension": 33,
+      "bundled": false,
+      "header": [
+        "# Version 2.0",
+        "# Create Date 2026.05.20",
+        "# Output: HLG / Rec2020 / 1000 nits / 203 nits Diffuse White",
+        "TITLE \"Insta360 I-Log to HLG Rendering LUT\""
+      ]
+    },
+    {
+      "file": "Luna_I-Log_to_Rec2020_HLG_1K_DW203_s65_v2.cube",
+      "sha256": "c1a70fe2977df8c9d52f913188a6d8edfc4b0befdef869e957589deefbb97fc5",
+      "bytes": 10710535,
+      "dimension": 65,
+      "bundled": false,
+      "header": [
+        "# Version 2.0",
+        "# Create Date 2026.05.20",
+        "# Output: HLG / Rec2020 / 1000 nits / 203 nits Diffuse White",
+        "TITLE \"Insta360 I-Log to HLG Rendering LUT\""
+      ]
+    },
+    {
+      "file": "Luna_I-Log_to_Rec2020_St2084_1K_DW203_s33_v2.cube",
+      "sha256": "4243713458a72e351c8dff1ff626ba0d64b817d69d7fa542a1d43363c2860616",
+      "bytes": 1401705,
+      "dimension": 33,
+      "bundled": false,
+      "header": [
+        "# Version 2.0",
+        "# Create Date 2026.05.20",
+        "# Output: ST2084 / Rec2020 / 1000 nits / 203 nits Diffuse White",
+        "TITLE \"Insta360 I-Log to PQ Rendering LUT\""
+      ]
+    },
+    {
+      "file": "Luna_I-Log_to_Rec2020_St2084_1K_DW203_s65_v2.cube",
+      "sha256": "b3bb1e772817bc4b66b737220923824a6f8f51d38aa1bb0f04aa869a0e20dfdb",
+      "bytes": 10710537,
+      "dimension": 65,
+      "bundled": false,
+      "header": [
+        "# Version 2.0",
+        "# Create Date 2026.05.20",
+        "# Output: ST2084 / Rec2020 / 1000 nits / 203 nits Diffuse White",
+        "TITLE \"Insta360 I-Log to PQ Rendering LUT\""
+      ]
+    },
+    {
+      "file": "Luna_I-Log_to_Rec709_BT1886_s33_v2.cube",
+      "sha256": "e3e5c3ab4ca7c166f3ebb740b45ed8cbce649b0c18dca9d5661754c53b9ee17d",
+      "bytes": 1401671,
+      "dimension": 33,
+      "bundled": true,
+      "header": [
+        "# Version 2.0",
+        "# Create Date 2026.05.20",
+        "# Output: Rec709 / BT1886",
+        "TITLE \"Insta360 I-Log to Rec709 Rendering LUT\""
+      ]
+    },
+    {
+      "file": "Luna_I-Log_to_Rec709_BT1886_s65_v2.cube",
+      "sha256": "06db0a02784fed3a5db4ef7fb3ee617c63c3b45b699653108927fa3917578d80",
+      "bytes": 10710503,
+      "dimension": 65,
+      "bundled": false,
+      "header": [
+        "# Version 2.0",
+        "# Create Date 2026.05.20",
+        "# Output: Rec709 / BT1886",
+        "TITLE \"Insta360 I-Log to Rec709 Rendering LUT\""
+      ]
+    }
+  ]
+}

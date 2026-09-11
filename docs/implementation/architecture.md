@@ -131,8 +131,11 @@ evidence must be reported separately.
    ID is `com.opencapture.openinstacine`. Rename both sides together later.
 5. **Profiles/assets:** Some inherited color/profile catalog machinery and DJI
    LUT resources remain compatibility material. Luna uses authoritative
-   Rec.709 metadata, without the old scene-brightness D-Log inference. Future
-   source-profile catalogs belong behind normalized profile capabilities.
+   Rec.709 metadata, without the old scene-brightness D-Log inference. Brand
+   configuration now injects camera LUT descriptors (stable ID, filename,
+   input transfer), including official I-Log → Rec.709. Actual preview metadata
+   stays separate from the selected LUT and recording settings. See
+   [I-Log integration](i-log.md) for source/profile and HDR boundaries.
 6. **Camera commands:** Every capability beyond live video requires research,
    strict codec tests, a native adapter mapping and real-camera validation
    before enabling its shared UI operation.

@@ -424,7 +424,7 @@ struct MediaPlayerView: View {
                         player: player,
                         session: playbackFeed,
                         effects: model.assist.playbackEffects,
-                        transfer: MonitorTransfer(model.assist.monitorColorMode ?? .normal),
+                transfer: model.assist.playbackEffects.monitorTransfer,
                         sampleBus: model.frameSamples
                     )
                     .scaleEffect(
@@ -986,7 +986,7 @@ struct MediaPlayerView: View {
         if model.assist.isPlaybackVisible(.falseColor), model.assist.falseColorReference {
             FalseColorAssist.referenceDisplay(
                 scale: model.assist.falseColorScale,
-                colorMode: model.assist.monitorColorMode ?? .normal
+                transfer: model.assist.playbackEffects.monitorTransfer
             )
             .position(x: videoRect.minX + 140, y: min(videoRect.maxY - 36, canvas.maxY - 80))
         }
@@ -1001,7 +1001,7 @@ struct MediaPlayerView: View {
         let fx = model.assist.playbackEffects
         playbackFeed.setEffects(
             fx,
-            transfer: MonitorTransfer(fx.colorMode),
+            transfer: fx.monitorTransfer,
             sampleBus: model.frameSamples)
         syncPlaybackAudioMetering()
     }

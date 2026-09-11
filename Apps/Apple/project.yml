@@ -41,6 +41,8 @@ targets:
       - package: SharedMonitorEngine
         product: OpenPocketViewCore
       - package: SharedMonitorEngine
+        product: MonitorCore
+      - package: SharedMonitorEngine
         product: MonitorContracts
     settings:
       base:
@@ -64,9 +66,13 @@ targets:
     sources:
       - path: OpenInstaCine
         excludes: ["*.xcconfig", "*.example"]
+      - path: ../../Resources/CameraLUTs/luts
+        buildPhase: resources
     dependencies:
       - target: MonitorUI
       - target: Insta360Apple
+      - package: SharedMonitorEngine
+        product: MonitorCore
       - package: SharedMonitorEngine
         product: MonitorContracts
     configFiles:
@@ -98,6 +104,8 @@ targets:
       - target: MonitorUI
       - package: SharedMonitorEngine
         product: OpenPocketViewCore
+      - package: SharedMonitorEngine
+        product: MonitorCore
       - package: SharedMonitorEngine
         product: MonitorContracts
     settings:

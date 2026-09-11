@@ -333,13 +333,14 @@ final class LiveFrameSampleTests: XCTestCase {
         XCTAssertFalse(bus.bundle.samples.histogramLuma.allSatisfy { $0 == 0 })
     }
 
-    func testTransferResolutionAndColorModeRoundTrip() {
+    func testTransferResolutionAndColorModeRoundTrip() throws {
         XCTAssertEqual(MonitorTransfer.resolved(nil, colorMode: nil), .rec709)
         XCTAssertEqual(MonitorTransfer.resolved(nil, colorMode: .dLog2), .dlog2)
         XCTAssertEqual(MonitorTransfer.resolved(.dlog, colorMode: .normal), .dlog, "status wins")
-        for transfer in MonitorTransfer.allCases {
-            XCTAssertEqual(MonitorTransfer(transfer.colorMode), transfer, "wire round trip")
+        for transfer in [MonitorTransfer.rec709, .hdr, .dlog, .dlog2] {
+            XCTAssertEqual(MonitorTransfer(try XCTUnwrap(transfer.colorMode)), transfer, "wire round trip")
         }
+        XCTAssertNil(MonitorTransfer.ilog.colorMode)
     }
 
     func testMissingColorModeKeepsPreviousLogTransfer() {

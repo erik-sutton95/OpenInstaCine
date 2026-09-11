@@ -1,4 +1,5 @@
 # Preserve upstream numerical LUT tables and license documents byte-for-byte.
 # Their original CRLF/trailing separators are vendor formatting, not source edits.
 Shared/Apple/MonitorUI/Resources/*.cube -text -diff whitespace=-blank-at-eol,-blank-at-eof
+Resources/CameraLUTs/luts/*.cube -text -diff whitespace=-blank-at-eol,-blank-at-eof
 Shared/Apple/MonitorUI/Resources/Fonts/OFL-*.txt -text whitespace=-blank-at-eol,-blank-at-eof

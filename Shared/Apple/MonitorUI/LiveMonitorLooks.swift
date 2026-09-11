@@ -13,7 +13,7 @@ extension LiveColorScience {
         case .rec709, .hdr:
             let gradient = 1.57
             return gradient * gradient
-        case .dlog, .dlog2:
+        case .dlog, .dlog2, .ilog:
             return 1
         }
     }
@@ -128,29 +128,52 @@ enum PocketFalseColorMap {
     static func overlayPaintData(
         scale: FalseColorScaleKind, mode: ColorMode, managedRender: Bool = false
     ) -> (Int, Data)? {
+        overlayPaintData(
+            scale: scale, transfer: MonitorTransfer(mode), managedRender: managedRender)
+    }
+
+    static func overlayPaintData(
+        scale: FalseColorScaleKind, transfer: MonitorTransfer, managedRender: Bool = false
+    ) -> (Int, Data)? {
         warmedData(
             key(
                 managedRender ? .overlayPaintDisplay : .overlayPaint,
-                scale: scale, transfer: MonitorTransfer(mode)))
+                scale: scale, transfer: transfer))
     }
 
     /// IRE / PStops full lattice: WAVE-axis grayscale with the painted zones.
     /// Not used on the live path — replacing the identity feed with this cube
     /// was the DeviceRGB contrast shift. Tests still sample it.
     static func fullPaintData(scale: FalseColorScaleKind, mode: ColorMode) -> (Int, Data)? {
-        warmedData(key(.full, scale: scale, transfer: MonitorTransfer(mode)))
+        fullPaintData(scale: scale, transfer: MonitorTransfer(mode))
+    }
+
+    static func fullPaintData(scale: FalseColorScaleKind, transfer: MonitorTransfer) -> (Int, Data)? {
+        warmedData(key(.full, scale: scale, transfer: transfer))
     }
 
     static func overlayWeightData(scale: FalseColorScaleKind, mode: ColorMode) -> (Int, Data)? {
-        warmedData(key(.overlayWeight, scale: scale, transfer: MonitorTransfer(mode)))
+        overlayWeightData(scale: scale, transfer: MonitorTransfer(mode))
+    }
+
+    static func overlayWeightData(
+        scale: FalseColorScaleKind, transfer: MonitorTransfer
+    ) -> (Int, Data)? {
+        warmedData(key(.overlayWeight, scale: scale, transfer: transfer))
     }
 
     /// Kick the 64³ overlay build before the first FALSE frame. Every scale
     /// paints holes-only over the identity / LUT look — do not warm the full
     /// replace lattice (that remake was the contrast shift).
-    static func warm(scale: FalseColorScaleKind, mode: ColorMode, hasLUT _: Bool = false) {
-        _ = overlayPaintData(scale: scale, mode: mode)
-        _ = overlayWeightData(scale: scale, mode: mode)
+    static func warm(scale: FalseColorScaleKind, mode: ColorMode, hasLUT: Bool = false) {
+        warm(scale: scale, transfer: MonitorTransfer(mode), hasLUT: hasLUT)
+    }
+
+    static func warm(
+        scale: FalseColorScaleKind, transfer: MonitorTransfer, hasLUT _: Bool = false
+    ) {
+        _ = overlayPaintData(scale: scale, transfer: transfer)
+        _ = overlayWeightData(scale: scale, transfer: transfer)
     }
 
     static func limitsPaintCube(transfer: MonitorTransfer) -> CubeLUT {
@@ -272,7 +295,9 @@ enum PocketFalseColorMap {
                     let ire = ScopeDisplayScale.monitorPercent(yEnc, transfer: transfer)
                     let value =
                         scale == .stops
-                        ? LiveColorScience.stops(encoded: yEnc, transfer: transfer) : ire
+                        ? stopValue(
+                            red: er, green: eg, blue: eb, encodedLuma: yEnc, transfer: transfer)
+                        : ire
                     let color = renderedColor(
                         value: value, scale: scale, bands: bandList,
                         source: (er, eg, eb),
@@ -309,7 +334,9 @@ enum PocketFalseColorMap {
                     let ire = ScopeDisplayScale.monitorPercent(yEnc, transfer: transfer)
                     let value =
                         scale == .stops
-                        ? LiveColorScience.stops(encoded: yEnc, transfer: transfer) : ire
+                        ? stopValue(
+                            red: er, green: eg, blue: eb, encodedLuma: yEnc, transfer: transfer)
+                        : ire
                     let chosen = component(
                         overlayPaint(
                             value: value, scale: scale, bands: bandList,
@@ -323,7 +350,21 @@ enum PocketFalseColorMap {
         return CubeLUT(size: size, rgb: rgb)
     }
 
-    /// Encoded-domain luma — same axis WAVE / ZEBRA use. Do not linearize.
+    /// I-Log exposure is scene-linear luminance: decode each channel before
+    /// weighting. Keep existing curve behavior for compatibility callers.
+    private static func stopValue(
+        red: Double, green: Double, blue: Double, encodedLuma: Double,
+        transfer: MonitorTransfer
+    ) -> Double {
+        if transfer == .ilog {
+            return LiveColorScience.stops(
+                linear: LiveColorScience.linearLuminance(
+                    red: red, green: green, blue: blue, transfer: transfer))
+        }
+        return LiveColorScience.stops(encoded: encodedLuma, transfer: transfer)
+    }
+
+    /// Encoded-domain luma — same axis WAVE / IRE use. Do not linearize.
     private static func encodedLuma(
         red: Double, green: Double, blue: Double, transfer: MonitorTransfer
     ) -> Double {

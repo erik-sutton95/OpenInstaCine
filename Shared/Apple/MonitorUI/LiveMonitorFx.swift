@@ -6,7 +6,7 @@ import UIKit
 /// Local GPU monitor tools. Peaking, false colour, and zebra measure **source
 /// camera codes** — the same pre-LUT buffer WAVE / HISTO tap. Never the cube look.
 /// False colour IRE / Limits use ``LiveColorScience/monitorIRE`` for the active
-/// `ColorMode`. LUT and de-squeeze are display-only CI ops. Mirror is a view-space
+/// source transfer. LUT and de-squeeze are display-only CI ops. Mirror is a view-space
 /// flip (`MirrorAssist.feedScale`) so it never lands in this graph.
 struct LiveImageEffects: Equatable, Sendable {
     var peaking = false
@@ -29,8 +29,12 @@ struct LiveImageEffects: Equatable, Sendable {
     var zebraMidtoneIRE: Double = LiveZebra.midtoneIRE
     var zebraHighlightColor: ZebraPaint = .white
     var zebraMidtoneColor: ZebraPaint = .amber
-    /// Sibling / session stamps the camera color mode so D-Log2 IRE does not treat mid-grey as clip.
+    /// Legacy DJI metadata input for clients that have not adopted source transfer metadata.
     var colorMode: ColorMode = .normal
+    /// The actual preview or playback encoding, independent of camera recording settings
+    /// and the operator's selected display LUT.
+    var sourceTransfer: MonitorTransfer?
+    var monitorTransfer: MonitorTransfer { sourceTransfer ?? MonitorTransfer(colorMode) }
     var splitComparison = false
     var splitVertical = true
     /// Left-to-right monitor flip. Applied in `VideoView`, not this compositor.
@@ -243,13 +247,13 @@ enum LiveMonitorCompositor {
                 over: output, source: input, extent: extent,
                 color: effects.peakingColor, sense: effects.peakingSensitivity,
                 gateScale: LiveColorScience.peakingGateScale(
-                    for: MonitorTransfer(effects.colorMode)))
+                    for: effects.monitorTransfer))
         }
         if effects.zebra {
             output = applyZebra(
                 over: output, source: input, extent: extent,
                 zebra: ZebraAssist.overlay(from: effects),
-                colorMode: effects.colorMode)
+                transfer: effects.monitorTransfer)
         }
         if effects.desqueezeFactor > 1.001 {
             output = desqueeze(
@@ -280,13 +284,13 @@ enum LiveMonitorCompositor {
                 over: output, source: input, extent: extent,
                 color: effects.peakingColor, sense: effects.peakingSensitivity,
                 gateScale: LiveColorScience.peakingGateScale(
-                    for: MonitorTransfer(effects.colorMode)))
+                    for: effects.monitorTransfer))
         }
         if effects.zebra {
             output = applyZebra(
                 over: output, source: input, extent: extent,
                 zebra: ZebraAssist.overlay(from: effects),
-                colorMode: effects.colorMode)
+                transfer: effects.monitorTransfer)
         }
         return output
     }
@@ -327,11 +331,11 @@ enum LiveMonitorCompositor {
     ) -> CIImage {
         guard
             let paintInfo = PocketFalseColorMap.overlayPaintData(
-                scale: effects.falseColorScale, mode: effects.colorMode),
+                scale: effects.falseColorScale, transfer: effects.monitorTransfer),
             let paint = applyColorCube(
                 to: codes, dimension: paintInfo.0, rgba: paintInfo.1),
             let weightInfo = PocketFalseColorMap.overlayWeightData(
-                scale: effects.falseColorScale, mode: effects.colorMode),
+                scale: effects.falseColorScale, transfer: effects.monitorTransfer),
             let weight = applyColorCube(
                 to: codes, dimension: weightInfo.0, rgba: weightInfo.1)
         else { return base }
@@ -692,6 +696,15 @@ enum LiveMonitorCompositor {
         over base: CIImage, source: CIImage, extent: CGRect,
         zebra: ZebraAssist.OverlaySpec, colorMode: ColorMode
     ) -> CIImage {
+        applyZebra(
+            over: base, source: source, extent: extent, zebra: zebra,
+            transfer: MonitorTransfer(colorMode))
+    }
+
+    static func applyZebra(
+        over base: CIImage, source: CIImage, extent: CGRect,
+        zebra: ZebraAssist.OverlaySpec, transfer: MonitorTransfer
+    ) -> CIImage {
         // Measure **source** encoded luma; monitor-percent thresholds map to curve
         // codes (0 = paper black, 100 = live-tap EI ceiling). The old
         // `encodedValue(ire100:)` ran a 48-step bisection up to 3× per frame.
@@ -701,14 +714,17 @@ enum LiveMonitorCompositor {
         // are `LiveFrameTap.maxRGB`, and a blue-led sky has luma well under
         // its hot channel, so a luma compare never reached the 100 line (#136).
         // Midtone stays luma (skin band, OpenZCine).
-        let transfer = MonitorTransfer(colorMode)
+        // Retain the inherited zebra weighting for existing sources. I-Log's
+        // source gamut is BT.2020; its encoded luma uses those published weights.
+        let weights = LiveColorScience.lumaWeights(transfer == .ilog ? .ilog : .rec709)
+        let lumaVector = CIVector(x: weights.red, y: weights.green, z: weights.blue, w: 0)
         let hot = source.applyingFilter("CIMaximumComponent")
         let luma = source.applyingFilter(
             "CIColorMatrix",
             parameters: [
-                "inputRVector": CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0),
-                "inputGVector": CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0),
-                "inputBVector": CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0),
+                "inputRVector": lumaVector,
+                "inputGVector": lumaVector,
+                "inputBVector": lumaVector,
                 "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 0),
                 "inputBiasVector": CIVector(x: 0, y: 0, z: 0, w: 1),
             ])

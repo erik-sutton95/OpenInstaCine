@@ -2,7 +2,7 @@ import OpenPocketViewCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// DJI / Creative / Custom. 50/50 is pinned on the long-press footer so
+/// Camera / Creative / Custom. 50/50 is pinned on the long-press footer so
 /// landscape never hides it under the catalog; the sheet keeps it inline.
 /// `embedded` is the assist-tray form; the sheet wraps the same body.
 struct LUTPicker: View {
@@ -93,7 +93,8 @@ struct LUTPicker: View {
                 live: model.session.status.colorMode,
                 inPlayback: model.session.status.inPlayback,
                 family: model.session.bodyFamily,
-                cameraName: model.session.connectedCamera?.model.name)
+                cameraName: model.session.connectedCamera?.model.name,
+                previewTransfer: model.session.monitorTransfer)
         }
         .confirmationDialog(
             pendingDeletion.map { "Clear \(CustomLUTIndex.displayName(fileName: $0))?" }
@@ -164,13 +165,13 @@ struct LUTPicker: View {
                 .multilineTextAlignment(.center)
                 .frame(height: captionHeight)
             LUTDrumWheel(
-                options: cases.map(\.title),
+                options: cases.map { $0.title(cameraLUTs: assist.cameraLUTs) },
                 selection: Binding(
                     get: {
-                        inCatalog ? assist.lutSelection.title : fallback.title
+                        (inCatalog ? assist.lutSelection : fallback).title(cameraLUTs: assist.cameraLUTs)
                     },
                     set: { name in
-                        guard let selection = cases.first(where: { $0.title == name }) else {
+                        guard let selection = cases.first(where: { $0.title(cameraLUTs: assist.cameraLUTs) == name }) else {
                             return
                         }
                         assist.selectLUT(selection)
@@ -182,6 +183,9 @@ struct LUTPicker: View {
     }
 
     private var djiCaption: String {
+        if case .camera(let entry) = assist.resolvedSource(), assist.lutSelection != .auto {
+            return "Official conversion for \(entry.inputTransfer.label) footage"
+        }
         if assist.lutSelection == .djiAuto || assist.lutSelection == .auto {
             return LUTResolver.autoCaption(source: assist.resolvedSource())
         }

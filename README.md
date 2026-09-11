@@ -23,7 +23,7 @@ not operate the connected phone.
 | Area | Current scope |
 | --- | --- |
 | Live monitor | Inherited landscape/portrait layouts, status chrome, DISP modes and editor, interface lock, settings overlays, feed warmup/recovery presentation |
-| Image assists | LUT import/look selection, peaking, false color, highlight/midtone zebras, guides, grids, crosshair and mirror |
+| Image assists | Official I-Log → Rec.709 SDR look, LUT import/look selection, peaking, false color, highlight/midtone zebras, guides, grids, crosshair and mirror |
 | Scopes | Waveform, RGB parade, histogram, vectorscope and traffic lights, driven by decoded image samples |
 | Media shell | Library, sorting/filtering, favorites, cache states, playback and playback assists retained; Luna catalog, transfer and deletion are unavailable |
 | Delivery | Existing local-media share/export surfaces; Apple retains LUT bake and Frame.io delivery, which requires local configuration. Android retains its baseline system delivery features |

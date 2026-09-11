@@ -1,5 +1,6 @@
 import CoreText
 import MonitorContracts
+import OpenPocketViewCore
 import SwiftUI
 
 /// The only product identity the shared Apple shell needs. A brand app supplies
@@ -17,13 +18,15 @@ public struct MonitorBrand {
     public var supportURL: URL?
     public var privacyURL: URL?
     public var termsURL: URL?
+    public var cameraLUTs: [CameraLUT]
 
     public init(
         displayName: String, monogram: String, accentRGB: UInt32,
         cameraFamily: String, discoveryHint: String, protocolDescription: String,
         protocolLabel: String, trademarkNotice: String,
         sourceURL: URL? = nil, supportURL: URL? = nil,
-        privacyURL: URL? = nil, termsURL: URL? = nil
+        privacyURL: URL? = nil, termsURL: URL? = nil,
+        cameraLUTs: [CameraLUT] = []
     ) {
         self.displayName = displayName
         self.monogram = monogram
@@ -37,6 +40,7 @@ public struct MonitorBrand {
         self.supportURL = supportURL
         self.privacyURL = privacyURL
         self.termsURL = termsURL
+        self.cameraLUTs = cameraLUTs
     }
 
     var accent: Color {

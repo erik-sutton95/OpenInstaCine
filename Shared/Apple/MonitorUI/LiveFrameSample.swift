@@ -6,13 +6,15 @@ import OpenPocketViewCore
 import os
 
 extension MonitorTransfer {
-    /// Wire ColorMode that selected this transfer (`3F` / `3C` / `17` / `41`).
-    var colorMode: ColorMode {
+    /// Legacy DJI metadata, when the source has a corresponding DJI curve.
+    /// Vendor-neutral transfers must never be relabelled as a DJI recording mode.
+    var colorMode: ColorMode? {
         switch self {
         case .rec709: .normal
         case .hdr: .hdr
         case .dlog: .dLog
         case .dlog2: .dLog2
+        case .ilog: nil
         }
     }
 
@@ -230,7 +232,7 @@ enum PocketScopeSampler {
         switch transfer {
         case .dlog: return BundledOfficialDJILUT.cube(.pocketDLog)
         case .dlog2: return BundledOfficialDJILUT.cube(.pocketDLog2)
-        case .rec709, .hdr: return nil
+        case .rec709, .hdr, .ilog: return nil
         }
     }
 
@@ -326,7 +328,7 @@ final class LiveFrameSampleBus {
     func publish(
         source: CVPixelBuffer,
         transfer: MonitorTransfer,
-        colorMode: ColorMode,
+        colorMode: ColorMode?,
         bundle: ScopeAssistBundle?
     ) {
         sourcePixelBuffer = source
@@ -368,7 +370,7 @@ final class LiveAssistEngine: @unchecked Sendable {
         var unmanagedBake: Bool
         var bundle: ScopeAssistBundle?
         var transfer: MonitorTransfer
-        var colorMode: ColorMode
+        var colorMode: ColorMode?
         /// False when this result is a late scope bundle. Present already happened.
         var shouldPresent: Bool
         /// Presentation time for skip-duplicate. `0` means unknown — never skip.
@@ -399,12 +401,12 @@ final class LiveAssistEngine: @unchecked Sendable {
     func updatePolicy(effects: LiveImageEffects, transfer: MonitorTransfer) {
         queue.async { [self] in
             var fx = effects
-            fx.colorMode = transfer.colorMode
+            fx.sourceTransfer = transfer
             pendingEffects = fx
             pendingTransfer = transfer
             if fx.falseColor {
                 PocketFalseColorMap.warm(
-                    scale: fx.falseColorScale, mode: fx.colorMode,
+                    scale: fx.falseColorScale, transfer: fx.monitorTransfer,
                     hasLUT: fx.lutDimension >= 2)
             }
         }
@@ -473,9 +475,9 @@ final class LiveAssistEngine: @unchecked Sendable {
         guard let buffer = pendingBuffer, let completion = pendingCompletion else { return }
         pendingBuffer = nil
         var fx = pendingEffects
-        var transfer = pendingTransfer
+        let transfer = pendingTransfer
         let timeNs = pendingTimeNs
-        fx.colorMode = transfer.colorMode
+        fx.sourceTransfer = transfer
         busy = true
 
         // Copy CPU planes before Core Image attaches. WAVE/HISTO read the source

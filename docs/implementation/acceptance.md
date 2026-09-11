@@ -21,7 +21,7 @@ Mac Catalyst build. Android review used an arm64 API 35 emulator.
 | Startup | Original splash, first-run steps, scanning list, saved-camera cards/options, reconnect, setup and failure/recovery screens; local recording source selected through these real screens |
 | Live monitor | Original safe-area/layout policies, video presentation, top status, battery/lock, system controls, capture bar and scrollable assist rail; moving Luna HEVC displayed on both Apple simulators and Catalyst |
 | Display modes | DISP 1/2, clean mode, visibility preferences, chrome editor, portrait/landscape policy and lock retained; both modes switched successfully in final iPhone review, with inherited layout/editor unit coverage |
-| LUT | Auto uses the backend's Rec.709 preview transfer; creative looks, custom imports, exposure and split preview retained. Luna camera LUT catalog offers Auto |
+| LUT | Auto uses the backend's Rec.709 preview transfer; creative looks, custom imports, exposure and split preview retained. Luna camera LUT catalog offers Auto and official I-Log → Rec.709 SDR conversion |
 | Peaking / false color / zebra | Existing GPU effects, options, exposure scales and legends; real false-color paint and legend visually verified; inherited effect tests pass |
 | Waveform / parade | Existing pixel sampling, mode/brightness/scale controls, trace rendering, positioning and resizing; actual recorded-pixel waveform on Apple and waveform/parade on Android visually verified |
 | Histogram / vectorscope / lights | Original sampling/math, scale and compensation options, presentation and settings; inherited shared/native tests retained |
@@ -43,12 +43,12 @@ every gesture on every physical device has been exhaustively exercised.
 
 | Gate | Result |
 | --- | --- |
-| Portable shared/compatibility/JNI Swift tests | 609 tests in 54 suites passed |
+| Portable shared/compatibility/JNI Swift tests | 624 tests in 56 suites passed |
 | Standalone Swift Luna protocol | 24 tests passed; debug and release checked during adapter development |
-| Apple native UI / facade tests | 413 tests, 1 optional fixture skipped, 0 failures; includes 16 backend-facade regressions |
+| Apple native UI / facade tests | 423 tests, 1 optional fixture skipped, 0 failures; includes 16 backend-facade regressions |
 | Apple builds | Simulator Debug, unsigned generic iOS Release and Mac Catalyst Debug all succeeded |
 | Release isolation | Release binaries contain neither the replay backend/label nor debug replay/direct-TCP environment selectors |
-| Android | 471 JVM tests passed; app, monitor and Luna lint passed; complete arm64 debug APK built |
+| Android | 479 JVM tests passed; app, monitor and Luna lint passed; complete arm64 debug APK built |
 | Python protocol/lab harness | 21 tests passed, including expected negative authorization/transport cases |
 | Source boundary | Foundation-only core imports and absence of camera wire codecs in shared Apple screens checked by tests |
 | Build/review helpers | Shell syntax, Python compilation, real HEVC indexing/remux and just recipe expansion checked |

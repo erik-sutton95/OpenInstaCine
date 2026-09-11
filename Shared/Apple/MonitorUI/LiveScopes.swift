@@ -281,6 +281,7 @@ extension MonitorTransfer {
         case .hdr: "HLG"
         case .dlog: "DLOG"
         case .dlog2: "DL2"
+        case .ilog: "ILOG"
         }
     }
 }

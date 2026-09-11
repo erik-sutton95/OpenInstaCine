@@ -1,28 +1,13 @@
 import Foundation
 
-/// Transfer the Pocket live HEVC *picture* is carrying.
+/// Transfer carried by the decoded monitor picture, independent of recording mode.
 ///
-/// `ColorMode` (`cam_image_effect` `@2`, body-mapped on Pocket 3) selects
-/// Normal / HDR / D-Log / D-Log2 / D-Log M.
-/// The camera writes **legal-range scaled** codes in a tv-range container:
-/// `container10 = 64 + curve × 876`. ``LiveFrameTap`` expands that back, so
-/// everything downstream speaks **curve fractions** (`byte/255` = the papers'
-/// own encoded axis).
-///
-/// Shared IRE mapping for HISTO / PARADE / ZEBRA / FALSE / LIGHTS / WAVE
-/// (``ScopeDisplayScale``). WAVE draws 0 / 100 on the plot edges and
-/// keeps 18% gray at paper IRE (not remapped to 50):
-/// * 0 line = paper / legal black (`encode(0)`)
-/// * 18% grey = published paper IRE (`encode(0.18) × 100`; D-Log2 = 30.50)
-/// * 100 line = **live-tap EI ceiling**, not code 255 and not the 10-bit
-///   recording top. SoftAP x420 at ISO 1600 measures D-Log2 `max=247`
-///   (typical 243–247) and D-Log `max=223` (typical 219–223). 255 is a
-///   full-range leak and is ignored. An earlier 188 calibration sat ~50
-///   codes below that shelf, so zebra / traffic-clip / FALSE Maximum
-///   fired while the LUT-off log still had highlight detail. Below each
-///   curve's native EI the DJI paper scales the code; at/above native an
-///   S-curve holds the preview at the measured ceiling (D-Log2 native
-///   1600, D-Log native 400). Rec.709 / HLG still clip at encoded 1.0.
+/// Inputs are normalized curve fractions after the decoder's transport-range
+/// conversion. A camera's recording profile alone does not establish the preview
+/// transfer or its container range. Shared scope anchors use paper black and
+/// middle gray. Only the separately measured D-Log / D-Log2 preview profiles use
+/// the device-specific EI ceilings in ``ScopeExposureCeiling``; other transfers
+/// use encoded 1.0 as their 100-line ceiling.
 public enum MonitorTransfer: String, CaseIterable, Sendable, Identifiable {
     /// `ColorMode.normal` `0x3F`. ITU-R BT.709-6 inverse OETF.
     case rec709
@@ -32,6 +17,8 @@ public enum MonitorTransfer: String, CaseIterable, Sendable, Identifiable {
     case dlog
     /// `ColorMode.dLog2` `0x41`. DJI D-Log2 (Gamut white paper Rev 1.0, 2026-06-30).
     case dlog2
+    /// Insta360 I-Log, June 2026 white paper. Scene-referred BT.2020 RGB.
+    case ilog
 
     public var id: String { rawValue }
 
@@ -41,20 +28,22 @@ public enum MonitorTransfer: String, CaseIterable, Sendable, Identifiable {
         case .hdr: "HLG"
         case .dlog: "D-Log"
         case .dlog2: "D-Log2"
+        case .ilog: "I-Log"
         }
     }
 
-    /// Scene reflectance at encoded 1.0. D-Log white paper: 4200% = 42. D-Log2 paper: 47500% = 475.
+    /// Scene reflectance at encoded 1.0; distinct from a measured sensor limit.
     public var peakLinear: Double {
         switch self {
         case .rec709: 1
         case .hdr: HLG.decode(1)
         case .dlog: DLog.peakLinear
         case .dlog2: DLog2.peakLinear
+        case .ilog: ILog.decode(1)
         }
     }
 
-    /// Anchor codes on the tap's byte axis at the current live-tap ISO.
+    /// Scope anchors on the normalized picture axis. ISO affects only calibrated profiles.
     public var scopeAnchors: ScopeAnchors {
         ScopeAnchors.make(transfer: self)
     }
@@ -86,18 +75,18 @@ public enum MonitorTransfer: String, CaseIterable, Sendable, Identifiable {
 
 }
 
-// MARK: - Live-tap EI ceiling (not recording 1023, not code 255)
+// MARK: - Profile-specific preview ceiling
 
 /// Preview clip model. WAVE 100 / zebra highlight / false-colour Maximum /
 /// traffic clip all sit on this ceiling.
 ///
-/// Device evidence (SoftAP x420 1280×720 tap, `scope max:` journal):
+/// D-Log / D-Log2 device evidence (SoftAP x420 1280×720 tap, `scope max:` journal):
 /// D-Log2 ISO 1600 measures `max=247` (typical 243–247); D-Log measures
 /// `max=223` (typical 219–223). 255 is a full-range leak and is ignored.
 /// 188 was an under-read that made zebra / traffic-clip fire ~50 codes
 /// early. DJI papers: below native EI the output cannot reach saturation;
 /// at/above native an S-curve holds the code. D-Log2 native = 1600; D-Log
-/// native = 400.
+/// native = 400. These measured ceilings do not apply to I-Log, HLG, or Rec.709.
 public enum ScopeExposureCeiling: Sendable {
     public static let referenceEI = 1600
     /// Pocket D-Log native / base ISO. Hold the live-tap ceiling from here up.
@@ -113,7 +102,7 @@ public enum ScopeExposureCeiling: Sendable {
 
     private static let store = ExposureCeilingStore()
 
-    /// Last `cam_expo_param` ISO. Unknown / 0 keeps the measured 1600 point.
+    /// Last published ISO. Unknown / 0 keeps the calibrated reference point.
     public static func setISO(_ iso: Int) {
         guard (50...102_400).contains(iso) else { return }
         store.withLock { $0.iso = iso }
@@ -132,7 +121,7 @@ public enum ScopeExposureCeiling: Sendable {
         store.withLock { $0 = ExposureCeilingStore.State() }
     }
 
-    /// Encoded curve fraction of the live-tap clip (D-Log2 → 247/255, D-Log → 223/255).
+    /// Encoded curve fraction of the profile ceiling. I-Log always uses 1.0.
     public static func clipEncoded(transfer: MonitorTransfer, iso: Int? = nil) -> Double {
         Double(clipByte(transfer: transfer, iso: iso)) / 255.0
     }
@@ -199,7 +188,7 @@ public enum ScopeExposureCeiling: Sendable {
         transfer: MonitorTransfer, iso: Int, refined1600: UInt8, refinedDlog: UInt8
     ) -> Int {
         switch transfer {
-        case .rec709, .hdr:
+        case .rec709, .hdr, .ilog:
             return 255
         case .dlog2:
             let ei = iso > 0 ? iso : referenceEI
@@ -258,14 +247,14 @@ private final class ExposureCeilingStore: @unchecked Sendable {
 
 /// Per-transfer anchors on the tap's curve-fraction axis (`byte / 255`).
 ///
-/// `black = encode(0)`, `mid = encode(0.18)`, `clip` = live-tap EI ceiling
-/// (D-Log2 → 247/255, D-Log → 223/255), **not** the curve top.
+/// `black = encode(0)`, `mid = encode(0.18)`, and `clip = 1` except for
+/// calibrated D-Log / D-Log2 preview ceilings. I-Log uses its paper curve top.
 public struct ScopeAnchors: Equatable, Sendable {
-    /// Encode-of-zero-light (D-Log2 0.062561 → byte ≈ 16, D-Log 0.0929 → ≈ 24, others 0).
+    /// Encoded zero light, including a transfer's published black offset.
     public let black: Double
     /// Encode-of-18%-grey (D-Log2 0.304985 → byte ≈ 78).
     public let mid: Double
-    /// Live-tap EI ceiling (D-Log2 → 247/255, D-Log → 223/255). Rec.709 / HLG → 1.0.
+    /// Profile ceiling: D-Log2 → 247/255, D-Log → 223/255, other transfers → 1.0.
     public let clip: Double
     /// Plot level of 18% grey, pinned at paper IRE (`encoded × 100`).
     public let midLevel: Double
@@ -343,9 +332,9 @@ public struct ScopeAnchors: Equatable, Sendable {
 /// numbers on a full-height plot (0 / 100 on the edges, gray at paper IRE).
 ///
 /// 0 and 100 scale lines sit at 5% / 95% of plot height. Paper black lands on
-/// the 0 line, the live-tap EI ceiling on the 100 line, 18% grey is pinned at
-/// its published paper IRE. Sub-black noise and codes above the EI ceiling
-/// (including 255) draw in the margins — 255 is **not** stretched onto 100.
+/// the 0 line, the profile ceiling on the 100 line, 18% grey is pinned at
+/// its published paper IRE. Sub-black noise and codes above a calibrated
+/// preview ceiling draw in the margins. An uncalibrated profile uses encoded 1.0.
 public enum ScopeDisplayScale {
     public static let crushLevel = 0.05
     public static let clipLevel = 0.95
@@ -381,8 +370,8 @@ public enum ScopeDisplayScale {
         crushLevel + scaleIRE / 100.0 * (clipLevel - crushLevel)
     }
 
-    /// WAVE IRE: 0 = paper black, 18% grey = paper IRE (D-Log2 30.50,
-    /// D-Log 39.88), 100 = live-tap EI ceiling. Codes above the ceiling
+    /// WAVE IRE: 0 = paper black, 18% grey = paper IRE,
+    /// 100 = profile ceiling. Codes above the ceiling
     /// clamp to 100 (zebra / FALSE clip).
     public static func monitorPercent(
         _ c: Double, transfer: MonitorTransfer, iso: Int? = nil
@@ -681,7 +670,7 @@ public enum LiveZebra {
 
 // MARK: - Color science entry points
 
-/// Linearize Pocket live codes and map them for the display-referred assists
+/// Linearize normalized camera codes and map them for the display-referred assists
 /// (false colour, zebra, LUT generation). Scopes do NOT linearize pixel data —
 /// they ride ``ScopeDisplayScale`` on encoded codes.
 public enum LiveColorScience {
@@ -714,7 +703,7 @@ public enum LiveColorScience {
     }
 
     /// Scene-linear luminance. Channels are decoded first, then weighted.
-    /// Rec.709 / D-Log use BT.709 Y; HDR (HLG) and D-Log2 use BT.2020 Y (BT.2100).
+    /// Rec.709 / D-Log use BT.709 Y; HLG, D-Log2, and I-Log use BT.2020 Y.
     public static func linearLuminance(
         red: Double, green: Double, blue: Double, transfer: MonitorTransfer
     ) -> Double {
@@ -730,7 +719,7 @@ public enum LiveColorScience {
         switch transfer {
         case .rec709, .dlog:
             (0.2126, 0.7152, 0.0722)
-        case .hdr, .dlog2:
+        case .hdr, .dlog2, .ilog:
             (0.2627, 0.6780, 0.0593)
         }
     }
@@ -742,7 +731,7 @@ public enum LiveColorScience {
     }
 
     /// Shared HISTO / PARADE / ZEBRA / FALSE / WAVE IRE. 0 = paper black,
-    /// 18% grey = paper IRE (D-Log2 30.50, D-Log 39.88), 100 = live-tap EI ceiling.
+    /// 18% grey = paper IRE, 100 = the profile's encoded ceiling.
     public static func monitorIRE(linear: Double, transfer: MonitorTransfer) -> Double {
         monitorIRE(encoded: encode(linear, transfer: transfer), transfer: transfer)
     }
@@ -777,7 +766,7 @@ public enum LiveColorScience {
     }
 
     /// IRE / Limits ride the WAVE axis. Stops are scene EV; clip-relative
-    /// bands use the live-tap EI ceiling, not D-Log2's paper peak (+11.4).
+    /// bands use the profile ceiling, including measured limits where available.
     public static func falseColorBands(
         _ scale: LiveFalseColorScale, transfer: MonitorTransfer
     ) -> [LiveFalseColorBand] {
@@ -803,6 +792,7 @@ public enum LiveColorScience {
         case .hdr: HLG.decode(encoded)
         case .dlog: DLog.decode(encoded)
         case .dlog2: DLog2.decode(encoded)
+        case .ilog: ILog.decode(encoded)
         }
     }
 
@@ -812,6 +802,7 @@ public enum LiveColorScience {
         case .hdr: HLG.encode(linear)
         case .dlog: DLog.encode(linear)
         case .dlog2: DLog2.encode(linear)
+        case .ilog: ILog.encode(linear)
         }
     }
 
@@ -867,6 +858,34 @@ private enum HLG {
 
     private static func inverseOETF(_ e: Double) -> Double {
         e <= 0.5 ? e * e / 3 : (exp((e - c) / a) + b) / 12
+    }
+}
+
+// MARK: - I-Log (Insta360 June 2026 white paper)
+
+/// Published equations from printed p3 (physical PDF p5). The curve's 10-bit
+/// axis is code / 1023; any transport legal-range expansion happens upstream.
+/// Keep the published, independently rounded branch thresholds. These raw
+/// expressions have no clipping; the shared monitoring entry points own clamps.
+private enum ILog {
+    private static let alpha = 5.77837328
+    private static let beta = 0.09055934
+    private static let delta = 0.623992
+    private static let eta = 0.280055
+    private static let theta = 0.01
+
+    static func decode(_ encoded: Double) -> Double {
+        if encoded < 0.154402 {
+            return (encoded - beta) / alpha
+        }
+        return pow(10, (encoded - delta) / eta) - theta
+    }
+
+    static func encode(_ linear: Double) -> Double {
+        if linear <= 0.01104854 {
+            return alpha * linear + beta
+        }
+        return delta + eta * log10(linear + theta)
     }
 }
 

@@ -17,13 +17,13 @@ enum FalseColorAssist {
     /// OpenZCine `falseColorRows` titles, in order.
     static let popupTitles = ["Scale", "Reference Display"]
 
-    /// OpenZCine Scale help, Pocket curves in the first sentence.
+    /// Exposure analysis describes the source signal, independently of a display look.
     static let scaleHelp =
-        "The camera color mode selects D-Log, D-Log2, Rec.709, or HLG automatically. "
+        "False color measures the source signal before the selected LUT. "
         + "PStops marks minimum exposure, −3, 18% gray, skin, +2, and three clip-relative "
         + "highlight levels over luminance grayscale. IRE uses RED Video Mode-style monitor "
-        + "ranges on the WAVE axis: paper black at 0, D-Log2 18% grey at 30.50, live-tap EI "
-        + "ceiling at 100. Limits paints only shadow and highlight warnings, leaving other "
+        + "ranges on the WAVE axis: source black at 0, the active curve's 18% gray anchor, "
+        + "and its exposure ceiling at 100. Limits paints only shadow and highlight warnings, leaving other "
         + "colors untouched."
 
     /// OpenZCine `falseColorRows` Reference Display help.
@@ -114,6 +114,12 @@ enum FalseColorAssist {
         FalseColorReference(scale: scale, colorMode: colorMode)
     }
 
+    static func referenceDisplay(
+        scale: FalseColorScaleKind, transfer: MonitorTransfer
+    ) -> FalseColorReference {
+        FalseColorReference(scale: scale, transfer: transfer)
+    }
+
     @MainActor
     static func selectScale(_ label: String, assist: LiveAssistState) {
         assist.falseColorScale = scale(forMenuLabel: label)
@@ -121,7 +127,7 @@ enum FalseColorAssist {
         if assist.falseColor {
             PocketFalseColorMap.warm(
                 scale: assist.falseColorScale,
-                mode: assist.monitorColorMode ?? .normal,
+                transfer: assist.effects.monitorTransfer,
                 hasLUT: assist.effects.lutDimension >= 2)
         }
     }
@@ -271,6 +277,7 @@ struct FalseColorReference: View {
         case .hdr: "HLG"
         case .dlog: "D-Log"
         case .dlog2: "D-Log2"
+        case .ilog: "I-Log"
         }
     }
 

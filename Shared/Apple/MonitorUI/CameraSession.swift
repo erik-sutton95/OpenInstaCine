@@ -39,6 +39,7 @@ final class CameraSession {
         case .hlg: .hdr
         case .dLog: .dlog
         case .dLog2: .dlog2
+        case .iLog: .ilog
         case nil: status.monitorTransfer
         }
     }
@@ -95,7 +96,9 @@ final class CameraSession {
     }
     var supportsGimbal: Bool { capabilities.contains(.gimbal) }
     var supportsGimbalControl: Bool { supportsGimbal }
-    var cameraLUTSelections: [LUTSelection] { [.auto] }
+    var cameraLUTSelections: [LUTSelection] {
+        [.auto] + MonitorIdentity.current.cameraLUTs.map { .camera($0.id) }
+    }
     var supportsZoom: Bool { capabilities.contains(.zoom) }
     var supportsRecording: Bool { capabilities.contains(.recording) }
     var isFocusResetAvailable: Bool { false }

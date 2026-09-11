@@ -254,6 +254,10 @@ final class LiveAssistState {
     var lutEnabled = true
     var lutSelection: LUTSelection = .auto
     var monitorColorMode: ColorMode?
+    /// Actual image encoding, independently supplied by the backend. A manual
+    /// LUT selection never changes this value or the camera's capture settings.
+    var sourceTransfer: MonitorTransfer?
+    let cameraLUTs: [CameraLUT]
     var monitorFamily: CameraBodyFamily = .pocket
     var monitorCameraName: String?
     /// Media player is grading a clip (connected or not). LUT sheet must not
@@ -284,7 +288,9 @@ final class LiveAssistState {
             hasCustomDLog: CustomLUTStore.hasCube(.dLog),
             hasCustomDLog2: CustomLUTStore.hasCube(.dLog2),
             hasCustomRec709: CustomLUTStore.hasCube(.rec709),
-            customFileName: OperatorPrefs.selectedCustomFileName
+            customFileName: OperatorPrefs.selectedCustomFileName,
+            cameraLUTs: cameraLUTs,
+            previewTransfer: sourceTransfer
         )
     }
 
@@ -312,6 +318,7 @@ final class LiveAssistState {
             zebraHighlightColor: zebraHighlightColor,
             zebraMidtoneColor: zebraMidtoneColor,
             colorMode: monitorColorMode ?? .normal,
+            sourceTransfer: sourceTransfer,
             splitComparison: splitComparison && isVisible(.lut),
             splitVertical: splitVertical,
             mirror: isVisible(.mirror),
@@ -340,7 +347,8 @@ final class LiveAssistState {
         return fx
     }
 
-    init() {
+    init(cameraLUTs: [CameraLUT] = MonitorIdentity.current.cameraLUTs) {
+        self.cameraLUTs = cameraLUTs
         OperatorPrefs.load(into: self)
         cleanViewPinnedTools = OperatorPrefs.cleanViewPinnedTools
         playbackVisibleTools = OperatorPrefs.playbackVisibleAssistTools
@@ -415,7 +423,7 @@ final class LiveAssistState {
         if tool == .falseColor, isPlaybackVisible(.falseColor) {
             PocketFalseColorMap.warm(
                 scale: falseColorScale,
-                mode: monitorColorMode ?? .normal,
+                transfer: effects.monitorTransfer,
                 hasLUT: lutEnabled && lutDimension >= 2)
         }
     }
@@ -436,7 +444,7 @@ final class LiveAssistState {
             if falseColor {
                 PocketFalseColorMap.warm(
                     scale: falseColorScale,
-                    mode: monitorColorMode ?? .normal,
+                    transfer: effects.monitorTransfer,
                     hasLUT: lutEnabled && lutDimension >= 2)
             }
         case .waveform: waveform.toggle()
@@ -488,8 +496,10 @@ final class LiveAssistState {
     func syncLUT(
         to colorMode: ColorMode?,
         family: CameraBodyFamily = .pocket,
-        cameraName: String? = nil
+        cameraName: String? = nil,
+        previewTransfer: MonitorTransfer? = nil
     ) {
+        sourceTransfer = previewTransfer
         monitorColorMode = colorMode
         monitorFamily = family
         if let cameraName { monitorCameraName = cameraName }
@@ -506,6 +516,7 @@ final class LiveAssistState {
         family: CameraBodyFamily = .pocket,
         cameraName: String? = nil
     ) {
+        sourceTransfer = nil
         monitorColorMode = colorMode
         monitorFamily = family
         if let cameraName { monitorCameraName = cameraName }
@@ -518,13 +529,14 @@ final class LiveAssistState {
         live: ColorMode?,
         inPlayback: Bool,
         family: CameraBodyFamily = .pocket,
-        cameraName: String? = nil
+        cameraName: String? = nil,
+        previewTransfer: MonitorTransfer? = nil
     ) {
         if inPlayback || gradesClip {
             refreshLUTCube()
             return
         }
-        syncLUT(to: live, family: family, cameraName: cameraName)
+        syncLUT(to: live, family: family, cameraName: cameraName, previewTransfer: previewTransfer)
     }
 
     func refreshLUTCube() {
@@ -535,6 +547,14 @@ final class LiveAssistState {
             return
         }
         switch resolvedSource() {
+        case .camera(let entry):
+            if let cube = BundledCameraLUT.cube(entry) {
+                cache(cube)
+            } else {
+                lutCube = nil
+                lutDimension = 0
+                lutRGBA = Data()
+            }
         case .official(let id):
             if let cube = BundledPocketLUT.cube(id) {
                 cache(cube)
@@ -673,12 +693,19 @@ final class LiveAssistState {
         return cube.preparedForExport(
             bakeExposure: bakeExposure,
             stops: lutExposureStops,
-            transfer: MonitorTransfer(color ?? .normal))
+            transfer: lutInputTransfer(fallback: MonitorTransfer(color ?? .normal)))
+    }
+
+    /// Exposure belongs to the selected LUT's input domain. Scopes keep
+    /// measuring the actual source even while a manual conversion is selected.
+    private func lutInputTransfer(fallback: MonitorTransfer) -> MonitorTransfer {
+        if case .camera(let entry) = resolvedSource() { return entry.inputTransfer }
+        return sourceTransfer ?? fallback
     }
 
     private func cache(_ cube: CubeLUT) {
         lutCube = cube
-        let transfer = MonitorTransfer(monitorColorMode ?? .normal)
+        let transfer = lutInputTransfer(fallback: MonitorTransfer(monitorColorMode ?? .normal))
         let gpu = cube.colorCube.compensatingExposure(
             stops: lutExposureStops, transfer: transfer)
         lutDimension = gpu.size
@@ -1191,7 +1218,7 @@ struct FeedAlignedAssists: View {
             if assist.isVisible(.falseColor), assist.falseColorReference {
                 FalseColorLegend(
                     scale: assist.falseColorScale,
-                    colorMode: model.session.status.colorMode ?? .normal
+                    transfer: assist.effects.monitorTransfer
                 )
             }
             if assist.evMeter {
@@ -1671,10 +1698,20 @@ private struct LevelAxisGauge: View {
 /// OpenZCine `FalseColorReference` on the live feed.
 struct FalseColorLegend: View {
     var scale: FalseColorScaleKind
-    var colorMode: ColorMode = .normal
+    var transfer: MonitorTransfer
+
+    init(scale: FalseColorScaleKind, colorMode: ColorMode = .normal) {
+        self.scale = scale
+        self.transfer = MonitorTransfer(colorMode)
+    }
+
+    init(scale: FalseColorScaleKind, transfer: MonitorTransfer) {
+        self.scale = scale
+        self.transfer = transfer
+    }
 
     var body: some View {
-        FalseColorAssist.referenceDisplay(scale: scale, colorMode: colorMode)
+        FalseColorAssist.referenceDisplay(scale: scale, transfer: transfer)
             .allowsHitTesting(false)
     }
 }

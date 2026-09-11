@@ -21,6 +21,58 @@ final class LUTAssistTests: XCTestCase {
         "OpenPocketCine.CacheFullResolution",
     ]
     private var saved: [String: Any] = [:]
+    private let iLogLook = CameraLUT(
+        id: "insta360-luna-ilog-rec709-v2", title: "I-Log → Rec.709",
+        fileName: "Luna_I-Log_to_Rec709_BT1886_s33_v2.cube", inputTransfer: .ilog)
+
+    func testBundledCameraLookLoadsWithoutChangingSourceMetadata() throws {
+        let cube = try XCTUnwrap(BundledCameraLUT.cube(iLogLook))
+        XCTAssertEqual(cube.size, 33)
+        let gray = cube.map(red: 0.4220033397, green: 0.4220033397, blue: 0.4220033397)
+        XCTAssertEqual(gray.green, 0.38836461, accuracy: 0.000002)
+        let assist = LiveAssistState(cameraLUTs: [iLogLook])
+        assist.syncLUT(to: nil, previewTransfer: .rec709)
+        XCTAssertEqual(assist.resolvedSource(), .off)
+        assist.selectLUT(.camera(iLogLook.id))
+        XCTAssertEqual(assist.effects.lutDimension, 33)
+        XCTAssertEqual(assist.effects.monitorTransfer, .rec709)
+        XCTAssertNil(assist.monitorColorMode)
+        XCTAssertEqual(assist.lutStatusLabel, "I-Log → Rec.709")
+        XCTAssertEqual(LiveAssistState(cameraLUTs: [iLogLook]).lutSelection, .camera(iLogLook.id))
+        assist.toggle(.lut)
+        XCTAssertEqual(assist.effects.lutDimension, 0)
+        XCTAssertEqual(assist.lutStatusLabel, "Off · I-Log → Rec.709")
+    }
+
+    func testCameraExposureAndExportUseLUTInputTransfer() throws {
+        let assist = LiveAssistState(cameraLUTs: [iLogLook])
+        assist.syncLUT(to: nil, previewTransfer: .rec709)
+        assist.selectLUT(.camera(iLogLook.id))
+        let original = try XCTUnwrap(assist.exportLUTCube(bakeExposure: false))
+        assist.nudgeLUTExposure(-1)
+        XCTAssertEqual(assist.effects.monitorTransfer, .rec709)
+        XCTAssertEqual(assist.exportLUTCube(bakeExposure: false), original)
+        let baked = try XCTUnwrap(assist.exportLUTCube(bakeExposure: true))
+        let code: Float = 13.0 / 32.0
+        let pixel = baked.map(red: code, green: code, blue: code)
+        // Independently evaluated supplied cube at decode_I-Log(13/32) / 2.
+        XCTAssertEqual(pixel.green, 0.23065660, accuracy: 0.000002)
+        let gpu = assist.effects.lutRGBA.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+        let idx = (13 + 13 * 33 + 13 * 33 * 33) * 4
+        XCTAssertEqual(gpu[idx + 1], pixel.green, accuracy: 0.000002)
+    }
+
+    func testPreviewMetadataControlsAutoIndependentlyOfRecordingColor() {
+        let assist = LiveAssistState(cameraLUTs: [iLogLook])
+        assist.syncLUT(to: .dLog2, previewTransfer: .rec709)
+        XCTAssertEqual(assist.resolvedSource(), .off)
+        assist.syncLUT(to: nil, previewTransfer: .ilog)
+        XCTAssertEqual(assist.resolvedSource(), .camera(iLogLook))
+        XCTAssertEqual(assist.effects.monitorTransfer, .ilog)
+        assist.syncLUT(to: nil, previewTransfer: .rec709)
+        XCTAssertEqual(assist.effects.lutDimension, 0)
+        XCTAssertEqual(assist.lutSelection, .auto)
+    }
 
     override func setUp() {
         super.setUp()

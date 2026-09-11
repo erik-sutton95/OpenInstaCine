@@ -3,7 +3,7 @@ import MonitorCore
 
 /// Operator LUT choice. DJI Auto follows color + body; Creative looks are
 /// generated; locked rows stay put until the operator picks something else.
-public enum LUTSelection: String, CaseIterable, Sendable, Codable {
+public enum LUTSelection: RawRepresentable, CaseIterable, Hashable, Sendable, Codable {
     case auto
     case officialDLog
     case officialDLog2
@@ -19,6 +19,71 @@ public enum LUTSelection: String, CaseIterable, Sendable, Codable {
     case customDLog
     case customDLog2
     case customFile
+    /// Stable catalog identity supplied by the brand, independent of wire enums.
+    case camera(String)
+
+    /// Fixed compatibility choices. Runtime camera choices come from the
+    /// injected catalog and are intentionally not a finite enumeration.
+    public static let allCases: [LUTSelection] = [
+        .auto, .officialDLog, .officialDLog2, .djiAuto, .djiDLog, .djiDLog2, .djiDLogM,
+        .creativeMono, .creativeContrast, .creativeWarm, .creativeCool,
+        .customRec709, .customDLog, .customDLog2, .customFile,
+    ]
+
+    public var rawValue: String {
+        switch self {
+        case .auto: "auto"
+        case .officialDLog: "officialDLog"
+        case .officialDLog2: "officialDLog2"
+        case .djiAuto: "djiAuto"
+        case .djiDLog: "djiDLog"
+        case .djiDLog2: "djiDLog2"
+        case .djiDLogM: "djiDLogM"
+        case .creativeMono: "creativeMono"
+        case .creativeContrast: "creativeContrast"
+        case .creativeWarm: "creativeWarm"
+        case .creativeCool: "creativeCool"
+        case .customRec709: "customRec709"
+        case .customDLog: "customDLog"
+        case .customDLog2: "customDLog2"
+        case .customFile: "customFile"
+        case .camera(let id): "camera:\(id)"
+        }
+    }
+
+    public init?(rawValue: String) {
+        if rawValue.hasPrefix("camera:"), rawValue.count > "camera:".count {
+            self = .camera(String(rawValue.dropFirst("camera:".count)))
+        } else if let legacy = Self.allCases.first(where: { $0.rawValue == rawValue }) {
+            self = legacy
+        } else {
+            return nil
+        }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let value = try decoder.singleValueContainer()
+        let raw = try value.decode(String.self)
+        guard let selection = Self(rawValue: raw) else {
+            throw DecodingError.dataCorruptedError(in: value, debugDescription: "Unknown LUT selection")
+        }
+        self = selection
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var value = encoder.singleValueContainer()
+        try value.encode(rawValue)
+    }
+
+    public var cameraLUTID: String? {
+        if case .camera(let id) = self { return id }
+        return nil
+    }
+
+    public func title(cameraLUTs: [CameraLUT]) -> String {
+        guard let id = cameraLUTID else { return title }
+        return cameraLUTs.first(where: { $0.id == id })?.title ?? title
+    }
 
     public var title: String {
         switch self {
@@ -36,6 +101,7 @@ public enum LUTSelection: String, CaseIterable, Sendable, Codable {
         case .customDLog: CustomLUTSlot.dLog.title
         case .customDLog2: CustomLUTSlot.dLog2.title
         case .customFile: "Custom"
+        case .camera: "Camera LUT"
         }
     }
 
@@ -204,6 +270,7 @@ public enum CustomLUTSlot: String, CaseIterable, Sendable {
 
 /// What the monitor should paint for a selection + color mode + body.
 public enum LUTSource: Equatable, Sendable {
+    case camera(CameraLUT)
     case official(OfficialPocketLUT)
     case dji(OfficialDJILUT)
     case creative(BuiltInLook)
@@ -213,6 +280,7 @@ public enum LUTSource: Equatable, Sendable {
 
     public var title: String {
         switch self {
+        case .camera(let lut): lut.title
         case .official(let lut): lut.title
         case .dji(let lut): lut.title
         case .creative(let look): look.rawValue
@@ -233,10 +301,30 @@ public enum LUTResolver {
         hasCustomDLog: Bool,
         hasCustomDLog2: Bool,
         hasCustomRec709: Bool = false,
-        customFileName: String? = nil
+        customFileName: String? = nil,
+        cameraLUTs: [CameraLUT] = [],
+        previewTransfer: MonitorTransfer? = nil
     ) -> LUTSource {
         switch selection {
+        case .camera(let id):
+            return cameraLUTs.first(where: { $0.id == id }).map(LUTSource.camera) ?? .off
         case .auto, .djiAuto:
+            if selection == .auto, let previewTransfer {
+                // Authoritative preview metadata takes precedence over capture
+                // settings. An already rendered Rec.709 feed stays neutral.
+                if let entry = cameraLUTs.first(where: { $0.inputTransfer == previewTransfer }) {
+                    return .camera(entry)
+                }
+                let legacy: ColorMode
+                switch previewTransfer {
+                case .dlog:
+                    legacy = colorMode == .dLogM ? .dLogM : .dLog
+                case .dlog2: legacy = .dLog2
+                case .rec709, .hdr, .ilog: return .off
+                }
+                return OfficialDJILUT.auto(colorMode: legacy, family: family, cameraName: cameraName)
+                    .map(LUTSource.dji) ?? .off
+            }
             return OfficialDJILUT.auto(
                 colorMode: colorMode, family: family, cameraName: cameraName
             ).map(LUTSource.dji) ?? .off
@@ -289,13 +377,16 @@ public enum LUTResolver {
         selection: LUTSelection,
         source: LUTSource
     ) -> String {
-        if !enabled { return "Off · \(selection.title)" }
+        let title = selection.cameraLUTID == nil || source == .off ? selection.title : source.title
+        if !enabled { return "Off · \(title)" }
         if selection == .auto || selection == .djiAuto { return "Auto · \(source.title)" }
-        return selection.title
+        return title
     }
 
     public static func autoCaption(source: LUTSource) -> String {
         switch source {
+        case .camera(let lut):
+            return "Applying official \(lut.title)"
         case .official(let lut):
             return "Applying \(lut.title)"
         case .dji(let lut):

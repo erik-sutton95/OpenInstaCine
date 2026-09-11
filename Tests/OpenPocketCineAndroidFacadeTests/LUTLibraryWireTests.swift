@@ -5,6 +5,25 @@ import Testing
 
 @Suite
 struct LUTLibraryWireTests {
+    @Test func officialILogCubeUsesNeutralBridgeForExposure() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let bytes = try Data(contentsOf: root.appendingPathComponent(
+            "Resources/CameraLUTs/luts/Luna_I-Log_to_Rec709_BT1886_s33_v2.cube"))
+        // Independently sampled official cube at I-Log decode(13/32) × 2^EV,
+        // then quantized to the GLES atlas's RGBA8 format.
+        let fixtures: [(Double, [UInt8])] = [
+            (-1, [58, 59, 59, 255]), (0, [93, 93, 93, 255]), (1, [129, 130, 130, 255]),
+        ]
+        let offset = (13 * 33 * 33 + 13 * 33 + 13) * 4
+        for (ev, expected) in fixtures {
+            let packed = try #require(LUTLibraryWire.packedImportedLUT(
+                utf8: Array(bytes), exposureStops: ev, colorModeCode: FeedEffectsWire.iLogTransferCode))
+            #expect(packed.count == 33 * 33 * 33 * 4)
+            #expect(Array(packed[offset..<(offset + 4)]) == expected)
+        }
+    }
+
     @Test
     func rejectsPathEscapeAndBadNames() {
         #expect(LUTLibraryWire.isSafeStoredFileName("Look.cube"))

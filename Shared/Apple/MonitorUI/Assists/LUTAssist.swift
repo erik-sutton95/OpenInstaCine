@@ -2,7 +2,7 @@ import Foundation
 import OpenPocketViewCore
 import SwiftUI
 
-/// LUT long-press body: DJI / Creative / Custom, then exposure and 50/50.
+/// LUT long-press body: Camera / Creative / Custom, then exposure and 50/50.
 ///
 /// DJI Auto follows color with the official Rec.709 cubes. Creative is Mono /
 /// Contrast / Warm / Cool. Custom is imported `.cube` files. The assist-bar
@@ -27,6 +27,26 @@ enum LUTAssist {
     @ViewBuilder
     static func longPressFooter(assist: LiveAssistState) -> some View {
         LUTSplitComparisonBar(assist: assist)
+    }
+}
+
+/// The brand ships camera conversions in its application bundle. The shared
+/// framework owns only this loader; it has no vendor filename switch.
+enum BundledCameraLUT {
+    private static let lock = NSLock()
+    private static var cache: [CameraLUT: CubeLUT] = [:]
+
+    static func cube(_ entry: CameraLUT) -> CubeLUT? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = cache[entry] { return cached }
+        guard CustomLUTIndex.isSafeFileName(entry.fileName),
+            let url = Bundle.main.url(forResource: entry.fileName, withExtension: nil),
+            let text = try? String(contentsOf: url, encoding: .utf8),
+            let cube = try? CubeLUT.parse(text)
+        else { return nil }
+        cache[entry] = cube
+        return cube
     }
 }
 

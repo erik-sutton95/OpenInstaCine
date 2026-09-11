@@ -10,8 +10,12 @@ public enum FeedEffectsWire {
     public static let falseColorCubeSize = 64
     public static let assistScalarCount = 4
     public static let stopsDetailBlend = 0.4
+    /// Neutral monitor-transfer identifier, outside the legacy camera-byte range.
+    /// This is a JNI rendering contract, not an Insta360 camera command or enum.
+    public static let iLogTransferCode = 65_536
 
     public static func monitorTransfer(colorModeCode: Int) -> MonitorTransfer {
+        if colorModeCode == iLogTransferCode { return .ilog }
         guard (0...255).contains(colorModeCode),
             let mode = ColorMode(rawValue: UInt8(colorModeCode))
         else { return .rec709 }
@@ -83,16 +87,17 @@ public enum FeedEffectsWire {
         case .rec709, .hdr:
             let gradient = 1.57
             return gradient * gradient
-        case .dlog, .dlog2:
+        case .dlog, .dlog2, .ilog:
             return 1
         }
     }
 
     private static func preparedTransfer(colorModeCode: Int, iso: Int) -> MonitorTransfer {
-        if (50...102_400).contains(iso) {
+        let transfer = monitorTransfer(colorModeCode: colorModeCode)
+        if transfer != .ilog, (50...102_400).contains(iso) {
             ScopeExposureCeiling.setISO(iso)
         }
-        return monitorTransfer(colorModeCode: colorModeCode)
+        return transfer
     }
 
     private static func overlayCube(
@@ -115,9 +120,18 @@ public enum FeedEffectsWire {
                     let eb = Double(b) / denom
                     let yEnc = encodedLuma(red: er, green: eg, blue: eb, transfer: transfer)
                     let ire = ScopeDisplayScale.monitorPercent(yEnc, transfer: transfer)
-                    let value =
-                        scale == .stops
-                        ? LiveColorScience.stops(encoded: yEnc, transfer: transfer) : ire
+                    let value: Double
+                    if scale == .stops, transfer == .ilog {
+                        // Exposure is scene-linear: decode each BT.2020 channel
+                        // before weighting. Encoded luma still drives IRE and the
+                        // detail blend; calibrated legacy profiles keep their path.
+                        let luminance = LiveColorScience.linearLuminance(
+                            red: er, green: eg, blue: eb, transfer: transfer)
+                        value = LiveColorScience.stops(linear: luminance)
+                    } else {
+                        value = scale == .stops
+                            ? LiveColorScience.stops(encoded: yEnc, transfer: transfer) : ire
+                    }
                     let chosen = component(
                         overlayPaint(
                             value: value, scale: scale, bands: bandList,

@@ -36,7 +36,7 @@ public enum CameraConnectionPhase: Sendable, Equatable {
 
 /// Capture metadata is deliberately separate from preview dimensions and delivery rate.
 public enum CameraPreviewTransfer: String, Sendable, Codable {
-    case rec709, hlg, dLog, dLog2
+    case rec709, hlg, dLog, dLog2, iLog
 }
 
 public struct CameraInformation: Sendable, Equatable {
