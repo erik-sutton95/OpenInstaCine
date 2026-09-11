@@ -125,7 +125,7 @@ struct LiveCameraControlBar: View {
     }
 
     private var wbIcon: OpcIcon? {
-        model.session.status.whiteBalance?.mode == .custom ? nil : .aperture
+        model.session.status.whiteBalance?.mode == .auto ? .aperture : nil
     }
 
     private var wbValue: String {
