@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.OpenPocketCine" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <style name="Theme.OpenPocketCine.Starting" parent="Theme.SplashScreen">
+        <item name="isLightTheme">false</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/opc_splash_empty</item>
+        <item name="windowSplashScreenBackground">@color/opc_splash_background</item>
+        <item name="postSplashScreenTheme">@style/Theme.OpenPocketCine</item>
+    </style>
+</resources>
