@@ -101,7 +101,7 @@ not establish real-device performance.
 
 The extraction passed 609 shared-core/facade tests and 24 Swift protocol tests.
 Android reports 462 inherited monitor tests plus 9 Luna tests passing, with APK
-and lint verification. The Apple UI run completed 406 tests with one optional
+and lint verification. The Apple UI run completed 413 tests with one optional
 fixture skip and no failures. Simulator and Catalyst review displayed private
 Luna footage through the shared renderer. The final
 [acceptance report](docs/implementation/acceptance.md) records subsequent
