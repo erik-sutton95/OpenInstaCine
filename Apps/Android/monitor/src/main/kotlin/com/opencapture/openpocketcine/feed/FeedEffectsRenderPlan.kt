@@ -231,11 +231,12 @@ internal object FeedEffectsRenderPlanFactory {
         colorMode: Int,
     ): FeedEffectsCube? {
         val snapped = LutExposureCompensation.snap(exposureStops)
+        val exposureColorMode = LutLookResolver.exposureColorMode(source, colorMode)
         val key =
             when (source) {
-                is LutLookSource.Asset -> "asset:${source.fileName}:$snapped:$colorMode"
-                is LutLookSource.Custom -> "custom:${source.fileName}:$snapped:$colorMode"
-                is LutLookSource.Creative -> "creative:${source.name}:$snapped:$colorMode"
+                is LutLookSource.Asset -> "asset:${source.fileName}:$snapped:$exposureColorMode"
+                is LutLookSource.Custom -> "custom:${source.fileName}:$snapped:$exposureColorMode"
+                is LutLookSource.Creative -> "creative:${source.name}:$snapped:$exposureColorMode"
                 LutLookSource.Off -> return null
             }
         return PackedCubeCache.value(key) {
@@ -244,7 +245,7 @@ internal object FeedEffectsRenderPlanFactory {
                 return@value null
             }
             if (source is LutLookSource.Creative) {
-                return@value SwiftCore.packCreativeLut(source.name, snapped, colorMode)
+                return@value SwiftCore.packCreativeLut(source.name, snapped, exposureColorMode)
             }
             val utf8 =
                 when (source) {
@@ -260,7 +261,7 @@ internal object FeedEffectsRenderPlanFactory {
                     }
                     is LutLookSource.Creative, LutLookSource.Off -> null
                 } ?: return@value null
-            SwiftCore.packImportedLut(utf8, snapped, colorMode)
+            SwiftCore.packImportedLut(utf8, snapped, exposureColorMode)
         }
     }
 

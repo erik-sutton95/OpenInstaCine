@@ -4,6 +4,7 @@ android {
  compileSdk = 36
  defaultConfig { applicationId = "com.opencapture.openinstacine"; minSdk = 29; targetSdk = 36; versionCode = 1; versionName = "0.1.0"; ndk { abiFilters += "arm64-v8a" } }
  buildFeatures { compose = true; buildConfig = true }
+ sourceSets.getByName("main").assets.srcDir(rootProject.projectDir.resolve("../../Resources/CameraLUTs"))
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
  kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 }

@@ -338,8 +338,8 @@ object OperatorPrefs {
     }
 
     fun lutSelection(context: Context): String {
-        val stored = prefs(context).getString(LUT_SELECTION, LutCatalog.DJI_AUTO) ?: LutCatalog.DJI_AUTO
-        return LutCatalog.migratedToDjiCatalog(stored)
+        val stored = prefs(context).getString(LUT_SELECTION, LutCatalog.AUTO) ?: LutCatalog.AUTO
+        return LutCatalog.normalizedSelection(stored)
     }
 
     fun setLutSelection(context: Context, value: String) {

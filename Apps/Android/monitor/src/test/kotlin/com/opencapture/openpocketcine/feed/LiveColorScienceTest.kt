@@ -249,19 +249,22 @@ class LiveColorScienceTest {
     }
 
     @Test
-    fun inferredTransferFromTapSignature() {
-        assertEquals(
-            MonitorTransfer.DLOG2,
-            MonitorTransfer.inferred(16, 188, MonitorTransfer.REC709),
+    fun darkRec709FrameRetainsItsSourceTransfer() {
+        val bytes = byteArrayOf(
+            16, 16, 16, -1, 16, 16, 16, -1,
+            188.toByte(), 188.toByte(), 188.toByte(), -1, 188.toByte(), 188.toByte(), 188.toByte(), -1,
         )
-        assertEquals(
-            MonitorTransfer.DLOG,
-            MonitorTransfer.inferred(24, 200, MonitorTransfer.REC709),
+        val sample = PocketScopeSampler.sample(
+            bytes = bytes,
+            width = 4,
+            height = 1,
+            bytesPerRow = 16,
+            transfer = MonitorTransfer.fromColorMode(CameraCommands.COLOR_NORMAL),
+            includePoints = false,
         )
-        assertEquals(
-            MonitorTransfer.DLOG,
-            MonitorTransfer.inferred(16, 188, MonitorTransfer.DLOG),
-        )
+        assertEquals(MonitorTransfer.REC709, sample.transfer)
+        assertEquals(1, sample.samples.histogramRed[16])
+        assertEquals(1, sample.samples.histogramRed[188])
     }
 
     private fun spike(code: Int, count: Int = 1000): IntArray {

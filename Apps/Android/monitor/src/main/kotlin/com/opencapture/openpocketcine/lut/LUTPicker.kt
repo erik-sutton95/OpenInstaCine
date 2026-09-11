@@ -81,7 +81,7 @@ import java.io.File
 import kotlin.math.abs
 
 private enum class LutTab(val label: String) {
-    DJI("Camera"),
+    CAMERA("Camera"),
     CREATIVE("Creative"),
     CUSTOM("Custom"),
 }
@@ -138,7 +138,7 @@ fun LUTPicker(model: AppModel, onClose: () -> Unit) {
 }
 
 /**
- * Built-in / DJI / Custom catalog with an AccentDrumWheel (iOS `LUTPicker`).
+ * Camera / Creative / Custom catalog with an AccentDrumWheel (iOS `LUTPicker`).
  * `embedded` is the assist-tray form; the sheet wraps the same body.
  */
 @Composable
@@ -160,10 +160,10 @@ internal fun LUTPicker(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val djiEntries =
+    val cameraEntries =
         remember(context) {
             val names = context.assets.list(LutCatalog.ASSET_DIRECTORY)?.toList().orEmpty()
-            listOf(LutCatalog.djiAuto)
+            LutCatalog.cameraEntries(names)
         }
     val creativeEntries = remember { LutCatalog.creative }
     var tab by remember {
@@ -171,7 +171,7 @@ internal fun LUTPicker(
             when (LutCatalog.categoryOf(selection)) {
                 LutCategory.CREATIVE -> LutTab.CREATIVE
                 LutCategory.CUSTOM -> LutTab.CUSTOM
-                LutCategory.DJI -> LutTab.DJI
+                LutCategory.CAMERA, LutCategory.DJI -> LutTab.CAMERA
             }
         )
     }
@@ -203,9 +203,9 @@ internal fun LUTPicker(
         if (next != tab) {
             tab = next
             when (next) {
-                LutTab.DJI ->
-                    if (LutCatalog.categoryOf(selection) != LutCategory.DJI) {
-                        onSelect(LutCatalog.DJI_AUTO)
+                LutTab.CAMERA ->
+                    if (LutCatalog.categoryOf(selection) != LutCategory.CAMERA) {
+                        onSelect(LutCatalog.AUTO)
                         onArmLut()
                     }
                 LutTab.CREATIVE ->
@@ -230,7 +230,7 @@ internal fun LUTPicker(
                 selection = selection,
                 onSelect = onPick,
                 creativeEntries = creativeEntries,
-                djiEntries = djiEntries,
+                cameraEntries = cameraEntries,
                 customEntries = customEntries,
                 onImport = { importer.launch(arrayOf("*/*")) },
                 onClear = { pendingDeletion = it },
@@ -324,7 +324,7 @@ private fun LUTPickerBody(
     selection: String,
     onSelect: (String) -> Unit,
     creativeEntries: List<LutEntry>,
-    djiEntries: List<LutEntry>,
+    cameraEntries: List<LutEntry>,
     customEntries: List<LutEntry>,
     onImport: () -> Unit,
     onClear: (String) -> Unit,
@@ -365,12 +365,12 @@ private fun LUTPickerBody(
         }
         Box(Modifier.fillMaxWidth().height(contentH)) {
             when (tab) {
-                LutTab.DJI ->
+                LutTab.CAMERA ->
                     CatalogTab(
-                        caption = djiCaption(selection, colorMode, family, cameraName),
-                        entries = djiEntries,
+                        caption = cameraCaption(selection, colorMode, family, cameraName),
+                        entries = cameraEntries,
                         selection = selection,
-                        fallbackId = LutCatalog.DJI_AUTO,
+                        fallbackId = LutCatalog.AUTO,
                         onSelect = onSelect,
                         contentHeight = contentH,
                     )
@@ -815,7 +815,7 @@ private fun creativeCaption(
         "Looks for the displayed picture"
     }
 
-private fun djiCaption(
+private fun cameraCaption(
     selection: String,
     colorMode: Int,
     family: String,
@@ -827,8 +827,9 @@ private fun djiCaption(
                 LutLookResolver.resolve(selection, true, colorMode, family, cameraName),
             )
         else ->
-            if (LutCatalog.categoryOf(selection) == LutCategory.DJI) {
-                "Camera conversion look"
+            if (LutCatalog.categoryOf(selection) == LutCategory.CAMERA) {
+                LutCatalog.cameraLooks.firstOrNull { it.id == selection }?.caption
+                    ?: "Manual camera conversion"
             } else {
                 "Camera looks for this color profile"
             }

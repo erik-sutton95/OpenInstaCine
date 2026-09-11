@@ -1,11 +1,16 @@
 package com.opencapture.openpocketcine.feed
 
 import com.opencapture.openpocketcine.lut.LutCatalog
+import com.opencapture.openpocketcine.lut.LutEntry
 import com.opencapture.openpocketcine.session.CameraCommands
 
 /** File the live GPU path should pack, mirroring iOS `LUTResolver`. */
 internal sealed class LutLookSource {
-    data class Asset(val fileName: String) : LutLookSource()
+    data class Asset(
+        val fileName: String,
+        val inputTransfer: MonitorTransfer? = null,
+        val title: String? = null,
+    ) : LutLookSource()
 
     data class Custom(val fileName: String) : LutLookSource()
 
@@ -22,8 +27,13 @@ internal object LutLookResolver {
         colorMode: Int,
         family: String,
         cameraName: String?,
+        cameraLooks: List<LutEntry> = LutCatalog.cameraLooks,
     ): LutLookSource {
         if (!lutOn) return LutLookSource.Off
+        cameraLooks.firstOrNull { it.id == selection }?.let { entry ->
+            return entry.fileName?.let { LutLookSource.Asset(it, entry.inputTransfer, entry.title) }
+                ?: LutLookSource.Off
+        }
         if (family == "generic" && (selection == LutCatalog.AUTO || selection == LutCatalog.DJI_AUTO)) return LutLookSource.Off
         return when (selection) {
             LutCatalog.OFF -> LutLookSource.Off
@@ -40,10 +50,10 @@ internal object LutLookResolver {
                 LutCatalog.customFileName(selection)?.let { LutLookSource.Custom(it) }
                     ?: LutCatalog.officialBuiltInLooks.firstOrNull { LutCatalog.matches(it, selection) }
                         ?.fileName
-                        ?.let(LutLookSource::Asset)
+                        ?.let { LutLookSource.Asset(it) }
                     ?: LutCatalog.officialDji.firstOrNull { LutCatalog.matches(it, selection) }
                         ?.fileName
-                        ?.let(LutLookSource::Asset)
+                        ?.let { LutLookSource.Asset(it) }
                     ?: LutLookSource.Off
             }
         }
@@ -81,12 +91,17 @@ internal object LutLookResolver {
         when (source) {
             LutLookSource.Off -> "Off"
             is LutLookSource.Asset ->
-                LutCatalog.officialBuiltInLooks.firstOrNull { it.fileName == source.fileName }?.title
+                source.title
+                    ?: LutCatalog.officialBuiltInLooks.firstOrNull { it.fileName == source.fileName }?.title
                     ?: LutCatalog.officialDji.firstOrNull { it.fileName == source.fileName }?.title
                     ?: LutCatalog.displayName(source.fileName)
             is LutLookSource.Custom -> LutCatalog.displayName(source.fileName)
             is LutLookSource.Creative -> source.name
         }
+
+    /** Manual conversion changes the cube's exposure math, never source metering metadata. */
+    fun exposureColorMode(source: LutLookSource, sourceColorMode: Int): Int =
+        (source as? LutLookSource.Asset)?.inputTransfer?.colorMode ?: sourceColorMode
 
     private fun djiAuto(colorMode: Int, family: String, cameraName: String?): LutLookSource {
         val nano = family.equals("nano", ignoreCase = true)

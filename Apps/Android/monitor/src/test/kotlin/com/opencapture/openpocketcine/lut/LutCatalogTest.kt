@@ -111,7 +111,7 @@ class LutCatalogTest {
         assertEquals("Action 6 D-Log M → Rec.709", LutCatalog.titleFor("djiAction6DLogM"))
         assertEquals("Look", LutCatalog.titleFor("custom:Look.cube"))
         assertEquals("Custom", LutCatalog.titleFor("customFile"))
-        assertEquals(LutCategory.DJI, LutCatalog.categoryOf("off"))
+        assertEquals(LutCategory.CAMERA, LutCatalog.categoryOf("off"))
         assertEquals(LutCategory.DJI, LutCatalog.categoryOf("djiDLog"))
         assertEquals(LutCategory.CUSTOM, LutCatalog.categoryOf("custom:Look.cube"))
         assertEquals(LutCategory.CUSTOM, LutCatalog.categoryOf("customFile"))

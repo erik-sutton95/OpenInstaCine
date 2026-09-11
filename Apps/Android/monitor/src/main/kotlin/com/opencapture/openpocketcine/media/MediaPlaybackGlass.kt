@@ -239,10 +239,10 @@ private fun publishPlaybackScopeTap(
     val pixels = IntArray(tapW * tapH)
     src.getPixels(pixels, 0, tapW, 0, 0, tapW, tapH)
     val packed = argb8888ToRgba(pixels)
-    var transfer = MonitorTransfer.fromColorMode(colorMode)
+    val transfer = MonitorTransfer.fromColorMode(colorMode)
     ScopeExposureCeiling.syncISO(iso)
-    val (minC, maxC) = PocketScopeSampler.minMaxRGB(packed)
-    transfer = MonitorTransfer.inferred(minC, maxC, transfer)
+    val (_, maxC) = PocketScopeSampler.minMaxRGB(packed)
+    // Pixel brightness is scene content, not evidence of a camera transfer function.
     ScopeExposureCeiling.observeTapMax(maxC, transfer)
     val bundle =
         PocketScopeSampler.sample(
