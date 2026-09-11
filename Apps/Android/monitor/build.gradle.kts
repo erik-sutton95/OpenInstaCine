@@ -84,7 +84,7 @@ val stageSwiftCore =
         workingDir = repositoryRoot
         inputs.files(
             fileTree(repositoryRoot) {
-                include("Package.swift", "Package.resolved", "Sources/**")
+                include("Package.swift", "Package.resolved", "Sources/**", "Adapters/OsmoCompatibility/Sources/**")
             },
             stageSwiftCoreScript,
         )
