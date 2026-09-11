@@ -2,6 +2,8 @@
 
 Measured **2026-09-11** using the user's Luna Ultra. **The detachable screen's own wireless video is now decrypted and decoded**, including its original SPS, PPS and first IDR frame. This resolves the decoder-initialization gap in the [earlier reconnect capture](luna-screen-transport-capture-2026-09-11.md). It does not yet establish a pre-Color-Recovery feed or implement a replacement screen client.
 
+**Follow-up:** the [later recovery-toggle capture](luna-recovery-toggle-capture-2026-09-11.md) identifies the screen's I-Log LUT configuration write and compares independently decoded flat and restored pictures from the same take. The startup-only limitations in this note remain the provenance of this earlier experiment.
+
 ## Operator sequence and capture
 
 The user was instructed to disconnect phone camera apps, attach the screen, select 10-bit I-Log with Color Recovery enabled, normally power off the camera, wait for shutdown plus ten seconds, power on, then detach after live preview appeared. After thirty seconds of detached preview, they checked the selected value of “preview reset to:” without changing it and returned to live view.

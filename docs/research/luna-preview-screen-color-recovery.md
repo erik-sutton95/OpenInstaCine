@@ -4,6 +4,8 @@ Research date: **2026-09-11**. Scope: current official Insta360 manuals, support
 
 The requested outcome is simultaneous camera-screen monitoring and an independent **pre-LUT I-Log preview stream while the camera's Color Recovery remains enabled**. “Raw” here means unconverted I-Log image values, not sensor RAW.
 
+**Latest local measurement:** the [confirmed recovery-toggle capture](luna-recovery-toggle-capture-2026-09-11.md) identifies the screen's Wi-Fi configuration write for the I-Log viewing LUT, with corresponding changes in incoming H.264 pictures. This supplies a concrete recovery-control route to investigate from OpenInstaCine. It does not establish simultaneous flat and restored streams or independent recovery settings for the phone and detachable screen.
+
 ## Findings
 
 | Question | Official evidence | What remains open |
