@@ -99,7 +99,7 @@ final class GimbalGamepadBridge {
         if model.session.isBrowsingMedia { return false }
         if model.liveOperatorPanel != nil { return false }
         if model.isEditingChrome { return false }
-        return model.isLive && model.session.datalink != nil
+        return model.isLive && model.session.hasControlLink
     }
 
     private func bindControllers() {

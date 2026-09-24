@@ -38,6 +38,10 @@ final class LunaBluetooth: NSObject, @preconcurrency CBCentralManagerDelegate,
         central.scanForPeripherals(
             withServices: [service], options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
     }
+    func stopScan() {
+        guard centralWasCreated else { return }
+        central.stopScan()
+    }
     private func waitForPower() async throws {
         try Task.checkCancellation()
         if central.state == .poweredOn { return }

@@ -69,7 +69,12 @@ public struct MediaFile: Equatable, Sendable, Identifiable, Hashable, Codable {
 
     /// `YYYYMMDDHHmmss` baked into `DJI_20260814125250_0034_D.MP4`.
     public var filenameTimestamp: String? {
-        MediaFile.group(MediaFile.timestampRegex, in: filename, at: 1)
+        if let dji = MediaFile.group(MediaFile.timestampRegex, in: filename, at: 1) { return dji }
+        // Insta360 `VID_20260916_123456_00_001.mp4` / `IMG_…`.
+        guard let day = MediaFile.group(MediaFile.insta360Regex, in: filename, at: 1),
+            let time = MediaFile.group(MediaFile.insta360Regex, in: filename, at: 2)
+        else { return nil }
+        return day + time
     }
 
     public var captureDate: Date? {
@@ -95,6 +100,7 @@ public struct MediaFile: Equatable, Sendable, Identifiable, Hashable, Codable {
     public var isBurstLead: Bool { burstGroupKey != nil }
 
     private static let timestampRegex = try! NSRegularExpression(pattern: #"_(\d{14})_"#)
+    private static let insta360Regex = try! NSRegularExpression(pattern: #"_(\d{8})_(\d{6})_"#)
     private static let sequenceRegex = try! NSRegularExpression(pattern: #"_(\d{4})_D"#)
     private static let burstRegex = try! NSRegularExpression(pattern: #"^(.+)_(\d{3})\.\w+$"#)
 
@@ -148,13 +154,20 @@ public enum MediaCacheGrade: String, Sendable, Equatable {
 
 /// SoftAP HTTP `/v2` paths. Osmosis `PathAddressing` + `StorageRules`.
 public enum MediaHTTP {
-    public static let host = CameraSoftAP.host
+    /// Brand hook: DJI serves `/v2?storage=&path=`; Insta360 serves each file at its own path.
+    public enum Addressing: Sendable { case djiV2, directPath }
+    nonisolated(unsafe) public static var addressing: Addressing = .djiV2
+    nonisolated(unsafe) public static var host = CameraSoftAP.host
     public static let port = 80
 
     public static func pathURL(storage: Int, path: String) -> URL? {
         var components = URLComponents()
         components.scheme = "http"
         components.host = host
+        if addressing == .directPath {
+            components.path = path.hasPrefix("/") ? path : "/" + path
+            return components.url
+        }
         components.path = "/v2"
         components.queryItems = [
             URLQueryItem(name: "storage", value: String(storage)),
@@ -215,6 +228,7 @@ public enum MediaHTTP {
     }
 
     public static func derivedProxyExtension(filename: String) -> String? {
+        if filename.hasPrefix("VID_"), filename.lowercased().hasSuffix(".mp4") { return "lrv" }
         if filename.hasPrefix("CAM_") { return "XRF" }
         if filename.hasPrefix("DJI_") { return "LRF" }
         return nil

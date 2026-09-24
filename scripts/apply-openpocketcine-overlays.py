@@ -159,6 +159,19 @@ def main() -> None:
         "    static var accent: Color { LiveHDRDisplay.chromeColor(hex: MonitorTheme.accentRGB) }\n",
     )
 
+    # --- Launch wiring + gates that assumed a DJI datalink. ---
+    replace_once(
+        APP / "OpenInstaCineApp.swift",
+        "        MonitorTheme.prepareResources()\n",
+        "        OpenInstaCineBrand.apply()\n        MonitorTheme.prepareResources()\n",
+    )
+    for name in ("GimbalGamepad.swift", "HeadphoneMotion.swift"):
+        replace_once(
+            APP / name,
+            "        return model.isLive && model.session.datalink != nil\n",
+            "        return model.isLive && model.session.hasControlLink\n",
+        )
+
 
 if __name__ == "__main__":
     main()

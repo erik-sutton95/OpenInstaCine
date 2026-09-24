@@ -2,9 +2,9 @@ import Foundation
 import MonitorContracts
 import Security
 
-struct LunaStoredWiFi: Codable {
-    let ssid: String
-    let password: String
+public struct LunaStoredWiFi: Codable, Sendable {
+    public let ssid: String
+    public let password: String
 }
 
 enum LunaSecureStore {

@@ -512,7 +512,7 @@ final class HeadphoneMotionBridge: NSObject, CMHeadphoneMotionManagerDelegate {
         if model.session.isBrowsingMedia { return false }
         if model.liveOperatorPanel != nil { return false }
         if model.isEditingChrome { return false }
-        return model.isLive && model.session.datalink != nil
+        return model.isLive && model.session.hasControlLink
     }
 
     private func apply(dt: TimeInterval) {

@@ -11,6 +11,7 @@ struct OpenInstaCineApp: App {
         #if DEBUG
             ReliabilityReportingVerification.runIfRequested()
         #endif
+        OpenInstaCineBrand.apply()
         MonitorTheme.prepareResources()
         FeedStressAutomation.installIfRequested()
     }

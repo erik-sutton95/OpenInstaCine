@@ -41,7 +41,15 @@ public enum ShootingMode: UInt8, CaseIterable, Sendable {
     /// Pocket 4 / 4 Pro Photo `0x02/0xE1` byte (`mimo-settings-1`).
     public static let photoRawPocket4: UInt8 = 0x17
 
+    /// Brand storefronts may rename modes (Insta360 TimeShift / PureVideo). Set once at launch.
+    nonisolated(unsafe) public static var labelOverrides: [ShootingMode: String] = [:]
+
     public var label: String {
+        if let override = Self.labelOverrides[self] { return override }
+        return defaultLabel
+    }
+
+    private var defaultLabel: String {
         switch self {
         case .slowMo: "SlowMo"
         case .video: "Video"
@@ -1163,13 +1171,18 @@ public struct VideoResolution: Equatable, Hashable, Sendable {
     public static let p3K_1x1 = Self(rawValue: 0x6B)
     public static let p3K_9x16 = Self(rawValue: 0x6C)
     public static let p4K_1x1 = Self(rawValue: 0x7D)
+    /// Insta360 Luna sizes with no DJI byte. Not DJI wire values.
+    public static let luna8K = Self(rawValue: 0xD0)
+    public static let luna6K = Self(rawValue: 0xD1)
+    public static let luna4K_9x16 = Self(rawValue: 0xD3)
+    public static let luna3K = Self(rawValue: 0xD4)
 
     public var aspect: VideoAspect? {
         switch rawValue {
-        case 0x0A, 0x10, 0x2D: .sixteenNine
+        case 0x0A, 0x10, 0x2D, 0xD0, 0xD1, 0xD4: .sixteenNine
         case 0x0C, 0x5F, 0x67: .fourThree
         case 0x69, 0x6A, 0x6B, 0x7D: .oneOne
-        case 0x42, 0x43, 0x6C: .nineSixteen
+        case 0x42, 0x43, 0x6C, 0xD3: .nineSixteen
         default: nil
         }
     }
@@ -1212,7 +1225,10 @@ public struct VideoResolution: Equatable, Hashable, Sendable {
         case 0x2D, 0x43, 0x5F: "2.7K"
         case 0x10, 0x67, 0x7D: "4K"
         case 0x6A: "2160"
-        case 0x6B, 0x6C: "3K"
+        case 0x6B, 0x6C, 0xD4: "3K"
+        case 0xD0: "8K"
+        case 0xD1: "6K"
+        case 0xD3: "4K"
         default: String(format: "%02X", rawValue)
         }
     }
@@ -1223,7 +1239,10 @@ public struct VideoResolution: Equatable, Hashable, Sendable {
         case 0x2D, 0x43, 0x5F: "2.7K"
         case 0x10, 0x67, 0x7D: "4K"
         case 0x6A: "2160p"
-        case 0x6B, 0x6C: "3K"
+        case 0x6B, 0x6C, 0xD4: "3K"
+        case 0xD0: "8K"
+        case 0xD1: "6K"
+        case 0xD3: "4K"
         default: String(format: "0x%02X", rawValue)
         }
     }

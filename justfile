@@ -65,14 +65,14 @@ luna-lab-bridge *args:
 # Physical XC driver for the official Insta360 iOS app. Host app is OpenInstaCine.
 luna-official-xc device:
     xcodegen generate --spec Apps/Apple/project.yml
-    xcodebuild -project Apps/Apple/OpenInstaCine.xcodeproj -scheme LunaOfficialCapture -destination 'platform=iOS,id={{device}}' -allowProvisioningUpdates -derivedDataPath .local/AppleDerivedData -maximum-test-execution-time-allowance 21600 -only-testing:LunaOfficialUITests/InteractiveDriver/testDriveOfficialInsta360 test
+    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme LunaOfficialCapture -destination 'platform=iOS,id={{device}}' -allowProvisioningUpdates -derivedDataPath .local/AppleDerivedData -maximum-test-execution-time-allowance 21600 -only-testing:LunaOfficialUITests/InteractiveDriver/testDriveOfficialInsta360 test
 
 # Compiles without signing or accessing a connected phone.
 apple-build: apple-generate
-    xcodebuild -project Apps/Apple/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'generic/platform=iOS Simulator' -configuration Debug -derivedDataPath .local/AppleDerivedData CODE_SIGNING_ALLOWED=NO build
+    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'generic/platform=iOS Simulator' -configuration Debug -derivedDataPath .local/AppleDerivedData CODE_SIGNING_ALLOWED=NO build
 
 apple-test simulator: apple-generate
-    xcodebuild -project Apps/Apple/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'platform=iOS Simulator,id={{simulator}}' -configuration Debug -derivedDataPath .local/AppleDerivedData CODE_SIGNING_ALLOWED=NO test
+    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'platform=iOS Simulator,id={{simulator}}' -configuration Debug -derivedDataPath .local/AppleDerivedData CODE_SIGNING_ALLOWED=NO test
 
 apple-simulator simulator:
     bash scripts/apple-simulator.sh {{quote(simulator)}}
