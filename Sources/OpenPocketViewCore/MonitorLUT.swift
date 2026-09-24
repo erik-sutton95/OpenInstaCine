@@ -208,7 +208,6 @@ public enum LUTSource: Equatable, Sendable {
     case creative(BuiltInLook)
     case custom(CustomLUTSlot)
     case file(String)
-    case lunaILog
     case off
 
     public var title: String {
@@ -218,7 +217,6 @@ public enum LUTSource: Equatable, Sendable {
         case .creative(let look): look.rawValue
         case .custom(let slot): slot.title
         case .file(let name): CustomLUTIndex.displayName(fileName: name)
-        case .lunaILog: "I-Log → Rec.709"
         case .off: "Off"
         }
     }
@@ -238,7 +236,6 @@ public enum LUTResolver {
     ) -> LUTSource {
         switch selection {
         case .auto, .djiAuto:
-            if colorMode == .iLog { return .lunaILog }
             return OfficialDJILUT.auto(
                 colorMode: colorMode, family: family, cameraName: cameraName
             ).map(LUTSource.dji) ?? .off
@@ -308,8 +305,6 @@ public enum LUTResolver {
             return "Applying \(slot.title)"
         case .file(let name):
             return "Applying \(CustomLUTIndex.displayName(fileName: name))"
-        case .lunaILog:
-            return "Applying I-Log → Rec.709"
         case .off:
             return "No matching look for this color / camera"
         }

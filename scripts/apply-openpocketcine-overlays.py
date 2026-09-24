@@ -1,117 +1,162 @@
 #!/usr/bin/env python3
-"""Brand-neutral hooks applied after every OpenPocketCine sync.
+"""Brand hunks applied after every OpenPocketCine sync (see sync-openpocketcine.sh).
 
-Keep these patches tiny. Camera protocol stays in Adapters/. If a hunk fails,
-the sync must fail instead of shipping a blue OpenPocketCine clone.
+Keep these patches tiny and exact. Camera protocol lives in Adapters/ and in the
+Luna-owned shell files listed in sync-openpocketcine.sh. If a hunk stops matching,
+the sync fails instead of silently shipping a blue OpenPocketCine clone.
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+APP = ROOT / "ios/OpenInstaCine"
 
 
 def replace_once(path: Path, old: str, new: str) -> None:
     text = path.read_text()
-    if old not in text:
-        raise SystemExit(f"{path}: expected overlay hunk missing:\n{old[:120]}")
-    if text.count(old) != 1:
-        raise SystemExit(f"{path}: overlay hunk matched {text.count(old)} times")
+    if new in text:
+        return  # already applied
+    count = text.count(old)
+    if count != 1:
+        sys.exit(f"{path.relative_to(ROOT)}: overlay hunk matched {count} times:\n{old[:160]}")
     path.write_text(text.replace(old, new, 1))
 
 
 def main() -> None:
+    # --- Brand accent: one engine token, assigned once at launch. ---
     theme = ROOT / "Sources/MonitorUI/MonitorTheme.swift"
     replace_once(
         theme,
-        "        public static let accent = color(0x00A3E0)\n",
-        "        /// Brand apps assign this once at launch before any view is built.\n"
+        "        public static var accent: Color { edrAccent(gain: hdrGain) }\n",
+        "        /// Brand storefronts assign this once at launch, before any view is built.\n"
         "        nonisolated(unsafe) public static var accentRGB: UInt32 = 0x00A3E0\n"
-        "        public static var accent: Color { color(accentRGB) }\n",
+        "        public static var accent: Color { edrAccent(gain: hdrGain) }\n"
+        "        /// Ink for text/icons drawn ON an accent fill. Light accents (yellow) need dark ink.\n"
+        "        public static var onAccent: Color { accentIsLight ? color(0x111213) : .white }\n"
+        "        public static var accentIsLight: Bool {\n"
+        "            let r = Double((accentRGB >> 16) & 255), g = Double((accentRGB >> 8) & 255)\n"
+        "            let b = Double(accentRGB & 255)\n"
+        "            return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.6\n"
+        "        }\n",
+    )
+    replace_once(
+        theme,
+        "            edrSRGB(red: 0, green: 163 / 255, blue: 230 / 255, gain: gain)\n",
+        "            edrSRGB(\n"
+        "                red: CGFloat((accentRGB >> 16) & 255) / 255,\n"
+        "                green: CGFloat((accentRGB >> 8) & 255) / 255,\n"
+        "                blue: CGFloat(accentRGB & 255) / 255, gain: gain)\n",
     )
 
-    palette = ROOT / "Apps/Android/monitor-ui/src/main/kotlin/com/opencapture/monitorui/MonitorTheme.kt"
+    branding = APP / "Branding.swift"
     replace_once(
-        palette,
-        "    val accent = Color(0xFF00A3E0)\n",
-        "    /** Brand shells assign this before composing shared screens. */\n"
-        "    var accent = Color(0xFF00A3E0)\n",
+        branding,
+        "/// OpenInstaCine brand palette — DJI Sky Blue on Black.\n",
+        "/// OpenInstaCine brand palette: Luna yellow on black.\n",
     )
-
-    colors = ROOT / "Shared/Apple/MonitorShell/Branding.swift"
     replace_once(
-        colors,
+        branding,
         "    static let accent = Color(red: 0, green: 163 / 255, blue: 230 / 255)\n"
         "    static let accentSoft = Color(red: 0, green: 163 / 255, blue: 230 / 255).opacity(0.18)\n",
         "    static var accent: Color { MonitorTheme.accent }\n"
         "    static var accentSoft: Color { MonitorTheme.accent.opacity(0.18) }\n",
     )
-    branding = colors.read_text()
-    if "import MonitorUI" not in branding:
-        colors.write_text(branding.replace("import SwiftUI\n", "import MonitorUI\nimport SwiftUI\n", 1))
+    text = branding.read_text()
+    if "import MonitorUI" not in text:
+        branding.write_text(text.replace("import SwiftUI\n", "import MonitorUI\nimport SwiftUI\n", 1))
 
-    control = ROOT / "Sources/OpenPocketViewCore/CameraControl.swift"
+    # --- Xcode project: Luna adapter packages, usage copy, official-app XC driver. ---
+    project = ROOT / "ios/project.yml"
     replace_once(
-        control,
-        """    case dLog2 = 0x41
-    case normal10 = 0x3D
-    case dLogM = 0x00
-""",
-        """    case dLog2 = 0x41
-    case normal10 = 0x3D
-    case dLogM = 0x00
-    /// Insta360 I-Log. Not a DJI SET byte.
-    case iLog = 0xE2
-    /// Insta360 Dolby Vision. Not a DJI SET byte.
-    case dolbyVision = 0xE5
-""",
+        project,
+        "  OpenPocketViewCore:\n    path: ..\n",
+        "  OpenPocketViewCore:\n    path: ..\n"
+        "  Insta360Protocol:\n    path: ../Adapters/Insta360Protocol\n",
     )
     replace_once(
-        control,
-        """        case .dLog2: "D-Log2"
-        case .normal10: "Normal 10-bit"
-        case .dLogM: "D-Log M 10-bit"
-""",
-        """        case .dLog2: "D-Log2"
-        case .normal10: "Normal 10-bit"
-        case .dLogM: "D-Log M 10-bit"
-        case .iLog: "I-Log"
-        case .dolbyVision: "Dolby Vision"
-""",
+        project,
+        "targets:\n  OpenInstaCine:\n",
+        "targets:\n"
+        "  # Luna wire I/O: CoreBluetooth, camera Wi-Fi, TCP 6666, screen KCP.\n"
+        "  Insta360Apple:\n"
+        "    type: framework\n"
+        "    platform: iOS\n"
+        "    sources:\n"
+        "      - ../Adapters/Insta360Apple/Sources/Insta360Apple\n"
+        "      - path: ../Adapters/Insta360Apple/Sources/CKcp\n"
+        "        excludes:\n"
+        "          - module.modulemap\n"
+        "          - LICENSE\n"
+        "    dependencies:\n"
+        "      - package: OpenPocketViewCore\n"
+        "        product: MonitorContracts\n"
+        "      - package: Insta360Protocol\n"
+        "        product: Insta360Protocol\n"
+        "    settings:\n"
+        "      base:\n"
+        '        SWIFT_VERSION: "5.0"\n'
+        "        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.insta360adapter\n"
+        "        CLANG_ENABLE_MODULES: YES\n"
+        "        GENERATE_INFOPLIST_FILE: YES\n"
+        '        DEVELOPMENT_TEAM: "4V4EGQ6LZA"\n'
+        "        CODE_SIGN_STYLE: Automatic\n"
+        "        SKIP_INSTALL: YES\n"
+        "\n"
+        "  OpenInstaCine:\n",
     )
     replace_once(
-        control,
-        """        switch self {
-        case .dLog, .dLog2, .dLogM: true
-        default: false
-        }
-""",
-        """        switch self {
-        case .dLog, .dLog2, .dLogM, .iLog: true
-        default: false
-        }
-""",
+        project,
+        "      - package: OpenPocketViewCore\n        product: MonitorPresentation\n"
+        "      - target: OpenInstaCineWatch\n",
+        "      - package: OpenPocketViewCore\n        product: MonitorPresentation\n"
+        "      - package: OpenPocketViewCore\n        product: MonitorContracts\n"
+        "      - package: Insta360Protocol\n        product: Insta360Protocol\n"
+        "      - target: Insta360Apple\n"
+        "      - target: OpenInstaCineWatch\n",
+    )
+    replace_once(
+        project,
+        '"OpenInstaCine uses Bluetooth to find and pair with your DJI Osmo Pocket and hand off Wi-Fi."',
+        '"OpenInstaCine uses Bluetooth to find your Insta360 Luna, ask it for approval, and hand off to its Wi-Fi."',
+    )
+    replace_once(
+        project,
+        "schemes:\n",
+        "  # Lab-only XC driver for the official Insta360 app (capture sessions).\n"
+        "  LunaOfficialUITests:\n"
+        "    type: bundle.ui-testing\n"
+        "    platform: iOS\n"
+        "    sources:\n"
+        "      - LunaOfficialUITests\n"
+        "    dependencies:\n"
+        "      - target: OpenInstaCine\n"
+        "    settings:\n"
+        "      base:\n"
+        '        SWIFT_VERSION: "5.0"\n'
+        "        GENERATE_INFOPLIST_FILE: YES\n"
+        "        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.official-uitests\n"
+        "        TEST_TARGET_NAME: OpenInstaCine\n"
+        '        DEVELOPMENT_TEAM: "4V4EGQ6LZA"\n'
+        "        CODE_SIGN_STYLE: Automatic\n"
+        "\n"
+        "schemes:\n"
+        "  LunaOfficialCapture:\n"
+        "    build:\n"
+        "      targets:\n"
+        "        OpenInstaCine: all\n"
+        "        LunaOfficialUITests: [test]\n"
+        "    test:\n"
+        "      targets:\n"
+        "        - LunaOfficialUITests\n",
     )
 
-    transfer = ROOT / "Sources/OpenPocketViewCore/LiveColorScience.swift"
+    startup = APP / "StartupChrome.swift"
     replace_once(
-        transfer,
-        """        case .dLog: self = .dlog
-        case .dLogM: self = .dlogm
-        case .dLog2: self = .dlog2
-""",
-        """        case .dLog: self = .dlog
-        case .dLogM: self = .dlogm
-        case .dLog2: self = .dlog2
-        case .iLog, .dolbyVision: self = .rec709
-""",
-    )
-
-    app_model = ROOT / "Shared/Apple/MonitorShell/AppRoot.swift"
-    replace_once(
-        app_model,
-        "    var isOnCameraAccessPoint: Bool { WiFiJoiner.isCameraPathReady() }\n",
-        "    var isOnCameraAccessPoint: Bool { session.isOnCameraNetwork }\n",
+        startup,
+        "    static var accent: Color { LiveHDRDisplay.chromeColor(hex: 0x00A3E0) }\n",
+        "    static var accent: Color { LiveHDRDisplay.chromeColor(hex: MonitorTheme.accentRGB) }\n",
     )
 
 

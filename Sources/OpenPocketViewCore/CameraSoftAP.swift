@@ -75,9 +75,21 @@ public enum CameraSoftAPSwitch {
         return current == target
     }
 
-    public static func ssidToKick(currentSSID: String?, target: String) -> String? {
-        guard let current = currentSSID, !current.isEmpty, current != target else { return nil }
+    /// Only another camera's access point is kicked. The operator's own Wi-Fi is never
+    /// removed: iOS names it once location is allowed, and a Wi-Fi setup configures it
+    /// through this app, so removing it stranded the join ("internal error", 2026-09-24).
+    public static func ssidToKick(
+        currentSSID: String?, target: String, knownCameraSSIDs: [String] = []
+    ) -> String? {
+        guard let current = currentSSID, !current.isEmpty, current != target,
+            isCameraNetwork(current, knownCameraSSIDs: knownCameraSSIDs)
+        else { return nil }
         return current
+    }
+
+    /// Osmo access points are named `Osmo…`; a renamed one is known from saved cameras.
+    public static func isCameraNetwork(_ ssid: String, knownCameraSSIDs: [String]) -> Bool {
+        ssid.lowercased().hasPrefix("osmo") || knownCameraSSIDs.contains(ssid)
     }
 }
 
@@ -330,6 +342,11 @@ extension CameraSoftAP {
         }
         if videoFresh {
             if enableSends == 1 { return .resendEnable }
+            // A missed initial IRAP leaves fresh P-frames indefinitely. After
+            // the one resend, use the existing picture-repair deadline and
+            // hand ownership to the bounded rejoin instead of waiting forever
+            // or adding a periodic enable loop on this working UDP socket.
+            if secondsSinceLastEnable >= FeedWatchdog.decoderRepairDeadline { return .rejoin }
             return .wait
         }
         // Live status with frozen HEVC is the watchdog's encoder-pause path

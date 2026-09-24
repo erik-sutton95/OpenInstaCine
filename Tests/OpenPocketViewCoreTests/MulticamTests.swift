@@ -138,3 +138,138 @@ struct MulticamTests {
         #expect(throws: RTMPIngest.Failure.self) { try RTMPIngest.values(Array(bytes.dropLast())) }
     }
 }
+
+struct MulticamSupportTests {
+    @Test func previewIsLimitedToCapturedLiveEnableBodies() {
+        for (id, name) in [
+            (0x20, "Osmo Pocket 3"), (0x21, "Osmo Pocket 4"), (0x22, "Osmo Pocket 4 Pro"),
+            (0x19, "Osmo Nano"),
+        ] {
+            let model = CameraModel.resolve(modelId: id, name: name)
+            #expect(MulticamSupport.appears(model), "\(name)")
+            #expect(MulticamSupport.hasPreview(model), "\(name)")
+        }
+        for (id, name) in [(0x15, "Osmo Action 5 Pro"), (0x17, "Osmo 360")] {
+            let model = CameraModel.resolve(modelId: id, name: name)
+            #expect(MulticamSupport.appears(model), "\(name)")
+            #expect(!MulticamSupport.hasPreview(model), "\(name)")
+        }
+        let drone = CameraModel.resolve(modelId: 0x7E, name: "DJI Neo")
+        #expect(!MulticamSupport.appears(drone))
+        #expect(!MulticamSupport.hasPreview(drone))
+    }
+
+    @Test func missingRoleQueryOnlyForPocket3AndNanoE0() {
+        for (name, accepted) in [
+            ("OsmoPocket3-Test", true), ("OsmoNano-Test", true),
+            ("OsmoPocket4P-Test", false), ("OsmoAction4-Test", false),
+        ] {
+            let model = CameraModel.resolve(modelId: nil, name: name)
+            #expect(MulticamSupport.acceptsMissingRoleQuery(model, reply: [0xe0]) == accepted)
+            for reply: [UInt8] in [[], [0], [0xe0, 0], [0, 0]] {
+                #expect(!MulticamSupport.acceptsMissingRoleQuery(model, reply: reply))
+            }
+        }
+    }
+
+    @Test func recoveryAllowsTwoRejoinsThenFails() {
+        var recovery = MultiviewRecovery()
+        let budget = (0..<3).map { _ in recovery.beginRejoin() }
+        #expect(budget == [true, true, false])
+        #expect(recovery.rejoins == 2)
+        #expect(recovery.failed)
+        let stalled = FeedWatchdog.Snapshot(
+            now: 100, lastDecodedFrameAge: 20, lastVideoPacketAge: 20,
+            lastStatusAge: 20, flowHealthy: false, pathReady: true, hasFormat: true,
+            decoderFailed: false, live: true, sawPicture: true,
+            secondsSinceLastEnable: 50)
+        let action = recovery.action(stalled)
+        #expect(action == .none)
+    }
+
+    /// Scripted camera for the shared station sequence: replies keyed by opcode, in order.
+    @MainActor final class StationScript {
+        var replies: [UInt8: [[UInt8]]]
+        var sent: [UInt8] = []
+        var seq: UInt16 = 0
+        init(_ replies: [UInt8: [[UInt8]]]) { self.replies = replies }
+        func exchange(_ frame: Duml.Frame, _: TimeInterval) throws -> Duml.Frame {
+            sent.append(frame.cmdId)
+            guard var queue = replies[frame.cmdId], !queue.isEmpty else {
+                throw MulticamCommands.Failure.invalidInput  // lost reply
+            }
+            let payload = queue.removeFirst()
+            replies[frame.cmdId] = queue
+            return Duml.Frame(
+                sender: 7, receiver: 2, seq: frame.seq, flags: 0x80, cmdSet: frame.cmdSet,
+                cmdId: frame.cmdId, payload: payload)
+        }
+    }
+
+    private func pocket4() -> CameraModel { .resolve(modelId: 0x22, name: "OsmoPocket4P-AAAA") }
+
+    @MainActor @Test func stationJoinSetsRoleThenRetriesTransientJoin() async throws {
+        let camera = StationScript([
+            0x39: [[0, 0], [0, 1]], 0x48: [[0, 0]], 0x47: [[1, 0xff], [0, 0]],
+        ])
+        var probes = 0
+        let outcome = try await StationJoin(
+            model: pocket4(), ssid: "Rig Phone", password: "secret", hotspot: true
+        ).run(
+            identity: [0, 4, 0x41, 0x42], exchange: camera.exchange,
+            send: { camera.sent.append($0.cmdId) },
+            next: {
+                camera.seq += 1
+                return camera.seq
+            }, status: { _ in }, hotspotReady: { true },
+            verifyOnNetwork: {
+                probes += 1
+                return true
+            }, sleep: { _ in })
+        #expect(outcome == .joined)
+        #expect(camera.sent == [0xe1, 0x39, 0x48, 0x39, 0x47, 0x47])
+        #expect(probes == 0)
+    }
+
+    @MainActor @Test func stationJoinProbesExistingStationOnlyWhenAsked() async throws {
+        let camera = StationScript([0x39: [[0, 1]], 0x47: [[0, 0]]])
+        var join = StationJoin(model: pocket4(), ssid: "Rig Phone", password: "p", hotspot: true)
+        join.probeExistingStation = true
+        let outcome = try await join.run(
+            identity: [0, 4, 0x41, 0x42], exchange: camera.exchange, send: { _ in },
+            next: { 1 }, status: { _ in }, hotspotReady: { true },
+            verifyOnNetwork: { true }, sleep: { _ in })
+        #expect(outcome == .verified)
+        #expect(camera.sent == [0x39])
+    }
+
+    @MainActor @Test func stationJoinChecksLanWhenJoinReplyIsLostAndRejectsBadCredentials()
+        async throws
+    {
+        let lost = StationScript([0x39: [[0, 1]]])
+        let found = try await StationJoin(
+            model: pocket4(), ssid: "Rig Phone", password: "p", hotspot: false
+        ).run(
+            identity: [0, 4, 0x41, 0x42], exchange: lost.exchange, send: { _ in }, next: { 1 },
+            status: { _ in }, hotspotReady: { false }, verifyOnNetwork: { true }, sleep: { _ in })
+        #expect(found == .verified)
+
+        let refused = StationScript([0x39: [[0, 1]], 0x47: [[1, 0xff], [1, 0xff], [1, 0xff]]])
+        await #expect(throws: StationJoin.Failure.joinRejected) {
+            _ = try await StationJoin(
+                model: pocket4(), ssid: "Rig Phone", password: "p", hotspot: false
+            ).run(
+                identity: [0, 4, 0x41, 0x42], exchange: refused.exchange, send: { _ in },
+                next: { 1 }, status: { _ in }, hotspotReady: { false },
+                verifyOnNetwork: { false }, sleep: { _ in })
+        }
+        await #expect(throws: StationJoin.Failure.rejected) {
+            _ = try await StationJoin(
+                model: pocket4(), ssid: "Rig Phone", password: "p", hotspot: false
+            ).run(
+                identity: [0xe4], exchange: refused.exchange, send: { _ in }, next: { 1 },
+                status: { _ in }, hotspotReady: { false }, verifyOnNetwork: { false },
+                sleep: { _ in })
+        }
+    }
+}

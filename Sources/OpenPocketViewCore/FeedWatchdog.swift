@@ -12,11 +12,14 @@ import Foundation
 /// the socket paused. SoftAP bind stays.
 ///
 /// Encoder pause: DUML status still landing, HEVC silent, past GOP/AF-C
-/// grace. Two `0x09/0xa8`, then one UDP rebuild. Keepalive must not flap
+/// grace. One `0x09/0xa8`, then one UDP rebuild. Keepalive must not flap
 /// while status is young. `escalateAfter` between actions — do not 1 Hz loop.
+/// Field data (1,960 incidents, 2026-09): when an enable restarts HEVC it does
+/// so within 4 s; a second enable almost never did and delayed the endpoint
+/// rebuild that fixed 292 of 521 transport stalls by ~5 s.
 ///
 /// After picture the ladder is bounded and ends in a **new handshake**:
-/// enable ×2 (encoder pause only) → one session-preserving UDP rebuild →
+/// enable ×1 (encoder pause only) → one session-preserving UDP rebuild →
 /// `fullSessionRejoin`. A rebuild keeps session/seq; a camera that dropped
 /// the session never answers it, and the old ladder sat in Reconnecting on
 /// 60 s rebuild cycles until the operator force-quit (#218). The rejoin is
@@ -74,6 +77,9 @@ public struct FeedWatchdog: Equatable, Sendable {
         public var lastDecoderOutputAge: TimeInterval?
         /// False for compressed display-layer paths without observable output.
         public var decoderOutputExpected: Bool
+        /// Explicit compressed discontinuity after valid references, not an
+        /// ordinary startup/GOP hold or an intentional decoder replacement.
+        public var referenceRecoveryNeeded: Bool
         /// Shell can execute a repair now; blocked requests spend no ladder rung.
         public var repairReady: Bool
         public var live: Bool
@@ -134,6 +140,7 @@ public struct FeedWatchdog: Equatable, Sendable {
             secondsSinceCameraSet: TimeInterval? = nil,
             lastDecoderOutputAge: TimeInterval? = nil,
             decoderOutputExpected: Bool = false,
+            referenceRecoveryNeeded: Bool = false,
             repairReady: Bool = true
         ) {
             self.now = now
@@ -147,6 +154,7 @@ public struct FeedWatchdog: Equatable, Sendable {
             self.decoderFailed = decoderFailed
             self.lastDecoderOutputAge = lastDecoderOutputAge
             self.decoderOutputExpected = decoderOutputExpected
+            self.referenceRecoveryNeeded = referenceRecoveryNeeded
             self.repairReady = repairReady
             self.live = live
             self.sawPicture = sawPicture
@@ -167,8 +175,8 @@ public struct FeedWatchdog: Equatable, Sendable {
 
     public var stage: Stage = .idle
     public private(set) var lastActionAt: TimeInterval = 0
-    /// Encoder-pause `0x09/0xa8`s this stall. Two then one UDP rebuild.
-    private var encoderPauseEnables = 0
+    /// Encoder-pause `0x09/0xa8` already sent this stall. Then one UDP rebuild.
+    private var encoderPauseEnableSent = false
 
     public init() {}
 
@@ -359,21 +367,33 @@ public struct FeedWatchdog: Equatable, Sendable {
 
         // Native output is measured before assists/presentation. A retained
         // image or arriving compressed AU cannot complete decoder recovery.
+        let outputAge = snap.lastDecoderOutputAge ?? snap.lastDecodedFrameAge
         let decoderSilent =
             snap.decoderOutputExpected && snap.sawPicture
-            && (snap.lastDecoderOutputAge ?? snap.lastDecodedFrameAge ?? 0) >= Self.stallThreshold
+            && (outputAge ?? 0) >= Self.stallThreshold
+        let knownReferenceLoss =
+            snap.decoderOutputExpected && snap.sawPicture && snap.referenceRecoveryNeeded
+        let decoderNeedsRepair = decoderSilent || knownReferenceLoss
         let assemblyStalled =
             snap.sawPicture && Self.udpReceiveAlive(snap)
             && snap.lastAccessUnitAge.map { $0 >= Self.stallThreshold } == true
             && (snap.lastDecodedFrameAge ?? 0) >= Self.stallThreshold
             && (!snap.decoderOutputExpected || decoderSilent)
-        if stage == .rebuildVT, decoderSilent {
+        // An explicit loss can start repair while the old output is still
+        // younger than stallThreshold. Only output newer than this action can
+        // release its budget; IRAP acceptance alone is not output proof.
+        let outputAfterAction = outputAge.map { snap.now - $0 > lastActionAt } ?? false
+        if stage == .rebuildVT, decoderNeedsRepair || !outputAfterAction {
             guard snap.now - lastActionAt >= Self.decoderRepairDeadline else { return .none }
             return fire(.fullSessionRejoin, at: snap.now)
         }
 
         if Self.udpReceiveAlive(snap), !assemblyStalled {
-            if decoderSilent, snap.hasFormat,
+            // A failed presentation path can discard parameter sets while
+            // retaining the last image. Inter-frames cannot restore that format;
+            // the existing decoder repair owns the one enable that requests it.
+            // Established picture/output intent still exclude cold startup.
+            if decoderNeedsRepair,
                 (snap.lastAccessUnitAge ?? .infinity) < Self.stallThreshold
             {
                 // After the one decoder attempt, ownership passes to the shell
@@ -382,15 +402,9 @@ public struct FeedWatchdog: Equatable, Sendable {
                 if Self.shouldHoldForGOPReset(
                     secondsSinceLastEnable: snap.secondsSinceLastEnable,
                     lastVideoPacketAge: snap.lastVideoPacketAge)
-                    || (snap.secondsSinceCameraSet ?? .infinity) < Self.cameraSetGrace
-                    || FocusTrackMode.shouldHoldWatchdog(
-                        secondsSinceSet: snap.secondsSinceFocusTrackSet)
-                    || CamFov.shouldHoldWatchdog(
-                        secondsSinceSet: snap.secondsSinceZoomSet, pinchActive: snap.zoomPinchActive
+                    || Self.shouldHoldForControlGrace(
+                        snap, stalledStageAge: snap.lastDecoderOutputAge ?? snap.lastDecodedFrameAge
                     )
-                    || GimbalStick.shouldHoldWatchdog(
-                        secondsSinceThrow: snap.secondsSinceGimbalThrow,
-                        stickHeld: snap.gimbalStickHeld)
                 {
                     return .none
                 }
@@ -400,39 +414,21 @@ public struct FeedWatchdog: Equatable, Sendable {
             return .none
         }
 
+        // Measure the hold at the stage that stopped: fresh fragments with no
+        // complete AU must not renew the 8 s window after every enable. A
+        // just-sent enable still gets stallThreshold for its keyframe.
+        let enableHadTime = (snap.secondsSinceLastEnable ?? 0) >= Self.stallThreshold
         if Self.shouldHoldForGOPReset(
             secondsSinceLastEnable: snap.secondsSinceLastEnable,
-            lastVideoPacketAge: snap.lastVideoPacketAge
+            lastVideoPacketAge: assemblyStalled && enableHadTime
+                ? snap.lastAccessUnitAge : snap.lastVideoPacketAge
         ) {
             return .none
         }
 
-        if FocusTrackMode.shouldHoldWatchdog(
-            secondsSinceSet: snap.secondsSinceFocusTrackSet,
-            lastVideoPacketAge: snap.lastVideoPacketAge)
-        {
-            return .none
-        }
-
-        if CamFov.shouldHoldWatchdog(
-            secondsSinceSet: snap.secondsSinceZoomSet,
-            lastVideoPacketAge: snap.lastVideoPacketAge,
-            pinchActive: snap.zoomPinchActive)
-        {
-            return .none
-        }
-
-        if GimbalStick.shouldHoldWatchdog(
-            secondsSinceThrow: snap.secondsSinceGimbalThrow,
-            lastVideoPacketAge: snap.lastVideoPacketAge,
-            stickHeld: snap.gimbalStickHeld)
-        {
-            return .none
-        }
-
-        if Self.shouldHoldForCameraSet(
-            secondsSinceSet: snap.secondsSinceCameraSet,
-            lastVideoPacketAge: snap.lastVideoPacketAge)
+        if Self.shouldHoldForControlGrace(
+            snap,
+            stalledStageAge: assemblyStalled ? snap.lastAccessUnitAge : snap.lastVideoPacketAge)
         {
             return .none
         }
@@ -458,7 +454,7 @@ public struct FeedWatchdog: Equatable, Sendable {
         }
 
         // After picture: one bounded ladder, escalateAfter between rungs.
-        // Encoder pause (status still on 9004, HEVC silent): two enables
+        // Encoder pause (status still on 9004, HEVC silent): one enable
         // first (#148: reopening at 2 s left lastVideo=none). Then one
         // session-preserving UDP rebuild (22:16 brought the picture back).
         // Then a new handshake — never a second bind inside rebuildBackoff,
@@ -476,8 +472,8 @@ public struct FeedWatchdog: Equatable, Sendable {
         }
         switch stage {
         case .idle, .resendEnable, .rebuildVT:
-            if Self.controlReceiveAlive(snap) || assemblyStalled, encoderPauseEnables < 2 {
-                encoderPauseEnables += 1
+            if Self.controlReceiveAlive(snap) || assemblyStalled, !encoderPauseEnableSent {
+                encoderPauseEnableSent = true
                 return fire(.resendLiveViewEnable, at: snap.now)
             }
             // A UDP rebuild (ours, keepalive, foreground, SET timeout) is
@@ -550,9 +546,28 @@ public struct FeedWatchdog: Equatable, Sendable {
         return action
     }
 
+    /// Bound repeated SET/throw grace by progress at the stage that stopped.
+    /// Fresh fragments cannot renew an AU stall, and fresh compressed AUs
+    /// cannot renew a native-output stall. A held gesture still owns its grace.
+    private static func shouldHoldForControlGrace(
+        _ snap: Snapshot, stalledStageAge: TimeInterval?
+    ) -> Bool {
+        shouldHoldForCameraSet(
+            secondsSinceSet: snap.secondsSinceCameraSet, lastVideoPacketAge: stalledStageAge)
+            || FocusTrackMode.shouldHoldWatchdog(
+                secondsSinceSet: snap.secondsSinceFocusTrackSet,
+                lastVideoPacketAge: stalledStageAge)
+            || CamFov.shouldHoldWatchdog(
+                secondsSinceSet: snap.secondsSinceZoomSet,
+                lastVideoPacketAge: stalledStageAge, pinchActive: snap.zoomPinchActive)
+            || GimbalStick.shouldHoldWatchdog(
+                secondsSinceThrow: snap.secondsSinceGimbalThrow,
+                lastVideoPacketAge: stalledStageAge, stickHeld: snap.gimbalStickHeld)
+    }
+
     private mutating func resetIdle() {
         stage = .idle
         lastActionAt = 0
-        encoderPauseEnables = 0
+        encoderPauseEnableSent = false
     }
 }

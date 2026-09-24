@@ -255,4 +255,42 @@ import Testing
         #expect(ConnectionPhase.pocketWizardStepCount == 4)
         #expect(ConnectionPhase.failed("x").pocketWizardStep == 1)
     }
+
+    @Test func stationSetupsArePerCameraAndSurviveReconnect() throws {
+        let id = UUID()
+        let other = camera(name: "OsmoAction6-BBBB")
+        var records = SavedCameras.setting(
+            .phoneHotspot, ssid: "  Rig Phone ", for: id, in: [camera(id: id), other])
+        records = SavedCameras.setting(.wifi, ssid: "Studio-5G", for: id, in: records)
+        let rig = try #require(records.first { $0.id == id })
+        #expect(rig.hotspotSSID == "Rig Phone")
+        #expect(rig.setups == [.cameraWiFi, .wifi, .phoneHotspot])
+        #expect(records.first { $0.id == other.id }?.setups == [.cameraWiFi])
+        // Connect prefers camera Wi-Fi until a station connect is stamped.
+        #expect(rig.preferredSetup == .cameraWiFi)
+        #expect(SavedCameras.startingStation(.cameraWiFi, for: id, in: records) == records)
+        records = SavedCameras.startingStation(.wifi, for: id, in: records)
+        #expect(records.first { $0.id == id }?.preferredSetup == .wifi)
+        // A live reconnect record carries none of the setup fields; merge keeps them.
+        records = SavedCameras.upserting(camera(id: id, ssid: nil), into: records)
+        #expect(records.first { $0.id == id }?.wifiSSID == "Studio-5G")
+        #expect(records.first { $0.id == id }?.hotspotSSID == "Rig Phone")
+        #expect(records.first { $0.id == id }?.lastSetup == .wifi)
+        // Forget keeps lastSetup: the camera may still need its access point restored.
+        records = SavedCameras.setting(.wifi, ssid: " ", for: id, in: records)
+        let forgotten = try #require(records.first { $0.id == id })
+        #expect(forgotten.setups == [.cameraWiFi, .phoneHotspot])
+        #expect(forgotten.lastSetup == .wifi)
+        #expect(forgotten.preferredSetup == .cameraWiFi)
+    }
+
+    @Test func recordsSavedBeforeSetupsStillDecode() throws {
+        let legacy = """
+            [{"id":"\(UUID().uuidString)","advertisedName":"OsmoPocket4P-AAAA",
+            "modelName":"Osmo Pocket 4 Pro","lastConnectedAt":0}]
+            """
+        let decoded = try JSONDecoder().decode([SavedCamera].self, from: Data(legacy.utf8))
+        #expect(decoded[0].setups == [.cameraWiFi])
+        #expect(decoded[0].preferredSetup == .cameraWiFi)
+    }
 }

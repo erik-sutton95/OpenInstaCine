@@ -101,27 +101,44 @@ public struct DiagnosticEnvironment: Equatable, Sendable {
 /// family stay. Home paths, emails, MACs, passphrases, and non-camera SSIDs go.
 public enum PrivacyRedactor: Sendable {
     public static func redact(_ text: String) -> String {
+        // Each expression runs only when its literal anchor is present; every
+        // match needs that anchor, so the result is unchanged. Journal lines
+        // arrive several times a second while live and rarely carry any.
+        // Case folding, like the expressions' (?i), so folded forms keep their anchor.
+        let lower = text.folding(options: .caseInsensitive, locale: nil)
         var out = text
-        out = replace(out, pattern: #"(?i)(/Users|/home)/[^/\s]+"#, template: "$1/<redacted>")
-        out = replace(out, pattern: #"(?i)\\Users\\[^\\\s]+"#, template: "\\Users\\<redacted>")
-        out = replace(
-            out,
-            pattern: #"(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b"#,
-            template: "<email>")
-        out = replace(
-            out,
-            pattern: #"\b(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b"#,
-            template: "<mac>")
-        out = replace(
-            out,
-            pattern: #"(?i)\b(password|passphrase|psk|wifiPassword)\s*[:=]\s*\S+"#,
-            template: "$1=<redacted>")
-        out = replace(
-            out,
-            pattern: #"(?i)\bBearer\s+[A-Za-z0-9._\-]+"#,
-            template: "Bearer <redacted>")
-        out = redactSSID(out)
-        out = redactPublicIPv4(out)
+        if lower.contains("/users") || lower.contains("/home") {
+            out = replace(out, pattern: #"(?i)(/Users|/home)/[^/\s]+"#, template: "$1/<redacted>")
+        }
+        if lower.contains("\\users\\") {
+            out = replace(out, pattern: #"(?i)\\Users\\[^\\\s]+"#, template: "\\Users\\<redacted>")
+        }
+        if lower.contains("@") {
+            out = replace(
+                out,
+                pattern: #"(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b"#,
+                template: "<email>")
+        }
+        if lower.contains(":") {
+            out = replace(
+                out,
+                pattern: #"\b(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b"#,
+                template: "<mac>")
+        }
+        if lower.contains("pass") || lower.contains("psk") {
+            out = replace(
+                out,
+                pattern: #"(?i)\b(password|passphrase|psk|wifiPassword)\s*[:=]\s*\S+"#,
+                template: "$1=<redacted>")
+        }
+        if lower.contains("bearer") {
+            out = replace(
+                out,
+                pattern: #"(?i)\bBearer\s+[A-Za-z0-9._\-]+"#,
+                template: "Bearer <redacted>")
+        }
+        if lower.contains("ssid") { out = redactSSID(out) }
+        if lower.contains(".") { out = redactPublicIPv4(out) }
         return out
     }
 
@@ -170,8 +187,22 @@ public enum PrivacyRedactor: Sendable {
         return false
     }
 
+    // Log lines are redacted on the UDP queue that also runs the 40 Hz ACK
+    // pump; compiling eight expressions per line was measurable there.
+    private static let regexLock = NSLock()
+    nonisolated(unsafe) private static var regexCache: [String: NSRegularExpression] = [:]
+
+    private static func regex(_ pattern: String) -> NSRegularExpression? {
+        regexLock.lock()
+        defer { regexLock.unlock() }
+        if let cached = regexCache[pattern] { return cached }
+        let compiled = try? NSRegularExpression(pattern: pattern)
+        regexCache[pattern] = compiled
+        return compiled
+    }
+
     private static func replace(_ text: String, pattern: String, template: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        guard let regex = regex(pattern) else { return text }
         let range = NSRange(text.startIndex..., in: text)
         return regex.stringByReplacingMatches(in: text, range: range, withTemplate: template)
     }
@@ -179,7 +210,7 @@ public enum PrivacyRedactor: Sendable {
     private static func replace(
         _ text: String, pattern: String, transform: ([String]) -> String
     ) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        guard let regex = regex(pattern) else { return text }
         let ns = text as NSString
         let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
         var out = text

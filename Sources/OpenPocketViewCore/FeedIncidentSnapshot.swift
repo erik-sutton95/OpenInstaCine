@@ -235,6 +235,15 @@ public struct FeedIncidentAges: Equatable, Sendable, Codable {
     public var decodedOutputAge: TimeInterval?
     public var assistOutputAge: TimeInterval?
     public var presentAge: TimeInterval?
+    /// Any camera DUML frame on the UDP socket (telemetry, command replies).
+    /// Fresh while `packetAge` is stale means only the video stream stopped.
+    public var statusAge: TimeInterval?
+    /// Last UDP send the network stack rejected. Nil means none this socket.
+    public var sendErrorAge: TimeInterval?
+    /// POSIX code of that rejection (65 EHOSTUNREACH, 55 ENOBUFS, 64 EHOSTDOWN, ...).
+    public var sendErrorCode: Int?
+    /// Camera's UDP reply to our 1 Hz Flip GET: proof the camera still hears us.
+    public var uplinkReplyAge: TimeInterval?
 
     public init(
         packetAge: TimeInterval? = nil,
@@ -242,7 +251,11 @@ public struct FeedIncidentAges: Equatable, Sendable, Codable {
         decodeAcceptAge: TimeInterval? = nil,
         decodedOutputAge: TimeInterval? = nil,
         assistOutputAge: TimeInterval? = nil,
-        presentAge: TimeInterval? = nil
+        presentAge: TimeInterval? = nil,
+        statusAge: TimeInterval? = nil,
+        sendErrorAge: TimeInterval? = nil,
+        sendErrorCode: Int? = nil,
+        uplinkReplyAge: TimeInterval? = nil
     ) {
         self.packetAge = FeedIncidentPrivacy.age(packetAge)
         self.accessUnitAge = FeedIncidentPrivacy.age(accessUnitAge)
@@ -250,6 +263,10 @@ public struct FeedIncidentAges: Equatable, Sendable, Codable {
         self.decodedOutputAge = FeedIncidentPrivacy.age(decodedOutputAge)
         self.assistOutputAge = FeedIncidentPrivacy.age(assistOutputAge)
         self.presentAge = FeedIncidentPrivacy.age(presentAge)
+        self.statusAge = FeedIncidentPrivacy.age(statusAge)
+        self.sendErrorAge = FeedIncidentPrivacy.age(sendErrorAge)
+        self.sendErrorCode = sendErrorCode
+        self.uplinkReplyAge = FeedIncidentPrivacy.age(uplinkReplyAge)
     }
 }
 
@@ -438,7 +455,7 @@ public enum FeedIncidentNativeBreadcrumb: Sendable {
     public static let allowedValues: [String: Set<String>] = [
         "sceneState": ["active", "inactive"],
         "assistState": ["off", "identity", "replacement"],
-        "path": ["unexpectedDisconnect"],
+        "path": ["unexpectedDisconnect", "bleDroppedVideoLive"],
         "repairPhase": [
             "requested", "blocked", "locallySent", "peerResponse", "pictureRestored",
         ],
@@ -584,6 +601,10 @@ public struct FeedIncidentVendorEnvelope: Equatable, Sendable, Codable {
     public var socketGeneration: Int
     public var testSource: String
     public var buildIdentity: String
+    /// First repair reason recorded during this incident (`bleDropped`, …).
+    public var trigger: String
+    /// Last repair action before a recovered outcome, else `none`.
+    public var recoveredBy: String
 }
 
 public struct FeedIncidentVerdict: Equatable, Sendable {
@@ -663,7 +684,9 @@ public enum FeedIncidentClassifier: Sendable {
             }
             return FeedIncidentVerdict(suppression: .none, kind: kind, failingStage: stage)
         }
-        if (outputFresh || !life.outputObservable) && assistStale
+        // A compressed-layer feed can retain timestamps from an earlier
+        // native assist pipeline. Its stopped clock is not an active stall.
+        if outputFresh && assistStale
             && snapshot.ages.assistOutputAge != nil
         {
             return FeedIncidentVerdict(
@@ -689,10 +712,11 @@ public enum FeedIncidentClassifier: Sendable {
         return FeedIncidentVerdict(suppression: .none, kind: nil, failingStage: nil)
     }
 
-    /// Fresh decoded output and presentation when those stages are observable.
+    /// Fresh decoded output and presentation, with no active assist failure.
     /// A generation change or repair request is not recovery.
     public static func isRecovered(_ snapshot: FeedIncidentSnapshot) -> Bool {
         if suppression(of: snapshot) != nil { return false }
+        guard classify(snapshot).kind == nil else { return false }
         let life = snapshot.lifecycle
         let threshold = FeedIncidentBounds.stallThreshold
         // With neither downstream stage observable, receipt of compressed

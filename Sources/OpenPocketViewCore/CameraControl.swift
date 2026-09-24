@@ -80,7 +80,9 @@ public enum ShootingMode: UInt8, CaseIterable, Sendable {
     /// Photo SET byte for this body. Unknown bodies keep the historic `0x17` default.
     public static func photoWireByte(for model: CameraModel?) -> UInt8 {
         guard let model else { return photoRawPocket4 }
-        if model.family == .nano || model.isPocket3 { return photoRawPocket3AndNano }
+        if model.family == .nano || model.isPocket3 || model.isAction6 {
+            return photoRawPocket3AndNano
+        }
         return photoRawPocket4
     }
 
@@ -120,7 +122,10 @@ public enum CaptureCommand: Sendable {
         if mode?.isPhoto == true {
             return Commands.shootPhoto()
         }
-        if model?.isPocket3 == true, mode?.usesShutterTriggerOnPocket3 == true {
+        // Action 6 TimeLapse is the same `0x02/0x01` pair (survey 2026-09-21).
+        if model?.isPocket3 == true || model?.isAction6 == true,
+            mode?.usesShutterTriggerOnPocket3 == true
+        {
             return Commands.shutterTrigger(start: !isRecording)
         }
         return isRecording ? Commands.recordStop() : Commands.recordStart()
@@ -138,6 +143,8 @@ public enum CameraParam: UInt16, Sendable {
     case selfieFlip = 0x0038
     case glamour = 0x0039
     case focusTrack = 0x003B
+    /// Action 6 aperture strategy, one byte `ApertureStrategy`. Survey 2026-09-21.
+    case apertureStrategy = 0x0044
     case vocalBoost = 0x004C
 
     /// GET reply `00 00 01 <pid u16-LE> 01 <value>`. SET ACK is a lone `00` — not this.
@@ -326,8 +333,18 @@ public enum CameraReply: Equatable, Sendable {
 
 /// `cam_expo_param` shutter / ISO / EV fields (Mimo 2026-08-14). `@13` is not ISO.
 public enum ExpoParam {
-    /// `@2–3` = `denom | 0x8000` u16-LE. Not `@16`.
+    /// Auto uses applied shutter `@20–22`; `@2–4` retains the manual setting.
+    /// Only integer reciprocals fit this readout. Missing/unsupported Auto values
+    /// must not fall back to the remembered manual shutter.
     public static func shutterDenom(_ value: [UInt8]) -> Int? {
+        if ExpoMode.parseExpoParam(value) == .auto {
+            guard value.count >= 23, value[21] & 0x80 != 0, value[22] == 0 else {
+                return nil
+            }
+            let raw = UInt16(value[20]) | (UInt16(value[21]) << 8)
+            let denom = Int(raw & 0x7FFF)
+            return (1...16_000).contains(denom) ? denom : nil
+        }
         guard value.count >= 4 else { return nil }
         let raw = UInt16(value[2]) | (UInt16(value[3]) << 8)
         let denom = Int(raw & 0x7FFF)
@@ -344,6 +361,13 @@ public enum ExpoParam {
     public static func evComp(_ value: [UInt8]) -> EvComp? {
         guard value.count > 6 else { return nil }
         return EvComp(rawValue: value[6])
+    }
+
+    /// `@15` is the camera's metered EV, independently reported from configured `@6`.
+    /// Same third-stop encoding; absent/unsupported values must not become zero.
+    public static func meteredEv(_ value: [UInt8]) -> EvComp? {
+        guard value.count > 15 else { return nil }
+        return EvComp(rawValue: value[15])
     }
 
     /// `@16` u16-LE = ISO number. Auto `@16` floats with the meter.
@@ -423,8 +447,6 @@ public struct EvComp: Hashable, Sendable, Comparable {
 public enum IsoIndex: UInt8, CaseIterable, Sendable {
     case auto = 0x00
     case iso100 = 0x03
-    /// Luna Ultra observed SET. Not a DJI index.
-    case iso160 = 0xE0
     case iso200 = 0x04
     case iso400 = 0x05
     case iso800 = 0x06
@@ -439,7 +461,6 @@ public enum IsoIndex: UInt8, CaseIterable, Sendable {
         switch self {
         case .auto: nil
         case .iso100: 100
-        case .iso160: 160
         case .iso200: 200
         case .iso400: 400
         case .iso800: 800
@@ -498,10 +519,6 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
     case dLog2 = 0x41
     case normal10 = 0x3D
     case dLogM = 0x00
-    /// Insta360 I-Log. Not a DJI SET byte.
-    case iLog = 0xE2
-    /// Insta360 Dolby Vision. Not a DJI SET byte.
-    case dolbyVision = 0xE5
 
     public var label: String {
         switch self {
@@ -511,15 +528,13 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
         case .dLog2: "D-Log2"
         case .normal10: "Normal 10-bit"
         case .dLogM: "D-Log M 10-bit"
-        case .iLog: "I-Log"
-        case .dolbyVision: "Dolby Vision"
         }
     }
 
     /// Log encodings Auto can bind a Rec.709 cube to.
     public var bindsAutoLUT: Bool {
         switch self {
-        case .dLog, .dLog2, .dLogM, .iLog: true
+        case .dLog, .dLog2, .dLogM: true
         default: false
         }
     }
@@ -540,6 +555,10 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
         }
     }
 
+    /// Action 6 `camcap_color_mode` is `3F` Normal 10-bit / `3D` D-Log M (survey
+    /// 2026-09-21): the Nano wire bytes, without Nano's 8-bit `00`.
+    public static let action6: [ColorMode] = [.normal10, .dLogM]
+
     /// Family fallback. Pocket 4 Pro is the only body with D-Log2 — use
     /// `available(for: CameraModel)` when the name is known.
     public static func available(for family: CameraBodyFamily) -> [ColorMode] {
@@ -553,6 +572,7 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
     /// Nano is the captured `camcap_color_mode` wheel. D-Log2 is 4 Pro only.
     public static func available(for model: CameraModel) -> [ColorMode] {
         if model.family == .nano { return available(for: .nano) }
+        if model.isAction6 { return action6 }
         let n = model.name.lowercased().replacingOccurrences(of: " ", with: "")
         if n.contains("pocket4p") || n.contains("4pro") {
             return [.normal, .hdr, .dLog, .dLog2]
@@ -567,7 +587,7 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
     /// Pocket 3 / Nano SET / `cam_image_effect` `@2`. Other bodies use `rawValue`.
     public func wireByte(for model: CameraModel?) -> UInt8 {
         guard let model else { return rawValue }
-        if model.family == .nano {
+        if model.family == .nano || model.isAction6 {
             switch self {
             case .normal: return 0x00
             case .normal10: return 0x3F
@@ -585,7 +605,7 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
 
     /// Inverse of `wireByte(for:)`. Unknown body bytes still try `rawValue`.
     public static func fromWire(_ byte: UInt8, model: CameraModel?) -> ColorMode? {
-        if let model, model.family == .nano {
+        if let model, model.family == .nano || model.isAction6 {
             switch byte {
             case 0x00: return .normal
             case 0x3F: return .normal10
@@ -608,11 +628,7 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
         switch self {
         case .dLog2: [.iso100, .iso200, .iso400, .iso800, .iso1600, .iso3200]
         case .dLog: [.auto, .iso400, .iso800, .iso1600, .iso3200, .iso6400]
-        case .iLog:
-            [
-                .auto, .iso100, .iso160, .iso200, .iso400, .iso800, .iso1600, .iso3200, .iso6400,
-            ]
-        case .normal, .hdr, .normal10, .dLogM, .dolbyVision:
+        case .normal, .hdr, .normal10, .dLogM:
             [
                 .auto, .iso100, .iso200, .iso400, .iso800, .iso1600, .iso3200, .iso6400, .iso12800,
                 .iso25600,
@@ -632,8 +648,7 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
         switch self {
         case .dLog2: nil
         case .dLog: 400
-        case .normal, .hdr, .normal10, .dLogM, .iLog, .dolbyVision:
-            model?.isoAutoRangeFloor ?? 100
+        case .normal, .hdr, .normal10, .dLogM: model?.isoAutoRangeFloor ?? 100
         }
     }
 
@@ -642,7 +657,7 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
         switch self {
         case .dLog2: []
         case .dLog: [.max800, .max1600, .max3200, .max6400]
-        case .normal, .hdr, .normal10, .dLogM, .iLog, .dolbyVision:
+        case .normal, .hdr, .normal10, .dLogM:
             [
                 .max200, .max400, .max800, .max1600, .max3200, .max6400, .max12800, .max25600,
             ]
@@ -659,6 +674,69 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
     public static func parseImageEffect(_ value: [UInt8], model: CameraModel? = nil) -> ColorMode? {
         guard value.count > 2 else { return nil }
         return fromWire(value[2], model: model)
+    }
+}
+
+/// Action 6 aperture strategy: `0x02/0x8E` pid `0x0044`, one byte. Survey 2026-09-21
+/// (handbook `devices/action-6/settings`). Offered set depends on exposure and mode:
+/// Video Auto `4,2,3`, Manual `1,2,3`, SuperNight `0,2,3` — read `camcap_aperture_ctrl_strategy`.
+public enum ApertureStrategy: UInt8, CaseIterable, Sendable {
+    /// SuperNight "Large Aperture".
+    case f2 = 0x00
+    case f26 = 0x01
+    case f28 = 0x02
+    case starburst = 0x03
+    case auto = 0x04
+
+    public static let capabilityKey = "camcap_aperture_ctrl_strategy"
+    public static let stateKey = "cam_aperture_ctrl_strategy"
+
+    public var label: String {
+        switch self {
+        case .f2: "f/2.0"
+        case .f26: "f/2.6"
+        case .f28: "f/2.8"
+        case .starburst: "Starburst f/4"
+        case .auto: "Auto"
+        }
+    }
+
+    public var setFrame: Duml.Frame { Commands.paramSet(.apertureStrategy, value: [rawValue]) }
+
+    /// `cam_aperture_ctrl_strategy` `01 00 00 <strategy>`.
+    public static func parseState(_ value: [UInt8]) -> ApertureStrategy? {
+        guard value.count >= 4, value[0] == 0x01 else { return nil }
+        return ApertureStrategy(rawValue: value[3])
+    }
+
+    /// `camcap_aperture_ctrl_strategy` `01 <len:u16-LE> <count> <ids…>`. Bytes past
+    /// `count` (Manual trails `03 04`) are not choices.
+    public static func parseCapability(_ value: [UInt8]) -> [ApertureStrategy] {
+        guard value.count >= 5, value[0] == 0x01 else { return [] }
+        let inner = Int(value[1]) | (Int(value[2]) << 8)
+        guard inner >= 2, 3 + inner <= value.count else { return [] }
+        let count = Int(value[3])
+        guard count >= 1, 1 + count <= inner else { return [] }
+        return value[4..<(4 + count)].compactMap { ApertureStrategy(rawValue: $0) }
+    }
+
+    /// Captured sets, used until the capability push lands.
+    public static func fallback(expoMode: ExpoMode?, shootingMode: Int) -> [ApertureStrategy] {
+        if shootingMode == Int(ShootingMode.superNight.rawValue) { return [.f2, .f28, .starburst] }
+        if expoMode == .manual { return [.f26, .f28, .starburst] }
+        return [.auto, .f28, .starburst]
+    }
+
+    /// Mechanical iris, `cam_expo_param` u16-LE `@13` in hundredths (`290` = f/2.9).
+    /// Moves while the blades settle — it is not the requested strategy.
+    public static func irisHundredths(_ expoParam: [UInt8]) -> Int? {
+        guard expoParam.count >= 15 else { return nil }
+        let raw = Int(UInt16(expoParam[13]) | (UInt16(expoParam[14]) << 8))
+        return (100...2_200).contains(raw) ? raw : nil
+    }
+
+    public static func fNumberLabel(hundredths: Int) -> String {
+        String(format: "f/%.1f", Double(hundredths) / 100)
     }
 }
 
@@ -1084,6 +1162,38 @@ public struct VideoResolution: Equatable, Hashable, Sendable {
         }
     }
 
+    /// Width / height for the recorded frame. Used to map guides onto the
+    /// active picture instead of letterbox padding in a 16:9 live well.
+    public var ratio: Double? {
+        switch aspect {
+        case .sixteenNine: 16.0 / 9.0
+        case .fourThree: 4.0 / 3.0
+        case .oneOne: 1
+        case .nineSixteen: 9.0 / 16.0
+        case nil: nil
+        }
+    }
+
+    /// Pocket 3 digital-zoom ceiling for this FORMAT, or `nil` for a byte the
+    /// catalog does not name.
+    ///
+    /// The limit tracks the capture size class, not the aspect — a bigger frame
+    /// leaves less crop headroom. Measured on a body by asking past the ceiling
+    /// and reading `cam_fov` `zoomLens` back: the camera clamps to its own max
+    /// rather than refusing, so an over-ask reports the true limit. `0x0A`,
+    /// `0x69` (4x), `0x2D`, `0x6A` (3x), `0x10`, `0x6B` (2x) are measured; the
+    /// rest inherit from a measured sibling in the same size class.
+    public var pocket3ZoomMax: Double? {
+        switch rawValue {
+        case 0x0A, 0x0C, 0x42, 0x69: 4  // 1080 — 0x0A, 0x69 measured
+        case 0x2D, 0x43, 0x5F: 3  // 2.7K — 0x2D measured
+        case 0x6A: 3  // 2160 — measured
+        case 0x10, 0x67, 0x7D: 2  // 4K — 0x10 measured
+        case 0x6B, 0x6C: 2  // 3K — 0x6B measured
+        default: nil
+        }
+    }
+
     public var sizeTitle: String {
         switch rawValue {
         case 0x0A, 0x0C, 0x42, 0x69: "1080"
@@ -1406,6 +1516,22 @@ public enum GimbalRamp: Int, CaseIterable, Sendable, Hashable {
     }
 
     public static let pickerOrder: [GimbalRamp] = [.off, .soft, .medium]
+}
+
+/// What the stick double-tap and gamepad Circle/B do: body recenter
+/// (`FE 08`) or a one-shot snap to world level (`WorldLevelSnap`).
+public enum GimbalDoubleTap: Int, CaseIterable, Sendable, Hashable {
+    case recenter = 0
+    case level = 1
+
+    public var label: String {
+        switch self {
+        case .recenter: "Recenter"
+        case .level: "Level"
+        }
+    }
+
+    public static let pickerOrder: [GimbalDoubleTap] = [.recenter, .level]
 }
 
 /// SET frames and reconciliation of the camera's independent mode/tilt reports.
@@ -2310,6 +2436,28 @@ public enum CamFov {
         min(Swift.max(factor, minFactor), max)
     }
 
+    /// The remembered chip stop, kept inside what the current FORMAT allows.
+    ///
+    /// A FORMAT change can drop the ceiling under a stop the operator already
+    /// picked — 2.7K offers 3×, 4K stops at 2×. The stop is only the readout's
+    /// last resort, before any `cam_fov` lands, but even then it must not
+    /// advertise a factor this FORMAT would refuse.
+    public static func stopWithinCycle(_ stop: Double, stops: [Double]) -> Double {
+        clamp(stop, max: stops.last ?? minFactor)
+    }
+
+    /// The line to show when a new FORMAT pulls the zoom ceiling out from
+    /// under the factor the operator is already holding.
+    ///
+    /// The body does not refuse: it walks the lens back to whatever the new
+    /// capture size allows, so without a word the chip just falls to 1x and
+    /// nothing on screen says why. `size` is `VideoResolution.sizeTitle`.
+    /// Nil while the held factor still fits, which is the usual case.
+    public static func ceilingNote(size: String, held: Double, stops: [Double]) -> String? {
+        guard let ceiling = stops.last, displayTenths(held) > ceiling + 0.05 else { return nil }
+        return "\(size) caps zoom at \(displayLabel(factor: ceiling))"
+    }
+
     private static func lerpLens(_ a: UInt16, _ b: UInt16, _ t: Double) -> UInt16 {
         let t = min(max(t, 0), 1)
         return UInt16((Double(a) + t * (Double(b) - Double(a))).rounded())
@@ -2477,6 +2625,9 @@ public enum CamFov {
         return raw == 0 ? nil : factor(raw: raw)
     }
 
+    /// Confirmation test for the chip pin (`CameraValuePin`): the live factor
+    /// comes back off a lens position and lands a hair off what was asked, so
+    /// exact equality would never release the pin.
     public static func matches(_ live: Double, _ target: Double) -> Bool {
         abs(displayTenths(live) - displayTenths(target)) < 0.15
     }

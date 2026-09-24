@@ -27,16 +27,11 @@
 
     private struct MonitorOpacityPulse: ViewModifier {
         let period: TimeInterval
-        @State private var pulse = false
 
         func body(content: Content) -> some View {
-            content
-                .opacity(pulse ? MonitorMotion.recPulseFloor : 1)
-                .modifier(
-                    MonitorDecorativePulse(
-                        pulse: $pulse,
-                        animation: .easeInOut(duration: period / 2).repeatForever(
-                            autoreverses: true)))
+            MonitorDecorativePulse(period: period) { phase in
+                content.opacity(1 - (1 - MonitorMotion.recPulseFloor) * phase)
+            }
         }
     }
 
@@ -45,6 +40,7 @@
         private let label: String
         private let active: Bool
         private let value: Value
+        @Environment(\.monitorHDRChromeGain) private var hdrGain
         public init(_ label: String, active: Bool = false, @ViewBuilder value: () -> Value) {
             self.label = label
             self.active = active
@@ -53,15 +49,17 @@
         public var body: some View {
             let tablet = UIDevice.current.userInterfaceIdiom == .pad
             let valueSize = CGFloat(MonitorReadoutTypography.valueSize(tablet: tablet))
+            let ink = active ? MonitorTheme.edrAccent(gain: hdrGain) : MonitorTheme.edrText(gain: hdrGain)
+            let caption = active ? MonitorTheme.edrAccent(gain: hdrGain) : MonitorTheme.edrMuted(gain: hdrGain)
             VStack(spacing: 4) {
                 value.font(MonitorTheme.font(valueSize, weight: .medium))
                     .monospacedDigit().lineLimit(1).minimumScaleFactor(0.65)
-                    .foregroundStyle(active ? MonitorTheme.accent : MonitorTheme.text)
+                    .foregroundStyle(ink)
                 Text(label).font(
                     MonitorTheme.font(
                         CGFloat(MonitorReadoutTypography.labelSize), weight: .semibold)
                 ).tracking(CGFloat(MonitorReadoutTypography.labelTracking))
-                    .foregroundStyle(active ? MonitorTheme.accent : MonitorTheme.muted)
+                    .foregroundStyle(caption)
                     .lineLimit(1)
             }
             .monitorReadoutShadow()
@@ -127,7 +125,6 @@
         public var recording: Bool
         public var photo: Bool
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
-        @State private var pulse = false
         public init(diameter: CGFloat, recording: Bool, photo: Bool = false) {
             self.diameter = diameter
             self.recording = recording
@@ -135,36 +132,48 @@
         }
         public var body: some View {
             let coreSize = recording ? ((diameter - 10) * 0.52).rounded() : 0
-            ZStack {
-                Circle().strokeBorder(photo ? Color.white : MonitorTheme.recording, lineWidth: 4.5)
-                    .padding(5)
-                RoundedRectangle(cornerRadius: (coreSize * 0.24).rounded())
-                    .fill(MonitorTheme.recording)
-                    .frame(width: coreSize, height: coreSize)
-                    .animation(MonitorMotion.recShape(reduceMotion), value: recording)
-                    // Half-radius native approximation of the CSS bloom.
-                    // `coreglow` changes the shadows, never the core opacity.
-                    .shadow(
-                        color: pulse
-                            ? MonitorTheme.recording.opacity(0.3)
-                            : MonitorTheme.color(0xE85A5E).opacity(0.9),
-                        radius: pulse ? 2 : 6
-                    )
-                    .shadow(
-                        color: MonitorTheme.recording.opacity(pulse ? 0.14 : 0.5),
-                        radius: pulse ? 4.5 : 13)
-                if photo && !recording {
-                    Circle().fill(Color.white).padding(12)
+            MonitorDecorativePulse(period: MonitorMotion.recPulseDuration, enabled: recording) {
+                pulse in
+                ZStack {
+                    Circle().strokeBorder(photo ? Color.white : MonitorTheme.recording, lineWidth: 4.5)
+                        .padding(5)
+                    RoundedRectangle(cornerRadius: (coreSize * 0.24).rounded())
+                        .fill(MonitorTheme.recording)
+                        .frame(width: coreSize, height: coreSize)
+                        .animation(MonitorMotion.recShape(reduceMotion), value: recording)
+                        // Half-radius native approximation of the CSS bloom.
+                        // `coreglow` changes the shadows, never the core opacity.
+                        .shadow(
+                            color: Self.mix(
+                                MonitorTheme.color(0xE85A5E).opacity(0.9),
+                                MonitorTheme.recording.opacity(0.3), pulse),
+                            radius: 6 + (2 - 6) * pulse
+                        )
+                        .shadow(
+                            color: MonitorTheme.recording.opacity(0.5 + (0.14 - 0.5) * pulse),
+                            radius: 13 + (4.5 - 13) * pulse)
+                    if photo && !recording {
+                        Circle().fill(Color.white).padding(12)
+                    }
                 }
             }
             .frame(width: diameter, height: diameter)
             .monitorGlass(in: Circle(), density: .recording)
-            .modifier(
-                MonitorDecorativePulse(
-                    pulse: $pulse, enabled: recording,
-                    animation: MonitorMotion.recPulse(reduceMotion))
-            )
             .accessibilityHidden(true)
+        }
+    }
+
+    extension MonitorRecordLamp {
+        /// Linear blend for the pulsed glow (iOS 17 has no `Color.mix`).
+        static func mix(_ a: Color, _ b: Color, _ t: Double) -> Color {
+            var (r1, g1, b1, a1, r2, g2, b2, a2): (CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, CGFloat) =
+                (0, 0, 0, 0, 0, 0, 0, 0)
+            UIColor(a).getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+            UIColor(b).getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+            let t = CGFloat(t)
+            return Color(
+                .sRGB, red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t,
+                blue: b1 + (b2 - b1) * t, opacity: a1 + (a2 - a1) * t)
         }
     }
 

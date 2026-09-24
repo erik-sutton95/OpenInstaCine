@@ -188,6 +188,38 @@ import Testing
         #expect(job?.bundle.header.kind == .freshInputStaleOutput)
     }
 
+    @Test func compressedLayerDoesNotReportRetiredAssistOutputAsStalled() {
+        var recorder = FeedIncidentRecorder(makeIncidentID: { "inc-retired-assist" })
+        _ = recorder.beginSession(Fixture.context())
+        _ = recorder.recordSnapshot(Fixture.healthy(now: 1))
+        var snapshot = Fixture.snap(
+            now: 10, outputHz: 0, outputAge: 8, presentAge: 0.04,
+            outputObservable: false)
+        snapshot.ages.assistOutputAge = 8
+        snapshot.rates.assistOutputHz = 0
+        #expect(FeedIncidentClassifier.isRecovered(snapshot))
+        #expect(recorder.recordSnapshot(snapshot) == nil)
+        #expect(recorder.openHeader == nil)
+    }
+
+    @Test func activeAssistStallDoesNotRecoverUntilAssistOutputReturns() {
+        var recorder = FeedIncidentRecorder(makeIncidentID: { "inc-active-assist" })
+        _ = recorder.beginSession(Fixture.context())
+        var snapshot = Fixture.healthy(now: 4)
+        snapshot.ages.assistOutputAge = 8
+        snapshot.rates.assistOutputHz = 0
+        #expect(recorder.recordSnapshot(snapshot)?.bundle.header.kind == .assistStalled)
+        #expect(!FeedIncidentClassifier.isRecovered(snapshot))
+        snapshot.monotonicNow = 5
+        _ = recorder.recordSnapshot(snapshot)
+        #expect(recorder.openHeader?.outcome != .recovered)
+        snapshot.ages.assistOutputAge = 0.04
+        snapshot.rates.assistOutputHz = 25
+        #expect(FeedIncidentClassifier.isRecovered(snapshot))
+        _ = recorder.recordSnapshot(snapshot)
+        #expect(recorder.openHeader?.outcome == .recovered)
+    }
+
     @Test func unexpectedDisconnectStartsDistinctIncident() {
         var recorder = FeedIncidentRecorder(makeIncidentID: { "inc-disc" })
         _ = recorder.beginSession(Fixture.context())
@@ -319,6 +351,33 @@ import Testing
         #expect(envelope.grouping.failingStage == "decodedOutput")
         #expect(envelope.kind == "freshInputStaleOutput")
         #expect(!envelope.grouping.errorClass.contains("hunter2"))
+    }
+
+    @Test func envelopeNamesTriggerAndTheRepairThatRecovered() throws {
+        var recorder = FeedIncidentRecorder(makeIncidentID: { "inc-ladder" })
+        _ = recorder.beginSession(Fixture.context())
+        var bundle = try #require(
+            recorder.recordSnapshot(Fixture.stall(now: 4, outputAge: 3))?.bundle)
+        bundle.repairs = [
+            FeedRepairRecord(monotonicAt: 1, action: "enable", phase: .locallySent),
+            FeedRepairRecord(monotonicAt: 4, action: "session", phase: .requested, reason: "bleDropped"),
+            FeedRepairRecord(monotonicAt: 5, action: "enable", phase: .locallySent),
+            FeedRepairRecord(monotonicAt: 9, action: "endpoint", phase: .requested),
+        ]
+        bundle.header.outcome = .recovered
+        let envelope = FeedIncidentExport.envelope(from: bundle)
+        #expect(envelope.trigger == "bleDropped", "repairs before the incident are not its trigger")
+        #expect(envelope.recoveredBy == "endpoint")
+
+        #expect(FeedIncidentExport.gapBucket(0.4) == "0-2s")
+        #expect(FeedIncidentExport.gapBucket(16.3) == "10-20s")
+        #expect(FeedIncidentExport.gapBucket(20) == "20-40s")
+        #expect(FeedIncidentExport.gapBucket(900) == "120s+")
+
+        bundle.header.outcome = .exhausted
+        #expect(FeedIncidentExport.envelope(from: bundle).recoveredBy == "none")
+        bundle.repairs = []
+        #expect(FeedIncidentExport.envelope(from: bundle).trigger == "none")
     }
 
     @Test func coveredUnobservableFeedCannotClaimRecoveryOrHealthyExposure() {

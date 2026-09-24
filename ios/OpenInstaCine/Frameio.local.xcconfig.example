@@ -1,0 +1,4 @@
+// Copy to Frameio.local.xcconfig (gitignored) and fill from Adobe Developer Console.
+FRAMEIO_CLIENT_ID = your_adobe_native_app_client_id
+FRAMEIO_REDIRECT_URI = adobe+yourid://adobeid/your_client_id
+FRAMEIO_URL_SCHEME = adobe+yourid

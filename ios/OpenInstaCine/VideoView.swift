@@ -1,0 +1,183 @@
+import AVFoundation
+import OpenPocketViewCore
+import SwiftUI
+import UIKit
+
+/// Hosts the HEVC display layer and the Core Image feed (used only while GPU assists are on).
+/// `effects` and `sampleBus` are read here so toggling PEAK/LUT/WAVE refreshes this representable
+/// and pushes the current stack + bus into the decoder — LiveViewScreen body otherwise never
+/// observes those flags (previous bug: `onChange(of: assist.effects)` never fired).
+///
+/// Mirror is OpenZCine `LiveFrameRaster.feedScale`: a negative-X transform on a host view
+/// that wraps both renderers. Applied at present time (not SwiftUI `scaleEffect`) so
+/// MIRROR assist lands with the presented picture.
+struct VideoView: View {
+    let decoder: HevcDecoder
+    var effects: LiveImageEffects
+    var sampleBus: LiveFrameSampleBus
+    /// `CameraStatus.monitorTransfer` (ColorMode `3F`/`3C`/`17`/`41`). Simulator clip is `.dlog2`.
+    var transfer: MonitorTransfer?
+    /// MIRROR assist. Applied on the host view so reconnect cannot skip it.
+    var pictureFlip = false
+    /// Outdoor HDR panel. Identity presents through Metal EDR.
+    var hdrDisplay = false
+
+    var body: some View {
+        VideoDisplayRepresentable(
+            decoder: decoder,
+            effects: rasterEffects,
+            assistMirror: effects.mirror,
+            pictureFlip: pictureFlip,
+            sampleBus: sampleBus,
+            transfer: transfer,
+            feedUpscaler: FeedUpscaleSwitch.shared.upscaler,
+            hdrDisplay: hdrDisplay
+        )
+        .transaction { $0.animation = nil }
+    }
+
+    /// Mirror stays a view-space flip so the GPU path does not also flip the buffer.
+    private var rasterEffects: LiveImageEffects {
+        var fx = effects
+        fx.mirror = false
+        return fx
+    }
+}
+
+struct VideoDisplayRepresentable: UIViewRepresentable {
+    let decoder: HevcDecoder
+    var effects: LiveImageEffects
+    var assistMirror: Bool
+    var pictureFlip: Bool
+    var sampleBus: LiveFrameSampleBus
+    var transfer: MonitorTransfer?
+    var feedUpscaler: FeedUpscaler
+    var hdrDisplay: Bool
+
+    func makeUIView(context: Context) -> DisplayLayerView {
+        let view = DisplayLayerView(decoder.displayLayer)
+        view.onReady = { [decoder] in decoder.noteDisplayReady() }
+        decoder.processedFeed = view.ciFeed
+        view.applyHDRDisplay(hdrDisplay)
+        bindMirror(decoder, view: view)
+        wire(decoder)
+        return view
+    }
+
+    func updateUIView(_ uiView: DisplayLayerView, context: Context) {
+        updateDisplay(uiView)
+    }
+
+    func updateDisplay(_ uiView: DisplayLayerView) {
+        guard uiView.ownsDisplayLayer else { return }
+        uiView.onReady = { [decoder] in decoder.noteDisplayReady() }
+        decoder.processedFeed = uiView.ciFeed
+        uiView.applyHDRDisplay(hdrDisplay)
+        bindMirror(decoder, view: uiView)
+        guard
+            decoder.sampleBus !== sampleBus
+                || decoder.effects != effects
+                || decoder.feedUpscaler != feedUpscaler
+                || decoder.hdrDisplayEnabled != hdrDisplay
+                || decoder.assistMirror != assistMirror
+                || (transfer != nil && decoder.incomingTransfer != transfer)
+        else { return }
+        wire(decoder)
+    }
+
+    private func bindMirror(_ decoder: HevcDecoder, view: DisplayLayerView) {
+        decoder.applyPictureMirror = { [weak view] mirrored in
+            view?.setPictureMirrored(mirrored)
+        }
+        decoder.assistMirror = assistMirror
+    }
+
+    private func wire(_ decoder: HevcDecoder) {
+        decoder.sampleBus = sampleBus
+        decoder.effects = effects
+        decoder.feedUpscaler = feedUpscaler
+        decoder.hdrDisplayEnabled = hdrDisplay
+        decoder.adoptIncomingTransfer(transfer)
+        decoder.startSimulatorSampleIfNeeded()
+    }
+}
+
+final class DisplayLayerView: UIView {
+    private let displayLayer: AVSampleBufferDisplayLayer
+    private let pictureHost = UIView()
+    private var pictureMirrored = false
+    let ciFeed = CIFeedView()
+    var onReady: (() -> Void)?
+
+    /// A replacement host can adopt the session's layer before this view retires.
+    /// Late updates and layout from the old host must not change the live owner.
+    var ownsDisplayLayer: Bool { displayLayer.superlayer === pictureHost.layer }
+
+    init(_ layer: AVSampleBufferDisplayLayer) {
+        displayLayer = layer
+        super.init(frame: .zero)
+        backgroundColor = .black
+        isUserInteractionEnabled = false
+        layer.videoGravity = .resizeAspect
+        addSubview(pictureHost)
+        pictureHost.isUserInteractionEnabled = false
+        pictureHost.backgroundColor = .black
+        pictureHost.layer.addSublayer(layer)
+        pictureHost.addSubview(ciFeed)
+        ciFeed.isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setPictureMirrored(_ mirrored: Bool) {
+        pictureMirrored = mirrored
+        applyPictureTransform()
+    }
+
+    func applyHDRDisplay(_ enabled: Bool) {
+        LiveHDRDisplay.setEnabled(enabled, screen: window?.screen)
+        LiveHDRDisplay.configure(displayLayer, screen: window?.screen)
+        ciFeed.syncHDRDisplay()
+    }
+
+    private func applyPictureTransform() {
+        let x = MirrorAssist.feedScale(mirrored: pictureMirrored).width
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        pictureHost.transform = CGAffineTransform(scaleX: x, y: 1)
+        CATransaction.commit()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        ciFeed.isEnabled = ownsDisplayLayer && window != nil
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard ownsDisplayLayer else {
+            ciFeed.isEnabled = false
+            return
+        }
+        // UIKit can resize the overlay immediately while the standalone video
+        // layer implicitly interpolates its bounds. Commit both as one geometry
+        // update; any enclosing rotation animation then moves the complete picture.
+        UIView.performWithoutAnimation {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            for layer in [pictureHost.layer, displayLayer, ciFeed.layer] {
+                layer.removeAnimation(forKey: "bounds")
+                layer.removeAnimation(forKey: "position")
+            }
+            pictureHost.bounds = CGRect(origin: .zero, size: bounds.size)
+            pictureHost.center = CGPoint(x: bounds.midX, y: bounds.midY)
+            displayLayer.frame = pictureHost.bounds
+            ciFeed.frame = pictureHost.bounds
+            ciFeed.layoutIfNeeded()
+            applyPictureTransform()
+            CATransaction.commit()
+        }
+        ciFeed.isEnabled = window != nil && bounds.width > 1 && bounds.height > 1
+        if bounds.width > 1, bounds.height > 1 { onReady?() }
+    }
+}

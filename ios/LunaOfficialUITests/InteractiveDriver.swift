@@ -76,7 +76,7 @@ final class InteractiveDriver: XCTestCase {
 }
 
 private final class CommandServer {
-    private let app: XCUIApplication
+    private var app: XCUIApplication
     private let port: UInt16
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: NWConnection] = [:]
@@ -172,6 +172,11 @@ private final class CommandServer {
                 replyJSON(connection, perform(cmd))
                 return
             }
+            if method == "GET" && (path == "/screenshot" || path.hasPrefix("/screenshot?")) {
+                let png = XCUIScreen.main.screenshot().pngRepresentation
+                replyJSON(connection, ["ok": true, "png": png.base64EncodedString()])
+                return
+            }
             if method == "POST" && path == "/stop" {
                 shouldStop = true
                 replyJSON(connection, ["ok": true, "stopped": true])
@@ -192,6 +197,19 @@ private final class CommandServer {
             app.launch()
         case "home":
             XCUIDevice.shared.press(.home)
+        case "target":
+            // Drive another app (Settings, SpringBoard alerts, OpenInstaCine).
+            let bundle = (cmd["bundle"] as? String) ?? InteractiveDriver.bundleID
+            app = XCUIApplication(bundleIdentifier: bundle)
+            if (cmd["activate"] as? Bool) ?? true { app.activate() }
+        case "terminate":
+            app.terminate()
+        case "tapAt":
+            // Absolute screen points, independent of the target app's frame.
+            if let x = number(cmd["x"]), let y = number(cmd["y"]) {
+                app.coordinate(withNormalizedOffset: .zero)
+                    .withOffset(CGVector(dx: x, dy: y)).tap()
+            }
         case "tap":
             tap(cmd)
         case "press":

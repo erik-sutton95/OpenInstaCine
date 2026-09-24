@@ -1,0 +1,241 @@
+name: OpenInstaCine
+options:
+  bundleIdPrefix: com.opencapture
+  deploymentTarget:
+    iOS: "17.0"
+    watchOS: "10.0"
+  createIntermediateGroups: true
+  # Xcode Cloud disables SPM auto-resolution; copy ios/Package.resolved into
+  # the generated (gitignored) workspace after every xcodegen run.
+  postGenCommand: sh sync-package-resolved.sh
+
+packages:
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    exactVersion: 9.24.0
+  OpenPocketViewCore:
+    path: ..
+  Insta360Protocol:
+    path: ../Adapters/Insta360Protocol
+
+targets:
+  # Luna wire I/O: CoreBluetooth, camera Wi-Fi, TCP 6666, screen KCP.
+  Insta360Apple:
+    type: framework
+    platform: iOS
+    sources:
+      - ../Adapters/Insta360Apple/Sources/Insta360Apple
+      - path: ../Adapters/Insta360Apple/Sources/CKcp
+        excludes:
+          - module.modulemap
+          - LICENSE
+    dependencies:
+      - package: OpenPocketViewCore
+        product: MonitorContracts
+      - package: Insta360Protocol
+        product: Insta360Protocol
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.insta360adapter
+        CLANG_ENABLE_MODULES: YES
+        GENERATE_INFOPLIST_FILE: YES
+        DEVELOPMENT_TEAM: "4V4EGQ6LZA"
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+
+  OpenInstaCine:
+    type: application
+    platform: iOS
+    sources:
+      - OpenInstaCine
+    postBuildScripts:
+      - name: Stamp source revision
+        script: bash "${SRCROOT}/../tools/stamp-source-revision.sh"
+        basedOnDependencyAnalysis: false
+    dependencies:
+      - package: Sentry
+        product: Sentry
+      - package: OpenPocketViewCore
+        product: OpenPocketViewCore
+      - package: OpenPocketViewCore
+        product: MonitorUI
+      - package: OpenPocketViewCore
+        product: MonitorPresentation
+      - package: OpenPocketViewCore
+        product: MonitorContracts
+      - package: Insta360Protocol
+        product: Insta360Protocol
+      - target: Insta360Apple
+      - target: OpenInstaCineWatch
+        embed: true
+        codeSign: true
+    settings:
+      base:
+        # The app shell (CoreBluetooth / Network / Hotspot glue) uses the Swift 5 language mode to
+        # keep the prototype moving; the core package stays Swift 6 strict-concurrency and fully tested.
+        # ponytail: tighten to Swift 6 once the I/O layer is validated on hardware.
+        SWIFT_VERSION: "5.0"
+        # Internal device builds need symbols just as distributed builds do.
+        DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+        # Same App ID as Android and the App Store Connect record. Enable Hotspot
+        # Configuration on this identifier in the Developer portal.
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine
+        PRODUCT_NAME: OpenInstaCine
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # Do not put XML comments in the entitlements plist. ProcessProductPackaging
+        # rewrites it in place (strips comments, retabs) and the build then fails with
+        # "Entitlements file was modified during the build".
+        CODE_SIGN_ENTITLEMENTS: OpenInstaCine/OpenInstaCine.entitlements
+        GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) CI_SILENCE_GL_DEPRECATION=1"
+        OTHER_SWIFT_FLAGS: "$(inherited) -Xcc -DCI_SILENCE_GL_DEPRECATION"
+        # Same team as OpenZCine — it already has the Hotspot Configuration capability.
+        DEVELOPMENT_TEAM: "4V4EGQ6LZA"
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: OpenInstaCine
+        INFOPLIST_KEY_CFBundleName: OpenInstaCine
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_UIFileSharingEnabled: YES
+        INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
+        INFOPLIST_KEY_GCSupportsControllerUserInteraction: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+        INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
+        INFOPLIST_KEY_UIStatusBarHidden: YES
+        # YES so SwiftUI `.statusBarHidden` can hide the iPad system bar after launch.
+        # `UIStatusBarHidden~ipad` lives in Info-Frameio.plist — INFOPLIST_KEY cannot
+        # spell a `~ipad` variant.
+        INFOPLIST_KEY_UIViewControllerBasedStatusBarAppearance: YES
+        # Space-separated — a colon list becomes one invalid string and iOS stays portrait-only.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone: YES
+        # Native iPad resizing lets UIKit report window-control exclusions.
+        # Do not request UIRequiresFullScreen compatibility scaling: it keeps a
+        # fixed scene size underneath the system window buttons on iPadOS 26.
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "OpenInstaCine uses Bluetooth to find your Insta360 Luna, ask it for approval, and hand off to its Wi-Fi."
+        INFOPLIST_KEY_NSMotionUsageDescription: "OpenInstaCine uses headphone motion so AirPods can aim the gimbal."
+        # iOS names the current Wi-Fi only to apps with precise location (Add setup › Wi-Fi).
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "OpenInstaCine uses your location only so iOS can tell it which Wi-Fi this iPhone is on, to offer that network when you add a camera's Wi-Fi setup. Your location is not stored or shared."
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "OpenInstaCine connects to cameras over local Wi-Fi to receive video and control them, and can share the live picture with nearby OpenInstaCine phones."
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "OpenInstaCine saves clips you choose to Photos."
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
+        INFOPLIST_FILE: OpenInstaCine/Info-Frameio.plist
+    configFiles:
+      Debug: OpenInstaCine/Frameio.xcconfig
+      Release: OpenInstaCine/Frameio.xcconfig
+
+  OpenInstaCineTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - OpenInstaCineTests
+    dependencies:
+      - target: OpenInstaCine
+      - package: OpenPocketViewCore
+        product: OpenPocketViewCore
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests
+        DEVELOPMENT_TEAM: "4V4EGQ6LZA"
+        CODE_SIGN_STYLE: Automatic
+        BUNDLE_LOADER: $(TEST_HOST)
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/OpenInstaCine.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/OpenInstaCine
+
+  OpenInstaCineWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - OpenInstaCineWatch
+    dependencies:
+      - package: OpenPocketViewCore
+        product: OpenPocketViewCore
+    configFiles:
+      Debug: OpenInstaCineWatch/Watch.xcconfig
+      Release: OpenInstaCineWatch/Watch.xcconfig
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.watch
+        PRODUCT_NAME: OpenInstaCineWatch
+        TARGETED_DEVICE_FAMILY: "4"
+        DEVELOPMENT_TEAM: "4V4EGQ6LZA"
+        CODE_SIGN_STYLE: Automatic
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: OpenInstaCineWatch/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SDKROOT: watchos
+        WATCHOS_DEPLOYMENT_TARGET: "10.0"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+
+  OpenInstaCineUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - OpenInstaCineUITests
+    dependencies:
+      - target: OpenInstaCine
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.uitests
+        TEST_TARGET_NAME: OpenInstaCine
+        DEVELOPMENT_TEAM: "4V4EGQ6LZA"
+        CODE_SIGN_STYLE: Automatic
+
+  # Lab-only XC driver for the official Insta360 app (capture sessions).
+  LunaOfficialUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - LunaOfficialUITests
+    dependencies:
+      - target: OpenInstaCine
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.official-uitests
+        TEST_TARGET_NAME: OpenInstaCine
+        DEVELOPMENT_TEAM: "4V4EGQ6LZA"
+        CODE_SIGN_STYLE: Automatic
+
+schemes:
+  LunaOfficialCapture:
+    build:
+      targets:
+        OpenInstaCine: all
+        LunaOfficialUITests: [test]
+    test:
+      targets:
+        - LunaOfficialUITests
+  OpenInstaCine:
+    build:
+      targets:
+        OpenInstaCine: all
+        OpenInstaCineWatch: all
+        OpenInstaCineTests: [test]
+    test:
+      targets:
+        - OpenInstaCineTests
+  OpenInstaCineWatch:
+    build:
+      targets:
+        OpenInstaCineWatch: all
+  OpenInstaCineUIReview:
+    build:
+      targets:
+        OpenInstaCine: all
+        OpenInstaCineUITests: [test]
+    test:
+      targets:
+        - OpenInstaCineUITests
