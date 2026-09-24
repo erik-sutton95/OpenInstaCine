@@ -152,6 +152,12 @@ def main() -> None:
         "        - LunaOfficialUITests\n",
     )
 
+    replace_once(
+        project,
+        "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
+        "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n      - package: Insta360Protocol\n        product: Insta360Protocol\n    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
+    )
+
     startup = APP / "StartupChrome.swift"
     replace_once(
         startup,
