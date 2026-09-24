@@ -33,10 +33,13 @@ class CamFovTest {
         assertTrue(CamFov.shouldHoldWatchdog(3.9))
         assertTrue(!CamFov.shouldHoldWatchdog(4.0))
         assertTrue(!CamFov.shouldHoldWatchdog(null))
+        assertTrue(CamFov.shouldHoldWatchdog(8.0, pinchActive = true))
         assertEquals(2.9, CamFov.displayTenths(2.9), 0.001)
         assertEquals(3.0, CamFov.displayTenths(2.95), 0.001)
         assertEquals(5.3, CamFov.displayTenths(5.34), 0.001)
         assertEquals(5.4, CamFov.displayTenths(5.36), 0.001)
+        assertEquals(1.53, CamFov.continuousReadout(1.0, 1.53, 1.0), 0.0001)
+        assertEquals(1.5, CamFov.readout(1.0, 1.53, 1.0), 0.0001)
     }
 
     @Test

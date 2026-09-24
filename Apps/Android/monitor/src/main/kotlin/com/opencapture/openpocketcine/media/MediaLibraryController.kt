@@ -80,7 +80,7 @@ class MediaLibraryController(
         session.markBrowsingMedia(true)
         if (!isLive) {
             fetchInProgress = false
-            note = if (files.isEmpty()) { if (!session.supportsCameraMedia) "Camera media is not connected yet. Cached clips remain available here." else MediaOperatorCopy.NOT_CONNECTED } else null
+            note = if (files.isEmpty()) MediaOperatorCopy.NOT_CONNECTED else null
             return
         }
         fetchInProgress = true
@@ -140,6 +140,8 @@ class MediaLibraryController(
 
     fun cacheGrade(file: MediaFile): MediaCacheGrade = cache.cacheGrade(file, cameraId)
 
+    fun cachedShotColor(file: MediaFile): Int = cache.shotColor(file.path, cameraId, appContext)
+
     /** Shot color for Auto LUT. Never the LRF/XRF sidecar (Rec.709 even on D-Log2). */
     fun fetchShotColor(file: MediaFile): Int {
         localFile(file)?.let { original ->
@@ -196,14 +198,14 @@ class MediaLibraryController(
 
     fun canDelete(file: MediaFile): Boolean = isLive && browsing && file.isDeletable
 
-    suspend fun delete(file: MediaFile): Boolean {
+    suspend fun delete(file: MediaFile) {
         if (!file.isDeletable) {
             note = MediaOperatorCopy.NOT_DELETABLE
-            return false
+            return
         }
         if (!browsing || !isLive) {
             note = MediaOperatorCopy.NOT_CONNECTED
-            return false
+            return
         }
         val counter = nextActionCounter()
         link.sendDuml(
@@ -213,7 +215,6 @@ class MediaLibraryController(
         )
         delay(400)
         dropFile(file.path)
-        return true
     }
 
     suspend fun ensureThumbnail(file: MediaFile) {

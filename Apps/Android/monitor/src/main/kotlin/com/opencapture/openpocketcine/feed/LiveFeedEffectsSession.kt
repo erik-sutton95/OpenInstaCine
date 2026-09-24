@@ -47,6 +47,9 @@ internal class LiveFeedEffectsSession(
     private val onFirstFrame: () -> Unit = {},
     private val letterboxSource: Boolean = true,
     private val notifySurfaceOnMain: Boolean = false,
+    private val onFramePresented: (Long) -> Unit = {},
+    private val playback: Boolean = false,
+    private val backdrop: MonitorBackdropFeed? = null,
 ) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -71,11 +74,13 @@ internal class LiveFeedEffectsSession(
             Thread(runnable, "opc.scope.tap").apply { isDaemon = true }
         }
     private val sampleBusy = AtomicBoolean(false)
+    private val previewSource = InspectorPreviewSource()
     @Volatile private var nextScopeAtNs = 0L
     @Volatile private var previousBundle = ScopeAssistBundle.EMPTY
 
     fun attachDisplay(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
         detachDisplay()
+        backdrop?.attach(this)
         displayTexture = surfaceTexture
         displayWidth = width.coerceAtLeast(1)
         displayHeight = height.coerceAtLeast(1)
@@ -94,6 +99,7 @@ internal class LiveFeedEffectsSession(
     }
 
     fun updatePlan(next: FeedEffectsRenderPlan) {
+        backdrop?.updatePlan(this, next)
         plan.set(next)
         planDirty = true
         requestRender()
@@ -103,12 +109,25 @@ internal class LiveFeedEffectsSession(
         val w = width.coerceAtLeast(16)
         val h = height.coerceAtLeast(16)
         if (w == sourceWidth && h == sourceHeight) return
+        previewSource.invalidate()
+        InspectorPreviewPipeline.sourceChanged(playback)
+        backdrop?.invalidate(this)
         sourceWidth = w
         sourceHeight = h
         requestRender()
     }
 
+    fun configurePreviewSource(identity: Any, ready: Boolean) {
+        if (previewSource.configure(identity, ready)) {
+            InspectorPreviewPipeline.sourceChanged(playback)
+            backdrop?.invalidate(this)
+        }
+    }
+
     fun detachDisplay() {
+        previewSource.invalidate()
+        InspectorPreviewPipeline.sourceChanged(playback)
+        backdrop?.invalidate(this)
         running.set(false)
         synchronized(frameLock) { frameLock.notifyAll() }
         renderThread?.join(800)
@@ -132,6 +151,7 @@ internal class LiveFeedEffectsSession(
      */
     private fun maybeTapScopes(
         policy: ScopeTapPolicy,
+        currentPlan: FeedEffectsRenderPlan,
         oesCopy: OesCopyGlProgram,
         oesTexture: Int,
         texMatrix: FloatArray,
@@ -139,68 +159,110 @@ internal class LiveFeedEffectsSession(
         tapPixels: ByteBuffer?,
         tapScratch: ByteArray?,
     ) {
-        if (!policy.needsTap || tapTarget == null || tapPixels == null || tapScratch == null) return
+        if ((!policy.needsTap && backdrop?.hasDemand(this) != true) || tapTarget == null || tapPixels == null || tapScratch == null) return
         val now = System.nanoTime()
         if (now < nextScopeAtNs) return
         if (!sampleBusy.compareAndSet(false, true)) return
+        val sourceEpoch = previewSource.captureEpoch()
+        val previewTicket = if (sourceEpoch != null) {
+            InspectorPreviewPipeline.acquire(policy.previewOwner, playback, now)?.takeIf {
+                if (previewSource.isCurrent(sourceEpoch)) true
+                else { InspectorPreviewPipeline.cancel(it); false }
+            }
+        } else null
         val thermal =
             runCatching {
                 val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
                 PocketScopeSampler.thermalMultiplier(pm.currentThermalStatus)
             }.getOrDefault(1.0)
-        nextScopeAtNs = now + PocketScopeSampler.minIntervalNs(policy.activeScopeCount, thermal)
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, tapTarget.framebufferId)
-        GLES20.glViewport(0, 0, tapTarget.width, tapTarget.height)
-        oesCopy.draw(oesTexture, texMatrix)
-        tapPixels.clear()
-        GLES20.glReadPixels(
-            0,
-            0,
-            tapTarget.width,
-            tapTarget.height,
-            GLES20.GL_RGBA,
-            GLES20.GL_UNSIGNED_BYTE,
-            tapPixels,
-        )
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
-        tapPixels.rewind()
-        tapPixels.get(tapScratch)
-        val packed = tapScratch.copyOf()
-        val width = tapTarget.width
-        val height = tapTarget.height
-        val look = policy.vectorLut
-        val previous = previousBundle
-        sampleExecutor.execute {
-            try {
-                var transfer = MonitorTransfer.fromColorMode(policy.colorMode)
-                ScopeExposureCeiling.syncISO(policy.iso)
-                val (minC, maxC) = PocketScopeSampler.minMaxRGB(packed)
-                // Backend transfer metadata remains authoritative for the displayed feed.
-                ScopeExposureCeiling.observeTapMax(maxC, transfer)
-                val sampled =
-                    PocketScopeSampler.sample(
-                        bytes = packed,
-                        width = width,
-                        height = height,
-                        bytesPerRow = width * 4,
-                        transfer = transfer,
-                        includePoints = policy.includePoints,
-                        includeVectorPoints = policy.includeVectorPoints,
-                        look = if (policy.includeVectorPoints) look else null,
-                        trafficThreshold = policy.trafficThreshold,
-                        previous = previous,
-                        iso = ScopeExposureCeiling.resolvedISO(),
+        val backdropTicket = if (sourceEpoch != null && previewSource.isCurrent(sourceEpoch)) {
+            backdrop?.acquire(this, now, thermal)
+        } else null
+        if (policy.activeScopeCount == 0 && previewTicket == null && backdropTicket == null) {
+            sampleBusy.set(false)
+            return
+        }
+        nextScopeAtNs = now + PocketScopeSampler.chromeSampleIntervalNs(
+            policy.activeScopeCount, thermal, backdropTicket != null || backdrop?.hasDemand(this) == true)
+        var handedOff = false
+        try {
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, tapTarget.framebufferId)
+            GLES20.glViewport(0, 0, tapTarget.width, tapTarget.height)
+            oesCopy.draw(oesTexture, texMatrix)
+            tapPixels.clear()
+            GLES20.glReadPixels(
+                0,
+                0,
+                tapTarget.width,
+                tapTarget.height,
+                GLES20.GL_RGBA,
+                GLES20.GL_UNSIGNED_BYTE,
+                tapPixels,
+            )
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+            tapPixels.rewind()
+            tapPixels.get(tapScratch)
+            val packed = tapScratch.copyOf()
+            val width = tapTarget.width
+            val height = tapTarget.height
+            val look = policy.vectorLut
+            val previous = previousBundle
+            sampleExecutor.execute {
+                var previewSubmitted = false
+                var backdropSubmitted = false
+                try {
+                    if (backdropTicket != null && previewSource.isCurrent(sourceEpoch)) {
+                        backdrop?.submit(backdropTicket,
+                            InspectorPreviewFrame.fromTap(packed, width, height, bottomUp = true), currentPlan)
+                        backdropSubmitted = true
+                    }
+                    if (previewTicket != null) {
+                        InspectorPreviewPipeline.submit(previewTicket,
+                            InspectorPreviewFrame.fromTap(packed, width, height, bottomUp = true))
+                        previewSubmitted = true
+                    }
+                    if (policy.activeScopeCount == 0) return@execute
+                    var transfer = MonitorTransfer.fromColorMode(policy.colorMode)
+                    ScopeExposureCeiling.syncISO(policy.iso)
+                    val (minC, maxC) = PocketScopeSampler.minMaxRGB(packed)
+                    if (policy.allowsTransferInference) {
+                        transfer = MonitorTransfer.inferred(minC, maxC, transfer)
+                    }
+                    ScopeExposureCeiling.observeTapMax(maxC, transfer)
+                    val sampled =
+                        PocketScopeSampler.sample(
+                            bytes = packed,
+                            width = width,
+                            height = height,
+                            bytesPerRow = width * 4,
+                            transfer = transfer,
+                            includePoints = policy.includePoints,
+                            includeVectorPoints = policy.includeVectorPoints,
+                            look = if (policy.includeVectorPoints) look else null,
+                            trafficThreshold = policy.trafficThreshold,
+                            previous = previous,
+                            iso = ScopeExposureCeiling.resolvedISO(),
+                        )
+                    previousBundle = sampled
+                    mainHandler.post { LiveScopeSampleBus.publish(sampled) }
+                    ScopeTapHzLog.note(
+                        TAG,
+                        scopes = policy.activeScopeCount,
+                        intervalNs = policy.minIntervalNs(thermal),
                     )
-                previousBundle = sampled
-                mainHandler.post { LiveScopeSampleBus.publish(sampled) }
-                ScopeTapHzLog.note(
-                    TAG,
-                    scopes = policy.activeScopeCount,
-                    intervalNs = PocketScopeSampler.minIntervalNs(policy.activeScopeCount, thermal),
-                )
-            } catch (error: Exception) {
-                Log.w(TAG, "scope tap failed", error)
-            } finally {
+                } catch (error: Exception) {
+                    if (!previewSubmitted) InspectorPreviewPipeline.cancel(previewTicket)
+                    Log.w(TAG, "scope tap failed", error)
+                } finally {
+                    if (!backdropSubmitted) backdrop?.cancel(backdropTicket)
+                    sampleBusy.set(false)
+                }
+            }
+            handedOff = true
+        } finally {
+            if (!handedOff) {
+                backdrop?.cancel(backdropTicket)
+                InspectorPreviewPipeline.cancel(previewTicket)
                 sampleBusy.set(false)
             }
         }
@@ -300,6 +362,7 @@ internal class LiveFeedEffectsSession(
                 }
                 var skipDuplicate = false
                 if (pullOes) {
+                    val previewLatch = previewSource.beginLatch()
                     oesSurfaceTexture.updateTexImage()
                     val timestampNs = oesSurfaceTexture.timestamp
                     if (FeedPresentPolicy.isDuplicateFrameTime(timestampNs, lastOesTimestampNs)) {
@@ -308,6 +371,7 @@ internal class LiveFeedEffectsSession(
                         lastOesTimestampNs = timestampNs
                         oesSurfaceTexture.getTransformMatrix(texMatrix)
                         hasOesFrame = true
+                        previewSource.didLatch(previewLatch)
                     }
                 }
                 if (!hasOesFrame) continue
@@ -389,13 +453,15 @@ internal class LiveFeedEffectsSession(
                         look = false,
                     )
                 }
-                EGL14.eglSwapBuffers(eglDisplay, eglSurface)
+                check(EGL14.eglSwapBuffers(eglDisplay, eglSurface)) { "live present failed" }
+                onFramePresented(lastOesTimestampNs)
                 if (!signaledFirstFrame) {
                     signaledFirstFrame = true
                     mainHandler.post(onFirstFrame)
                 }
                 maybeTapScopes(
                     policy = nextPlan.scopeTap,
+                    currentPlan = nextPlan,
                     oesCopy = copy,
                     oesTexture = oesTexture,
                     texMatrix = texMatrix,

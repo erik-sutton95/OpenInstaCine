@@ -33,6 +33,44 @@ def integer(field: int, value: int) -> bytes:
     return tag(field, 0) + varint(value)
 
 
+def zigzag32(value: int) -> int:
+    if not -0x80000000 <= value <= 0x7fffffff:
+        raise ValueError("Expected signed 32-bit value")
+    return ((value << 1) ^ (value >> 31)) & 0xffffffff
+
+
+def signed32(field: int, value: int) -> bytes:
+    return integer(field, zigzag32(value))
+
+
+def photography_get(types: list[int], mode: int = 7) -> bytes:
+    if not types or any(t <= 0 for t in types):
+        raise ValueError("Photography GET requires option type numbers")
+    return b"".join(integer(1, number) for number in types) + integer(2, mode)
+
+
+def photography_set(types: list[int], nested: bytes, mode: int = 7) -> bytes:
+    if not types or any(t <= 0 for t in types):
+        raise ValueError("Photography SET requires option type numbers")
+    packed = b"".join(varint(number) for number in types)
+    return blob(1, packed) + blob(2, nested) + integer(3, mode)
+
+
+def color_recovery_set(enabled: bool, mode: int = 7) -> bytes:
+    return photography_set([73], integer(73, 1 if enabled else 0), mode)
+
+
+def gimbal_control(action: int, up_down: int = 0, left_right: int = 0) -> bytes:
+    if action not in (1, 2, 3) or not -99 <= up_down <= 99 or not -99 <= left_right <= 99:
+        raise ValueError("Unsupported gimbal control")
+    remote = b""
+    if up_down:
+        remote += signed32(1, up_down)
+    if left_right:
+        remote += signed32(2, left_right)
+    return integer(1, action) + blob(2, remote)
+
+
 def blob(field: int, value: bytes) -> bytes:
     return tag(field, 2) + varint(len(value)) + value
 

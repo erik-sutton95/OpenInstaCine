@@ -106,7 +106,7 @@ public enum AndroidSessionWire {
         let glamourJSON = status.glamourEnabled.map { bool($0) } ?? "null"
         let selfieFlipJSON = status.selfieFlip.map { bool($0.isOn) } ?? "null"
         return """
-            {"batteryPercent":\(status.batteryPercent),"batteryMilliVolts":\(status.batteryMilliVolts),"batteryMilliAmps":\(status.batteryMilliAmps),"docked":\(bool(status.docked)),"charging":\(bool(status.charging)),"storageTotalMb":\(status.storageTotalMb),"storageFreeMb":\(status.storageFreeMb),"sdTotalMb":\(status.sdTotalMb),"sdFreeMb":\(status.sdFreeMb),"internalTotalMb":\(status.internalTotalMb),"internalFreeMb":\(status.internalFreeMb),"inPlayback":\(bool(status.inPlayback)),"firmware":\(quote(status.firmware)),"isRecording":\(bool(status.isRecording)),"shootingMode":\(status.shootingMode),"recordElapsedSec":\(status.recordElapsedSec),"recordRemainingSec":\(status.recordRemainingSec),"timecode":\(quote(status.timecode)),"iso":\(status.iso),"shutterDenom":\(status.shutterDenom),"fps":\(status.fps),"expoMode":\(intOrMinus(status.expoMode?.rawValue)),"isoIndex":\(intOrMinus(status.isoIndex?.rawValue)),"colorMode":\(intOrMinus(status.colorMode?.rawValue)),"videoResolution":\(intOrMinus(status.videoResolution?.rawValue)),"fpsIndex":\(intOrMinus(status.videoFormat?.frameRate.rawValue)),"whiteBalanceMode":\(intOrMinus(status.whiteBalance?.mode.rawValue)),"whiteBalanceKelvin":\(status.whiteBalanceKelvin),"whiteBalanceTint":\(status.whiteBalanceTint ?? 0),"focusMode":\(intOrMinus(status.focusMode?.rawValue)),"audioChannel":\(intOrMinus(status.audioChannel?.rawValue)),"vocalBoost":\(intOrMinus(status.vocalBoost?.rawValue)),"audioDspAt2":\(intOrMinus(status.audioDspAt2?.rawValue)),"audioDspBlob":\(quote(blob)),"zoomFactorRaw":\(status.zoomFactorRaw),"availableShutterDenoms":\(ints(status.availableShutterDenoms)),"availableIsoIndices":\(ints(isoCaps)),"evComp":\(intOrMinus(status.evComp?.rawValue)),"isoLimit":\(intOrMinus(status.isoLimit?.rawValue)),"availableColorModes":\(ints(colorCaps)),"availableVideoFormats":\(ints(formatCaps)),"focusX":\(status.focusX),"focusY":\(status.focusY),"hasCameraFocusPoint":\(bool(status.hasCameraFocusPoint)),"focusTrack":\(intOrMinus(status.focusTrack?.rawValue)),"zoomLens":\(intOrMinus(status.zoomLens)),"zoomFactor":\(zoomFactorJSON),"glamourEnabled":\(glamourJSON),"selfieFlip":\(selfieFlipJSON),"gimbalFace":\(intOrMinus(status.gimbalFace?.rawValue)),"windNR":\(intOrMinus(status.windNR?.rawValue)),"directionalAudio":\(intOrMinus(status.directionalAudio?.rawValue)),"audioMetersLeft":\(status.audioMeters.left.levelDB),"audioMetersRight":\(status.audioMeters.right.levelDB),"audioPeakLeft":\(status.audioMeters.left.peakDB),"audioPeakRight":\(status.audioMeters.right.peakDB)}
+            {"batteryPercent":\(status.batteryPercent),"batteryMilliVolts":\(status.batteryMilliVolts),"batteryMilliAmps":\(status.batteryMilliAmps),"docked":\(bool(status.docked)),"charging":\(bool(status.charging)),"storageTotalMb":\(status.storageTotalMb),"storageFreeMb":\(status.storageFreeMb),"sdTotalMb":\(status.sdTotalMb),"sdFreeMb":\(status.sdFreeMb),"internalTotalMb":\(status.internalTotalMb),"internalFreeMb":\(status.internalFreeMb),"inPlayback":\(bool(status.inPlayback)),"firmware":\(quote(status.firmware)),"isRecording":\(bool(status.isRecording)),"shootingMode":\(status.shootingMode),"recordElapsedSec":\(status.recordElapsedSec),"recordRemainingSec":\(status.recordRemainingSec),"timecode":\(quote(status.timecode)),"iso":\(status.iso),"shutterDenom":\(status.shutterDenom),"fps":\(status.fps),"expoMode":\(intOrMinus(status.expoMode?.rawValue)),"isoIndex":\(intOrMinus(status.isoIndex?.rawValue)),"colorMode":\(intOrMinus(status.colorMode?.rawValue)),"videoResolution":\(intOrMinus(status.videoResolution?.rawValue)),"fpsIndex":\(intOrMinus(status.videoFormat?.frameRate.rawValue)),"whiteBalanceMode":\(intOrMinus(status.whiteBalance?.mode.rawValue)),"whiteBalanceKelvin":\(status.whiteBalanceKelvin),"whiteBalanceTint":\(status.whiteBalanceTint ?? 0),"focusMode":\(intOrMinus(status.focusMode?.rawValue)),"audioChannel":\(intOrMinus(status.audioChannel?.rawValue)),"vocalBoost":\(intOrMinus(status.vocalBoost?.rawValue)),"audioDspAt2":\(intOrMinus(status.audioDspAt2?.rawValue)),"audioDspBlob":\(quote(blob)),"zoomFactorRaw":\(status.zoomFactorRaw),"availableShutterDenoms":\(ints(status.availableShutterDenoms)),"availableIsoIndices":\(ints(isoCaps)),"evComp":\(intOrMinus(status.evComp?.rawValue)),"isoLimit":\(intOrMinus(status.isoLimit?.rawValue)),"availableColorModes":\(ints(colorCaps)),"availableVideoFormats":\(ints(formatCaps)),"focusX":\(status.focusX),"focusY":\(status.focusY),"hasCameraFocusPoint":\(bool(status.hasCameraFocusPoint)),"focusTrack":\(intOrMinus(status.focusTrack?.rawValue)),"zoomLens":\(intOrMinus(status.zoomLens)),"zoomFactor":\(zoomFactorJSON),"glamourEnabled":\(glamourJSON),"selfieFlip":\(selfieFlipJSON),"gimbalFace":\(intOrMinus(status.gimbalFace?.rawValue)),"gimbalModeFamily":\(intOrMinus(status.gimbalModeFamily?.rawValue)),"windNR":\(intOrMinus(status.windNR?.rawValue)),"directionalAudio":\(intOrMinus(status.directionalAudio?.rawValue)),"audioMetersLeft":\(status.audioMeters.left.levelDB),"audioMetersRight":\(status.audioMeters.right.levelDB),"audioPeakLeft":\(status.audioMeters.left.peakDB),"audioPeakRight":\(status.audioMeters.right.peakDB)}
             """
     }
 
@@ -315,6 +315,8 @@ public enum AndroidSessionWire {
         if let face = GimbalFace(rawValue: int("gimbalFace", default: -1)) {
             status.gimbalFace = face
         }
+        status.gimbalModeFamily = optionalUInt8(int("gimbalModeFamily", default: -1))
+            .flatMap(GimbalModeFamily.init(rawValue:))
         if let wind = optionalUInt8(int("windNR", default: -1)).flatMap(
             WindNoiseReduction.init(rawValue:))
         {
@@ -509,11 +511,18 @@ public enum AndroidSessionWire {
         case .setVideoFormat:
             let parts = splitExtra(extra)
             guard parts.count >= 2,
-                let resRaw = UInt8(parts[0]), let fpsRaw = UInt8(parts[1])
+                let resRaw = parseUInt8(parts[0]), let fpsRaw = parseUInt8(parts[1])
             else { return nil }
+            let shootingMode: ShootingMode?
+            if parts.count >= 3, let raw = parseUInt8(parts[2]) {
+                shootingMode = ShootingMode.fromWire(raw)
+            } else {
+                shootingMode = nil
+            }
             return Commands.setVideoFormat(
                 resolution: VideoResolution(rawValue: resRaw),
-                frameRate: VideoFrameRate(rawValue: fpsRaw), seq: seq)
+                frameRate: VideoFrameRate(rawValue: fpsRaw),
+                shootingMode: shootingMode, seq: seq)
         case .tapFocusPrepare:
             return Commands.tapFocusPrepare(seq: seq)
         case .tapFocusPoint:
@@ -531,7 +540,13 @@ public enum AndroidSessionWire {
             }
             return Commands.tapFocusCommit(x, y, seq: seq)
         case .shootPhoto:
-            return Commands.shootPhoto(seq: seq)
+            // Empty retains the original Photo trigger. Pocket 3 TimeLapse also
+            // uses this opcode, with an explicit stop byte.
+            switch extra {
+            case nil, "", "1": return Commands.shutterTrigger(start: true, seq: seq)
+            case "0": return Commands.shutterTrigger(start: false, seq: seq)
+            default: return nil
+            }
         case .setShootingMode:
             // Not `ShootingMode(rawValue:)`: the Nano's Photo is 0x05 and has no case, so going
             // through the enum returned nil and the mode never reached the wire.
@@ -821,6 +836,7 @@ public enum AndroidSessionWire {
     private final class WatchdogStore: @unchecked Sendable {
         let lock = NSLock()
         var boxes: [Int64: FeedWatchdog] = [:]
+        var beforeAction: [Int64: FeedWatchdog] = [:]
         var next: Int64 = 1
     }
 
@@ -1035,6 +1051,7 @@ public enum AndroidSessionWire {
         let store = watchdogStore
         store.lock.lock()
         store.boxes[handle] = FeedWatchdog()
+        store.beforeAction.removeValue(forKey: handle)
         store.lock.unlock()
     }
 
@@ -1042,6 +1059,7 @@ public enum AndroidSessionWire {
         let store = watchdogStore
         store.lock.lock()
         store.boxes.removeValue(forKey: handle)
+        store.beforeAction.removeValue(forKey: handle)
         store.lock.unlock()
     }
 
@@ -1052,7 +1070,18 @@ public enum AndroidSessionWire {
         store.lock.lock()
         defer { store.lock.unlock() }
         guard var watchdog = store.boxes[handle] else { return "none" }
+        // Shell effect feedback uses the existing JNI entry point. Only the
+        // immediately preceding action can be rolled back, once, and only
+        // before another tick. A blocked write is not a spent enable rung.
+        if jsonBool(snapshotJSON, key: "rollbackLastAction", default: false) {
+            if let previous = store.beforeAction.removeValue(forKey: handle) {
+                store.boxes[handle] = previous
+            }
+            return "none"
+        }
+        let previous = watchdog
         let action = feedWatchdogAction(snapshotJSON: snapshotJSON, watchdog: &watchdog)
+        store.beforeAction[handle] = action == "none" ? nil : previous
         store.boxes[handle] = watchdog
         return action
     }
@@ -1088,8 +1117,13 @@ public enum AndroidSessionWire {
             secondsSinceLastEnable: jsonOptionalNumber(json, key: "secondsSinceLastEnable"),
             secondsSinceFocusTrackSet: jsonOptionalNumber(json, key: "secondsSinceFocusTrackSet"),
             secondsSinceZoomSet: jsonOptionalNumber(json, key: "secondsSinceZoomSet"),
+            zoomPinchActive: jsonBool(json, key: "zoomPinchActive", default: false),
             secondsSinceGimbalThrow: jsonOptionalNumber(json, key: "secondsSinceGimbalThrow"),
-            secondsSinceCameraSet: jsonOptionalNumber(json, key: "secondsSinceCameraSet")
+            gimbalStickHeld: jsonBool(json, key: "gimbalStickHeld", default: false),
+            secondsSinceCameraSet: jsonOptionalNumber(json, key: "secondsSinceCameraSet"),
+            lastDecoderOutputAge: jsonOptionalNumber(json, key: "lastDecoderOutputAge"),
+            decoderOutputExpected: jsonBool(json, key: "decoderOutputExpected", default: false),
+            repairReady: jsonBool(json, key: "repairReady", default: true)
         )
         switch watchdog.tick(snap) {
         case .none: return "none"

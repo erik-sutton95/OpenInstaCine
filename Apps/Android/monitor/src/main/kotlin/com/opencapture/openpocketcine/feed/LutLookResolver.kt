@@ -1,16 +1,11 @@
 package com.opencapture.openpocketcine.feed
 
 import com.opencapture.openpocketcine.lut.LutCatalog
-import com.opencapture.openpocketcine.lut.LutEntry
 import com.opencapture.openpocketcine.session.CameraCommands
 
 /** File the live GPU path should pack, mirroring iOS `LUTResolver`. */
 internal sealed class LutLookSource {
-    data class Asset(
-        val fileName: String,
-        val inputTransfer: MonitorTransfer? = null,
-        val title: String? = null,
-    ) : LutLookSource()
+    data class Asset(val fileName: String) : LutLookSource()
 
     data class Custom(val fileName: String) : LutLookSource()
 
@@ -27,14 +22,10 @@ internal object LutLookResolver {
         colorMode: Int,
         family: String,
         cameraName: String?,
-        cameraLooks: List<LutEntry> = LutCatalog.cameraLooks,
+        isPhoto: Boolean = false,
     ): LutLookSource {
         if (!lutOn) return LutLookSource.Off
-        cameraLooks.firstOrNull { it.id == selection }?.let { entry ->
-            return entry.fileName?.let { LutLookSource.Asset(it, entry.inputTransfer, entry.title) }
-                ?: LutLookSource.Off
-        }
-        if (family == "generic" && (selection == LutCatalog.AUTO || selection == LutCatalog.DJI_AUTO)) return LutLookSource.Off
+        if (isPhoto && isTechnicalLogSelection(selection)) return LutLookSource.Off
         return when (selection) {
             LutCatalog.OFF -> LutLookSource.Off
             LutCatalog.AUTO, LutCatalog.DJI_AUTO -> djiAuto(colorMode, family, cameraName)
@@ -50,10 +41,10 @@ internal object LutLookResolver {
                 LutCatalog.customFileName(selection)?.let { LutLookSource.Custom(it) }
                     ?: LutCatalog.officialBuiltInLooks.firstOrNull { LutCatalog.matches(it, selection) }
                         ?.fileName
-                        ?.let { LutLookSource.Asset(it) }
+                        ?.let(LutLookSource::Asset)
                     ?: LutCatalog.officialDji.firstOrNull { LutCatalog.matches(it, selection) }
                         ?.fileName
-                        ?.let { LutLookSource.Asset(it) }
+                        ?.let(LutLookSource::Asset)
                     ?: LutLookSource.Off
             }
         }
@@ -76,7 +67,7 @@ internal object LutLookResolver {
     /** iOS `LUTResolver.autoCaption`. */
     fun autoCaption(source: LutLookSource): String =
         when (source) {
-            LutLookSource.Off -> "Rec.709 preview · no conversion needed"
+            LutLookSource.Off -> "No matching look for this color / camera"
             is LutLookSource.Asset -> {
                 val title = sourceTitle(source)
                 val official =
@@ -91,17 +82,12 @@ internal object LutLookResolver {
         when (source) {
             LutLookSource.Off -> "Off"
             is LutLookSource.Asset ->
-                source.title
-                    ?: LutCatalog.officialBuiltInLooks.firstOrNull { it.fileName == source.fileName }?.title
+                LutCatalog.officialBuiltInLooks.firstOrNull { it.fileName == source.fileName }?.title
                     ?: LutCatalog.officialDji.firstOrNull { it.fileName == source.fileName }?.title
                     ?: LutCatalog.displayName(source.fileName)
             is LutLookSource.Custom -> LutCatalog.displayName(source.fileName)
             is LutLookSource.Creative -> source.name
         }
-
-    /** Manual conversion changes the cube's exposure math, never source metering metadata. */
-    fun exposureColorMode(source: LutLookSource, sourceColorMode: Int): Int =
-        (source as? LutLookSource.Asset)?.inputTransfer?.colorMode ?: sourceColorMode
 
     private fun djiAuto(colorMode: Int, family: String, cameraName: String?): LutLookSource {
         val nano = family.equals("nano", ignoreCase = true)
@@ -133,4 +119,21 @@ internal object LutLookResolver {
     }
 
     private const val COLOR_DLOG_M = 0x00
+
+    /** DJI/official log conversions and log-specific custom slots. Creative and generic Custom stay. */
+    fun isTechnicalLogSelection(selection: String): Boolean =
+        when (selection) {
+            LutCatalog.AUTO,
+            LutCatalog.DJI_AUTO,
+            "officialDLog",
+            "officialDLog2",
+            "djiDLog",
+            "djiDLog2",
+            "djiDLogM",
+            "djiAction6DLogM",
+            "customDLog",
+            "customDLog2",
+            -> true
+            else -> false
+        }
 }

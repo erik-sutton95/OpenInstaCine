@@ -31,10 +31,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -43,6 +47,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.opencapture.openpocketcine.ChromeShape
+import com.opencapture.monitorui.MonitorMaterial
+import com.opencapture.monitorui.monitorMaterial
 import com.opencapture.openpocketcine.GlassTier
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.LiveType
@@ -140,7 +146,7 @@ fun MediaFavoriteButton(
         OpcIcon(
             icon = OpcIcon.STAR,
             contentDescription = null,
-            tint = if (favorite) LiveDesign.accent else LiveDesign.text,
+            tint = if (favorite) Color(0xFFE9C35A) else LiveDesign.text,
             modifier = Modifier.size(size * 0.50f),
             filled = favorite,
         )
@@ -216,7 +222,7 @@ fun MediaActionPill(
             color = if (active) LiveDesign.accent else LiveDesign.muted,
             fontSize = 9.5.sp,
             fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
         )
         if (badge != null) {
             Text(
@@ -224,7 +230,7 @@ fun MediaActionPill(
                 color = LiveDesign.background,
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
                 modifier =
                     Modifier
                         .clip(MediaCapsuleShape)
@@ -247,7 +253,7 @@ fun MediaFilterChip(
         color = if (active) LiveDesign.accent else LiveDesign.muted,
         fontSize = 10.sp,
         fontWeight = FontWeight.SemiBold,
-        fontFamily = FontFamily.Monospace,
+        fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
         maxLines = 1,
         modifier =
             modifier
@@ -377,8 +383,8 @@ fun MediaPlaybackScrubber(
     val widthPx = remember { mutableFloatStateOf(1f) }
     val dragProgress = remember { mutableFloatStateOf(-1f) }
     val density = LocalDensity.current
-    val trackHeight = with(density) { 3.dp.toPx() }
-    val thumbSize = with(density) { 12.dp.toPx() }
+    val trackHeight = with(density) { 4.dp.toPx() }
+    val thumbSize = with(density) { 13.dp.toPx() }
     val hairline = LiveDesign.hairline
     val accent = LiveDesign.accent
     val display = if (dragProgress.floatValue >= 0f) dragProgress.floatValue else progressSeconds
@@ -393,7 +399,19 @@ fun MediaPlaybackScrubber(
         modifier
             .fillMaxWidth()
             .height(22.dp)
-            .semantics { contentDescription = "Playback position" }
+            .semantics {
+                contentDescription = "Playback position"
+                progressBarRangeInfo = ProgressBarRangeInfo(display.coerceIn(0f, duration), 0f..duration)
+                setProgress { requested ->
+                    val target = requested.coerceIn(0f, duration)
+                    onScrubbingChanged(true)
+                    onProgressChange(target)
+                    onSeek(target)
+                    onScrubbingChanged(false)
+                    dragProgress.floatValue = -1f
+                    true
+                }
+            }
             .pointerInput(duration) {
                 detectTapGestures { offset ->
                     val target = progressAt(offset.x)
@@ -447,7 +465,7 @@ fun MediaPlaybackScrubber(
             cornerRadius = CornerRadius(trackHeight / 2f, trackHeight / 2f),
         )
         val thumbX = (size.width * fraction).coerceIn(0f, size.width)
-        drawCircle(color = accent, radius = thumbSize / 2f, center = Offset(thumbX, cy))
+        drawCircle(color = Color.White, radius = thumbSize / 2f, center = Offset(thumbX, cy))
     }
 }
 
@@ -468,9 +486,22 @@ internal object PlaybackChromeMetrics {
     const val bottomScrimDp = 200f
     const val SAMPLE_MS = 80L
     const val SAMPLE_MAX_SIDE = 480f
+    const val actionChipSize = 44f
+    const val actionChipSpacing = 8f
+    const val actionChipIcon = 18f
+    const val actionChipCorner = 14f
+    const val headerGutterBase = 28f
     val hideChromeIcon = OpcIcon.MAXIMIZE
     val showChromeIcon = OpcIcon.MINIMIZE
     val viewAssistIcon = OpcIcon.MONITOR
+
+    fun headerGutter(safeLeading: Float, safeTrailing: Float, base: Float = headerGutterBase): Float =
+        max(max(0f, safeLeading), max(0f, safeTrailing)) + base
+
+    fun headerTopPadding(safeTop: Float, base: Float = 12f): Float = max(0f, safeTop) + base
+
+    fun portraitActionRowWidth(actionCount: Int = 4): Float =
+        actionChipSize * actionCount + actionChipSpacing * max(0, actionCount - 1)
 
     fun usesDarkenedBars(tier: GlassTier): Boolean = tier == GlassTier.FLAT
 
@@ -487,6 +518,63 @@ internal object PlaybackChromeMetrics {
 }
 
 @Composable
+fun PlaybackActionChip(
+    icon: OpcIcon,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    active: Boolean = false,
+    destructive: Boolean = false,
+    filled: Boolean = false,
+    enabled: Boolean = true,
+    tint: Color = if (!enabled) LiveDesign.faint else if (destructive) LiveDesign.rec else if (active) LiveDesign.accent else LiveDesign.text.copy(alpha = 0.86f),
+) {
+    val shape = RoundedCornerShape(PlaybackChromeMetrics.actionChipCorner.dp)
+    Row(
+        modifier
+            .height(PlaybackChromeMetrics.actionChipSize.dp)
+            .then(if (title == null) Modifier.width(PlaybackChromeMetrics.actionChipSize.dp) else Modifier)
+            .clip(shape)
+            .then(
+                when {
+                    destructive -> Modifier.background(LiveDesign.rec.copy(alpha = 0.12f), shape)
+                    active -> Modifier.background(LiveDesign.accent.copy(alpha = 0.22f), shape)
+                    else -> Modifier
+                },
+            )
+            .mediaGlass(shape)
+            .then(
+                when {
+                    destructive -> Modifier.border(1.dp, LiveDesign.rec.copy(alpha = 0.4f), shape)
+                    active -> Modifier.border(1.dp, LiveDesign.accent.copy(alpha = 0.5f), shape)
+                    else -> Modifier
+                },
+            )
+            .chromeClickable(enabled = enabled, onClick = onClick)
+            .semantics { this.contentDescription = contentDescription }
+            .padding(horizontal = if (title == null) 13.dp else 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        OpcIcon(
+            icon = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(PlaybackChromeMetrics.actionChipIcon.dp),
+            filled = filled,
+        )
+        if (title != null) {
+            Text(
+                title,
+                color = tint,
+                style = LiveType.ui(12f, FontWeight.SemiBold),
+            )
+        }
+    }
+}
+
+@Composable
 fun MediaTransportIconButton(
     icon: OpcIcon,
     contentDescription: String,
@@ -497,21 +585,21 @@ fun MediaTransportIconButton(
     primary: Boolean = false,
     action: Boolean = false,
 ) {
-    val width = if (action) PlaybackChromeMetrics.actionButtonWidth else PlaybackChromeMetrics.transportButtonWidth
-    val height = if (action) PlaybackChromeMetrics.actionButtonHeight else PlaybackChromeMetrics.transportButtonHeight
+    val width = if (primary) 52.dp else if (action) 37.dp else 34.dp
+    val height = width
     val iconSize =
         when {
             primary -> PlaybackChromeMetrics.primaryTransportIconSize
             action -> PlaybackChromeMetrics.actionIconSize
             else -> PlaybackChromeMetrics.transportIconSize
         }
-    val shape = PlaybackChromeMetrics.corner
+    val shape = if (action) RoundedCornerShape(10.dp) else CircleShape
     Box(
         modifier
             .size(width = width, height = height)
             .clip(shape)
-            .then(if (highlighted) Modifier.background(LiveDesign.accentDim, shape) else Modifier)
-            .mediaGlass(shape)
+            .then(if (primary) Modifier.background(Color.White, shape) else Modifier.monitorMaterial(
+                if (highlighted) MonitorMaterial.Compact.copy(tint = LiveDesign.accentDim) else MonitorMaterial.Compact, shape))
             .chromeClickable(enabled = enabled, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
@@ -522,6 +610,7 @@ fun MediaTransportIconButton(
             tint =
                 when {
                     !enabled -> LiveDesign.faint
+                    primary -> LiveDesign.background
                     highlighted -> LiveDesign.accent
                     else -> LiveDesign.text
                 },
@@ -550,7 +639,7 @@ fun MediaTransportSkipButton(
             color = LiveDesign.text,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
         )
     }
 }
@@ -564,7 +653,7 @@ fun MediaBadge(
         text,
         color = LiveDesign.text,
         fontSize = 10.sp,
-        fontFamily = FontFamily.Monospace,
+        fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
         fontWeight = FontWeight.Bold,
         modifier =
             modifier

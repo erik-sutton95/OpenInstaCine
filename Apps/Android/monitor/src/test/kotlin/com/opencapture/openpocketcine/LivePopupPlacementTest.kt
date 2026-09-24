@@ -5,212 +5,58 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class LivePopupPlacementTest {
-    @Test
-    fun topPickerAnchorsUnderChipLikeOpenZCine() {
-        LiveChromeMetrics.scale = 1f
-        assertEquals(340f, LiveChromeMetrics.TOP_PICKER_WIDTH, 0.05f)
-        assertEquals(8f, LiveChromeMetrics.TOP_PICKER_GAP, 0.05f)
-
-        val width = LiveChromeMetrics.TOP_PICKER_WIDTH
-        val viewportW = 874f
-        val viewportH = 402f
-        val cell = ChromeRect(220f, 14f, 90f, 34f)
-        val leading =
-            LiveTopPickerPlacement.leadingX(cellMidX = cell.midX, width = width, viewportWidth = viewportW)
-        val top =
-            LiveTopPickerPlacement.topY(cellMaxY = cell.maxY, panelHeight = 280f, viewportHeight = viewportH)
-        assertEquals(cell.midX - width / 2f, leading, 0.05f)
-        assertEquals(cell.maxY + 8f, top, 0.05f)
-
-        val leftLeading =
-            LiveTopPickerPlacement.leadingX(cellMidX = 40f, width = width, viewportWidth = viewportW)
-        assertEquals(8f, leftLeading, 0.05f)
-        val rightLeading =
-            LiveTopPickerPlacement.leadingX(cellMidX = 850f, width = width, viewportWidth = viewportW)
-        assertEquals(viewportW - width - 8f, rightLeading, 0.05f)
-
-        val islandLeading =
-            LiveTopPickerPlacement.leadingX(
-                cellMidX = 40f,
-                width = width,
-                viewportWidth = viewportW,
-                safeLeading = 59f,
-            )
-        assertEquals(59f + 4f, islandLeading, 0.05f)
-
-        val rec =
-            LivePopupPlacement.topPicker(
-                cell = cell,
-                panelHeight = LiveChromeMetrics.DRUM_PICKER_HEIGHT + LiveChromeMetrics.PICKER_MODE_BAR_HEIGHT,
-                viewportWidth = viewportW,
-                viewportHeight = viewportH,
-                safeLeading = 0f,
-                safeTrailing = 0f,
-                safeTop = 0f,
-                safeBottom = 0f,
-            )
-        val color =
-            LivePopupPlacement.topPicker(
-                cell = cell,
-                panelHeight = LiveChromeMetrics.DRUM_PICKER_HEIGHT,
-                viewportWidth = viewportW,
-                viewportHeight = viewportH,
-                safeLeading = 0f,
-                safeTrailing = 0f,
-                safeTop = 0f,
-                safeBottom = 0f,
-            )
-        assertEquals(cell.maxY + 8f, rec.y, 0.05f)
-        assertEquals(cell.maxY + 8f, color.y, 0.05f)
-        assertTrue(rec.maxHeight > LiveChromeMetrics.DRUM_PICKER_HEIGHT + LiveChromeMetrics.PICKER_MODE_BAR_HEIGHT)
-        assertTrue(LiveSheet.FORMAT.isTopPicker)
-        assertTrue(LiveSheet.COLOR.isTopPicker)
-        assertTrue(!LiveSheet.ISO.isTopPicker)
-        assertEquals(340f, rec.width, 0.05f)
-
-        val withBarFloor =
-            LivePopupPlacement.topPicker(
-                cell = cell,
-                panelHeight = LiveChromeMetrics.DRUM_PICKER_HEIGHT,
-                viewportWidth = viewportW,
-                viewportHeight = viewportH,
-                safeLeading = 0f,
-                safeTrailing = 0f,
-                safeTop = 0f,
-                safeBottom = 0f,
-                floorY = 330f,
-            )
-        assertEquals(cell.maxY + 8f, withBarFloor.y, 0.05f)
-        assertEquals(340f, withBarFloor.width, 0.05f)
+    @Test fun actualPortraitReadoutEdgeAnchorsBothTapAndHoldAcrossFeedLayouts() {
+        for ((width, height) in listOf(400f to 800f, 800f to 1100f)) {
+            for (fill in listOf(false, true)) for (aspect in listOf(16f / 9f, 9f / 16f)) {
+                val zones = portraitZones(width, height, 44f, 34f, clean = false,
+                    fill = fill, assistToolbarHeight = 0f, feedAspectRatio = aspect)
+                val layout = LiveMonitorLayout.fit(width, height, safeLeading = 0f, safeTrailing = 0f,
+                    safeTop = 44f, safeBottom = 34f, showsBottomBars = true)
+                val row = livePortraitReadoutFrame(layout, zones)
+                val full = LivePopupPlacement.topCapturePanel(220f, width, height,
+                    0f, 0f, 44f, 34f, row.maxY, zones.systemBar.minY)
+                val compact = com.opencapture.monitorui.MonitorLayoutPolicy.topPanel(128f, width, height,
+                    0f, 0f, 44f, 34f, row.maxY, zones.systemBar.minY)
+                assertEquals(row.maxY + 6f, full.y, .001f)
+                assertEquals(full.y, compact.y, .001f)
+                assertEquals(full.x, compact.x, .001f)
+                assertEquals(full.width, compact.width, .001f)
+            }
+        }
     }
 
     @Test
-    fun topPickerStaysUnderChipWhenPanelTallerThanWell() {
-        LiveChromeMetrics.scale = 1f
-        val cell = ChromeRect(220f, 14f, 90f, 34f)
-        val box =
-            LivePopupPlacement.topPicker(
-                cell = cell,
-                panelHeight = 400f,
-                viewportWidth = 874f,
-                viewportHeight = 360f,
-                safeLeading = 0f,
-                safeTrailing = 0f,
-                safeTop = 0f,
-                safeBottom = 0f,
-                floorY = 300f,
-            )
-        assertEquals(cell.maxY + 8f, box.y, 0.05f)
-        assertEquals(300f - (cell.maxY + 8f), box.maxHeight, 0.05f)
-        assertTrue(CaptureLists.topPickerDrumHeight(box.maxHeight, hasTabs = true) <= 176f)
-        assertTrue(CaptureLists.topPickerDrumHeight(box.maxHeight, hasTabs = true) >= 104f)
-    }
-
-    @Test
-    fun capturePickerParksAboveBarOnTile() {
-        LiveChromeMetrics.scale = 1f
-        val layout =
-            LiveMonitorLayout.fit(
-                viewportWidth = 874f,
-                viewportHeight = 402f,
-                safeLeading = 59f,
-                safeTrailing = 0f,
-                safeTop = 0f,
-                safeBottom = 0f,
-                showsBottomBars = true,
-            )
-        val tile = ChromeRect(layout.capture.midX - 40f, layout.capture.minY, 80f, 58f)
-        val box =
-            LivePopupPlacement.capturePicker(
-                tile = tile,
-                bar = layout.capture,
-                panelHeight = 280f,
-                viewportWidth = layout.viewportWidth,
-                viewportHeight = layout.viewportHeight,
-                safeLeading = layout.safeLeading,
-                safeTrailing = layout.safeTrailing,
-                safeTop = layout.safeTop,
-                safeBottom = layout.safeBottom,
-            )
-        assertEquals(420f, box.width, 0.05f)
-        assertEquals(layout.capture.minY - 10f, box.y + 280f, 0.05f)
-        assertEquals(tile.midX, box.x + box.width / 2f, 1.0f)
-        assertTrue(box.x >= 59f + 4f)
-        assertTrue(box.y + minOf(280f, box.maxHeight) <= layout.capture.minY - 10f + 0.05f)
-    }
-
-    @Test
-    fun capturePickerHeightFollowsContentNotSharedWell() {
-        LiveChromeMetrics.scale = 1f
-        val layout =
-            LiveMonitorLayout.fit(
-                viewportWidth = 874f,
-                viewportHeight = 402f,
-                safeLeading = 59f,
-                safeTrailing = 0f,
-                safeTop = 0f,
-                safeBottom = 0f,
-                showsBottomBars = true,
-            )
-        val tile = ChromeRect(layout.capture.midX - 40f, layout.capture.minY, 80f, 58f)
-        val shutter =
-            LivePopupPlacement.capturePicker(
-                tile = tile,
-                bar = layout.capture,
-                panelHeight = LiveChromeMetrics.DRUM_PICKER_HEIGHT,
-                viewportWidth = layout.viewportWidth,
-                viewportHeight = layout.viewportHeight,
-                safeLeading = layout.safeLeading,
-                safeTrailing = layout.safeTrailing,
-                safeTop = layout.safeTop,
-                safeBottom = layout.safeBottom,
-            )
-        val withTabs =
-            LivePopupPlacement.capturePicker(
-                tile = tile,
-                bar = layout.capture,
-                panelHeight = LiveChromeMetrics.DRUM_PICKER_HEIGHT + LiveChromeMetrics.PICKER_MODE_BAR_HEIGHT,
-                viewportWidth = layout.viewportWidth,
-                viewportHeight = layout.viewportHeight,
-                safeLeading = layout.safeLeading,
-                safeTrailing = layout.safeTrailing,
-                safeTop = layout.safeTop,
-                safeBottom = layout.safeBottom,
-            )
-        assertEquals(
-            layout.capture.minY - 10f,
-            shutter.y + LiveChromeMetrics.DRUM_PICKER_HEIGHT,
-            0.05f,
+    fun cameraValuesStayOnTheBottomCenterAnchor() {
+        assertTrue(!LiveSheet.FOCUS.isTopAnchored)
+        val panel = LivePopupPlacement.bottomCapturePanel(190f, 874f, 402f, 59f, 0f, 0f, 0f)
+        assertEquals(437f, panel.x + panel.width / 2f, .001f)
+        assertEquals(402f, panel.y + 190f, .001f)
+        assertEquals(480f, panel.width)
+        val withToolbarFloor = LivePopupPlacement.bottomCapturePanel(
+            190f, 874f, 402f, 59f, 0f, 0f, 0f, floorY = 237f,
         )
-        assertEquals(
-            layout.capture.minY - 10f,
-            withTabs.y + LiveChromeMetrics.DRUM_PICKER_HEIGHT + LiveChromeMetrics.PICKER_MODE_BAR_HEIGHT,
-            0.05f,
-        )
-        assertTrue(withTabs.maxHeight > LiveChromeMetrics.DRUM_PICKER_HEIGHT)
-        assertTrue(shutter.y > withTabs.y)
-        assertTrue(kotlin.math.abs(shutter.y - withTabs.y) > 0.05f)
+        assertEquals(panel, withToolbarFloor, "Landscape drawers must not be raised above the assist toolbar")
     }
 
     @Test
-    fun capturePickerDoesNotGoFullBleed() {
-        LiveChromeMetrics.scale = 1f
-        val box =
-            LivePopupPlacement.capturePicker(
-                tile = ChromeRect(0f, 0f, 0f, 0f),
-                bar = ChromeRect(20f, 700f, 800f, 58f),
-                panelHeight = 500f,
-                viewportWidth = 390f,
-                viewportHeight = 844f,
-                safeLeading = 0f,
-                safeTrailing = 0f,
-                safeTop = 59f,
-                safeBottom = 34f,
-            )
-        assertTrue(box.width <= 420f)
-        assertTrue(box.width < 390f)
-        assertTrue(box.y >= 59f + 4f)
-        assertTrue(box.y + minOf(500f, box.maxHeight) <= 700f - 10f + 0.05f)
+    fun recordingCategoriesHangFromTheLandscapeTopEdge() {
+        assertTrue(LiveSheet.FORMAT.isTopAnchored)
+        assertTrue(LiveSheet.COLOR.isTopAnchored)
+        assertTrue(LiveSheet.MODE.isTopAnchored)
+        assertTrue(!LiveSheet.EXPO.isTopAnchored)
+        val panel = LivePopupPlacement.topCapturePanel(190f, 874f, 402f, 59f, 0f, 0f, 0f)
+        assertEquals(437f, panel.x + panel.width / 2f, .001f)
+        assertEquals(0f, panel.y, .001f)
+        assertEquals(480f, panel.width)
+    }
+
+    @Test
+    fun portraitRecordingCategoriesSitBelowTheInfoBar() {
+        val panel = LivePopupPlacement.topCapturePanel(
+            190f, 393f, 852f, 0f, 0f, 59f, 34f, ceilingY = 80f, floorY = 736f)
+        assertEquals(86f, panel.y, .001f)
+        assertEquals(393f / 2f, panel.x + panel.width / 2f, .001f)
+        assertEquals(365f, panel.width)
     }
 
     @Test

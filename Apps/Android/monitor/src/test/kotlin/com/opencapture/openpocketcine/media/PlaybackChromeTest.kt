@@ -206,11 +206,25 @@ class PlaybackChromeTest {
     }
 
     @Test
+    fun headerGuttersMirrorTheLargerCutoutAndActionsFitNarrowPortrait() {
+        assertEquals(87f, PlaybackChromeMetrics.headerGutter(59f, 0f), 0.01f)
+        assertEquals(87f, PlaybackChromeMetrics.headerGutter(0f, 59f), 0.01f)
+        assertEquals(28f, PlaybackChromeMetrics.headerGutter(0f, 0f), 0.01f)
+        assertEquals(71f, PlaybackChromeMetrics.headerTopPadding(59f), 0.01f)
+        assertEquals(44f, PlaybackChromeMetrics.actionChipSize, 0.01f)
+        assertEquals(8f, PlaybackChromeMetrics.actionChipSpacing, 0.01f)
+        val actions = PlaybackChromeMetrics.portraitActionRowWidth(4)
+        val usable = PlaybackChromeMetrics.narrowestScreenWidth - PlaybackChromeMetrics.headerGutter(0f, 0f) * 2
+        assertEquals(200f, actions, 0.01f)
+        assertTrue(actions <= usable, "actions=$actions usable=$usable")
+    }
+
+    @Test
     fun flatPlaybackUsesDarkenedBarsAndFullDoesNot() {
         assertTrue(PlaybackChromeMetrics.usesDarkenedBars(GlassTier.FLAT))
         assertFalse(PlaybackChromeMetrics.usesDarkenedBars(GlassTier.FULL))
         assertEquals(0.72f, LiveDesign.playbackScrim.alpha, 0.01f)
-        assertTrue(LiveDesign.playbackScrim.alpha > LiveDesign.chromePlate.alpha)
+        assertTrue(LiveDesign.playbackScrim.alpha < LiveDesign.chromePlate.alpha)
         assertEquals(120f, PlaybackChromeMetrics.topScrimDp, 0.01f)
         assertEquals(200f, PlaybackChromeMetrics.bottomScrimDp, 0.01f)
     }
@@ -254,9 +268,9 @@ class PlaybackChromeTest {
 
     @Test
     fun playbackPanelIsDenseEnoughToRead() {
-        assertEquals(0.82f, LiveDesign.playbackPanel.alpha, 0.01f)
+        assertEquals(1f, LiveDesign.playbackPanel.alpha, 0.01f)
         assertTrue(LiveDesign.playbackPanel.alpha > LiveDesign.scopePlate.alpha)
-        assertTrue(LiveDesign.playbackPanel.alpha < LiveDesign.sheetPlate.alpha)
+        assertEquals(LiveDesign.playbackPanel.alpha, LiveDesign.sheetPlate.alpha)
     }
 
     @Test

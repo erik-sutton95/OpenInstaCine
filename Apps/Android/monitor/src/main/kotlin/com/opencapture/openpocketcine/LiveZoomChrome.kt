@@ -3,6 +3,8 @@ package com.opencapture.openpocketcine
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,12 +29,15 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.opencapture.monitorui.MonitorPalette
+import com.opencapture.monitorui.MonitorZoomCaption
 import com.opencapture.openpocketcine.session.CamFov
 import com.opencapture.openpocketcine.session.CameraStatus
 import com.opencapture.openpocketcine.session.LiveFeedFocusGesture
@@ -86,27 +92,55 @@ fun LiveZoomChip(
     pinching: Boolean = false,
     dimmed: Boolean = false,
     onCycle: () -> Unit,
+    maximum: Double = 1.0,
+    onDial: ((Double) -> Unit)? = null,
+    onDialEnd: () -> Unit = {},
+    opticalStops: List<Double> = listOf(1.0),
+    onDigitalCycle: (() -> Unit)? = null,
+    dialFactor: Double = factor,
 ) {
+    val haptics = LocalOperatorHaptics.current
+    val interaction = remember { MutableInteractionSource() }
+    var dialOpen by remember { mutableStateOf(false) }
+    var dialBase by remember { mutableStateOf(factor) }
+    if (dialOpen && !locked && onDial != null) {
+        val end by rememberUpdatedState(onDialEnd)
+        DisposableEffect(Unit) { onDispose { end() } }
+        com.opencapture.openpocketcine.monitor.MonitorZoomDial(dialBase, maximum,
+            onChange = { onDial(it / dialBase.coerceAtLeast(1.0)) },
+            onDismiss = { dialOpen = false }, opticalStops = opticalStops)
+    }
+    val orientation = LocalConfiguration.current.orientation
+    LaunchedEffect(locked, orientation) { dialOpen = false }
     var held by remember { mutableStateOf(factor) }
     LaunchedEffect(factor, pinching) {
         if (LiveZoomLabelHold.shouldReplace(held, factor, pinching)) {
             held = factor
         }
     }
+    val digital = MonitorZoomCaption.isDigital(held, opticalStops)
     Box(
         modifier
-            .size(LiveDesign.ZOOM_CHIP_DP.dp)
-            .monitorGlass(CircleShape)
-            .chromeClickable(enabled = !locked, onClick = onCycle)
+            .fillMaxSize()
+            .combinedClickable(enabled = !locked, interactionSource = interaction, indication = null,
+                onClick = { haptics.selection(); onCycle() },
+                onDoubleClick = onDigitalCycle?.let { action -> { haptics.selection(); action() } },
+                onLongClick = if (!dimmed && onDial != null && maximum > 1.0) {
+                    { haptics.longPress(); dialBase = dialFactor; dialOpen = true }
+                } else null)
             .semantics {
-                contentDescription = "Zoom ${LiveZoom.label(held)}. Camera zoom control is not connected yet."
+                val crop = if (digital) ", digital crop" else ""
+                val extra = if (onDigitalCycle != null) "; double tap for digital zoom" else ""
+                contentDescription =
+                    "Zoom ${LiveZoom.label(held)}$crop. Tap to cycle; hold to adjust$extra"
             },
         contentAlignment = Alignment.Center,
     ) {
+        val ink = if (digital) MonitorPalette.digitalCrop else LiveDesign.text
         Text(
             LiveZoom.label(held),
-            color = LiveDesign.text.copy(alpha = if (locked || dimmed) 0.4f else 1f),
-            style = LiveType.ui(13f, FontWeight.Bold),
+            color = ink.copy(alpha = if (locked || dimmed) 0.4f else 1f),
+            style = LiveType.ui(18f, FontWeight.Medium),
             maxLines = 1,
         )
     }

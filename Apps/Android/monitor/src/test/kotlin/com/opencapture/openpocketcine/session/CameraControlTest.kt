@@ -10,6 +10,49 @@ import kotlin.test.assertTrue
 
 class CameraControlTest {
     @Test
+    fun emptyCapabilityPortraitKeepsReportedResolution() {
+        val current = VideoFormat(VideoResolution.P3K_9X16, VideoFrameRate.FPS25)
+        val formats = VideoFormat.pickerFormats(emptyList(), CameraModel("Osmo Pocket 3"), -1)
+        val aspects = VideoFormat.aspects(formats, current.resolution.aspect)
+        val resolutions = VideoFormat.resolutions(
+            formats, current.resolution,
+            if (aspects.size > 1) VideoAspect.NINE_SIXTEEN else null,
+        )
+        assertEquals(listOf(VideoResolution.P3K_9X16), resolutions)
+        assertEquals(listOf("3K"), resolutions.map { it.tabTitle })
+    }
+
+    @Test
+    fun emptyCapabilityPreservesReportedSizesWithoutInventingAnAspect() {
+        for (current in listOf(
+            VideoResolution.P3K_1X1, VideoResolution.P2_7K,
+            VideoResolution.P4K_4X3, VideoResolution(0xFE),
+        )) {
+            assertEquals(listOf(current), VideoFormat.resolutions(emptyList(), current))
+        }
+        assertEquals(listOf(VideoResolution.P1080, VideoResolution.P4K), VideoFormat.resolutions(emptyList(), null))
+        assertTrue(VideoFormat.resolutions(emptyList(), VideoResolution.P3K_9X16, VideoAspect.SIXTEEN_NINE).isEmpty())
+    }
+
+    @Test
+    fun pocket3PickerFallbackIncludesNormalVideoSizesOnly() {
+        val model = CameraModel(name = "Osmo Pocket 3")
+        val formats = VideoFormat.pickerFormats(emptyList(), model, CameraCommands.SHOOT_VIDEO)
+        assertTrue(VideoFormat.resolutions(formats, VideoResolution.P4K, VideoAspect.SIXTEEN_NINE).contains(VideoResolution.P2_7K))
+        assertTrue(VideoFormat.resolutions(formats, null, VideoAspect.NINE_SIXTEEN).contains(VideoResolution.P3K_9X16))
+        assertTrue(VideoFormat.resolutions(formats, null, VideoAspect.ONE_ONE).contains(VideoResolution.P3K_1X1))
+        assertTrue(!VideoFormat.aspects(formats, null).contains(VideoAspect.FOUR_THREE))
+        val reported = listOf(VideoFormat(VideoResolution.P4K, VideoFrameRate.FPS25))
+        assertEquals(reported, VideoFormat.pickerFormats(reported, model, 1))
+        for (mode in listOf(-1, 2, 26)) {
+            assertTrue(VideoFormat.pickerFormats(emptyList(), model, mode).isEmpty())
+        }
+        for (name in listOf("Osmo Pocket 4 Pro", "Osmo Nano", "Unknown")) {
+            assertTrue(VideoFormat.pickerFormats(emptyList(), CameraModel(name), 1).isEmpty())
+        }
+    }
+
+    @Test
     fun shutterIsU16DenomOr8000() {
         val p = CameraCommands.shutter(1600)
         assertEquals(7, p.size)
@@ -409,6 +452,28 @@ class CameraControlTest {
     }
 
     @Test
+    fun expoPinHoldsOptimisticModeUntilSubscribeMatches() {
+        val pin =
+            ExpoPin(expoMode = CameraCommands.EXPO_AUTO, deadlineElapsedRealtime = 2_000L)
+        val current = CameraStatus(expoMode = CameraCommands.EXPO_AUTO)
+        val stale = CameraStatus(expoMode = CameraCommands.EXPO_MANUAL)
+        val held = pin.absorb(stale, current, nowElapsedRealtime = 500L)
+        assertEquals(CameraCommands.EXPO_AUTO, held.first.expoMode)
+        assertEquals(pin.expoMode, held.second?.expoMode)
+        val matched =
+            pin.absorb(
+                CameraStatus(expoMode = CameraCommands.EXPO_AUTO),
+                current,
+                nowElapsedRealtime = 500L,
+            )
+        assertNull(matched.second)
+        assertEquals(CameraCommands.EXPO_AUTO, matched.first.expoMode)
+        val expired = pin.absorb(stale, current, nowElapsedRealtime = 2_000L)
+        assertNull(expired.second)
+        assertEquals(CameraCommands.EXPO_MANUAL, expired.first.expoMode)
+    }
+
+    @Test
     fun colorPinHoldsOptimisticUntilSubscribeMatches() {
         val pin = ColorPin(CameraCommands.COLOR_DLOG, deadlineElapsedRealtime = 2_000L)
         val stale = CameraStatus(colorMode = CameraCommands.COLOR_DLOG2)
@@ -426,6 +491,59 @@ class CameraControlTest {
         val expired = ColorPin.absorbStale(stale, pin, nowElapsedRealtime = 2_000L)
         assertNull(expired.second)
         assertEquals(CameraCommands.COLOR_DLOG2, expired.first.colorMode)
+        val merged =
+            ColorPin.absorbStale(
+                CameraStatus(colorMode = CameraCommands.COLOR_DLOG),
+                pin,
+                nowElapsedRealtime = 500L,
+                reported = false,
+            )
+        assertEquals(pin, merged.second)
+        assertEquals(CameraCommands.COLOR_DLOG, merged.first.colorMode)
+    }
+
+    @Test
+    fun shootingModePinIgnoresUnrelatedFramesAndStaleEcho() {
+        val pin =
+            ShootingModePin(
+                expected = CameraCommands.SHOOT_SLOWMO,
+                deadlineElapsedRealtime = 2_000L,
+            )
+        val merged =
+            ShootingModePin.absorbStale(
+                CameraStatus(shootingMode = CameraCommands.SHOOT_SLOWMO),
+                pin,
+                nowElapsedRealtime = 500L,
+                reported = false,
+            )
+        assertEquals(pin, merged.second)
+        val stale =
+            ShootingModePin.absorbStale(
+                CameraStatus(shootingMode = CameraCommands.SHOOT_VIDEO),
+                pin,
+                nowElapsedRealtime = 500L,
+                reported = true,
+            )
+        assertEquals(CameraCommands.SHOOT_SLOWMO, stale.first.shootingMode)
+        assertEquals(pin, stale.second)
+        val matched =
+            ShootingModePin.absorbStale(
+                CameraStatus(shootingMode = CameraCommands.SHOOT_SLOWMO),
+                pin,
+                nowElapsedRealtime = 500L,
+                reported = true,
+            )
+        assertNull(matched.second)
+        assertEquals(CameraCommands.SHOOT_SLOWMO, matched.first.shootingMode)
+        val expired =
+            ShootingModePin.absorbStale(
+                CameraStatus(shootingMode = CameraCommands.SHOOT_VIDEO),
+                pin,
+                nowElapsedRealtime = 2_000L,
+                reported = true,
+            )
+        assertNull(expired.second)
+        assertEquals(CameraCommands.SHOOT_VIDEO, expired.first.shootingMode)
     }
 
     @Test
@@ -1147,6 +1265,7 @@ class CameraControlTest {
         assertTrue(!CameraCommands.shouldHoldGimbalWatchdog(null))
         assertTrue(CameraCommands.shouldHoldGimbalWatchdog(0.1, 4.2))
         assertTrue(!CameraCommands.shouldHoldGimbalWatchdog(0.1, 5.1))
+        assertTrue(CameraCommands.shouldHoldGimbalWatchdog(8.0, 8.0, stickHeld = true))
     }
 
     @Test

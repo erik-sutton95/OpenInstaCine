@@ -42,6 +42,21 @@ internal class FeedEffectsRenderPlan(
     val falseColorOn: Boolean
         get() = falseColorPaint != null && falseColorWeight != null
 
+    /** Same look; the present tap also feeds this inspector preview owner. */
+    fun withPreviewOwner(owner: Any?): FeedEffectsRenderPlan = FeedEffectsRenderPlan(
+        lutCube, falseColorPaint, falseColorWeight, peaking, peakingColor, peakingRatioThreshold,
+        peakingNoiseGate, zebraHighlightOn, zebraHighlightCode, zebraHighlightColor, zebraMidtoneOn,
+        zebraMidtoneCode, zebraMidtoneHalf, zebraMidtoneColor, splitComparison, splitVertical,
+        scopeTap.copy(previewOwner = owner),
+    )
+
+    /** Same shader set and cube textures; only uniforms or scope policy differ. */
+    fun sharesGlResources(other: FeedEffectsRenderPlan): Boolean =
+        lutCube === other.lutCube &&
+            falseColorPaint === other.falseColorPaint &&
+            falseColorWeight === other.falseColorWeight &&
+            peaking == other.peaking
+
     /** LUT / PEAK / FALSE / ZEBRA — grade the player, not a CPU overlay. */
     val hasPlaybackLook: Boolean
         get() =
@@ -63,11 +78,14 @@ internal class FeedEffectsRenderPlan(
             h = 31 * h + System.identityHashCode(falseColorWeight)
             h = 31 * h + if (peaking) 1 else 0
             h = 31 * h + peakingColor.contentHashCode()
+            h = 31 * h + peakingRatioThreshold.hashCode()
+            h = 31 * h + peakingNoiseGate.hashCode()
             h = 31 * h + if (zebraHighlightOn) 1 else 0
             h = 31 * h + zebraHighlightCode.hashCode()
             h = 31 * h + zebraHighlightColor.contentHashCode()
             h = 31 * h + if (zebraMidtoneOn) 1 else 0
             h = 31 * h + zebraMidtoneCode.hashCode()
+            h = 31 * h + zebraMidtoneHalf.hashCode()
             h = 31 * h + zebraMidtoneColor.contentHashCode()
             h = 31 * h + if (splitComparison) 1 else 0
             h = 31 * h + if (splitVertical) 1 else 0
@@ -107,9 +125,13 @@ internal object FeedEffectsRenderPlanFactory {
         family: String,
         cameraName: String?,
         playback: Boolean = false,
+        previewTool: LiveAssistTool? = null,
+        isPhoto: Boolean = false,
     ): FeedEffectsRenderPlan {
         val shown: (LiveAssistTool) -> Boolean =
-            if (playback) {
+            if (previewTool != null) {
+                { it == previewTool }
+            } else if (playback) {
                 { assist.isPlaybackVisible(it) }
             } else {
                 { assist.isVisible(it) }
@@ -118,11 +140,18 @@ internal object FeedEffectsRenderPlanFactory {
         val peaking = shown(LiveAssistTool.PEAK)
         val falseColor = shown(LiveAssistTool.FALSE)
         val zebra = shown(LiveAssistTool.ZEBRA)
-        val waveform = shown(LiveAssistTool.WAVE)
-        val parade = shown(LiveAssistTool.PARADE)
-        val histogram = shown(LiveAssistTool.HISTO)
-        val vectorscope = shown(LiveAssistTool.VECTOR)
-        val trafficLights = shown(LiveAssistTool.LIGHTS)
+        val inspectorDemand = assist.inspectorScopeDemand?.takeIf { it.playback == playback && previewTool == null }
+        val inspector = inspectorDemand?.tool
+        val previewOwner = inspectorDemand?.takeIf {
+            it.tool in listOf(LiveAssistTool.LUT, LiveAssistTool.PEAK, LiveAssistTool.FALSE, LiveAssistTool.ZEBRA, LiveAssistTool.DESQ)
+        }?.owner
+        val inspectorOnly = inspector != null && listOf(LiveAssistTool.WAVE, LiveAssistTool.PARADE,
+            LiveAssistTool.HISTO, LiveAssistTool.VECTOR, LiveAssistTool.LIGHTS, LiveAssistTool.ND).none(shown)
+        val waveform = shown(LiveAssistTool.WAVE) || inspector == LiveAssistTool.WAVE
+        val parade = shown(LiveAssistTool.PARADE) || inspector == LiveAssistTool.PARADE
+        val histogram = shown(LiveAssistTool.HISTO) || inspector == LiveAssistTool.HISTO
+        val vectorscope = shown(LiveAssistTool.VECTOR) || inspector == LiveAssistTool.VECTOR
+        val trafficLights = shown(LiveAssistTool.LIGHTS) || inspector == LiveAssistTool.LIGHTS
         val look =
             LutLookResolver.resolve(
                 selection = lutSelection,
@@ -130,6 +159,7 @@ internal object FeedEffectsRenderPlanFactory {
                 colorMode = colorMode,
                 family = family,
                 cameraName = cameraName,
+                isPhoto = isPhoto,
             )
         val lutCube = lutCube(context, look, assist.lutExposureStops, colorMode)
         // Same gate as iOS `FeedPresentPolicy.appliesSplitComparison` (#218).
@@ -153,13 +183,13 @@ internal object FeedEffectsRenderPlanFactory {
         val gateScale = scalars?.getOrNull(3) ?: 1f
         val paint =
             if (falseColor) {
-                falseColorCube(paint = true, assist.falseColorScale, colorMode, iso)
+                falseColorCube(paint = true, assist.falseColorScale, colorMode, iso, assist.falseColorRec709)
             } else {
                 null
             }
         val weight =
             if (falseColor) {
-                falseColorCube(paint = false, assist.falseColorScale, colorMode, iso)
+                falseColorCube(paint = false, assist.falseColorScale, colorMode, iso, assist.falseColorRec709)
             } else {
                 null
             }
@@ -188,14 +218,19 @@ internal object FeedEffectsRenderPlanFactory {
             splitVertical = assist.splitVertical,
             scopeTap =
                 ScopeTapPolicy(
+                    inspectorOnly = inspectorOnly,
+                    previewOwner = previewOwner,
+                    playback = playback,
                     waveform = waveform,
                     parade = parade,
                     histogram = histogram,
                     vectorscope = vectorscope,
                     trafficLights = trafficLights,
+                    ndMeter = shown(LiveAssistTool.ND),
                     trafficThreshold = assist.crushClipCompensation.pixelFractionThreshold,
                     colorMode = colorMode,
                     iso = if (iso in 50..102_400) iso else ScopeExposureCeiling.REFERENCE_EI,
+                    allowsTransferInference = playback || !isPhoto,
                     vectorLut =
                         if (vectorscope) {
                             lutCube
@@ -211,6 +246,7 @@ internal object FeedEffectsRenderPlanFactory {
                                                 colorMode = colorMode,
                                                 family = family,
                                                 cameraName = cameraName,
+                                                isPhoto = isPhoto,
                                             ),
                                             assist.lutExposureStops,
                                             colorMode,
@@ -222,6 +258,46 @@ internal object FeedEffectsRenderPlanFactory {
                         },
                 ),
         )
+    }
+
+    /**
+     * Multiview tile: the camera-specific DJI Auto conversion only, no assists.
+     * iOS `MultiviewSession.Tile.updateLUT`. Returns the plan and its caption.
+     */
+    fun multiviewAutoLut(
+        context: Context,
+        enabled: Boolean,
+        colorMode: Int,
+        family: String,
+        cameraName: String?,
+    ): Pair<FeedEffectsRenderPlan, String> {
+        val source = LutLookResolver.resolve(LutCatalog.AUTO, true, colorMode, family, cameraName)
+        if (source == LutLookSource.Off) {
+            val caption = if (colorMode < 0) "Waiting for camera color" else "Auto · no conversion needed"
+            return FeedEffectsRenderPlan.IDENTITY to caption
+        }
+        val caption = "Auto · " + LutLookResolver.sourceTitle(source)
+        if (!enabled) return FeedEffectsRenderPlan.IDENTITY to caption
+        val cube = lutCube(context, source, 0.0, colorMode) ?: return FeedEffectsRenderPlan.IDENTITY to "LUT unavailable"
+        val identity = FeedEffectsRenderPlan.IDENTITY
+        return FeedEffectsRenderPlan(
+            lutCube = cube,
+            falseColorPaint = null,
+            falseColorWeight = null,
+            peaking = false,
+            peakingColor = identity.peakingColor,
+            peakingRatioThreshold = identity.peakingRatioThreshold,
+            peakingNoiseGate = identity.peakingNoiseGate,
+            zebraHighlightOn = false,
+            zebraHighlightCode = identity.zebraHighlightCode,
+            zebraHighlightColor = identity.zebraHighlightColor,
+            zebraMidtoneOn = false,
+            zebraMidtoneCode = identity.zebraMidtoneCode,
+            zebraMidtoneHalf = identity.zebraMidtoneHalf,
+            zebraMidtoneColor = identity.zebraMidtoneColor,
+            splitComparison = false,
+            splitVertical = identity.splitVertical,
+        ) to caption
     }
 
     private fun lutCube(
@@ -270,13 +346,16 @@ internal object FeedEffectsRenderPlanFactory {
         scale: FalseColorScale,
         colorMode: Int,
         iso: Int,
+        rec709: Boolean,
     ): FeedEffectsCube? {
         if (!SwiftCore.isAvailable) return null
+        // 4…7 = each scale read through the official Rec.709 look (Swift `FeedEffectsWire`).
         val ordinal =
             when (scale) {
-                FalseColorScale.STOPS -> 0
-                FalseColorScale.IRE -> 1
-                FalseColorScale.LIMITS -> 2
+                FalseColorScale.STOPS -> if (rec709) 4 else 0
+                FalseColorScale.IRE -> if (rec709) 5 else 1
+                FalseColorScale.LIMITS -> if (rec709) 6 else 2
+                FalseColorScale.SCENE_STOPS -> if (rec709) 7 else 3
             }
         val kind = if (paint) "paint" else "weight"
         return PackedCubeCache.value("$kind:$ordinal:$colorMode:$iso") {

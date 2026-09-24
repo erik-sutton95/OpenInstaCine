@@ -94,7 +94,11 @@ data class VideoFrameRate(val rawValue: Int) {
         val FPS240 = VideoFrameRate(0x08)
         val FPS100 = VideoFrameRate(0x0A)
         val FPS96 = VideoFrameRate(0x0B)
+        val FPS200 = VideoFrameRate(0x13)
         val FPS15 = VideoFrameRate(0x1D)
+
+        private val catalog =
+            listOf(FPS24, FPS25, FPS30, FPS48, FPS50, FPS60, FPS120, FPS240, FPS100, FPS96, FPS200, FPS15)
 
         fun fromRaw(raw: Int): VideoFrameRate? =
             if (raw in 0..255) VideoFrameRate(raw) else null
@@ -111,17 +115,15 @@ data class VideoFrameRate(val rawValue: Int) {
                 8 -> 240
                 10 -> 100
                 11 -> 96
+                19 -> 200
                 29 -> 15
                 else -> null
             }
 
-        fun fromFps(fps: Int): VideoFrameRate? =
-            listOf(FPS24, FPS25, FPS30, FPS48, FPS50, FPS60, FPS120, FPS240, FPS100, FPS96, FPS15)
-                .firstOrNull { it.fps == fps }
+        fun fromFps(fps: Int): VideoFrameRate? = catalog.firstOrNull { it.fps == fps }
 
         fun fromDrumLabel(label: String): VideoFrameRate? =
-            listOf(FPS24, FPS25, FPS30, FPS48, FPS50, FPS60, FPS120, FPS240, FPS100, FPS96, FPS15)
-                .firstOrNull { it.drumLabel == label }
+            catalog.firstOrNull { it.drumLabel == label }
 
         val drumLabels: List<String> get() = labeledVideo.map { it.drumLabel }
 
@@ -130,10 +132,18 @@ data class VideoFrameRate(val rawValue: Int) {
     }
 }
 
-/** One 5-byte SET: `[res][fps_idx] 00 00 00`. No GET — `cam_video_param_v2` `@0–1`. */
+/** One 5-byte SET: `[res][fps_idx]` plus Video `00 00 00` or a SlowMo trailer. No GET — `cam_video_param_v2` `@0–1`. */
 data class VideoFormat(val resolution: VideoResolution, val frameRate: VideoFrameRate) {
     val setPayload: ByteArray
-        get() = CameraCommands.resolutionFps(resolution.rawValue, frameRate.rawValue)
+        get() = payload(CameraCommands.SHOOT_VIDEO)
+
+    fun payload(shootingMode: Int): ByteArray =
+        CameraCommands.resolutionFps(resolution.rawValue, frameRate.rawValue, shootingMode)
+
+    fun commandExtra(shootingMode: Int, cameraName: String? = null): String =
+        CameraCommands.formatCommandExtra(
+            resolution.rawValue, frameRate.rawValue, shootingMode, cameraName,
+        )
 
     /** Top-deck chip, OpenZCine `resolutionFrameRate` shape (`4K · 25p`). */
     val chipLabel: String get() = "${resolution.label} · ${frameRate.drumLabel}"
@@ -204,13 +214,68 @@ data class VideoFormat(val resolution: VideoResolution, val frameRate: VideoFram
             return VideoFormat(res, rate)
         }
 
-        /** iOS `CamCapVideoFormat.resolutions`. Empty camcap → 1080 / 4K tabs. */
+        /**
+         * Picker list for the current shooting mode. A reported camcap table always
+         * wins, including SlowMo 4K240 when the body actually supplied it.
+         * Pocket 3 empty-table fallbacks are only the documented Video, SlowMo, and
+         * Low-Light pairs. TimeLapse / Hyperlapse stay empty until camcap arrives —
+         * Pocket 3 format menus there are UI-only, not accepted `0x02/0x18` writes.
+         */
+        fun pickerFormats(available: List<VideoFormat>, model: CameraModel?, shootingMode: Int): List<VideoFormat> {
+            if (available.isNotEmpty()) return available
+            if (model == null || !CameraModel.looksLikePocket3(model.name)) return available
+            return when (shootingMode) {
+                CameraCommands.SHOOT_VIDEO -> pocket3VideoFormats
+                CameraCommands.SHOOT_SLOWMO -> pocket3SlowMoFormats
+                CameraCommands.SHOOT_SUPER_NIGHT -> pocket3LowLightFormats
+                else -> available
+            }
+        }
+
+        /** Operator FORMAT SET. Empty picker tables are read-only, including Video. */
+        fun allowsOperatorSet(
+            format: VideoFormat,
+            available: List<VideoFormat>,
+            model: CameraModel?,
+            shootingMode: Int,
+        ): Boolean {
+            val legal = pickerFormats(available, model, shootingMode)
+            return legal.isNotEmpty() && format in legal
+        }
+
+        private val pocket3VideoFormats = listOf(
+            VideoResolution.P1080, VideoResolution.P2_7K, VideoResolution.P4K,
+            VideoResolution.P1080_1X1, VideoResolution.P2160_1X1, VideoResolution.P3K_1X1,
+            VideoResolution.P1080_9X16, VideoResolution.P2_7K_9X16, VideoResolution.P3K_9X16,
+        ).flatMap { res -> VideoFrameRate.labeledVideo.map { rate -> VideoFormat(res, rate) } }
+
+        /** Documented Pocket 3 SlowMo menu. 4K240 is not in this fallback. */
+        private val pocket3SlowMoFormats = listOf(
+            VideoFormat(VideoResolution.P4K, VideoFrameRate.FPS100),
+            VideoFormat(VideoResolution.P4K, VideoFrameRate.FPS120),
+            VideoFormat(VideoResolution.P2_7K, VideoFrameRate.FPS120),
+            VideoFormat(VideoResolution.P1080, VideoFrameRate.FPS120),
+            VideoFormat(VideoResolution.P1080, VideoFrameRate.FPS240),
+        )
+
+        /** Pocket 3 Low-Light (`0x28`): 1080/4K at 24/25/30. No 2.7K or square. */
+        private val pocket3LowLightFormats =
+            listOf(VideoResolution.P1080, VideoResolution.P4K).flatMap { res ->
+                listOf(VideoFrameRate.FPS24, VideoFrameRate.FPS25, VideoFrameRate.FPS30)
+                    .map { rate -> VideoFormat(res, rate) }
+            }
+
+        /** iOS `CamCapVideoFormat.resolutions`. Preserve a reported size when camcap is empty. */
         fun resolutions(
             available: List<VideoFormat>,
             current: VideoResolution?,
             aspect: VideoAspect? = null,
         ): List<VideoResolution> {
-            if (available.isEmpty()) return VideoResolution.labeledVideo
+            if (available.isEmpty()) {
+                val fallback = VideoResolution.labeledVideo
+                val resolutions = if (current != null && current !in fallback) listOf(current) else fallback
+                return resolutions.filter { aspect == null || it.aspect == aspect }
+            }
             val out = ArrayList<VideoResolution>()
             val seen = HashSet<VideoResolution>()
             for (format in available) {
@@ -237,18 +302,23 @@ data class VideoFormat(val resolution: VideoResolution, val frameRate: VideoFram
             return out
         }
 
-        /** iOS `CamCapVideoFormat.frameRates`. Empty Video camcap → 24–60. */
+        /**
+         * iOS `CamCapVideoFormat.frameRates`. Empty Video / unknown camcap → 24–60.
+         * Other modes keep the live rate rather than leftover Video 24–60.
+         */
         fun frameRates(
             available: List<VideoFormat>,
             resolution: VideoResolution,
             current: VideoFrameRate?,
+            shootingMode: Int = CameraCommands.SHOOT_VIDEO,
         ): List<VideoFrameRate> {
             val rates = available.filter { it.resolution == resolution }.map { it.frameRate }
-            if (rates.isEmpty()) {
-                if (current != null && current !in VideoFrameRate.labeledVideo) return listOf(current)
-                return VideoFrameRate.labeledVideo
+            if (rates.isNotEmpty()) return rates
+            if (shootingMode != CameraCommands.SHOOT_VIDEO && shootingMode >= 0) {
+                return listOfNotNull(current)
             }
-            return rates
+            if (current != null && current !in VideoFrameRate.labeledVideo) return listOf(current)
+            return VideoFrameRate.labeledVideo
         }
 
         /** Tab change: skip the SET when res+fps already match. */
@@ -268,7 +338,9 @@ data class VideoFormat(val resolution: VideoResolution, val frameRate: VideoFram
             val res =
                 resolutions(status.availableVideoFormats, current.resolution)
                     .getOrNull(tab) ?: current.resolution
-            val rates = frameRates(status.availableVideoFormats, res, current.frameRate)
+            val rates = frameRates(
+                status.availableVideoFormats, res, current.frameRate, status.shootingMode,
+            )
             if (rate !in rates) return null
             return VideoFormat(res, rate)
         }
@@ -277,8 +349,8 @@ data class VideoFormat(val resolution: VideoResolution, val frameRate: VideoFram
          * Keep the optimistic FORMAT HUD until `cam_video_param_v2` reports the SET.
          *
          * Merged status from an unrelated push still carries the SET pair — that
-         * is not confirmation. [formatReported] is true only when this apply
-         * changed res / fps index / fps.
+         * is not confirmation. [formatReported] is true only when the current
+         * frame actually reports a resolution and frame-rate pair.
          */
         fun absorbStale(
             incoming: CameraStatus,
@@ -306,18 +378,174 @@ data class VideoFormat(val resolution: VideoResolution, val frameRate: VideoFram
 data class FormatPin(val expected: VideoFormat, val deadlineElapsedRealtime: Long)
 
 /** iOS `CameraSession.colorPin` — hold the SET color until subscribe matches. */
+/** iOS `CameraSession.ExpoPin` — hold SET ISO / shutter / EV / mode until subscribe matches. */
+data class ExpoPin(
+    val isoIndex: Int? = null,
+    val shutterDenom: Int? = null,
+    val evComp: Int? = null,
+    val expoMode: Int? = null,
+    val deadlineElapsedRealtime: Long,
+) {
+    fun isEmpty(): Boolean =
+        isoIndex == null && shutterDenom == null && evComp == null && expoMode == null
+
+    fun absorb(
+        incoming: CameraStatus,
+        current: CameraStatus,
+        nowElapsedRealtime: Long,
+        reported: Boolean = true,
+        reportedValues: CameraStatus = incoming,
+    ): Pair<CameraStatus, ExpoPin?> {
+        if (nowElapsedRealtime >= deadlineElapsedRealtime) return incoming to null
+        if (!reported) return incoming to this
+        var next = incoming
+        var isoIndex = this.isoIndex
+        var shutterDenom = this.shutterDenom
+        var evComp = this.evComp
+        var expoMode = this.expoMode
+        if (isoIndex != null) {
+            if (reportedValues.isoIndex == isoIndex) isoIndex = null
+            else next = next.copy(isoIndex = current.isoIndex, iso = current.iso)
+        }
+        if (shutterDenom != null) {
+            if (reportedValues.shutterDenom == shutterDenom) shutterDenom = null
+            else if (incoming.shutterDenom > 0) next = next.copy(shutterDenom = current.shutterDenom)
+        }
+        if (evComp != null) {
+            if (reportedValues.evComp == evComp) evComp = null
+            else if (incoming.evComp >= 0) next = next.copy(evComp = current.evComp)
+        }
+        if (expoMode != null) {
+            if (reportedValues.expoMode == expoMode) expoMode = null
+            else if (incoming.expoMode >= 0) next = next.copy(expoMode = current.expoMode)
+        }
+        val remaining =
+            ExpoPin(isoIndex, shutterDenom, evComp, expoMode, deadlineElapsedRealtime)
+        return next to if (remaining.isEmpty()) null else remaining
+    }
+}
+
 data class ColorPin(val expected: Int, val deadlineElapsedRealtime: Long) {
     companion object {
         fun absorbStale(
             incoming: CameraStatus,
             pin: ColorPin?,
             nowElapsedRealtime: Long,
+            reported: Boolean = true,
+        reportedValues: CameraStatus = incoming,
         ): Pair<CameraStatus, ColorPin?> {
             if (pin == null) return incoming to null
             if (nowElapsedRealtime >= pin.deadlineElapsedRealtime) return incoming to null
-            if (incoming.colorMode == pin.expected) return incoming to null
+            if (!reported) return incoming to pin
+            if (reportedValues.colorMode == pin.expected) return incoming to null
             return incoming.copy(colorMode = pin.expected) to pin
         }
+    }
+}
+
+/** Hold SET shooting mode until `0x02/0x80` `@57` matches. Unrelated frames cannot confirm. */
+data class ShootingModePin(val expected: Int, val deadlineElapsedRealtime: Long) {
+    companion object {
+        fun absorbStale(
+            incoming: CameraStatus,
+            pin: ShootingModePin?,
+            nowElapsedRealtime: Long,
+            reported: Boolean,
+        ): Pair<CameraStatus, ShootingModePin?> {
+            if (pin == null) return incoming to null
+            if (nowElapsedRealtime >= pin.deadlineElapsedRealtime) return incoming to null
+            if (!reported) return incoming to pin
+            if (incoming.shootingMode == pin.expected) return incoming to null
+            return incoming.copy(shootingMode = pin.expected) to pin
+        }
+    }
+}
+
+data class IsoLimitPin(val expected: Int, val deadlineElapsedRealtime: Long) {
+    companion object {
+        fun absorbStale(
+            incoming: CameraStatus,
+            pin: IsoLimitPin?,
+            nowElapsedRealtime: Long,
+            reported: Boolean,
+        ): Pair<CameraStatus, IsoLimitPin?> {
+            if (pin == null) return incoming to null
+            if (nowElapsedRealtime >= pin.deadlineElapsedRealtime) return incoming to null
+            if (!reported) return incoming to pin
+            if (incoming.isoLimit == pin.expected) return incoming to null
+            return incoming.copy(isoLimit = pin.expected) to pin
+        }
+    }
+}
+
+data class WhiteBalancePin(
+    val wbMode: Int,
+    val wbKelvin: Int,
+    val wbTint: Int,
+    val deadlineElapsedRealtime: Long,
+) {
+    companion object {
+        fun absorbStale(
+            incoming: CameraStatus,
+            pin: WhiteBalancePin?,
+            nowElapsedRealtime: Long,
+            reported: Boolean,
+        ): Pair<CameraStatus, WhiteBalancePin?> {
+            if (pin == null) return incoming to null
+            if (nowElapsedRealtime >= pin.deadlineElapsedRealtime) return incoming to null
+            if (!reported) return incoming to pin
+            if (incoming.wbMode == pin.wbMode &&
+                (pin.wbMode != CameraCommands.WB_CUSTOM || incoming.wbKelvin == pin.wbKelvin) &&
+                incoming.wbTint == pin.wbTint
+            ) {
+                return incoming to null
+            }
+            return incoming.copy(
+                wbMode = pin.wbMode,
+                wbKelvin = pin.wbKelvin,
+                wbTint = pin.wbTint,
+            ) to pin
+        }
+    }
+}
+
+data class FocusPin(
+    val requestId: java.util.UUID = java.util.UUID.randomUUID(),
+    val focusMode: Int? = null,
+    val focusTrack: Int? = null,
+    val deadlineElapsedRealtime: Long,
+) {
+    fun absorb(
+        incoming: CameraStatus,
+        current: CameraStatus,
+        nowElapsedRealtime: Long,
+        lensReported: Boolean,
+        trackReported: Boolean,
+    ): Pair<CameraStatus, FocusPin?> {
+        if (nowElapsedRealtime >= deadlineElapsedRealtime) return incoming to null
+        var next = incoming
+        var focusMode = this.focusMode
+        var focusTrack = this.focusTrack
+        if (focusMode != null) {
+            if (!lensReported) {
+                next = next.copy(focusMode = current.focusMode)
+            } else if (incoming.focusMode == focusMode) {
+                focusMode = null
+            } else {
+                next = next.copy(focusMode = current.focusMode)
+            }
+        }
+        if (focusTrack != null) {
+            if (!trackReported) {
+                next = next.copy(focusTrack = current.focusTrack)
+            } else if (incoming.focusTrack == focusTrack) {
+                focusTrack = null
+            } else if (incoming.focusTrack >= 0) {
+                next = next.copy(focusTrack = current.focusTrack)
+            }
+        }
+        val remaining = copy(focusMode = focusMode, focusTrack = focusTrack)
+        return next to if (focusMode == null && focusTrack == null) null else remaining
     }
 }
 

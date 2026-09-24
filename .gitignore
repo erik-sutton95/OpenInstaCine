@@ -1,6 +1,7 @@
 # Hardware captures and private research inputs remain local.
 captures/
 .local/
+Apps/Apple/OpenInstaCine/RecoveryBodies.json
 vendor/
 ref/
 *.pcap

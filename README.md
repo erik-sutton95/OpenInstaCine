@@ -4,12 +4,11 @@ Native iOS and Android field monitor for Insta360 cameras, starting with **Luna
 Ultra**. OpenInstaCine carries forward OpenPocketCine's monitor shell, with a
 yellow `#FFCF00` identity and a separate Insta360 connection adapter.
 
-The native shell and live-video adapters are implemented. The monitor, scopes,
-assists, settings, library, playback and delivery components come from the
-OpenPocketCine baseline; camera settings and recording remain unavailable for
-Luna until their commands are verified. This is the first shared-engine
-extraction in this repository. OpenPocketCine and OpenZCine have **not yet been
-switched to consume it**.
+The native Apple app is the current OpenPocketCine monitor shell, vendored and
+kept in sync with `just sync-openpocketcine`, with a yellow `#FFCF00` identity
+and a Luna Ultra adapter. Re-sync from the sibling OpenPocketCine checkout
+instead of forking screens. OpenPocketCine and OpenZCine have **not yet been
+switched to consume this repo**.
 
 The earlier Python Mac viewer completed real BLE → Wi-Fi → displayed-video
 sessions. Native simulator/emulator review uses an explicitly labeled **LOCAL
@@ -25,23 +24,20 @@ not operate the connected phone.
 | Live monitor | Inherited landscape/portrait layouts, status chrome, DISP modes and editor, interface lock, settings overlays, feed warmup/recovery presentation |
 | Image assists | Official I-Log → Rec.709 SDR look, LUT import/look selection, peaking, false color, highlight/midtone zebras, guides, grids, crosshair and mirror |
 | Scopes | Waveform, RGB parade, histogram, vectorscope and traffic lights, driven by decoded image samples |
-| Media shell | Library, sorting/filtering, favorites, cache states, playback and playback assists retained; Luna catalog, transfer and deletion are unavailable |
-| Delivery | Existing local-media share/export surfaces; Apple retains LUT bake and Frame.io delivery, which requires local configuration. Android retains its baseline system delivery features |
-| Luna adapter | Discovery, owner approval, encrypted credential bootstrap, camera Wi-Fi handoff, bounded UCD2 parsing, HEVC preview, heartbeat and cleanup |
-| Deferred camera features | Record/photo capture, exposure, white balance, capture format, zoom/focus/tracking, gimbal, camera audio and camera media |
+| Media shell | Library, sorting/filtering, favorites, cache states, playback and playback assists; Luna list / HTTP download / delete use captured commands 13 / 11 / 12 |
+| Delivery | Existing local-media share/export surfaces; Apple retains LUT bake and Frame.io delivery, which requires local configuration |
+| Luna adapter | Discovery, owner approval, encrypted credential bootstrap, camera Wi-Fi handoff, HEVC preview, record/photo, exposure, color, zoom, gimbal, tap-focus, Deep Track |
+| Deferred | Color Recovery (detached-screen RPC, not phone option 73), filter SET 18, camera-side star, UCD2 playback 89–99, live audio meters, Watcher / Osmo multiview |
 
-Luna currently advertises **live video only**. Unsupported operations do not
-send speculative camera commands. The observed preview is 1280×720 HEVC Main at
-25 fps, 8-bit Rec.709 limited range on firmware v1.0.288; these are preview
-properties, not the camera's recording settings. Luna starts with a Rec.709
-viewing path. Signal colors such as false color, clipping and record red retain
-their meaning alongside the yellow app accent.
+Unsupported operations do not invent opcodes. The observed preview is 1280×720
+HEVC Main at 25 fps, 8-bit Rec.709 limited range on firmware v1.0.288; these are
+preview properties, not the camera's recording settings. Signal colors such as
+false color, clipping and record red retain their meaning alongside the yellow
+app accent.
 
-See the [implemented architecture](docs/implementation/architecture.md),
-[Apple session](docs/implementation/apple-session.md),
-[Android implementation and review](docs/implementation/android-shell.md),
-[shared-core extraction](docs/implementation/shared-core-extraction.md), and
-[baseline provenance](docs/implementation/baseline-provenance.json).
+See the [OpenPocketCine foundation](docs/implementation/openpocketcine-foundation.md),
+[command catalog](docs/research/luna-command-catalog.md), and
+[shared-engine design](docs/SHARED-MONITOR-ENGINE.md).
 
 ## Build and review
 
@@ -99,15 +95,12 @@ loading and rendering must be checked in addition to JVM tests. Android
 emulator replay is also explicitly labeled; its software decode/GPU limits do
 not establish real-device performance.
 
-The extraction passed 609 shared-core/facade tests and 24 Swift protocol tests.
-Android reports 462 inherited monitor tests plus 9 Luna tests passing, with APK
-and lint verification. The Apple UI run completed 413 tests with one optional
-fixture skip and no failures. Simulator and Catalyst review displayed private
-Luna footage through the shared renderer. The final
-[acceptance report](docs/implementation/acceptance.md) records subsequent
-changes and the exact verification state.
-The [adapter review](docs/implementation/apple-adapter-review.md) records
-connection-race fixes and the remaining hardware verification boundary.
+Re-sync the OpenPocketCine engine with `just sync-openpocketcine`. Portable
+shared-engine tests (`swift test`) and Insta360 protocol tests are the gates
+for that vendored tree plus the Luna codec. `just apple-build` compiles the
+native Apple storefront for Simulator without signing. Android still needs its
+Gradle modules pointed at the newly vendored `monitor-ui` / monitor sources
+before APK claims. Physical Luna connect remains a device check.
 
 ## Existing Mac live-view lab
 

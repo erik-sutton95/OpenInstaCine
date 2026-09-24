@@ -26,6 +26,9 @@ data class CameraModel(
 ) {
     val zoomMax: Double get() = activeZoomStops().lastOrNull() ?: 1.0
 
+    /** Pocket 3-axis gimbal. Nano has none. */
+    val hasGimbal: Boolean get() = family == "pocket"
+
     val isoAutoRangeFloor: Int get() = Companion.isoAutoRangeFloorFor(name)
 
     /**
@@ -59,6 +62,15 @@ data class CameraModel(
             val n = name.lowercase().replace(" ", "")
             return n.contains("pocket3") || n.contains("muse")
         }
+
+        fun looksLikePocket4Pro(name: String): Boolean {
+            val n = name.lowercase().replace(" ", "")
+            return n.contains("pocket4p")
+        }
+
+        /** SlowMo `0x02/0x18` trailer context. Regular Pocket 4 stays unqualified. */
+        fun supportsSlowMoFormatTrailer(name: String): Boolean =
+            looksLikePocket3(name) || looksLikePocket4Pro(name)
 
         fun looksLikeNano(name: String, family: String = ""): Boolean {
             if (family == "nano") return true
@@ -271,6 +283,12 @@ data class CameraStatus(
     val selfieFlip: Boolean? = null,
     /** `0x04/0x27` `@2` bit `0x40`. `0` front / `1` selfie / `-1` unknown. */
     val gimbalFace: Int = CameraCommands.GIMBAL_FACE_UNKNOWN,
+    /** Pocket `0x04/0x05` mode family: 0 Direction Lock, 1 FPV, 2 Follow; -1 unknown. */
+    val gimbalModeFamily: Int = -1,
+    /** `0x04/0x50` param `04`. `0` Follow / `1` Tilt locked. `-1` unknown. */
+    val gimbalTiltLock: Int = -1,
+    /** `0x04/0x50` param `05`. `0` Fast / `1` Default / `2` Slow. `-1` unknown. */
+    val gimbalSpeed: Int = -1,
     /** Live VU from `cam_audio_status_v2`, dBFS. Floor is −60. */
     val audioMetersLeft: Double = -60.0,
     val audioMetersRight: Double = -60.0,
@@ -306,6 +324,14 @@ data class CameraStatus(
 
     val colorLabel: String
         get() = CameraCommands.colorLabel(colorMode)
+
+    /** Still capture: Photo `05`/`17` and Live Photo `4D`. SuperNight is video. */
+    val isPhoto: Boolean
+        get() = CameraCommands.isPhotoMode(shootingMode)
+
+    /** Live LUT/scope color. Photo/Live Photo is Rec.709 even if `@2` still reports log. */
+    val monitorColorMode: Int
+        get() = if (isPhoto) CameraCommands.COLOR_NORMAL else colorMode
 
     val resolutionLabel: String
         get() = CameraCommands.resolutionLabel(resolutionCode)
@@ -387,6 +413,65 @@ data class CameraStatus(
             }
         return if (at2 >= 0) applyingAudioByte2(at2) else copy(audioDspAt2 = at2)
     }
+
+    fun clearedModeDependentCapabilities(): CameraStatus =
+        copy(
+            availableVideoFormats = emptyList(),
+            availableShutterDenoms = emptyList(),
+            availableIsoIndices = emptyList(),
+            availableColorModes = emptyList(),
+        )
+
+    /**
+     * Keep camcap wheels across the first unknown → mode report. A later mode
+     * change must not resurrect the previous mode's ISO / shutter / color / FORMAT lists.
+     */
+    fun droppingStaleModeDependentCaps(previous: CameraStatus): CameraStatus {
+        if (shouldPreserveModeDependentCaps(previous.shootingMode, shootingMode)) return this
+        fun stale(current: List<*>, prior: List<*>): Boolean = current == prior && current.isNotEmpty()
+        return copy(
+            availableVideoFormats =
+                if (stale(availableVideoFormats, previous.availableVideoFormats)) emptyList()
+                else availableVideoFormats,
+            availableShutterDenoms =
+                if (stale(availableShutterDenoms, previous.availableShutterDenoms)) emptyList()
+                else availableShutterDenoms,
+            availableIsoIndices =
+                if (stale(availableIsoIndices, previous.availableIsoIndices)) emptyList()
+                else availableIsoIndices,
+            availableColorModes =
+                if (stale(availableColorModes, previous.availableColorModes)) emptyList()
+                else availableColorModes,
+        )
+    }
+
+    /** First unknown→mode keeps initial wheels; a later mode hop does not restore them. */
+    fun mergingModeDependentCaps(previous: CameraStatus): CameraStatus {
+        if (!shouldPreserveModeDependentCaps(previous.shootingMode, shootingMode)) {
+            return droppingStaleModeDependentCaps(previous)
+        }
+        var next = this
+        if (next.availableShutterDenoms.isEmpty()) {
+            next = next.copy(availableShutterDenoms = previous.availableShutterDenoms)
+        }
+        if (next.availableIsoIndices.isEmpty()) {
+            next = next.copy(availableIsoIndices = previous.availableIsoIndices)
+        }
+        if (next.availableColorModes.isEmpty()) {
+            next = next.copy(availableColorModes = previous.availableColorModes)
+        }
+        if (next.availableVideoFormats.isEmpty()) {
+            next = next.copy(availableVideoFormats = previous.availableVideoFormats)
+        }
+        return next
+    }
+
+    /**
+     * `camcap_video_format` is per shooting mode. Keep a new table from this
+     * apply; drop a leftover Video list when the mode changed without a fresh cap.
+     */
+    fun droppingStaleVideoFormats(previous: CameraStatus): CameraStatus =
+        droppingStaleModeDependentCaps(previous)
 
     fun preservingExtras(prev: CameraStatus): CameraStatus =
         copy(
@@ -479,6 +564,7 @@ data class CameraStatus(
             .put("glamourEnabled", glamourEnabled ?: JSONObject.NULL)
             .put("selfieFlip", selfieFlip ?: JSONObject.NULL)
             .put("gimbalFace", gimbalFace)
+            .put("gimbalModeFamily", gimbalModeFamily)
             .put("windNR", windNRJson())
             .put("directionalAudio", directionalAudioJson())
             .put("audioMetersLeft", audioMetersLeft)
@@ -515,6 +601,9 @@ data class CameraStatus(
         }
 
     companion object {
+        fun shouldPreserveModeDependentCaps(previousMode: Int, nextMode: Int): Boolean =
+            previousMode < 0 || previousMode == nextMode
+
         fun fromJson(raw: String?): CameraStatus {
             if (raw.isNullOrBlank()) return CameraStatus()
             return runCatching {
@@ -573,6 +662,7 @@ data class CameraStatus(
                     glamourEnabled = optionalBoolean(obj, "glamourEnabled"),
                     selfieFlip = optionalBoolean(obj, "selfieFlip"),
                     gimbalFace = obj.optInt("gimbalFace", CameraCommands.GIMBAL_FACE_UNKNOWN),
+                    gimbalModeFamily = obj.optInt("gimbalModeFamily", -1),
                     windNr = mapWindNr(obj),
                     directionalAudio = mapDirectionalAudio(obj),
                     audioMetersLeft = obj.optDouble("audioMetersLeft", -60.0),

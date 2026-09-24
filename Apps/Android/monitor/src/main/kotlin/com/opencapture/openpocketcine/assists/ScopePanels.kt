@@ -1,12 +1,21 @@
 package com.opencapture.openpocketcine.assists
 
+import com.opencapture.monitorui.MonitorMaterial
+import com.opencapture.monitorui.monitorMaterial
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -59,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.opencapture.openpocketcine.ChromeRect
 import com.opencapture.openpocketcine.LiveDesign
+import com.opencapture.openpocketcine.NDFilterRecommendation
 import com.opencapture.openpocketcine.LocalOperatorHaptics
 
 import com.opencapture.openpocketcine.reportChromeFrame
@@ -77,7 +87,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private val PanelShape = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
-private val PanelFill = LiveDesign.scopePlate
+private val ChipShape = RoundedCornerShape(percent = 50)
 private val Boundary = Color(220 / 255f, 235 / 255f, 225 / 255f, 0.8f)
 private val ClipColor = Color(255 / 255f, 150 / 255f, 142 / 255f, 0.8f)
 private val MiddleColor = Color(246 / 255f, 241 / 255f, 226 / 255f, 0.8f)
@@ -112,6 +122,7 @@ internal fun MovableAssistPanel(
     scale: Double,
     stored: StoredCenter?,
     canvas: AssistRect,
+    placementBounds: AssistRect,
     defaultCenter: AssistPoint,
     enabled: Boolean,
     onStore: (StoredCenter) -> Unit,
@@ -119,14 +130,23 @@ internal fun MovableAssistPanel(
     onOpenOptions: ((ChromeRect) -> Unit)? = null,
     onActivate: () -> Unit = {},
     fillPlate: Boolean = true,
+    chip: Boolean = false,
     content: @Composable (AssistSize) -> Unit,
 ) {
     val density = LocalDensity.current
     val haptics = LocalOperatorHaptics.current
-    val sizeDp = MovablePanelMath.panelSize(base, scale)
-    val sizePx = with(density) { AssistSize(sizeDp.width.dp.toPx(), sizeDp.height.dp.toPx()) }
+    val preferred = MovablePanelMath.panelSize(base, scale)
+    val gripPx = with(density) { MovablePanelMath.gripPadDp.dp.toPx() }
+    val minimumHit = with(density) { MovablePanelMath.MIN_GRIP_HIT_DP.dp.toPx() }
+    val usable = placementBounds.width >= minimumHit && placementBounds.height >= minimumHit
+    val sizePx = MovablePanelMath.fittedSize(
+        with(density) { AssistSize(preferred.width.dp.toPx(), preferred.height.dp.toPx()) },
+        placementBounds, gripPx)
+    val sizeDp = AssistSize(sizePx.width / density.density, sizePx.height / density.density)
     val gripPadDp = MovablePanelMath.gripPadDp
+    val gripHit = MovablePanelMath.gripHitSize(sizeDp.width, sizeDp.height)
     val gripOrigin = MovablePanelMath.gripHitOrigin(sizeDp.width, sizeDp.height)
+    val gripOverhang = MovablePanelMath.gripOverhang(sizeDp.width, sizeDp.height)
     var session by remember(tool) { mutableStateOf<AssistPoint?>(null) }
     var origin by remember { mutableStateOf<AssistPoint?>(null) }
     var resizeOrigin by remember { mutableStateOf<Double?>(null) }
@@ -137,7 +157,7 @@ internal fun MovableAssistPanel(
         if (!active) session = null
     }
     var panelFrame by remember { mutableStateOf(ChromeRect(0f, 0f, 0f, 0f)) }
-    val center =
+    val rawCenter =
         MovablePanelMath.resolvedCenter(
             session = session,
             stored = stored,
@@ -145,6 +165,8 @@ internal fun MovableAssistPanel(
             size = sizePx,
             bounds = canvas,
         )
+    val center = MovablePanelMath.clampWithGrip(rawCenter, sizePx, placementBounds, gripPx)
+    val placementState = rememberUpdatedState(placementBounds)
     val gpuSlot = GpuOverlayBus.usesGpuSlot(tool)
     val centerState = rememberUpdatedState(center)
     val sizeState = rememberUpdatedState(sizePx)
@@ -152,6 +174,7 @@ internal fun MovableAssistPanel(
     val canvasState = rememberUpdatedState(canvas)
     fun publishSlot(at: AssistPoint, size: AssistSize) {
         if (!gpuSlot) return
+        if (!usable) { GpuOverlayBus.reportSlot(tool, null); return }
         val root = GpuOverlayBus.layerRoot
         val left = (at.x - size.width / 2f).roundToInt().toFloat()
         val top = (at.y - size.height / 2f).roundToInt().toFloat()
@@ -163,21 +186,25 @@ internal fun MovableAssistPanel(
     }
     DisposableEffect(tool) { onDispose { GpuOverlayBus.reportSlot(tool, null) } }
     SideEffect {
-        if (!active) publishSlot(center, sizePx)
+        publishSlot(center, sizePx)
     }
+    if (!usable) return
     val snapGrid = with(density) { MovablePanelMath.POSITION_GRID.dp.toPx() }
+    val plateShape = if (chip) ChipShape else PanelShape
     Box(
         Modifier
             .offset {
                 IntOffset(
-                    (center.x - sizePx.width / 2f).roundToInt(),
-                    (center.y - sizePx.height / 2f).roundToInt(),
+                    (center.x - sizePx.width / 2f - gripOverhang.x * density.density).roundToInt(),
+                    (center.y - sizePx.height / 2f - gripOverhang.y * density.density).roundToInt(),
                 )
             }
-            .size((sizeDp.width + gripPadDp).dp, (sizeDp.height + gripPadDp).dp),
+            .size((sizeDp.width + gripPadDp + gripOverhang.x).dp,
+                (sizeDp.height + MovablePanelMath.GRIP_BOTTOM_EXTERIOR_DP + gripOverhang.y).dp),
     ) {
         Box(
             Modifier
+                .offset(gripOverhang.x.dp, gripOverhang.y.dp)
                 .size(sizeDp.width.dp, sizeDp.height.dp)
                 .align(Alignment.TopStart)
                 .then(if (onOpenOptions != null) Modifier.reportChromeFrame { panelFrame = it } else Modifier)
@@ -185,20 +212,24 @@ internal fun MovableAssistPanel(
                 // shadow(clip=true)+clip+Offscreen+border stacked a thick inner edge.
                 .shadow(
                     elevation = 16.dp,
-                    shape = PanelShape,
+                    shape = plateShape,
                     clip = false,
                     ambientColor = Color.Black.copy(alpha = 0.34f),
                     spotColor = Color.Black.copy(alpha = 0.34f),
                 )
-                .clip(PanelShape)
-                .then(if (fillPlate) Modifier.background(LiveDesign.scopePlate) else Modifier)
+                .clip(plateShape)
+                .then(if (fillPlate) Modifier.monitorMaterial(MonitorMaterial.Scope, plateShape) else Modifier)
                 .onGloballyPositioned { panelCoords = it }
-                .pointerInput(tool, enabled) {
-                    detectHoldThenDrag(
+                .pointerInput(tool, enabled, base, canvas, placementBounds, density.density) {
+                    detectPanelDrag(
                         holdMs = AssistLongPress.PANEL_MS,
                         enabled = enabled,
                         onDown = onActivate,
-                        onHold = {
+                        onLongPress = onOpenOptions?.let { present -> {
+                            haptics.confirm()
+                            present(panelFrame)
+                        } },
+                        onStart = {
                             origin = centerState.value
                             active = true
                             haptics.confirm()
@@ -208,25 +239,21 @@ internal fun MovableAssistPanel(
                             val size = sizeState.value
                             val proposed = AssistPoint(start.x + translation.x, start.y + translation.y)
                             val snapped =
-                                MovablePanelMath.clamp(
+                                MovablePanelMath.clampWithGrip(
                                     MovablePanelMath.snap(proposed, snapGrid),
                                     size,
-                                    canvasState.value,
+                                    placementState.value,
+                                    gripPx,
                                 )
                             session = snapped
                             publishSlot(snapped, size)
                         },
-                        onEnd = { translation ->
-                            val final = session ?: centerState.value
-                            onStore(StoredCenter(final, canvasState.value))
+                        onEnd = { _ ->
+                            if (canvas == canvasState.value && placementBounds == placementState.value) {
+                                session?.let { onStore(StoredCenter(it, canvas)) }
+                            } else session = null
                             origin = null
                             active = false
-                            if (onOpenOptions != null &&
-                                WaveformAxis.shouldPresentOptions(translation.x, translation.y)
-                            ) {
-                                haptics.confirm()
-                                onOpenOptions(panelFrame)
-                            }
                         },
                         toRoot = { local -> panelCoords?.localToRoot(local) ?: local },
                     )
@@ -236,7 +263,12 @@ internal fun MovableAssistPanel(
             Canvas(Modifier.matchParentSize()) {
                 val stroke = 1.dp.toPx()
                 val inset = stroke / 2f
-                val radius = (LiveDesign.CORNER_RADIUS_DP.dp.toPx() - inset).coerceAtLeast(0f)
+                val radius =
+                    if (chip) {
+                        (this.size.minDimension / 2f - inset).coerceAtLeast(0f)
+                    } else {
+                        (LiveDesign.CORNER_RADIUS_DP.dp.toPx() - inset).coerceAtLeast(0f)
+                    }
                 drawRoundRect(
                     color = LiveDesign.hairline,
                     topLeft = Offset(inset, inset),
@@ -251,16 +283,16 @@ internal fun MovableAssistPanel(
             Box(
                 Modifier
                     .align(Alignment.TopStart)
-                    .offset(gripOrigin.x.dp, gripOrigin.y.dp)
-                    .size(MovablePanelMath.GRIP_HIT_DP.dp)
+                    .offset((gripOrigin.x + gripOverhang.x).dp, (gripOrigin.y + gripOverhang.y).dp)
+                    .size(gripHit.dp)
                     .background(Color.Transparent)
                     .onGloballyPositioned { gripCoords = it }
                     .pointerInput(tool, enabled, reachPx) {
-                        detectHoldThenDrag(
+                        detectPanelDrag(
                             holdMs = AssistLongPress.PANEL_MS,
                             enabled = enabled,
                             onDown = onActivate,
-                            onHold = {
+                            onStart = {
                                 resizeOrigin = scaleState.value
                                 active = true
                                 haptics.confirm()
@@ -279,7 +311,7 @@ internal fun MovableAssistPanel(
                         )
                     },
             ) {
-                val visual = MovablePanelMath.gripVisualOrigin()
+                val visual = MovablePanelMath.gripVisualOrigin(gripHit)
                 Canvas(
                     Modifier
                         .offset(visual.x.dp, visual.y.dp)
@@ -308,9 +340,10 @@ internal fun MovableAssistPanel(
 }
 
 @Composable
-internal fun WaveformPanel(state: LiveAssistState, colorMode: Int, modifier: Modifier = Modifier) {
+internal fun WaveformPanel(state: LiveAssistState, colorMode: Int, modifier: Modifier = Modifier,
+    previewBundle: com.opencapture.openpocketcine.feed.ScopeAssistBundle? = null) {
     val measurer = rememberTextMeasurer()
-    val bundle = state.scopeBundle
+    val bundle = previewBundle ?: state.scopeBundle
     val transfer = bundle.resolvedTransfer(colorMode)
     val table = remember(transfer, bundle.iso) { WaveformIre.levelTable(transfer, bundle.iso) }
     val intensity = WaveformAssist.intensity(state.waveBrightness)
@@ -334,9 +367,10 @@ internal fun WaveformPanel(state: LiveAssistState, colorMode: Int, modifier: Mod
 }
 
 @Composable
-internal fun ParadePanel(state: LiveAssistState, colorMode: Int, modifier: Modifier = Modifier) {
+internal fun ParadePanel(state: LiveAssistState, colorMode: Int, modifier: Modifier = Modifier,
+    previewBundle: com.opencapture.openpocketcine.feed.ScopeAssistBundle? = null) {
     val measurer = rememberTextMeasurer()
-    val bundle = state.scopeBundle
+    val bundle = previewBundle ?: state.scopeBundle
     val transfer = bundle.resolvedTransfer(colorMode)
     val table = remember(transfer, bundle.iso) { WaveformIre.levelTable(transfer, bundle.iso) }
     val intensity = ParadeAssist.intensity(state.paradeBrightness)
@@ -361,14 +395,14 @@ internal fun ParadePanel(state: LiveAssistState, colorMode: Int, modifier: Modif
 }
 
 @Composable
-internal fun HistogramPanel(state: LiveAssistState, modifier: Modifier = Modifier) {
+internal fun HistogramPanel(state: LiveAssistState, modifier: Modifier = Modifier,
+    previewBundle: com.opencapture.openpocketcine.feed.ScopeAssistBundle? = null) {
     val measurer = rememberTextMeasurer()
-    val bundle = state.scopeBundle
+    val bundle = previewBundle ?: state.scopeBundle
     val display = bundle.histogramDisplay
     val traffic = bundle.traffic
     Canvas(modifier.fillMaxSize()) {
         val d = density
-        drawRect(PanelFill)
         val plot = HistogramAssist.plotRect(this.size.width, this.size.height, d)
         for (step in 1 until 4) {
             val y = plot.minY + plot.height * step / 4f
@@ -411,9 +445,10 @@ internal fun HistogramPanel(state: LiveAssistState, modifier: Modifier = Modifie
 }
 
 @Composable
-internal fun VectorscopePanel(state: LiveAssistState, modifier: Modifier = Modifier) {
+internal fun VectorscopePanel(state: LiveAssistState, modifier: Modifier = Modifier,
+    previewBundle: com.opencapture.openpocketcine.feed.ScopeAssistBundle? = null) {
     val measurer = rememberTextMeasurer()
-    val bundle = state.scopeBundle
+    val bundle = previewBundle ?: state.scopeBundle
     val intensity = VectorscopeAssist.intensity(state.vectorBrightness)
     val gain = state.vectorZoom.gain
     var trace by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -464,7 +499,7 @@ internal fun VectorscopePanel(state: LiveAssistState, modifier: Modifier = Modif
                 measurer,
                 target.label,
                 Offset(pt.x + dx / len * push - 4f * d, pt.y + dy / len * push - 4f * d),
-                TextStyle(color = VectorRing, fontSize = 6.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
+                TextStyle(color = VectorRing, fontSize = 6.5.sp, fontFamily = com.opencapture.openpocketcine.OpcFonts.sora, fontWeight = FontWeight.Bold),
             )
         }
         drawScopeTitle(measurer, "VECTOR", VectorscopeAssist.chip(state.vectorZoom))
@@ -472,9 +507,10 @@ internal fun VectorscopePanel(state: LiveAssistState, modifier: Modifier = Modif
 }
 
 @Composable
-internal fun TrafficLightsPanel(state: LiveAssistState, modifier: Modifier = Modifier) {
+internal fun TrafficLightsPanel(state: LiveAssistState, modifier: Modifier = Modifier,
+    previewBundle: com.opencapture.openpocketcine.feed.ScopeAssistBundle? = null) {
     val measurer = rememberTextMeasurer()
-    val reading = state.scopeBundle.traffic
+    val reading = (previewBundle ?: state.scopeBundle).traffic
     Canvas(modifier.fillMaxSize()) {
         val ui = minOf(this.size.width / ScopePanelSize.trafficLights.width, this.size.height / ScopePanelSize.trafficLights.height)
         val pad = TrafficLightsAssist.PANEL_PAD * ui
@@ -485,7 +521,7 @@ internal fun TrafficLightsPanel(state: LiveAssistState, modifier: Modifier = Mod
             TextStyle(
                 color = LiveDesign.text.copy(alpha = 0.58f),
                 fontSize = 8.5.sp,
-                fontFamily = FontFamily.Monospace,
+                fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
                 fontWeight = FontWeight.Bold,
             ),
         )
@@ -502,77 +538,31 @@ internal fun TrafficLightsPanel(state: LiveAssistState, modifier: Modifier = Mod
     }
 }
 
+
+object NDAssist {
+    const val HELP =
+        "Meters the live picture against middle gray and suggests a screw-on ND — stops and ND number — to balance it. The app cannot set a filter."
+    const val METER_TITLE = "ND"
+    const val NOTATION_TITLE = "Units"
+    const val NOTATION_HELP =
+        "Stops vs middle gray, filter factor (ND16 / ND32 / ND64), or optical density (ND 0.3 = 1 stop)."
+}
+
 @Composable
-internal fun AudioMetersPanel(
-    left: AudioMeterReading,
-    right: AudioMeterReading,
-    sensitivity: String?,
-    modifier: Modifier = Modifier,
-) {
-    val measurer = rememberTextMeasurer()
-    Canvas(modifier.size(AudioAssist.PANEL_WIDTH_DP.dp, AudioAssist.PANEL_HEIGHT_DP.dp)) {
-        drawText(
-            measurer,
-            "AUDIO",
-            Offset(2f, 4f),
-            TextStyle(color = LiveDesign.text.copy(alpha = 0.58f), fontSize = 6.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
-        )
-        val labelReserve = 22f
-        val bars = AssistRect(0f, 16f, this.size.width, this.size.height - labelReserve - 16f)
-        for (mark in AudioAssist.guideMarks) {
-            val y = AudioAssist.y(mark, bars.minY, bars.maxY)
-            drawLine(Color(220 / 255f, 235 / 255f, 225 / 255f, 0.10f), Offset(bars.minX, y), Offset(bars.maxX, y), 1f)
-        }
-        val gap = 2f
-        val inset = 1f
-        val barW = (bars.width - gap - inset * 2) / 2f
-        listOf("L" to left, "R" to right).forEachIndexed { index, pair ->
-            val x = bars.minX + inset + index * (barW + gap)
-            val track = AssistRect(x, bars.minY, barW, bars.height)
-            drawRoundRect(
-                LiveDesign.text.copy(alpha = 0.08f),
-                Offset(track.minX, track.minY),
-                Size(track.width, track.height),
-                CornerRadius(2f, 2f),
-            )
-            val levelY = AudioAssist.y(pair.second.levelDB, track.minY, track.maxY)
-            if (levelY < track.maxY - 0.5f) {
-                val bands =
-                    listOf(
-                        AudioAssist.FLOOR_DB to AudioAssist.YELLOW_FROM_DB,
-                        AudioAssist.YELLOW_FROM_DB to AudioAssist.RED_FROM_DB,
-                        AudioAssist.RED_FROM_DB to 0.0,
-                    )
-                for (band in bands) {
-                    val top = AudioAssist.y(band.second, track.minY, track.maxY).coerceAtLeast(levelY)
-                    val bottom = AudioAssist.y(band.first, track.minY, track.maxY).coerceAtLeast(levelY)
-                    if (bottom > top) {
-                        drawRect(zoneColor(band.first), Offset(track.minX, top), Size(track.width, bottom - top))
-                    }
-                }
-            }
-            if (pair.second.peakDB > AudioAssist.FLOOR_DB + 0.5) {
-                val peakY = AudioAssist.y(pair.second.peakDB, track.minY, track.maxY)
-                drawLine(zoneColor(pair.second.peakDB), Offset(track.minX, peakY), Offset(track.maxX, peakY), 1.5f)
-            }
-            drawText(
-                measurer,
-                pair.first,
-                Offset(track.midX - 3f, this.size.height - 18f),
-                TextStyle(color = LiveDesign.text.copy(alpha = 0.58f), fontSize = 7.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
-            )
-        }
-        drawText(
-            measurer,
-            "SENS",
-            Offset(2f, this.size.height - 12f),
-            TextStyle(color = LiveDesign.text.copy(alpha = 0.42f), fontSize = 5.sp, fontFamily = FontFamily.Monospace),
-        )
-        drawText(
-            measurer,
-            AudioAssist.displayedSensitivity(sensitivity),
-            Offset(this.size.width / 2f - 6f, this.size.height - 12f),
-            TextStyle(color = LiveDesign.text.copy(alpha = 0.72f), fontSize = 8.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
+internal fun NDMeterPanel(state: LiveAssistState, modifier: Modifier = Modifier) {
+    val transfer = state.scopeBundle.transfer
+    val reading =
+        NDFilterRecommendation.reading(state.scopeBundle.samples.histogramLuma, transfer)
+    Box(
+        modifier.fillMaxSize().padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            reading?.chipLabel(state.ndNotation) ?: "—",
+            color = if (reading?.needsGlass == true) LiveDesign.accent else LiveDesign.text,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
         )
     }
 }
@@ -590,13 +580,12 @@ private fun DrawScope.drawWaveGuides(plot: AssistRect, guides: ScopeGuides, colo
 }
 
 /**
- * One 0.72 plate, then traces into [dstPlot] (same rect as the 0 / 100 IRE
+ * Traces into [dstPlot] over the shared scope material (same rect as the 0 / 100 IRE
  * guides). The baked image is plot-sized and transparent aside from ticks, so
  * it does not stack a second plate (the black square) and L-scale cannot
  * drift IRE 100.
  */
 private fun DrawScope.blitScopePlot(trace: ImageBitmap?, dstPlot: AssistRect) {
-    drawRect(PanelFill)
     if (trace == null) return
     drawImage(
         trace,
@@ -618,12 +607,12 @@ private fun DrawScope.drawScopeTitle(measurer: TextMeasurer, title: String, chip
         measurer,
         title,
         Offset(padX, padY),
-        TextStyle(color = LiveDesign.text.copy(alpha = 0.66f), fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
+        TextStyle(color = LiveDesign.text.copy(alpha = 0.66f), fontSize = 10.5.sp, fontFamily = com.opencapture.openpocketcine.OpcFonts.sora, fontWeight = FontWeight.Bold),
     )
     val chipLayout =
         measurer.measure(
             chip,
-            TextStyle(color = LiveDesign.text.copy(alpha = 0.58f), fontSize = 9.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
+            TextStyle(color = LiveDesign.text.copy(alpha = 0.58f), fontSize = 9.5.sp, fontFamily = com.opencapture.openpocketcine.OpcFonts.sora, fontWeight = FontWeight.Bold),
         )
     drawText(chipLayout, topLeft = Offset(size.width - chipLayout.size.width - padX, 5.dp.toPx()))
 }
@@ -849,8 +838,9 @@ private fun zoneColor(db: Double): Color =
         else -> MeterGreen.copy(alpha = 0.9f)
     }
 
+@Composable
 internal fun Modifier.scopePanelChrome(): Modifier =
-    clip(PanelShape).background(PanelFill).border(1.dp, LiveDesign.hairline, PanelShape)
+    monitorMaterial(MonitorMaterial.Scope, PanelShape)
 
 /** Plot origin in root pixels — same rect the Canvas punches, so Vulkan fill matches. */
 private fun Modifier.reportGpuPlot(

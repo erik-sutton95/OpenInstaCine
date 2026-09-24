@@ -1,5 +1,8 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.monitorui.MonitorExposureReadout
+import com.opencapture.monitorui.MonitorMaterial
+import com.opencapture.monitorui.monitorMaterial
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -20,10 +24,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.opencapture.monitorui.monitorReadoutShadow
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +44,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -44,6 +53,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import com.opencapture.monitorui.MonitorQuickGestureOwner
+import com.opencapture.monitorui.monitorReadoutGesture
+import com.opencapture.monitorui.monitorPickerPassthrough
 import com.opencapture.openpocketcine.assists.AssistToolGlyph
 import com.opencapture.openpocketcine.assists.LiveAssistBar
 import com.opencapture.openpocketcine.assists.LiveAssistState
@@ -112,60 +124,17 @@ fun portraitZones(
     assistToolbarHeight: Float,
     feedAspectRatio: Float = 16f / 9f,
 ): PortraitZones {
-    val vw = max(0f, viewportWidth)
-    val vh = max(0f, viewportHeight)
-    val ratio = if (feedAspectRatio > 0f) feedAspectRatio else 16f / 9f
-    val topBar =
-        ChromeRect(0f, max(0f, max(0f, safeTop) - LivePortraitMetrics.TOP_BAR_LIFT), vw, LivePortraitMetrics.TOP_BAR)
-    val systemBottom = max(0f, max(0f, safeBottom) - LivePortraitMetrics.SYSTEM_BAR_LIFT)
-    val systemBar =
-        ChromeRect(
-            0f,
-            max(0f, vh - systemBottom - LivePortraitMetrics.SYSTEM_BAR),
-            vw,
-            LivePortraitMetrics.SYSTEM_BAR,
-        )
-    if (fill) {
-        val span = max(0f, systemBar.minY - topBar.maxY)
-        val feedHeight = min(vw * 16f / 9f, span)
-        val feed = ChromeRect(0f, topBar.maxY, vw, feedHeight)
-        val controlsHeight = if (clean) 0f else min(LivePortraitMetrics.CAPTURE, feed.height)
-        val controls = ChromeRect(0f, feed.maxY - controlsHeight, vw, controlsHeight)
-        return PortraitZones(
-            topBar = topBar,
-            feed = feed,
-            assistToolbar = ChromeRect(0f, feed.maxY, vw, 0f),
-            controls = controls,
-            systemBar = systemBar,
-        )
-    }
-    val natural = vw / ratio
-    val spanForVertical = max(0f, systemBar.minY - topBar.maxY)
-    if (clean) {
-        val feedHeight = if (ratio >= 1f) natural else min(natural, spanForVertical)
-        val feed = ChromeRect(0f, topBar.maxY + max(0f, (spanForVertical - feedHeight) / 2f), vw, feedHeight)
-        return PortraitZones(
-            topBar = topBar,
-            feed = feed,
-            assistToolbar = ChromeRect(0f, feed.maxY, vw, 0f),
-            controls = ChromeRect(0f, feed.maxY, vw, 0f),
-            systemBar = systemBar,
-        )
-    }
-    val toolbar = max(0f, assistToolbarHeight)
-    val chromeFloor = systemBar.minY - toolbar
-    val feedHeight =
-        if (ratio >= 1f) {
-            natural
-        } else {
-            min(natural, max(0f, chromeFloor - topBar.maxY))
-        }
-    val y = liveFitFeedOriginY(vh, feedHeight, topBar.maxY, chromeFloor)
-    val feed = ChromeRect(0f, y, vw, feedHeight)
-    val assist = ChromeRect(0f, systemBar.minY - toolbar, vw, toolbar)
-    val controls = ChromeRect(0f, feed.maxY, vw, max(0f, assist.minY - feed.maxY))
-    return PortraitZones(topBar, feed, assist, controls, systemBar)
+    val layout = com.opencapture.monitorui.MonitorLayoutPolicy.portrait(
+        viewportWidth, viewportHeight, safeTop, safeBottom, fill, !clean, feedAspectRatio,
+    )
+    fun com.opencapture.monitorui.MonitorRect.chrome() = ChromeRect(x, y, width, height)
+    return PortraitZones(layout.status.chrome(), layout.picture.chrome(),
+        ChromeRect(0f, layout.controlsFloor, viewportWidth, 0f), layout.values.chrome(), layout.system.chrome())
 }
+
+/** Actual visible status row, shared by tap and hold presentation routes. */
+fun livePortraitReadoutFrame(layout: LiveMonitorLayout, zones: PortraitZones): ChromeRect =
+    ChromeRect(zones.topBar.minX, zones.topBar.minY + 6f, layout.viewportWidth, zones.topBar.height)
 
 /**
  * iOS `LiveViewScreen` fillCrop: landscape fill over-widens a 16:9 picture to
@@ -194,42 +163,30 @@ fun fillAssistRail(
     return ChromeRect(feed.minX + edge, y, width, height)
 }
 
-fun portraitAspectToggle(picture: ChromeRect, floorY: Float): ChromeRect {
-    val size = LivePortraitMetrics.TOGGLE
-    val gap = LivePortraitMetrics.TOGGLE_GAP
-    val parked = floorY - gap - size
-    val y = if (floorY > picture.maxY) max(picture.maxY + gap, parked) else max(picture.minY, parked)
-    return ChromeRect(picture.minX + max(0f, (picture.width - size) / 2f), y, size, size)
+fun portraitAspectToggle(viewportWidth: Float, floorY: Float): ChromeRect {
+    val frame = com.opencapture.monitorui.MonitorLayoutPolicy.portraitAspect(viewportWidth, floorY)
+    return ChromeRect(frame.x, frame.y, frame.width, frame.height)
+}
+
+fun portraitAssistToolbar(floorY: Float, tablet: Boolean): ChromeRect {
+    val frame = com.opencapture.monitorui.MonitorLayoutPolicy.portraitAssists(floorY, tablet)
+    return ChromeRect(frame.x, frame.y, frame.width, frame.height)
 }
 
 fun portraitOnFeedControls(
-    picture: ChromeRect,
-    fill: Boolean,
-    bottomClearance: Float,
+    viewportWidth: Float,
     floorY: Float,
-): Pair<ChromeRect, ChromeRect> {
-    val cluster =
-        if (fill) {
-            GimbalCluster.inTrailingBottom(
-                well = picture,
-                floorY = picture.maxY - bottomClearance,
-                canvasMaxY = picture.maxY,
-                stickSize = LiveChromeMetrics.STICK,
-                zoomSize = LiveChromeMetrics.ZOOM,
-                gap = LiveChromeMetrics.STICK_GAP,
-                inset = LiveChromeMetrics.STICK_INSET,
-            )
-        } else {
-            GimbalCluster.belowWell(
-                well = picture,
-                floorY = floorY,
-                stickSize = LiveChromeMetrics.STICK,
-                zoomSize = LiveChromeMetrics.ZOOM,
-                gap = LiveChromeMetrics.STICK_GAP,
-                inset = LiveChromeMetrics.STICK_INSET,
-            )
-        }
-    return cluster.stick to cluster.zoom
+    showGimbalButton: Boolean = false,
+): GimbalCluster {
+    val stickFrame = com.opencapture.monitorui.MonitorLayoutPolicy.portraitStick(viewportWidth, floorY)
+    val zoomFrame = com.opencapture.monitorui.MonitorLayoutPolicy.portraitZoom(stickFrame)
+    val gimbalFrame = com.opencapture.monitorui.MonitorLayoutPolicy.portraitGimbal(stickFrame, zoomFrame)
+    val stick = ChromeRect(stickFrame.x, stickFrame.y, stickFrame.width, stickFrame.height)
+    val zoom = ChromeRect(zoomFrame.x, zoomFrame.y, zoomFrame.width, zoomFrame.height)
+    val controls =
+        if (showGimbalButton) ChromeRect(gimbalFrame.x, gimbalFrame.y, gimbalFrame.width, gimbalFrame.height)
+        else ChromeRect(0f, 0f, 0f, 0f)
+    return GimbalCluster(stick, zoom, controls)
 }
 
 @Composable
@@ -246,120 +203,145 @@ fun LivePortraitChrome(
     onAssistLongPress: (LiveAssistTool) -> Unit,
     chromeInteractive: Boolean,
     controlBusy: Boolean,
+    fpsLabel: String = "—",
+    bars: Int = 0,
+    sourceIsVertical: Boolean = false,
+    capabilities: com.opencapture.monitorui.MonitorCapabilities = model.monitorCapabilities(status),
     onTileFrame: (LiveSheet, ChromeRect) -> Unit = { _, _ -> },
+    readoutFrame: ChromeRect = livePortraitReadoutFrame(layout, zones),
 ) {
-    val fill = model.portraitFeedAspect == PortraitFeedAspect.FILL
+    var stripQuick by remember { mutableStateOf(false) }
+    var topQuick by remember { mutableStateOf(false) }
+    val captureOpen = sheet != null || stripQuick || topQuick
+    val hidesCaptureValues = hidesLowerCaptureValues(sheet, stripQuick, topQuick)
+    val fill = sourceIsVertical || model.portraitFeedAspect == PortraitFeedAspect.FILL
+    val tablet = min(layout.viewportWidth, layout.viewportHeight) >= 600f
     val editing = model.chromeEditorMode
     val showsStatus = model.chromeSectionMounts(PocketDispSection.STATUS_BAR)
     val showsLock = model.chromeSectionMounts(PocketDispSection.LOCK_BUTTON) || uiLocked
     val showsRecord = model.chromeSectionMounts(PocketDispSection.RAIL_RECORD) || status.isRecording
-    val showsMedia = model.chromeSectionMounts(PocketDispSection.RAIL_MEDIA)
-    val showsSettings = model.chromeSectionMounts(PocketDispSection.RAIL_SETTINGS) || status.isRecording
-    val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR)
+    val showsMedia = !topQuick && !stripQuick && model.chromeSectionMounts(PocketDispSection.RAIL_MEDIA)
+    val showsSettings = !topQuick && !stripQuick && (model.chromeSectionMounts(PocketDispSection.RAIL_SETTINGS) || status.isRecording)
+    val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR) &&
+        model.liveOperatorPanel == null && assist.configureTool == null
     val showsCapture = model.chromeSectionMounts(PocketDispSection.CAMERA_VALUES)
-    val captureH = if (fill && showsCapture && zones.controls.height > 1f) zones.controls.height else 0f
-    val floorY =
-        when {
-            fill && zones.controls.height > 1f -> zones.controls.minY
-            zones.assistToolbar.height > 1f -> zones.assistToolbar.minY
-            else -> zones.systemBar.minY
-        }
-    val (stick, zoom) =
-        portraitOnFeedControls(
-            picture = layout.onFeed,
-            fill = fill,
-            bottomClearance = captureH + 10f,
-            floorY = floorY,
-        )
-    val toggle = portraitAspectToggle(layout.onFeed, floorY)
-    var railExpanded by remember { mutableStateOf(false) }
-    val captureTop = if (captureH > 1f) zones.controls.minY else null
-    val rail = fillAssistRail(zones.feed, captureTop, railExpanded)
+    val floorY = zones.assistToolbar.minY
+    val showGimbalButton =
+        capabilities.gimbal && model.chromeSectionMounts(PocketDispSection.GIMBAL_STICK)
+    val cluster = layout.gimbalCluster(showGimbalButton)
+    val stick = cluster.stick
+    val zoom = cluster.zoom
+    val gimbalButton = cluster.controls
+    val toggle = portraitAspectToggle(layout.viewportWidth, floorY)
+    val rail = portraitAssistToolbar(floorY, tablet)
 
     Box(Modifier.fillMaxSize()) {
         if (showsStatus) {
-            Box(Modifier.liveModuleFrame(zones.topBar).chromeEditStroke(editing != null, true)) {
-                LivePortraitTopBar(model, status)
+            val gaugeTop = if (tablet) 82f else max(4f, zones.topBar.minY - 16f)
+            Box(Modifier.liveModuleFrame(ChromeRect(if (tablet) 14f else layout.viewportWidth - 118f,
+                gaugeTop, if (tablet) 46f else 104f, if (tablet) 54f else 28f))) {
+                com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
+                    model.phoneBatteryPercent, status.batteryPercent, horizontal = !tablet)
+            }
+            if (model.chromeSectionMounts(PocketDispSection.STORAGE)) {
+                Row(Modifier.liveModuleFrame(ChromeRect(14f, if (tablet) 52f else gaugeTop, 120f, 28f)),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    SdCardGlyph(LiveDesign.text)
+                    Text(portraitStorageLabel(status).substringBefore(" ·"), style = LiveType.mono(13.5f, FontWeight.SemiBold))
+                }
+            }
+            val recContext = LocalContext.current
+            val recLifetime = rememberCaptureQuickLifetime(model)
+            val recOwner = remember { MonitorQuickGestureOwner() }
+            val recInteractive = !uiLocked && chromeInteractive
+            val notifyTop by rememberUpdatedState<(Boolean) -> Unit> { topQuick = it; if (it) onSheet(null) }
+            LaunchedEffect(recOwner.active) { notifyTop(recOwner.active != null) }
+            DisposableEffect(Unit) { onDispose { notifyTop(false) } }
+            Box(Modifier.liveModuleFrame(readoutFrame).monitorReadoutShadow(), contentAlignment = Alignment.Center) {
+                if (CaptureShutterPolicy.showsVideoTransport(status.shootingMode) &&
+                    capabilities.timecode && model.chromeSectionMounts(PocketDispSection.TIMECODE)
+                ) TimecodeReadout(status.timecode)
+                if (CaptureShutterPolicy.showsVideoTransport(status.shootingMode) &&
+                    model.chromeSectionMounts(PocketDispSection.REC_READOUT)
+                ) {
+                    Box(Modifier.align(Alignment.CenterStart).padding(start = 14.dp)) { RecChip(status.isRecording, status.recordElapsedSec) }
+                }
+                val setupSheet = CaptureShutterPolicy.portraitSetupSheet(status.shootingMode)
+                Text(
+                    CaptureShutterPolicy.portraitSetupLabel(status.shootingMode),
+                    style = LiveType.ui(13f, FontWeight.Medium),
+                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 14.dp)
+                        .monitorReadoutGesture(
+                            captureQuickControl(setupSheet, status, model, recContext, recLifetime),
+                            recInteractive && recLifetime.active && (recOwner.owner == null || recOwner.owner == setupSheet.name),
+                            { onSheet(if (sheet == setupSheet) null else setupSheet) },
+                            { source, value ->
+                                releaseCaptureQuickControl(setupSheet, source, value, model, recContext, recLifetime, recInteractive)
+                            },
+                            0f, recOwner, setupSheet.name,
+                            { preview, maxHeight ->
+                                LiveControlSheet(setupSheet, model, status, locked = false,
+                                    onDismiss = {}, maxHeightDp = maxHeight, preview = preview,
+                                    portrait = true)
+                            },
+                            fromTop = true, ceilingY = readoutFrame.maxY,
+                            onPreviewBegin = { notifyTop(true) },
+                        ),
+                )
             }
         }
 
-        if (model.chromeSectionMounts(PocketDispSection.RAIL_RECORD) && editing == null) {
-            val recOptions =
-                ChromeRect(
-                    layout.feed.maxX - LivePortraitMetrics.REC_OPTIONS - LivePortraitMetrics.REC_OPTIONS_INSET,
-                    zones.topBar.maxY + LivePortraitMetrics.REC_OPTIONS_GAP,
-                    LivePortraitMetrics.REC_OPTIONS,
-                    LivePortraitMetrics.REC_OPTIONS,
-                )
-            LivePortraitRecOptionsButton(
-                locked = uiLocked,
-                modifier = Modifier.liveModuleFrame(recOptions).alpha(if (uiLocked) 0.4f else 1f),
-                onOpen = { if (!uiLocked) onSheet(if (sheet == it) null else it) },
-            )
-        }
-
-        if (!fill && showsAssist && zones.assistToolbar.height > 0f) {
-            val inset =
-                ChromeRect(
-                    zones.assistToolbar.minX + 12f,
-                    zones.assistToolbar.minY + 4f,
-                    max(0f, zones.assistToolbar.width - 24f),
-                    max(0f, zones.assistToolbar.height - 8f),
-                )
-            Box(
-                Modifier
-                    .liveModuleFrame(inset)
-                    .alpha(if (uiLocked) 0.4f else 1f)
-                    .chromeEditStroke(editing != null, true),
-            ) {
-                LiveAssistBar(
-                    state = assist,
-                    locked = uiLocked || !chromeInteractive,
-                    onLongPress = onAssistLongPress,
-                )
-            }
-        }
-
-        if (fill && showsAssist) {
+        if (showsAssist) {
             Box(
                 Modifier
                     .liveModuleFrame(rail)
                     .alpha(if (uiLocked) 0.4f else 1f)
                     .chromeEditStroke(editing != null, true),
             ) {
-                LivePortraitAssistRail(
-                    assist = assist,
-                    expanded = railExpanded,
-                    locked = uiLocked || !chromeInteractive,
-                    onExpandedChange = { if (!uiLocked) railExpanded = it },
-                    onLongPress = onAssistLongPress,
+                com.opencapture.openpocketcine.assists.MonitorAssistCluster(
+                    portrait = true, locked = uiLocked || !chromeInteractive,
+                    isOn = assist::isOn, onToggle = { assist.toggle(it) }, onLongPress = onAssistLongPress,
+                    showsAudio = CaptureShutterPolicy.showsAudioControls(status.shootingMode),
                 )
             }
         }
 
-        if (fill && showsCapture && zones.controls.height > 1f) {
+        if (showsCapture && layout.capture.height > 1f) {
             Box(
                 Modifier
-                    .liveModuleFrame(zones.controls)
-                    .alpha(if (uiLocked) 0.4f else 1f)
+                    .liveModuleFrame(layout.capture, Alignment.BottomCenter)
+                    .alpha(if (hidesCaptureValues) 0f else if (uiLocked) 0.4f else 1f)
+                    .then(if (hidesCaptureValues) Modifier.clearAndSetSemantics { } else Modifier)
                     .chromeEditStroke(editing != null, true),
-                contentAlignment = Alignment.Center,
             ) {
                 LiveCaptureStrip(
                     status = status,
+                    model = model,
                     active = sheet,
-                    enabled = !uiLocked && !controlBusy && chromeInteractive,
+                    enabled = !uiLocked && !controlBusy && chromeInteractive
+                        && (sheet == null || sheet.isTopAnchored),
+                    portrait = true,
+                    onQuickActiveChange = {
+                        stripQuick = it
+                        if (it) onSheet(null)
+                    },
+                    quickBottomClearanceDp = layout.viewportHeight - zones.systemBar.minY + 12f,
                     showFocus =
-                        CaptureLists.supportsFocusModeOrDefault(model.session.connectedCamera?.model),
+                        capabilities.focus,
                     facePriority = model.facePriorityExposureEnabled,
                     shutterUsesAngle = model.shutterUsesAngle,
-                    onOpen = { if (!uiLocked) onSheet(if (sheet == it) null else it) },
+                    onOpen = {
+                        if (!uiLocked) {
+                            val next = CaptureShutterPolicy.opening(it, status.shootingMode)
+                            onSheet(if (sheet == next) null else next)
+                        }
+                    },
                     onTileFrame = onTileFrame,
                 )
             }
         }
 
-        if (editing == null) {
+        if (editing == null && !sourceIsVertical) {
             LivePortraitAspectToggle(
                 fill = fill,
                 locked = uiLocked,
@@ -374,8 +356,9 @@ fun LivePortraitChrome(
             )
         }
 
-        if (model.chromeSectionMounts(PocketDispSection.ZOOM_CHIP)) {
+        if (!captureOpen && capabilities.zoom && model.chromeSectionMounts(PocketDispSection.ZOOM_CHIP)) {
             val zoomReadout by model.session.zoomReadout.collectAsState()
+            val zoomDialReadout by model.session.zoomDialReadout.collectAsState()
             val zoomPinching by model.session.zoomPinching.collectAsState()
             val zoomBlocked =
                 CamFov.zoomNeedsColorHopWhileRecording(
@@ -385,6 +368,7 @@ fun LivePortraitChrome(
                 )
             LiveZoomChip(
                 factor = zoomReadout,
+                dialFactor = zoomDialReadout,
                 locked = uiLocked,
                 pinching = zoomPinching,
                 dimmed = zoomBlocked,
@@ -394,21 +378,51 @@ fun LivePortraitChrome(
                         .alpha(if (uiLocked || zoomBlocked) 0.4f else 1f)
                         .chromeEditStroke(editing != null, true),
                 onCycle = {
-                    model.session.setZoom(model.session.zoomNextJump())
+                    model.session.setZoom(LiveZoom.nextJump(model.session.zoomCycleFrom(), model.monitorZoomStops().primary))
                 },
+                onDigitalCycle = model.monitorZoomStops().secondary.takeIf { it.isNotEmpty() }?.let { stops ->
+                    { model.session.setZoom(LiveZoom.nextJump(model.session.zoomCycleFrom(), stops)) }
+                },
+                maximum = model.session.zoomMax(),
+                opticalStops = if (3.0 in model.session.zoomStops()) listOf(1.0, 3.0) else listOf(1.0),
+                onDial = model.session::updateZoomPinch,
+                onDialEnd = model.session::endZoomPinch,
             )
         }
 
-        if (model.chromeSectionMounts(PocketDispSection.GIMBAL_STICK)) {
-            Box(Modifier.liveModuleFrame(stick).chromeEditStroke(editing != null, true)) {
+        if (!captureOpen && showGimbalButton && !gimbalButton.isEmpty) {
+            LiveGimbalButton(
+                locked = uiLocked,
+                onClick = {
+                    model.liveGimbalPanel =
+                        if (model.liveGimbalPanel == LiveGimbalPanel.SHEET) LiveGimbalPanel.NONE
+                        else LiveGimbalPanel.SHEET
+                },
+                modifier =
+                    Modifier
+                        .liveModuleFrame(gimbalButton)
+                        .alpha(if (uiLocked) 0.4f else 1f),
+            )
+        }
+        if (showGimbalButton) {
+            Box(Modifier.liveModuleFrame(stick).alpha(if (captureOpen) 0f else 1f).chromeEditStroke(editing != null, true)) {
                 LiveGimbalStick(
-                    enabled = !uiLocked && model.liveOperatorPanel == null && chromeInteractive,
+                    enabled = !captureOpen && !uiLocked && model.liveOperatorPanel == null && chromeInteractive,
                     onMove = model::updateGimbalStick,
                     onRelease = model::endGimbalStick,
                     onRecenter = { model.session.recenterGimbal() },
                     onFlip = { model.session.flipGimbal() },
                 )
             }
+        }
+        if (!captureOpen && showGimbalButton && chromeInteractive && !uiLocked && model.liveOperatorPanel == null) {
+            LiveGimbalOverlay(
+                model = model,
+                layout = layout,
+                feed = layout.onFeed,
+                joystickBounds = stick,
+                uiLocked = uiLocked,
+            )
         }
 
         Box(
@@ -422,7 +436,7 @@ fun LivePortraitChrome(
                         max(0f, layout.viewportHeight - zones.systemBar.minY),
                     ),
                 )
-                .background(LiveDesign.glass),
+                .background(LiveDesign.background),
         )
 
         Box(Modifier.liveModuleFrame(zones.systemBar)) {
@@ -445,7 +459,7 @@ fun LivePortraitChrome(
 
 @Composable
 fun LivePortraitTopBar(model: AppModel, status: CameraStatus) {
-    Box(Modifier.fillMaxSize().background(LiveDesign.glass)) {
+    Box(Modifier.fillMaxSize().monitorMaterial(MonitorMaterial.Expanded)) {
         if (model.chromeSectionMounts(PocketDispSection.STORAGE)) {
             Text(
                 portraitStorageLabel(status),
@@ -484,10 +498,44 @@ fun LivePortraitSystemBar(
     showsSettings: Boolean,
     controlBusy: Boolean,
 ) {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val tablet = min(configuration.screenWidthDp, configuration.screenHeightDp) >= 600
+    val navigationEnabled = !uiLocked && chromeInteractive && model.liveOperatorPanel == null
+    if (tablet) {
+        Box(Modifier.fillMaxSize().padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+            Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (showsLock) LockButton(uiLocked, Modifier.size(48.dp), onClick = onLock)
+                if (chromeInteractive) DispButton(clean = model.assistClean, modifier = Modifier.size(48.dp), onClick = {
+                    if (!uiLocked) { val clean = !model.assistClean; model.setDisplayMode(clean); assist.clean = clean }
+                })
+            }
+            if (showsRecord) RecordButton(status.isRecording, !controlBusy && !uiLocked, Modifier.size(84.dp),
+                confirm = CaptureShutterPolicy.requiresRecordConfirmation(
+                    model.recordConfirmationEnabled, status.shootingMode,
+                ),
+                photo = CaptureShutterPolicy.isStillCapture(status.shootingMode),
+                diameter = 84f,
+                request = CaptureShutterPolicy.request(
+                    status.shootingMode, status.isRecording, uiLocked, controlBusy, model.session.phase,
+                ),
+                onClick = model::pressShutter)
+            Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (showsSettings) AuxCircleButton(Modifier.size(48.dp).monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.SETTINGS }) {
+                    OpcIcon(OpcIcon.SETTINGS, "Settings", Modifier.fillMaxSize(), it)
+                }
+                if (showsMedia) AuxCircleButton(Modifier.size(48.dp).monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.MEDIA }) {
+                    OpcIcon(OpcIcon.FILM, "Media", Modifier.fillMaxSize(), it)
+                }
+            }
+        }
+        return
+    }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Row(
-                Modifier.weight(1f).fillMaxHeight(),
+                Modifier.weight(1f).fillMaxHeight().offset(x = (-4).dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Spacer(Modifier.weight(1f))
@@ -511,19 +559,19 @@ fun LivePortraitSystemBar(
             }
             if (showsRecord) Spacer(Modifier.width(LiveChromeMetrics.RECORD.dp))
             Row(
-                Modifier.weight(1f).fillMaxHeight(),
+                Modifier.weight(1f).fillMaxHeight().offset(x = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Spacer(Modifier.weight(1f))
-                if (showsMedia) {
-                    AuxCircleButton(onClick = { model.liveOperatorPanel = LiveOperatorPanel.MEDIA }) {
-                        OpcIcon(OpcIcon.LAYERS, contentDescription = null, tint = it, modifier = Modifier.fillMaxSize())
+                if (showsSettings) {
+                    AuxCircleButton(Modifier.monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.SETTINGS }) {
+                        OpcIcon(OpcIcon.SETTINGS, contentDescription = "Settings", tint = it, modifier = Modifier.fillMaxSize())
                     }
                     Spacer(Modifier.weight(1f))
                 }
-                if (showsSettings) {
-                    AuxCircleButton(onClick = { model.liveOperatorPanel = LiveOperatorPanel.SETTINGS }) {
-                        OpcIcon(OpcIcon.SETTINGS, contentDescription = null, tint = it, modifier = Modifier.fillMaxSize())
+                if (showsMedia) {
+                    AuxCircleButton(Modifier.monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.MEDIA }) {
+                        OpcIcon(OpcIcon.FILM, contentDescription = "Media", tint = it, modifier = Modifier.fillMaxSize())
                     }
                     Spacer(Modifier.weight(1f))
                 }
@@ -532,9 +580,15 @@ fun LivePortraitSystemBar(
         if (showsRecord) {
             RecordButton(
                 recording = status.isRecording,
-                enabled = !controlBusy,
-                confirm = model.recordConfirmationEnabled,
-                photo = CameraCommands.isPhotoMode(status.shootingMode),
+                enabled = !controlBusy && !uiLocked,
+                diameter = LiveChromeMetrics.RECORD,
+                confirm = CaptureShutterPolicy.requiresRecordConfirmation(
+                    model.recordConfirmationEnabled, status.shootingMode,
+                ),
+                photo = CaptureShutterPolicy.isStillCapture(status.shootingMode),
+                request = CaptureShutterPolicy.request(
+                    status.shootingMode, status.isRecording, uiLocked, controlBusy, model.session.phase,
+                ),
                 onClick = model::pressShutter,
             )
         }
@@ -559,8 +613,8 @@ fun LivePortraitAspectToggle(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            if (fill) "FIT" else "FILL",
-            color = LiveDesign.text,
+            if (fill) "FILL" else "FIT",
+            color = if (fill) LiveDesign.accent else LiveDesign.text,
             style = LiveType.ui(9f, FontWeight.Bold),
             maxLines = 1,
         )
@@ -578,85 +632,61 @@ fun LiveCaptureStrip(
     shutterUsesAngle: Boolean = false,
     onOpen: (LiveSheet) -> Unit,
     onTileFrame: (LiveSheet, ChromeRect) -> Unit = { _, _ -> },
+    model: AppModel? = null,
+    onQuickActiveChange: (Boolean) -> Unit = {},
+    quickBottomClearanceDp: Float = 0f,
+    portrait: Boolean? = null,
 ) {
     val context = LocalContext.current
     val auto = status.expoMode == CameraCommands.EXPO_AUTO
-    val shutterValue =
-        if (shutterUsesAngle) {
-            ShutterAngle.label(ShutterAngle.nearestDegrees(OperatorPrefs.shutterAngleDegrees(context)))
-        } else {
-            status.shutterLabel
+    val shutter = captureShutterReadout(
+        status,
+        shutterUsesAngle,
+        OperatorPrefs.shutterAngleDegrees(context),
+    )
+    fun value(sheet: LiveSheet, label: String, readout: String, annotation: String? = null) =
+        com.opencapture.openpocketcine.monitor.MonitorValue(
+            sheet.name, label, readout, selected = active == sheet, annotation = annotation,
+        )
+    val values = buildList {
+        add(value(LiveSheet.ISO, "ISO", CaptureLists.isoChipValue(status)))
+        add(value(LiveSheet.SHUTTER,
+            if (auto) MonitorExposureReadout.autoEvCaption(status.shutterDenom)
+            else "SHUTTER",
+            if (auto) EvComp.fromRaw(status.evComp)?.label ?: "—" else shutter,
+            if (auto && facePriority) "FACE" else null))
+        add(value(LiveSheet.EXPO, "EXPOSURE", if (status.expoMode == CameraCommands.EXPO_MANUAL) "M" else if (auto) "A" else "—"))
+        add(value(LiveSheet.WB, "WB", CaptureLists.wbChipValue(status)))
+        if (showFocus) add(value(LiveSheet.FOCUS, "FOCUS", status.focusLabel))
+        if (CaptureShutterPolicy.showsAudioControls(status.shootingMode)) {
+            add(value(LiveSheet.AUDIO, "AUDIO", status.audioLabel))
         }
-    val wbAuto = CaptureLists.wbIsAuto(status)
-    CaptureStripShell(modifier) {
-        CaptureSettingCell(
-            "ISO",
-            CaptureLists.isoChipValue(status),
-            "25600",
-            active == LiveSheet.ISO,
-            enabled,
-            modifier = Modifier.weight(1f).reportChromeFrame { onTileFrame(LiveSheet.ISO, it) },
-        ) { onOpen(LiveSheet.ISO) }
-        if (auto) {
-            CaptureSettingCell(
-                "EV",
-                EvComp.fromRaw(status.evComp)?.label ?: "—",
-                "+3.0",
-                active == LiveSheet.SHUTTER,
-                enabled,
-                modifier = Modifier.weight(1f).reportChromeFrame { onTileFrame(LiveSheet.SHUTTER, it) },
-                showFacePriorityBadge = facePriority,
-            ) { onOpen(LiveSheet.SHUTTER) }
-        } else {
-            CaptureSettingCell(
-                "SHUTTER",
-                shutterValue,
-                if (shutterUsesAngle) "346°" else "1/16000",
-                active == LiveSheet.SHUTTER,
-                enabled,
-                modifier = Modifier.weight(1f).reportChromeFrame { onTileFrame(LiveSheet.SHUTTER, it) },
-            ) {
-                onOpen(LiveSheet.SHUTTER)
-            }
-        }
-        CaptureSettingCell(
-            "MODE",
-            status.expoLabel,
-            "Manual",
-            active == LiveSheet.EXPO,
-            enabled,
-            modifier = Modifier.weight(1f).reportChromeFrame { onTileFrame(LiveSheet.EXPO, it) },
-        ) { onOpen(LiveSheet.EXPO) }
-        CaptureSettingCell(
-            "WB",
-            CaptureLists.wbChipValue(status),
-            CaptureLists.wbChipWidest(),
-            active == LiveSheet.WB,
-            enabled,
-            modifier = Modifier.weight(1f).reportChromeFrame { onTileFrame(LiveSheet.WB, it) },
-            valueIcon = if (wbAuto) { { tint -> WbAutoGlyph(tint) } } else null,
-        ) { onOpen(LiveSheet.WB) }
-        if (showFocus) {
-            CaptureSettingCell(
-                "FOCUS",
-                status.focusLabel,
-                "Showcase",
-                active == LiveSheet.FOCUS,
-                enabled,
-                modifier = Modifier.weight(1f).reportChromeFrame { onTileFrame(LiveSheet.FOCUS, it) },
-            ) {
-                onOpen(LiveSheet.FOCUS)
-            }
-        }
-        CaptureSettingCell(
-            "AUDIO",
-            status.audioLabel,
-            "Spatial",
-            active == LiveSheet.AUDIO,
-            enabled,
-            modifier = Modifier.weight(1f).reportChromeFrame { onTileFrame(LiveSheet.AUDIO, it) },
-        ) { onOpen(LiveSheet.AUDIO) }
     }
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val quickLifetime = rememberCaptureQuickLifetime(model)
+    val isPortrait = portrait ?: (configuration.screenHeightDp > configuration.screenWidthDp)
+    com.opencapture.openpocketcine.monitor.MonitorCameraValues(
+        values = values,
+        enabled = enabled && quickLifetime.active,
+        portrait = isPortrait,
+        modifier = modifier,
+        quickControl = { id -> model?.let { captureQuickControl(LiveSheet.valueOf(id), status, it, context, quickLifetime) } },
+        quickPreview = { id, preview, maxHeight ->
+            model?.let {
+                LiveControlSheet(LiveSheet.valueOf(id), it, status, locked = false,
+                    onDismiss = {}, maxHeightDp = maxHeight, preview = preview,
+                    portrait = isPortrait)
+            }
+        },
+        onQuickActiveChange = onQuickActiveChange,
+        quickBottomClearanceDp = quickBottomClearanceDp,
+        onQuickCommit = { id, source, value -> model?.let {
+            releaseCaptureQuickControl(LiveSheet.valueOf(id), source, value, it, context, quickLifetime,
+                enabled && active == null)
+        } },
+        onOpen = { onOpen(LiveSheet.valueOf(it)) },
+        onFrame = { id, rect -> onTileFrame(LiveSheet.valueOf(id), rect) },
+    )
 }
 
 /** iOS `a.circle.fill` stand-in for Auto white-balance. */
@@ -682,6 +712,7 @@ fun LivePortraitAssistRail(
     locked: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onLongPress: (LiveAssistTool) -> Unit,
+    showsAudio: Boolean = true,
 ) {
     if (!expanded) {
         Box(
@@ -723,7 +754,9 @@ fun LivePortraitAssistRail(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            val tools = LiveAssistTool.toolbarCases + LiveAssistTool.AUDIO
+            val tools =
+                if (showsAudio) LiveAssistTool.toolbarCases + LiveAssistTool.AUDIO
+                else LiveAssistTool.toolbarCases
             tools.forEach { tool ->
                 LivePortraitRailTool(
                     tool = tool,
@@ -744,6 +777,7 @@ fun LivePortraitRecOptionsButton(
     locked: Boolean,
     modifier: Modifier = Modifier,
     onOpen: (LiveSheet) -> Unit,
+    isPhoto: Boolean = false,
 ) {
     var open by remember { mutableStateOf(false) }
     val menuOffset = with(LocalDensity.current) { IntOffset(0, 8.dp.roundToPx()) }
@@ -765,15 +799,22 @@ fun LivePortraitRecOptionsButton(
                 offset = menuOffset,
                 onDismissRequest = { open = false },
             ) {
-                Column(Modifier.width(220.dp).background(LiveDesign.glass)) {
-                    RecOptionsRow("Resolution · Framerate") {
-                        open = false
-                        onOpen(LiveSheet.FORMAT)
-                    }
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(LiveDesign.hairline))
-                    RecOptionsRow("Color") {
-                        open = false
-                        onOpen(LiveSheet.COLOR)
+                Column(Modifier.width(220.dp).monitorMaterial(MonitorMaterial.Expanded)) {
+                    if (isPhoto) {
+                        RecOptionsRow("Shooting mode") {
+                            open = false
+                            onOpen(LiveSheet.MODE)
+                        }
+                    } else {
+                        RecOptionsRow("Resolution · Framerate") {
+                            open = false
+                            onOpen(LiveSheet.FORMAT)
+                        }
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(LiveDesign.hairline))
+                        RecOptionsRow("Color") {
+                            open = false
+                            onOpen(LiveSheet.COLOR)
+                        }
                     }
                 }
             }
@@ -825,7 +866,7 @@ private fun LivePortraitRailTool(
             tool.chipLabel,
             color = tint,
             fontSize = 9.sp,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
             maxLines = 1,
             letterSpacing = 0.9.sp,
         )

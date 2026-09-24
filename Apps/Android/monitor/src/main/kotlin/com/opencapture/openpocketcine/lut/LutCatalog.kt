@@ -1,10 +1,8 @@
 package com.opencapture.openpocketcine.lut
 
 import java.io.File
-import com.opencapture.openpocketcine.feed.MonitorTransfer
 
 enum class LutCategory {
-    CAMERA,
     DJI,
     CREATIVE,
     CUSTOM,
@@ -15,41 +13,19 @@ data class LutEntry(
     val title: String,
     val category: LutCategory,
     val fileName: String? = null,
-    /** Declared cube input, independent of the transfer carried by the source frame. */
-    val inputTransfer: MonitorTransfer? = null,
-    val caption: String? = null,
 )
 
-/** Injected camera looks plus shared creative/custom catalogs and legacy selection compatibility. */
+/** Built-in / DJI / Custom catalog. Selection ids match iOS `LUTSelection` where possible. */
 object LutCatalog {
     const val ASSET_DIRECTORY = "luts"
     const val CUSTOM_DIRECTORY = "luts"
     const val AUTO = "auto"
     const val OFF = "off"
     const val DJI_AUTO = "djiAuto"
+    const val PHOTO_REC709_CAPTION = "Photo live view is Rec.709 — log conversions are off"
 
     private const val CUSTOM_PREFIX = "custom:"
     private const val ASSET_PREFIX = "asset:"
-
-    val auto: LutEntry = LutEntry(AUTO, "Auto", LutCategory.CAMERA)
-    var cameraLooks: List<LutEntry> = emptyList()
-        private set
-
-    /** Installed once by the thin brand app, alongside its backend and identity. */
-    fun configureCameraLooks(entries: List<LutEntry>) {
-        require(entries.all {
-            it.category == LutCategory.CAMERA && it.id.startsWith("camera:") &&
-                it.fileName?.let { name -> isSafeFileName(name) && isCubeFileName(name) } == true
-        })
-        require(entries.map { it.id }.distinct().size == entries.size)
-        cameraLooks = entries.toList()
-    }
-
-    fun cameraEntries(assetFileNames: Collection<String>, looks: List<LutEntry> = cameraLooks): List<LutEntry> =
-        listOf(auto) + looks.filter { entry -> assetFileNames.any { it == entry.fileName } }
-
-    fun normalizedSelection(id: String): String =
-        if (id.isBlank() || id == DJI_AUTO) AUTO else id
 
     val djiAuto: LutEntry = LutEntry(DJI_AUTO, "Auto", LutCategory.DJI)
 
@@ -143,7 +119,7 @@ object LutCatalog {
         return fileName.takeIf { isSafeFileName(it) }
     }
 
-    fun djiEntries(assetFileNames: Collection<String>): List<LutEntry> {
+    fun djiEntries(assetFileNames: Collection<String>, isPhotoLive: Boolean = false): List<LutEntry> {
         val cubes = assetFileNames.filter(::isCubeFileName)
         val reserved =
             (officialDji + officialBuiltInLooks)
@@ -158,7 +134,9 @@ object LutCatalog {
                 .filter { name -> name.lowercase() !in reserved }
                 .sortedBy { it.lowercase() }
                 .map { extraDji(it) }
-        return listOf(djiAuto) + presentOfficial + extras
+        val all = listOf(djiAuto) + presentOfficial + extras
+        if (!isPhotoLive) return all
+        return all.filter { it.id == DJI_AUTO || it.id.startsWith(ASSET_PREFIX) }
     }
 
     fun storedCustom(fromFileNames: Collection<String>): List<LutEntry> =
@@ -193,7 +171,6 @@ object LutCatalog {
     }
 
     fun titleFor(id: String): String {
-        cameraLooks.firstOrNull { it.id == id }?.let { return it.title }
         val canonical = migratedToDjiCatalog(id)
         if (canonical.isBlank()) return "Auto"
         if (canonical == AUTO || canonical == DJI_AUTO) return djiAuto.title
@@ -213,7 +190,6 @@ object LutCatalog {
 
     fun categoryOf(id: String): LutCategory =
         when {
-            id == AUTO || id == OFF || id.startsWith("camera:") -> LutCategory.CAMERA
             customFileName(id) != null ||
                 id == "customFile" ||
                 id == "customRec709" ||

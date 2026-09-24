@@ -1,6 +1,6 @@
 # Luna Ultra protocol investigation
 
-Updated: 2026-09-11. Scope: establish the connection protocol needed for an
+Updated: 2026-09-17. Scope: establish the connection protocol needed for an
 Insta360 adapter, with the same evidence-driven progression used by
 OpenPocketCine. This is an investigation ledger, not a completed protocol spec.
 
@@ -42,9 +42,9 @@ moving a claim into code or public documentation.
 | Wi-Fi credentials and AP startup | Encrypted GetOptions [36,37,43] credential read and AP join succeed | Establish AP lifetime, sleep/wake and startup requirements |
 | Camera IP, control port, media endpoints | Own TCP 192.168.42.1:6666 authorization; HTTP 80 reachable | HTTP file-transfer semantics |
 | Live enable, codec, packetization | Own commands 1/2; decoded 1280×720 HEVC/BT.709, 25 fps; 271-second live window | Latency, native decoding, interruption recovery and recording coexistence |
-| Record, exposure, WB, format, battery, storage | Public command leads | Isolated changes with request/reply/status and on-camera confirmation |
-| Gimbal/zoom/tracking | Do not infer support from Pocket or camera hardware | Identify protocol then validate each control/capability |
-| Clip list, download, playback, delete/star | Implementation leads vary | Read/list/download first; exact clip identity and file integrity |
+| Record, exposure, WB, format, battery, storage | SET: ISO 160, shutter 1/50, EV +0.3, Standard=1 / I-Log=2 / **Dolby=5**, WB 2000/2400K, sharpness High, zoom 1–6, format enum, record 4/5, photo 3, modes 41, pano 40=8 | Colour Recovery **solved**: screen RPC `iq_ilog_lut.enable`, writable from a Mac once the KCP sequence is primed. See [implementation guide](implementation/luna-color-recovery.md). Phone option 73 remains a no-op on v1.0.288. |
+| Gimbal/zoom/tracking | Zoom 1/2/3/6; recenter + flip; FPV/FPV-V/Roll Lock; tap-focus; Deep Track 237; **stick MOVE cmd 226 action 1, sint32 ±99** | Dolby still open; Colour Recovery solved |
+| Clip list, download, playback, delete/star | cmd 2 + 118 + 11 + HTTP GET; **delete cmd 12 URI**; star/like not on UCD2; no play/pause opcodes | Filter field 18 unused by iOS live UI |
 
 ## Local hardware check
 

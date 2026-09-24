@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.session
 
+import kotlin.math.hypot
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -200,9 +201,52 @@ object CameraCommands {
     /** iOS `CamFov.shouldRestoreDLog2` — only park back at 1×, not 2.9×. */
     fun shouldRestoreDLog2(factor: Double): Boolean = CamFov.shouldRestoreDLog2(factor)
 
-    /** `[res][fps_idx] 00 00 00`. */
-    fun resolutionFps(res: Int, fpsIndex: Int): ByteArray =
-        byteArrayOf(res.toByte(), fpsIndex.toByte(), 0x00, 0x00, 0x00)
+    /** Video `0x02/0x18` trailer. SlowMo uses [slowMoFormatTrailer] instead. */
+    val VIDEO_FORMAT_TRAILER: ByteArray = byteArrayOf(0x00, 0x00, 0x00)
+
+    /**
+     * Pocket 3 SlowMo `0x02/0x18` trailer, or null when that fps index has no
+     * documented SlowMo request. 4X (100/120) is `00 04 00`; 8X (240) is `00 08 00`.
+     */
+    fun slowMoFormatTrailer(fpsIndex: Int): ByteArray? =
+        when (fpsIndex) {
+            VideoFrameRate.FPS100.rawValue,
+            VideoFrameRate.FPS120.rawValue,
+            VideoFrameRate.FPS200.rawValue,
+            -> byteArrayOf(0x00, 0x04, 0x00)
+            VideoFrameRate.FPS240.rawValue -> byteArrayOf(0x00, 0x08, 0x00)
+            else -> null
+        }
+
+    /** `[res][fps_idx]` plus Video `00 00 00` or the documented SlowMo trailer. */
+    fun resolutionFps(res: Int, fpsIndex: Int, shootingMode: Int = SHOOT_VIDEO): ByteArray {
+        val trailer =
+            if (shootingMode == SHOOT_SLOWMO) {
+                slowMoFormatTrailer(fpsIndex) ?: VIDEO_FORMAT_TRAILER
+            } else {
+                VIDEO_FORMAT_TRAILER
+            }
+        return byteArrayOf(res.toByte(), fpsIndex.toByte()) + trailer
+    }
+
+    /**
+     * JNI extra for video-format SET. Third field is shooting-mode raw for
+     * Pocket 3 and Pocket 4 Pro SlowMo so the facade can emit 4X/8X trailers
+     * (200 fps still uses `00 04 00`). Regular Pocket 4 omits it.
+     */
+    fun formatCommandExtra(
+        res: Int,
+        fpsIndex: Int,
+        shootingMode: Int = SHOOT_VIDEO,
+        cameraName: String? = null,
+    ): String {
+        if (shootingMode == SHOOT_SLOWMO &&
+            CameraModel.supportsSlowMoFormatTrailer(cameraName.orEmpty())
+        ) {
+            return "$res\u001f$fpsIndex\u001f$shootingMode"
+        }
+        return "$res\u001f$fpsIndex"
+    }
 
     fun paramGet(pid: Int): ByteArray =
         byteArrayOf(0x00, 0x01, (pid and 0xFF).toByte(), ((pid shr 8) and 0xFF).toByte())
@@ -313,7 +357,9 @@ object CameraCommands {
     const val CMD_TRACK_SET = 0xA6
     const val CMD_TRACK_POLL = 0xA5
     const val CMD_PLAYBACK = 0x0C
+    const val CMD_GIMBAL_ANGLE = 0x14
     const val CMD_GIMBAL_MODE = 0x4C
+    const val CMD_GIMBAL_PARAMS = 0x50
     const val CMD_MEDIA_LIST = 0x26
     const val CMD_MEDIA_DELETE = 0x28
     const val CMD_MEDIA_FAVORITE = 0xBF
@@ -336,24 +382,30 @@ object CameraCommands {
     const val SHOOT_HYPERLAPSE = 0x0A
     const val SHOOT_PHOTO_POCKET4 = 0x17
     const val SHOOT_SUPER_NIGHT = 0x28
+    /** Pocket 4 Pro Live Photo, physically observed in Mimo. */
+    const val SHOOT_LIVE_PHOTO = 0x4D
 
+    /** Still capture: Photo `0x05` / Pocket 4 `0x17` / Live Photo `0x4D`. SuperNight `0x28` is video. */
     fun isPhotoMode(shootingMode: Int): Boolean =
         shootingMode == SHOOT_PHOTO ||
             shootingMode == SHOOT_PHOTO_POCKET4 ||
-            shootingMode == SHOOT_SUPER_NIGHT
+            shootingMode == SHOOT_LIVE_PHOTO
 
     /**
      * Label for a tabled `0x02/0xE1` value, or null when the camera reports one we do not know.
      * Both photo encodings read back as "Photo" — the body decides which it uses.
+     * Pocket 3 presents `0x28` as Low-Light video; other bodies keep SuperNight.
      */
-    fun shootingModeLabel(raw: Int): String? =
+    fun shootingModeLabel(raw: Int, cameraName: String? = null): String? =
         when (raw) {
             SHOOT_SLOWMO -> "SlowMo"
             SHOOT_VIDEO -> "Video"
             SHOOT_TIMELAPSE -> "TimeLapse"
             SHOOT_PHOTO, SHOOT_PHOTO_POCKET4 -> "Photo"
+            SHOOT_LIVE_PHOTO -> "Live Photo"
             SHOOT_HYPERLAPSE -> "HyperLapse"
-            SHOOT_SUPER_NIGHT -> "SuperNight"
+            SHOOT_SUPER_NIGHT ->
+                if (CameraModel.looksLikePocket3(cameraName.orEmpty())) "Low-Light" else "SuperNight"
             else -> null
         }
 
@@ -368,8 +420,8 @@ object CameraCommands {
 
     /**
      * The camera's own on-screen carousel order — Video, Photo, TimeLapse, HyperLapse,
-     * SuperNight, SlowMo — which is not the numeric order. The wire enum is sparse and
-     * unordered, so this is tabled and never computed.
+     * SuperNight (Low-Light on Pocket 3), SlowMo — which is not the numeric order. The
+     * wire enum is sparse and unordered, so this is tabled and never computed.
      *
      * Only ever send a value from this table. Sweeping the `0x02/0xE1` value space froze a Nano
      * solid and needed a power cycle, so an unlisted mode must be refused rather than passed
@@ -422,9 +474,43 @@ object CameraCommands {
 
     fun zoomForFactor(factor: Double): ByteArray = zoomLens(lensForZoomFactor(factor))
 
+    /** Native timed target: yaw/roll/pitch i16 LE, absolute + ignore roll, duration in 0.1s. */
+    fun gimbalTimedTarget(target: GimbalWaypoint, duration: Double): ByteArray? {
+        if (target.pitchDeg !in GimbalWaypoint.TILT_MIN_DEG..GimbalWaypoint.TILT_MAX_DEG) return null
+        val nativePitch = target.nativePitchDeg ?: return null
+        return gimbalTimedTarget(target.yawDeg, nativePitch, duration)
+    }
+
+    fun gimbalTimedTarget(yawDeg: Double, nativePitchDeg: Double, duration: Double): ByteArray? {
+        if (!yawDeg.isFinite() || !nativePitchDeg.isFinite() || !duration.isFinite() ||
+            yawDeg !in GimbalWaypoint.PAN_MIN_DEG..GimbalWaypoint.PAN_MAX_DEG ||
+            nativePitchDeg !in -180.0..180.0 || duration !in 0.1..25.5 ||
+            kotlin.math.abs(duration * 10 - kotlin.math.round(duration * 10)) >= 1e-6) return null
+        fun tenth(value: Double): Int =
+            java.lang.Math.copySign(kotlin.math.floor(kotlin.math.abs(value * 10) + 0.5), value).toInt()
+        return u16LE(tenth(yawDeg)) + u16LE(0) + u16LE(tenth(nativePitchDeg)) +
+            byteArrayOf(0x05, tenth(duration).toByte())
+    }
+
+    fun gimbalTimedStop(): ByteArray = byteArrayOf(0, 0, 0, 0, 0, 0, 4, 1)
+
     fun gimbalRecenter(): ByteArray = byteArrayOf(0xFE.toByte(), 0x08)
 
     fun gimbalFlip(): ByteArray = byteArrayOf(0xFE.toByte(), 0x09)
+
+    fun gimbalFollowFamily(): ByteArray = byteArrayOf(0x02, 0x08)
+
+    fun gimbalFpv(): ByteArray = byteArrayOf(0x01, 0x08)
+
+    fun gimbalDirectionLock(): ByteArray = byteArrayOf(0x00, 0x08)
+
+    fun gimbalParamsGet(): ByteArray = byteArrayOf(0x01, 0x04, 0x05)
+
+    fun setGimbalSpeed(speed: Int): ByteArray =
+        byteArrayOf(0x00, 0x05, 0x01, (speed and 0xFF).toByte())
+
+    fun setGimbalTiltLock(locked: Boolean): ByteArray =
+        byteArrayOf(0x00, 0x04, 0x01, if (locked) 0x01 else 0x00)
 
     fun liveViewEnablePayload(): ByteArray =
         byteArrayOf(0x00, 0x04, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
@@ -488,9 +574,106 @@ object CameraCommands {
     const val GIMBAL_STICK_MAX = 1574
     const val GIMBAL_STICK_DEADZONE = 0.08f
     const val GIMBAL_STICK_ANALOG_EXPO = 2.0
+    const val GIMBAL_STICK_DEFAULT_DEADZONE_PERCENT = 8
 
     const val GIMBAL_STICK_DEFAULT_SENSITIVITY = 4
+
+    enum class VirtualJoystickCurve(val raw: String, val expo: Double, val label: String) {
+        LINEAR("linear", 1.0, "Linear"),
+        STANDARD("standard", GIMBAL_STICK_ANALOG_EXPO, "Standard"),
+        FINE("fine", 3.0, "Fine"),
+        ;
+
+        companion object {
+            fun parse(raw: String?): VirtualJoystickCurve =
+                entries.firstOrNull { it.raw.equals(raw, ignoreCase = true) } ?: STANDARD
+
+            fun fromLabel(label: String): VirtualJoystickCurve =
+                entries.firstOrNull { it.label == label } ?: STANDARD
+        }
+    }
+
+    data class VirtualJoystickMapping(
+        val invertPan: Boolean = false,
+        val invertTilt: Boolean = false,
+        val deadzone: Float = GIMBAL_STICK_DEADZONE,
+        val curve: VirtualJoystickCurve = VirtualJoystickCurve.STANDARD,
+    ) {
+        val isDefault: Boolean
+            get() = this == DEFAULT
+
+        companion object {
+            val DEFAULT = VirtualJoystickMapping()
+
+            fun clampedDeadzone(value: Float): Float =
+                if (value.isFinite()) value.coerceIn(0f, 0.25f) else GIMBAL_STICK_DEADZONE
+
+            fun clampedDeadzonePercent(value: Int): Int = value.coerceIn(0, 25)
+
+            fun deadzoneFromPercent(percent: Int): Float {
+                val p = clampedDeadzonePercent(percent)
+                return if (p == GIMBAL_STICK_DEFAULT_DEADZONE_PERCENT) GIMBAL_STICK_DEADZONE
+                else p / 100f
+            }
+
+            fun resolvedDeadzonePercent(stored: Int?): Int =
+                if (stored == null) GIMBAL_STICK_DEFAULT_DEADZONE_PERCENT
+                else clampedDeadzonePercent(stored)
+        }
+    }
     const val GIMBAL_STICK_TAP_SLOP = 0.18f
+    /** Full command throw as a multiple of the visible outer radius (`stickSize / 2`). */
+    const val GIMBAL_STICK_TOUCH_COMMAND_RADIUS_FACTOR = 1.35f
+
+    data class GimbalStickTouchMapping(
+        val visualX: Float,
+        val visualY: Float,
+        val commandX: Float,
+        val commandY: Float,
+        val isTap: Boolean,
+        val engaged: Boolean,
+        val emit: Boolean,
+    )
+
+    fun mapGimbalStickTouch(
+        dx: Float,
+        dy: Float,
+        stickSize: Float,
+        knobSize: Float,
+        engaged: Boolean,
+    ): GimbalStickTouchMapping {
+        val size = if (stickSize.isFinite()) maxOf(stickSize, 0f) else 0f
+        val knob = if (knobSize.isFinite()) maxOf(knobSize, 0f) else 0f
+        val rawX = if (dx.isFinite()) dx else 0f
+        val rawY = if (dy.isFinite()) dy else 0f
+        val travel = maxOf((size - knob) / 2f, 0f)
+        val commandRadius = GIMBAL_STICK_TOUCH_COMMAND_RADIUS_FACTOR * (size / 2f)
+        val (visualX, visualY) = radialClamp(rawX, rawY, travel)
+        val visualMag = hypot(visualX, visualY)
+        val visualNorm = if (travel > 0f) visualMag / travel else 0f
+        val isTap = visualNorm <= GIMBAL_STICK_TAP_SLOP
+        val nowEngaged = engaged || !isTap
+        val (cmdX, cmdY) = radialClamp(rawX, rawY, commandRadius)
+        val commandX = if (commandRadius > 0f) cmdX / commandRadius else 0f
+        val commandY = if (commandRadius > 0f) -cmdY / commandRadius else 0f
+        return GimbalStickTouchMapping(
+            visualX = visualX,
+            visualY = visualY,
+            commandX = commandX,
+            commandY = commandY,
+            isTap = isTap,
+            engaged = nowEngaged,
+            emit = nowEngaged,
+        )
+    }
+
+    private fun radialClamp(x: Float, y: Float, radius: Float): Pair<Float, Float> {
+        val mag = hypot(x, y)
+        if (radius <= 0f || mag <= radius) return x to y
+        val scale = radius / mag
+        return x * scale to y * scale
+    }
+
     /** iOS `GimbalStick.streamInterval` — ACK pump emits while held. */
     const val GIMBAL_STICK_STREAM_INTERVAL_MS = 40L
     /** Stick throw can pause HEVC the same way zoom/AF-C do. */
@@ -541,7 +724,9 @@ object CameraCommands {
     fun shouldHoldGimbalWatchdog(
         secondsSinceThrow: Double?,
         lastVideoPacketAgeSec: Double? = null,
+        stickHeld: Boolean = false,
     ): Boolean {
+        if (stickHeld) return true
         val s = secondsSinceThrow ?: return false
         if (s < 0.0 || s >= GIMBAL_STICK_VIDEO_GRACE_SEC) return false
         if (lastVideoPacketAgeSec != null &&
@@ -608,25 +793,48 @@ object CameraCommands {
         sensitivity.coerceIn(1, 5) / GIMBAL_STICK_DEFAULT_SENSITIVITY.toFloat()
 
     /** Deadzone, then linear remainder onto −1…1. Zoom stick uses this (no expo). */
-    fun gimbalLinearThrow(normalized: Float): Float {
+    fun gimbalLinearThrow(
+        normalized: Float,
+        deadzone: Float = GIMBAL_STICK_DEADZONE,
+    ): Float {
         val n = normalized.coerceIn(-1f, 1f)
         val magnitude = kotlin.math.abs(n)
-        if (magnitude < GIMBAL_STICK_DEADZONE) return 0f
-        val t = (magnitude - GIMBAL_STICK_DEADZONE) / (1f - GIMBAL_STICK_DEADZONE)
+        val rest = VirtualJoystickMapping.clampedDeadzone(deadzone)
+        if (magnitude < rest) return 0f
+        val span = 1f - rest
+        if (span <= 0f) return 0f
+        val t = (magnitude - rest) / span
         return if (n < 0f) -t else t
     }
 
     /** Deadzone, then expo ease-in onto −1…1. Full throw stays 1. Rest stays 0. */
-    fun gimbalAnalogCurve(normalized: Float): Float {
-        val t = gimbalLinearThrow(normalized)
+    fun gimbalAnalogCurve(
+        normalized: Float,
+        deadzone: Float = GIMBAL_STICK_DEADZONE,
+        expo: Double = GIMBAL_STICK_ANALOG_EXPO,
+    ): Float {
+        val t = gimbalLinearThrow(normalized, deadzone)
         if (t == 0f) return 0f
-        val curved = kotlin.math.abs(t).toDouble().pow(GIMBAL_STICK_ANALOG_EXPO).toFloat()
+        val power = if (expo.isFinite() && expo > 0.0) expo else GIMBAL_STICK_ANALOG_EXPO
+        val curved = kotlin.math.abs(t).toDouble().pow(power).toFloat()
         return if (t < 0f) -curved else curved
     }
 
     /** `x` −1…1 left…right → pan (axis1). `y` −1…1 down…up → tilt (axis0). */
-    fun gimbalAxis(normalized: Float, sensitivity: Int = GIMBAL_STICK_DEFAULT_SENSITIVITY): Int {
-        val curved = gimbalAnalogCurve(normalized)
+    fun gimbalAxisLinear(normalized: Float): Int {
+        val n = normalized.coerceIn(-1f, 1f)
+        if (kotlin.math.abs(n) < 0.02f) return GIMBAL_STICK_CENTER
+        return (GIMBAL_STICK_CENTER + n * GIMBAL_STICK_TRAVEL)
+            .roundToInt()
+            .coerceIn(GIMBAL_STICK_MIN, GIMBAL_STICK_MAX)
+    }
+
+    fun gimbalAxis(
+        normalized: Float,
+        sensitivity: Int = GIMBAL_STICK_DEFAULT_SENSITIVITY,
+        mapping: VirtualJoystickMapping = VirtualJoystickMapping.DEFAULT,
+    ): Int {
+        val curved = gimbalAnalogCurve(normalized, mapping.deadzone, mapping.curve.expo)
         if (curved == 0f) return GIMBAL_STICK_CENTER
         val scaled = (curved * gimbalSensitivityGain(sensitivity)).coerceIn(-1f, 1f)
         return (GIMBAL_STICK_CENTER + scaled * GIMBAL_STICK_TRAVEL)
@@ -640,8 +848,17 @@ object CameraCommands {
         y: Float,
         invertPan: Boolean = false,
         sensitivity: Int = GIMBAL_STICK_DEFAULT_SENSITIVITY,
-    ): Pair<Int, Int> =
-        gimbalAxis(y, sensitivity) to gimbalAxis(if (invertPan) -x else x, sensitivity)
+        mapping: VirtualJoystickMapping = VirtualJoystickMapping.DEFAULT,
+        linear: Boolean = false,
+    ): Pair<Int, Int> {
+        if (linear) {
+            val pan = if (invertPan) -x else x
+            return gimbalAxisLinear(y) to gimbalAxisLinear(pan)
+        }
+        val pan = if (invertPan != mapping.invertPan) -x else x
+        val tilt = if (mapping.invertTilt) -y else y
+        return gimbalAxis(tilt, sensitivity, mapping) to gimbalAxis(pan, sensitivity, mapping)
+    }
 
     /** `0x04/0x01` payload: two u16-LE axes + trailer `00 80 22 00`. */
     fun gimbalStickPayload(axis0: Int, axis1: Int): ByteArray {
@@ -671,21 +888,7 @@ object CameraCommands {
      * including SlowMo 100/120/240. FORMAT SET still only writes a pair
      * the body advertised (or Video 24–60 when camcap is empty).
      */
-    fun fpsFromSubscribeIndex(index: Int): Int? =
-        when (index) {
-            1 -> 24
-            2 -> 25
-            3 -> 30
-            4 -> 48
-            5 -> 50
-            6 -> 60
-            7 -> 120
-            8 -> 240
-            10 -> 100
-            11 -> 96
-            29 -> 15
-            else -> null
-        }
+    fun fpsFromSubscribeIndex(index: Int): Int? = VideoFrameRate.fps(index)
 
     fun resolutionLabel(code: Int): String = VideoResolution.fromRaw(code)?.label ?: "—"
 
@@ -1028,8 +1231,11 @@ data class AudioPin(
         incoming: CameraStatus,
         current: CameraStatus,
         nowElapsedMs: Long,
+        reported: Boolean = true,
+        reportedValues: CameraStatus = incoming,
     ): Pair<CameraStatus, AudioPin?> {
         if (nowElapsedMs >= deadlineElapsedMs) return incoming to null
+        if (!reported) return incoming to this
         var next = incoming
         var channel = this.channel
         var vocal = this.vocal
@@ -1037,25 +1243,25 @@ data class AudioPin(
         var directional = this.directional
         if (channel != null) {
             when {
-                incoming.audioChannel == channel -> channel = null
+                reportedValues.audioChannel == channel -> channel = null
                 incoming.audioChannel >= 0 -> next = next.copy(audioChannel = current.audioChannel)
             }
         }
         if (vocal != null) {
             when {
-                incoming.vocalBoost == vocal -> vocal = null
+                reportedValues.vocalBoost == vocal -> vocal = null
                 incoming.vocalBoost >= 0 -> next = next.copy(vocalBoost = current.vocalBoost)
             }
         }
         if (wind != null) {
             when {
-                incoming.windNr == wind -> wind = null
+                reportedValues.windNr == wind -> wind = null
                 incoming.windNr >= 0 -> next = next.copy(windNr = current.windNr)
             }
         }
         if (directional != null) {
             when {
-                incoming.directionalAudio == directional -> directional = null
+                reportedValues.directionalAudio == directional -> directional = null
                 incoming.directionalAudio >= 0 ->
                     next = next.copy(directionalAudio = current.directionalAudio)
             }

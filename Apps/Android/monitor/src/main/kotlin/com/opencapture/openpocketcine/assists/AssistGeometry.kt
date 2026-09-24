@@ -5,11 +5,9 @@ import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeDisplayScale
 import com.opencapture.openpocketcine.feed.ScopeExposureCeiling
 import com.opencapture.openpocketcine.feed.WaveformIre
-import kotlin.math.log2
 import com.opencapture.openpocketcine.session.CameraStatus
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -33,6 +31,19 @@ data class AssistRect(val x: Float, val y: Float, val width: Float, val height: 
         get() = y + height / 2f
 
     fun contains(px: Float, py: Float): Boolean = px in minX..maxX && py in minY..maxY
+
+    /** Aspect-fit a picture of `aspect` (width/height) inside this rect. */
+    fun fittedContent(aspect: Float): AssistRect {
+        val ratio = if (aspect.isFinite() && aspect > 0f) aspect else 16f / 9f
+        if (height <= 0f) return this
+        return if (width / height > ratio) {
+            val w = height * ratio
+            AssistRect(x + (width - w) / 2f, y, w, height)
+        } else {
+            val h = width / ratio
+            AssistRect(x, y + (height - h) / 2f, width, h)
+        }
+    }
 }
 
 data class GridSegment(val from: AssistPoint, val to: AssistPoint)
@@ -62,6 +73,7 @@ object ScopePanelSize {
     val histogram = AssistSize(250f, 77f)
     val vectorscope = AssistSize(190f, 190f)
     val trafficLights = AssistSize(74f, 168f)
+    val ndMeter = AssistSize(84f, 30f)
     val audio = AssistSize(28f, 168f)
     val falseColorReference = AssistSize(264f, 52f)
 }
@@ -108,15 +120,6 @@ object GridAssist {
 }
 
 object GuidesAssist {
-    const val PANEL_WIDTH_DP = 472f
-
-    fun summaryLabel(selected: Set<GuideAspect>): String =
-        when (selected.size) {
-            0 -> "—"
-            1 -> selected.first().label
-            else -> "${selected.size} ratios"
-        }
-
     /** Letterbox when the guide is wider than the feed, pillarbox when narrower. */
     fun rectForRatio(feed: AssistRect, ratio: Float): AssistRect {
         val width: Float
@@ -147,8 +150,10 @@ object CrosshairAssist {
 
 object MirrorAssist {
     const val EXPLANATION =
-        "Flips the monitor left-to-right, for a camera pointed back at you. " +
+        "Flips the monitor for a camera pointed back at you or mounted upside down. " +
             "The recording and the scopes are never mirrored."
+    const val HORIZONTAL_HELP = "Left-to-right, for a camera pointed back at you."
+    const val VERTICAL_HELP = "Top-to-bottom, for an underslung mount. Both on turns it 180°."
 
     fun feedScaleX(mirrored: Boolean, squeeze: Float = 1f): Float = if (mirrored) -squeeze else squeeze
 }
@@ -162,14 +167,10 @@ object AudioAssist {
     const val RED_FROM_DB = -6.0
     val guideMarks = doubleArrayOf(0.0, -6.0, -18.0, -36.0)
 
-    fun displayedSensitivity(value: String?): String {
-        val trimmed = value?.trim().orEmpty()
-        return if (trimmed.isEmpty()) "—" else trimmed.uppercase()
-    }
-
-    fun y(db: Double, barTop: Float, barBottom: Float): Float {
-        val fraction = ((db - FLOOR_DB) / -FLOOR_DB).coerceIn(0.0, 1.0)
-        return (barBottom - fraction * (barBottom - barTop)).toFloat()
+    /** Fresh meter: left of the movement well, vertically centered on the canvas. */
+    fun defaultCenter(canvas: AssistRect, movement: AssistRect, size: AssistSize): AssistPoint {
+        val fallback = AssistPoint(movement.minX + size.width / 2f, canvas.midY)
+        return MovablePanelMath.clamp(fallback, size, movement)
     }
 }
 
@@ -183,7 +184,6 @@ object WaveformAxis {
     const val BOTTOM_PAD = 2f
     const val SIDE_PAD = 6f
     const val BUFFER_IRE = 5.0
-    const val OPTIONS_DRAG_SLOP = 8f
     val crushClipDash = floatArrayOf(3f, 3f)
 
     /**
@@ -219,15 +219,6 @@ object WaveformAxis {
     fun middleGrayIRE(colorMode: Int): Double =
         WaveformIre.middleGrayIRE(MonitorTransfer.fromColorMode(colorMode))
 
-    fun ire(encoded: Double, colorMode: Int, iso: Int? = null): Double =
-        WaveformIre.ire(encoded, MonitorTransfer.fromColorMode(colorMode), iso)
-
-    fun levelTable(colorMode: Int, iso: Int? = null): FloatArray =
-        WaveformIre.levelTable(MonitorTransfer.fromColorMode(colorMode), iso)
-
-    fun remapHistogram(bins: IntArray, colorMode: Int, iso: Int? = null): IntArray =
-        WaveformIre.remapHistogram(bins, MonitorTransfer.fromColorMode(colorMode), iso)
-
     data class GuideStroke(val ire: Double, val dashed: Boolean, val crushClip: Boolean)
 
     fun guideStrokes(
@@ -246,8 +237,6 @@ object WaveformAxis {
         }
         return strokes
     }
-
-    fun shouldPresentOptions(dx: Float, dy: Float): Boolean = hypot(dx, dy) <= OPTIONS_DRAG_SLOP
 }
 
 object HistogramAssist {
@@ -259,7 +248,7 @@ object HistogramAssist {
     const val TRAFFIC_OUTER_PAD = 6f
     const val TRAFFIC_LINE_GAP = 4f
     const val TRAFFIC_LIGHTS_TITLE = "Traffic Lights"
-    const val TRAFFIC_LIGHTS_HELP = "Show small RGB edge blocks for crushed and clipped channels."
+    const val TRAFFIC_LIGHTS_HELP = "Show small RGB edge blocks for crushed and clipped channels. Clip lights from about a third of a stop under the camera's clip, the same point zebra 100% and CineStop use."
     const val COMPENSATION_TITLE = "Crush/Clip Compensation"
     const val COMPENSATION_HELP =
         "Stops of crush/clip tolerance before a traffic light glows. Shared with the goal-post meter."
@@ -303,9 +292,6 @@ object ParadeAssist {
     }
 
     fun chip(mode: ParadeMode): String = mode.label.uppercase()
-
-    fun accessibilityLabel(mode: ParadeMode): String =
-        if (mode == ParadeMode.YRGB) "YRGB parade" else "RGB parade"
 }
 
 object VectorscopeAssist {
@@ -421,10 +407,8 @@ object TrafficLightsAssist {
 object MovablePanelMath {
     const val HOLD_SECONDS = 0.3
     const val POSITION_GRID = 4f
-    const val HAPTIC_GRID = 22f
     const val SCALE_MIN = 0.6
     const val SCALE_MAX = 1.6
-    const val GAP = 10f
     /** Thumb well for the L-corner. Larger than iOS 56 so the grip is easy to hit. */
     const val GRIP_HIT_DP = 90f
     /** iOS `WaveformAssist.gripVisualSize` — L-bracket stroke size. */
@@ -433,22 +417,35 @@ object MovablePanelMath {
     const val GRIP_EXTERIOR_GAP_DP = 2f
     /** How much of [GRIP_HIT_DP] hangs off the panel (outside the clip). */
     const val GRIP_EXTERIOR_DP = 40f
+    const val GRIP_BOTTOM_EXTERIOR_DP = 12f
+    const val MIN_GRIP_HIT_DP = 44f
     const val DRAG_HIT_PADDING_DP = 10f
 
     val gripPadDp: Float
         get() = GRIP_EXTERIOR_DP
 
     /** Top-leading of the hit well: [GRIP_EXTERIOR_DP] past the clip, rest on the plate. */
-    fun gripHitOrigin(panelWidth: Float, panelHeight: Float): AssistPoint =
-        AssistPoint(
-            panelWidth - GRIP_HIT_DP + GRIP_EXTERIOR_DP,
-            panelHeight - GRIP_HIT_DP + GRIP_EXTERIOR_DP,
-        )
+    fun gripHitSize(panelWidth: Float, panelHeight: Float): Float =
+        maxOf(MIN_GRIP_HIT_DP, minOf(GRIP_HIT_DP, panelWidth + GRIP_EXTERIOR_DP,
+            panelHeight + GRIP_BOTTOM_EXTERIOR_DP))
+
+    fun gripHitOrigin(panelWidth: Float, panelHeight: Float): AssistPoint {
+        val hit = gripHitSize(panelWidth, panelHeight)
+        return AssistPoint(panelWidth - hit + GRIP_EXTERIOR_DP,
+            panelHeight - hit + GRIP_BOTTOM_EXTERIOR_DP)
+    }
+
+    /** Extra wrapper space above/left of a small body, so Compose does not shrink the target. */
+    fun gripOverhang(panelWidth: Float, panelHeight: Float): AssistPoint {
+        val origin = gripHitOrigin(panelWidth, panelHeight)
+        return AssistPoint(maxOf(0f, -origin.x), maxOf(0f, -origin.y))
+    }
 
     /** Top-leading of the 14 dp L inside the hit well, 2 dp outside the clip. */
-    fun gripVisualOrigin(): AssistPoint {
-        val x = GRIP_HIT_DP - GRIP_EXTERIOR_DP + GRIP_EXTERIOR_GAP_DP - GRIP_VISUAL_DP
-        return AssistPoint(x, x)
+    fun gripVisualOrigin(hitSize: Float = GRIP_HIT_DP): AssistPoint {
+        val x = hitSize - GRIP_EXTERIOR_DP + GRIP_EXTERIOR_GAP_DP - GRIP_VISUAL_DP
+        val y = hitSize - GRIP_BOTTOM_EXTERIOR_DP + GRIP_EXTERIOR_GAP_DP - GRIP_VISUAL_DP
+        return AssistPoint(x, y)
     }
 
     fun clampedScale(value: Double): Double = value.coerceIn(SCALE_MIN, SCALE_MAX)
@@ -462,16 +459,34 @@ object MovablePanelMath {
         val halfW = size.width / 2f
         val halfH = size.height / 2f
         return AssistPoint(
-            point.x.coerceIn(bounds.minX + halfW, bounds.maxX - halfW),
-            point.y.coerceIn(bounds.minY + halfH, bounds.maxY - halfH),
+            point.x.coerceIn(bounds.minX + halfW, maxOf(bounds.minX + halfW, bounds.maxX - halfW)),
+            point.y.coerceIn(bounds.minY + halfH, maxOf(bounds.minY + halfH, bounds.maxY - halfH)),
         )
+    }
+
+    /** Pixel bounds fit the body horizontally and reserve the resize well vertically. */
+    fun fittedSize(preferred: AssistSize, bounds: AssistRect, grip: Float): AssistSize {
+        val bottomGrip = grip * GRIP_BOTTOM_EXTERIOR_DP / GRIP_EXTERIOR_DP
+        val factor = minOf(1f, maxOf(1f, bounds.width) / maxOf(1f, preferred.width),
+            maxOf(1f, bounds.height - bottomGrip) / maxOf(1f, preferred.height))
+        return AssistSize(maxOf(1f, kotlin.math.floor(preferred.width * factor)),
+            maxOf(1f, kotlin.math.floor(preferred.height * factor)))
+    }
+
+    fun clampWithGrip(point: AssistPoint, size: AssistSize, bounds: AssistRect, grip: Float): AssistPoint {
+        val density = grip / GRIP_EXTERIOR_DP
+        val bottomGrip = GRIP_BOTTOM_EXTERIOR_DP * density
+        val hit = gripHitSize(size.width / density, size.height / density) * density
+        // Equal body margins; the visible corner fits the padding, while its expanded
+        // touch well may extend beyond the side boundary or beneath fixed controls.
+        val minX = bounds.minX + size.width / 2
+        val minY = bounds.minY + maxOf(size.height / 2, hit - bottomGrip - size.height / 2)
+        return AssistPoint(point.x.coerceIn(minX, maxOf(minX, bounds.maxX - size.width / 2)),
+            point.y.coerceIn(minY, maxOf(minY, bounds.maxY - size.height / 2 - bottomGrip)))
     }
 
     fun snap(point: AssistPoint, grid: Float = POSITION_GRID): AssistPoint =
         AssistPoint(round(point.x / grid) * grid, round(point.y / grid) * grid)
-
-    fun hapticCell(point: AssistPoint, grid: Float = HAPTIC_GRID): Int =
-        round(point.x / grid).toInt() * 100_000 + round(point.y / grid).toInt()
 
     fun resolvedCenter(
         session: AssistPoint?,
@@ -484,101 +499,6 @@ object MovablePanelMath {
         if (stored != null) return clamp(stored.center(bounds), size, bounds)
         return clamp(defaultCenter, size, bounds)
     }
-
-    fun defaultCenterTopLeading(
-        feed: AssistRect,
-        size: AssistSize,
-        bounds: AssistRect,
-        topClearance: Float = 0f,
-    ): AssistPoint {
-        val halfW = size.width / 2f
-        val halfH = size.height / 2f
-        val x = feed.minX + halfW
-        val outside = feed.minY - GAP - halfH
-        val y =
-            if (outside - halfH >= bounds.minY) {
-                outside
-            } else {
-                maxOf(feed.minY, bounds.minY + topClearance) + GAP + halfH
-            }
-        return clamp(AssistPoint(x, y), size, bounds)
-    }
-
-    fun defaultCenterTopTrailing(
-        feed: AssistRect,
-        size: AssistSize,
-        bounds: AssistRect,
-        topClearance: Float = 0f,
-    ): AssistPoint {
-        val halfW = size.width / 2f
-        val halfH = size.height / 2f
-        val x = feed.maxX - halfW
-        val outside = feed.minY - GAP - halfH
-        val y =
-            if (outside - halfH >= bounds.minY) {
-                outside
-            } else {
-                maxOf(feed.minY, bounds.minY + topClearance) + GAP + halfH
-            }
-        return clamp(AssistPoint(x, y), size, bounds)
-    }
-
-    fun defaultCenterBottomTrailing(
-        feed: AssistRect,
-        size: AssistSize,
-        bounds: AssistRect,
-        bottomClearance: Float = 0f,
-    ): AssistPoint {
-        val halfW = size.width / 2f
-        val halfH = size.height / 2f
-        val x = feed.maxX - halfW
-        val outside = feed.maxY + GAP + halfH
-        val y =
-            if (outside + halfH <= bounds.maxY) {
-                outside
-            } else {
-                minOf(feed.maxY, bounds.maxY - bottomClearance) - GAP - halfH
-            }
-        return clamp(AssistPoint(x, y), size, bounds)
-    }
-
-    fun defaultCenterBottomLeading(
-        feed: AssistRect,
-        size: AssistSize,
-        bounds: AssistRect,
-        bottomClearance: Float = 0f,
-    ): AssistPoint {
-        val halfW = size.width / 2f
-        val halfH = size.height / 2f
-        val x = feed.minX + halfW
-        val outside = feed.maxY + GAP + halfH
-        val y =
-            if (outside + halfH <= bounds.maxY) {
-                outside
-            } else {
-                minOf(feed.maxY, bounds.maxY - bottomClearance) - GAP - halfH
-            }
-        return clamp(AssistPoint(x, y), size, bounds)
-    }
-}
-
-object LiveLumaHistogram {
-    const val BINS = 256
-
-    /** Rec.709 luma over packed ARGB. Empty input yields 256 zeros. */
-    fun fromArgb(pixels: IntArray): IntArray {
-        val bins = IntArray(BINS)
-        for (px in pixels) {
-            val r = (px ushr 16) and 0xFF
-            val g = (px ushr 8) and 0xFF
-            val b = px and 0xFF
-            val y = (0.2126 * r + 0.7152 * g + 0.0722 * b).roundToInt().coerceIn(0, 255)
-            bins[y]++
-        }
-        return bins
-    }
-
-    fun empty(): IntArray = IntArray(BINS)
 }
 
 object FalseColorBands {
@@ -593,74 +513,124 @@ object FalseColorBands {
         fun contains(value: Double): Boolean = value >= lowerBound && value < upperBound
     }
 
-    fun legendLabels(scale: FalseColorScale): List<String> =
+    fun bands(scale: FalseColorScale, transfer: MonitorTransfer, rec709: Boolean = false): List<Band> =
         when (scale) {
-            FalseColorScale.STOPS ->
-                listOf("Minimum", "−3", "18%", "Skin +1", "+2", "⅔ below max", "⅓ below max", "Maximum")
-            FalseColorScale.IRE ->
-                listOf("0–4", "5", "10–12", "18%", "55–61", "92–93", "94–95", "96–98", "99–100")
-            FalseColorScale.LIMITS -> listOf("0–4", "5–9", "94–98", "99–100")
-        }
-
-    fun bands(scale: FalseColorScale, transfer: MonitorTransfer): List<Band> =
-        when (scale) {
-            FalseColorScale.STOPS -> stopBands(transfer)
+            FalseColorScale.SCENE_STOPS -> sceneStopBands(clipStops(transfer, rec709))
+            FalseColorScale.STOPS -> cineStopBands()
             FalseColorScale.IRE -> ireBands()
-            FalseColorScale.LIMITS -> limitBands()
+            FalseColorScale.LIMITS -> limitBands(limitShelfIRE(transfer, rec709))
         }
 
-    /** iOS `LiveColorScience.stopBands` — scene EV landmarks, not IRE 0–100. */
-    fun stopBands(transfer: MonitorTransfer): List<Band> {
-        val clipLinear = LiveColorScience.linearize(ScopeExposureCeiling.clipEncoded(transfer), transfer)
-        val maximum = maxOf(3.0, log2(maxOf(clipLinear, 0.18 * 8) / 0.18))
-        return listOf(
-            Band(Double.NEGATIVE_INFINITY, -35.0 / 6, 78 / 255.0, 11 / 255.0, 82 / 255.0, "Minimum"),
-            Band(-19.0 / 6, -17.0 / 6, 17 / 255.0, 149 / 255.0, 141 / 255.0, "−3"),
-            Band(-1.0 / 6, 1.0 / 6, 8 / 255.0, 203 / 255.0, 24 / 255.0, "18%"),
-            Band(5.0 / 6, 7.0 / 6, 245 / 255.0, 143 / 255.0, 148 / 255.0, "Skin +1"),
-            Band(11.0 / 6, 13.0 / 6, 212 / 255.0, 208 / 255.0, 13 / 255.0, "+2"),
-            Band(maximum - 5.0 / 6, maximum - 0.5, 255 / 255.0, 244 / 255.0, 0 / 255.0, "⅔ below max"),
-            Band(maximum - 0.5, maximum - 1.0 / 6, 255 / 255.0, 126 / 255.0, 18 / 255.0, "⅓ below max"),
-            Band(maximum - 1.0 / 6, Double.POSITIVE_INFINITY, 250 / 255.0, 60 / 255.0, 36 / 255.0, "Maximum"),
-        )
-    }
-
-    fun ireBands(): List<Band> =
+    /** iOS `LiveColorScience.cineStopBands`: the Video scale, Video Mode IRE with grayscale gaps. */
+    fun cineStopBands(): List<Band> =
         listOf(
             Band(0.0, 5.0, 0.44, 0.22, 0.76, "0–4"),
             Band(5.0, 6.0, 0.28, 0.37, 0.85, "5"),
             Band(10.0, 13.0, 0.18, 0.58, 0.64, "10–12"),
-            Band(28.0, 34.0, 0.38, 0.63, 0.35, "18%"),
-            Band(52.0, 62.0, 0.83, 0.53, 0.71, "55–61"),
+            Band(41.0, 49.0, 0.38, 0.63, 0.35, "41–48"),
+            Band(61.0, 71.0, 0.83, 0.53, 0.71, "61–70"),
             Band(92.0, 94.0, 0.83, 0.77, 0.45, "92–93"),
             Band(94.0, 96.0, 0.89, 0.72, 0.29, "94–95"),
             Band(96.0, 99.0, 0.85, 0.55, 0.22, "96–98"),
             Band(99.0, Double.POSITIVE_INFINITY, 0.78, 0.28, 0.18, "99–100"),
         )
 
-    fun limitBands(): List<Band> =
+    fun ireBands(): List<Band> =
         listOf(
-            Band(0.0, 5.0, 0.44, 0.22, 0.76, "0–4"),
-            Band(5.0, 10.0, 0.28, 0.37, 0.85, "5–9"),
-            Band(94.0, 99.0, 0.89, 0.72, 0.29, "94–98"),
-            Band(99.0, Double.POSITIVE_INFINITY, 0.78, 0.28, 0.18, "99–100"),
+            Band(0.0, 2.5, 115 / 255.0, 33 / 255.0, 120 / 255.0, "BDL"),
+            Band(2.5, 10.0, 29 / 255.0, 2 / 255.0, 221 / 255.0, "NBDL"),
+            Band(38.0, 42.0, 123 / 255.0, 207 / 255.0, 87 / 255.0, "18%MG"),
+            Band(52.0, 56.0, 241 / 255.0, 190 / 255.0, 198 / 255.0, "MG+1"),
+            Band(80.0, 95.0, 255 / 255.0, 255 / 255.0, 88 / 255.0, "80%WC"),
+            Band(95.0, Double.POSITIVE_INFINITY, 220 / 255.0, 51 / 255.0, 33 / 255.0, "95%WC"),
         )
+
+    /** iOS `LiveColorScience.limitBands(shelfIRE:)`: clip starts on the clip shelf, never above 99 IRE. */
+    fun limitBands(shelfIRE: Double? = null): List<Band> {
+        val bands =
+            listOf(
+                Band(0.0, 5.0, 0.44, 0.22, 0.76, "0–4"),
+                Band(5.0, 10.0, 0.28, 0.37, 0.85, "5–9"),
+                Band(94.0, 99.0, 0.89, 0.72, 0.29, "94–98"),
+                Band(99.0, Double.POSITIVE_INFINITY, 0.78, 0.28, 0.18, "99–100"),
+            )
+        if (shelfIRE == null || shelfIRE >= 99 || shelfIRE <= bands[2].lowerBound) return bands
+        return bands.mapIndexed { index, band ->
+            when (index) {
+                2 -> band.copy(upperBound = shelfIRE)
+                3 -> band.copy(lowerBound = shelfIRE)
+                else -> band
+            }
+        }
+    }
+
+    /** iOS `falseColorClip` for Limits: the clip shelf in WAVE IRE, on Rec.709 when 709 reads the look. */
+    fun limitShelfIRE(transfer: MonitorTransfer, rec709: Boolean = false): Double {
+        val t = if (readsThroughLook(transfer, rec709)) MonitorTransfer.REC709 else transfer
+        val shelf = maxOf(0.0, ScopeExposureCeiling.clipEncoded(t) - ScopeExposureCeiling.CLIP_SHELF_CODES / 255.0)
+        return ScopeDisplayScale.monitorPercent(shelf, t)
+    }
+
+    /** iOS `LiveColorScience.sceneStopDefaultClip`: clip starts at +11 when the ceiling is unknown. */
+    const val SCENE_STOP_DEFAULT_CLIP = 10.5
+
+    /**
+     * iOS `LiveColorScience.falseColorClip(.sceneStops, rec709: true)`: encoded code where each
+     * official Rec.709 look first saturates (33-point gray axis). Pinned by the Swift test
+     * `cineStopAt709ClipMatchesTheAndroidMirror`.
+     */
+    private val LOOK_SATURATION =
+        mapOf(MonitorTransfer.DLOG2 to 30 / 32.0, MonitorTransfer.DLOG to 1.0, MonitorTransfer.DLOGM to 1.0)
+
+    /** True when 709 applies: the operator picked 709 and this curve has an official look. */
+    fun readsThroughLook(transfer: MonitorTransfer, rec709: Boolean): Boolean =
+        rec709 && transfer in LOOK_SATURATION
+
+    /** Scene stops at this curve's clip shelf; the CineStop clip band starts here. At 709 the look's clip. */
+    fun clipStops(transfer: MonitorTransfer, rec709: Boolean = false): Double {
+        val ceiling =
+            if (readsThroughLook(transfer, rec709)) LOOK_SATURATION.getValue(transfer)
+            else ScopeExposureCeiling.clipEncoded(transfer)
+        val shelf = ceiling - ScopeExposureCeiling.CLIP_SHELF_CODES / 255.0
+        val stops = LiveColorScience.stops(maxOf(0.0, shelf), transfer)
+        return if (stops.isFinite()) stops else SCENE_STOP_DEFAULT_CLIP
+    }
+
+    /**
+     * iOS `LiveColorScience.sceneStopBands`: CineStop, five whole-stop zones around 18% gray,
+     * violet crush, red clip at the camera's ceiling, flat dark gray below and light gray above.
+     */
+    fun sceneStopBands(clipStops: Double = SCENE_STOP_DEFAULT_CLIP): List<Band> {
+        val clip = if (clipStops.isFinite()) clipStops else SCENE_STOP_DEFAULT_CLIP
+        return buildList {
+            add(rgb(Double.NEGATIVE_INFINITY, -6.5, 75, 8, 165, "crush"))
+            add(rgb(-6.5, -2.5, 102, 102, 102, "shadows"))
+            SCENE_STOP_ZONES.filter { it.lowerBound < clip }
+                .forEach { add(it.copy(upperBound = minOf(it.upperBound, clip))) }
+            if (clip > 2.5) add(rgb(2.5, clip, 179, 178, 178, "highlights"))
+            add(rgb(clip, Double.POSITIVE_INFINITY, 245, 39, 0, "clip"))
+        }
+    }
+
+    private val SCENE_STOP_ZONES =
+        listOf(
+            rgb(-2.5, -1.5, 39, 76, 0, "−2"),
+            rgb(-1.5, -0.5, 155, 196, 56, "−1"),
+            rgb(-0.5, 0.5, 127, 127, 127, "18%"),
+            rgb(0.5, 1.5, 221, 174, 180, "+1"),
+            rgb(1.5, 2.5, 252, 232, 96, "+2"),
+        )
+
+    private fun rgb(lo: Double, hi: Double, r: Int, g: Int, b: Int, label: String) =
+        Band(lo, hi, r / 255.0, g / 255.0, b / 255.0, label)
 }
 
 object AssistLongPress {
-    const val CHIP_MS = 250L
     const val PANEL_MS = 300L
-    const val GAP_DP = 10f
-    const val MARGIN_DP = 12f
     /** LUT-matched close on every assist / capture options card (iOS 34 pt reads large on S25). */
     const val CLOSE_DP = 27f
     const val PANEL_PAD_DP = 12f
     const val PANEL_GAP_DP = 8f
-    const val DRUM_ROW_DP = 52f
-    const val DRUM_FADE_IN = 0.12f
-    const val DRUM_FADE_OUT = 0.88f
-    const val DRUM_CENTER_PT = 27f
-    const val DRUM_NEIGHBOR_PT = 20f
 
     fun preferredWidthDp(tool: LiveAssistTool): Float =
         if (tool == LiveAssistTool.GUIDES) 472f else 400f
@@ -695,79 +665,60 @@ object FalseColorReference {
 
     data class AxisMarker(val label: String, val fraction: Double)
 
-    const val MINIMUM_SCENE_STOP = -6.0
+    /** iOS `FalseColorReference.sceneStopDomain`: crush to one stop past this curve's clip. */
+    private fun sceneStopDomain(transfer: MonitorTransfer, rec709: Boolean): ClosedRange<Double> =
+        -8.5..(maxOf(2.5, FalseColorBands.clipStops(transfer, rec709)) + 1)
 
-    fun curveKeyLabel(colorMode: Int): String =
-        when (MonitorTransfer.fromColorMode(colorMode)) {
-            MonitorTransfer.REC709 -> "709"
-            MonitorTransfer.HDR -> "HLG"
-            MonitorTransfer.DLOG -> "D-Log"
-            MonitorTransfer.DLOG2 -> "D-Log2"
-            MonitorTransfer.ILOG -> "I-Log"
+    fun curveKeyLabel(colorMode: Int, rec709: Boolean = false): String =
+        if (FalseColorBands.readsThroughLook(MonitorTransfer.fromColorMode(colorMode), rec709)) "709"
+        else when (colorMode) {
+            com.opencapture.openpocketcine.session.CameraCommands.COLOR_HDR -> "HLG"
+            com.opencapture.openpocketcine.session.CameraCommands.COLOR_DLOG -> "D-Log"
+            com.opencapture.openpocketcine.session.CameraCommands.COLOR_DLOG_M -> "DLM ≈"
+            com.opencapture.openpocketcine.session.CameraCommands.COLOR_DLOG2 -> "D-Log2"
+            else -> if (MonitorTransfer.fromColorMode(colorMode) == MonitorTransfer.ILOG) "I-Log" else "709"
         }
 
     fun axisLabels(scale: FalseColorScale): List<String> =
         when (scale) {
-            FalseColorScale.STOPS -> emptyList()
-            FalseColorScale.IRE -> listOf("clip / shadows", "18%", "skin hi", "highlights → clip")
+            FalseColorScale.SCENE_STOPS -> emptyList()
+            FalseColorScale.STOPS, FalseColorScale.IRE -> listOf("crush", "18%", "skin", "clip")
             FalseColorScale.LIMITS -> listOf("crushed", "midtones untouched", "clipped")
         }
 
-    fun maximumSceneStop(transfer: MonitorTransfer): Double {
-        val ev = LiveColorScience.stops(ScopeExposureCeiling.clipEncoded(transfer), transfer)
-        return if (ev.isFinite()) maxOf(3.0, ev) else 6.0
-    }
+    fun segments(scale: FalseColorScale, transfer: MonitorTransfer, rec709: Boolean = false): List<Segment> =
+        FalseColorBands.bands(scale, transfer, rec709).map { band ->
+            Segment(
+                lowerFraction = fraction(band.lowerBound, scale, transfer, rec709, infiniteFallback = 0.0),
+                upperFraction = fraction(band.upperBound, scale, transfer, rec709, infiniteFallback = 1.0),
+                band = band,
+            )
+        }
 
-    fun segments(scale: FalseColorScale, transfer: MonitorTransfer): List<Segment> {
-        val bands = FalseColorBands.bands(scale, transfer)
-        return when (scale) {
-            FalseColorScale.STOPS -> {
-                val domain = stopReferenceDomain(transfer)
-                bands.map { band ->
-                    Segment(
-                        lowerFraction = stopFraction(band.lowerBound, domain, 0.0),
-                        upperFraction = stopFraction(band.upperBound, domain, 1.0),
-                        band = band,
-                    )
-                }
-            }
-            FalseColorScale.IRE, FalseColorScale.LIMITS ->
-                bands.map { band ->
-                    Segment(
-                        lowerFraction = (band.lowerBound / 100.0).coerceIn(0.0, 1.0),
-                        upperFraction =
-                            if (band.upperBound.isFinite()) {
-                                (band.upperBound / 100.0).coerceIn(0.0, 1.0)
-                            } else {
-                                1.0
-                            },
-                        band = band,
-                    )
-                }
+    /** iOS `FalseColorReference.sceneStopMarkers`: every second stop, 1½ stops clear of clip. */
+    fun sceneStopMarkers(transfer: MonitorTransfer, rec709: Boolean = false): List<AxisMarker> {
+        val clip = FalseColorBands.clipStops(transfer, rec709)
+        val marks =
+            generateSequence(-6) { it + 2 }.takeWhile { it < clip - 1.5 }
+                .map { stop ->
+                    val label = if (stop == 0) "18%" else if (stop < 0) "−${-stop}" else "+$stop"
+                    label to stop.toDouble()
+                }.toList() + ("clip" to clip)
+        return marks.map { (label, stop) ->
+            AxisMarker(label, fraction(stop, FalseColorScale.SCENE_STOPS, transfer, rec709, infiniteFallback = 1.0))
         }
     }
 
-    fun stopAxisMarkers(transfer: MonitorTransfer): List<AxisMarker> {
-        val domain = stopReferenceDomain(transfer)
-        val maximum = maximumSceneStop(transfer)
-        return listOf(
-            "Min" to MINIMUM_SCENE_STOP,
-            "−3" to -3.0,
-            "18%" to 0.0,
-            "Skin" to 1.0,
-            "+2" to 2.0,
-            "Max" to maximum,
-        ).map { (label, stop) -> AxisMarker(label, stopFraction(stop, domain, 0.0)) }
-    }
-
-    private fun stopReferenceDomain(transfer: MonitorTransfer): ClosedRange<Double> {
-        val lower = MINIMUM_SCENE_STOP - 1.0 / 6
-        val upper = maxOf(6.0, maximumSceneStop(transfer) + 1.0 / 6)
-        return lower..upper
-    }
-
-    private fun stopFraction(value: Double, domain: ClosedRange<Double>, infiniteFallback: Double): Double {
+    private fun fraction(
+        value: Double,
+        scale: FalseColorScale,
+        transfer: MonitorTransfer,
+        rec709: Boolean,
+        infiniteFallback: Double,
+    ): Double {
         if (!value.isFinite()) return infiniteFallback
+        if (!scale.usesSceneStops) return (value / 100.0).coerceIn(0.0, 1.0)
+        val domain = sceneStopDomain(transfer, rec709)
         return ((value - domain.start) / (domain.endInclusive - domain.start)).coerceIn(0.0, 1.0)
     }
 }

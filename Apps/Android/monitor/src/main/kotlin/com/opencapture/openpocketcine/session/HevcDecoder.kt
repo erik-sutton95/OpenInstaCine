@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
 import com.opencapture.openpocketcine.bridge.SwiftCore
+import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * depacketizer (Annex-B, DJI marker already stripped). Pocket is HEVC; Nano is AVC.
  * SwiftCore.hevcCsd / hevcNalTypes already classify both.
  */
-class HevcDecoder {
+class HevcDecoder internal constructor(private val cadence: LivePipelineCadence = LivePipelineCadence()) {
     internal enum class LiveCodec { HEVC, AVC }
     private val lock = Any()
     private var codec: MediaCodec? = null
@@ -34,20 +35,28 @@ class HevcDecoder {
     @Volatile private var running = false
     @Volatile var hasFormat = false
         private set
-    @Volatile var awaitingIdr = false
-        private set
+    internal val randomAccess = DecoderRandomAccessHold()
+    val awaitingIdr: Boolean get() = randomAccess.awaitingIdr
+    val hasDecodableReferences: Boolean get() = randomAccess.hasDecodableReferences
     var nalTypesSeen = ""
         private set
     var lastKeyframeAt: Long? = null
         private set
     /** ElapsedRealtime of the last presented picture. Watchdog stall signal. */
-    @Volatile var lastPresentedAt: Long? = null
+    private val presentedClock = PresentedFrameClock()
+    val lastPresentedAt: Long? get() = presentedClock.lastPresentedAt
+    /** Native MediaCodec output callback clock, not GLES present. */
+    @Volatile var lastDecoderOutputAt: Long? = null
         private set
+    @Volatile private var hasSeenNativeOutput = false
+    val decoderOutputExpected: Boolean get() = hasSeenNativeOutput
     val isPresentationReady: Boolean
         get() = surface?.isValid == true
     private val _hasPicture = MutableStateFlow(false)
     val hasPicture: StateFlow<Boolean> = _hasPicture.asStateFlow()
     val decoderErrors = AtomicInteger(0)
+    internal val errorLifetime = DecoderErrorLifetime()
+    val failedThisGeneration: Boolean get() = errorLifetime.failedThisGeneration
     val framesEnqueued = AtomicInteger(0)
     val framesPresented = AtomicInteger(0)
     @Volatile var pictureWidth = LIVE_WIDTH
@@ -74,8 +83,13 @@ class HevcDecoder {
 
     /** TextureView / GLES presented a frame. C2 surface output may never
      *  surface through [dequeueOutputBuffer], which left WAITING FOR LIVE VIEW up. */
-    fun notePresented() {
-        lastPresentedAt = SystemClock.elapsedRealtime()
+    /** Keep codec/Surface alive, but require an image produced after foreground. */
+    fun beginPresentationProbe(): Long =
+        presentedClock.beginProbe(System.nanoTime(), SystemClock.elapsedRealtime())
+
+    fun notePresented(sourceTimestampNs: Long) {
+        if (!presentedClock.note(sourceTimestampNs, SystemClock.elapsedRealtime())) return
+        cadence.note(LivePipelineCadence.Stage.PRESENT)
         framesPresented.incrementAndGet()
         if (!_hasPicture.value) {
             _hasPicture.value = true
@@ -100,9 +114,8 @@ class HevcDecoder {
             if (!configured) {
                 val csd = pendingCsd ?: return
                 if (configure(csd, pendingTypes)) {
-                    awaitingIdr = true
                     pendingIdr?.let { au ->
-                        if (queue(au, keyframe = true)) awaitingIdr = false
+                        if (queue(au, keyframe = true)) randomAccess.onIrapAccepted()
                     }
                 }
             }
@@ -121,9 +134,8 @@ class HevcDecoder {
         }
         val csd = pendingCsd ?: return
         if (configure(csd, pendingTypes)) {
-            awaitingIdr = true
             pendingIdr?.let { au ->
-                if (queue(au, keyframe = true)) awaitingIdr = false
+                if (queue(au, keyframe = true)) randomAccess.onIrapAccepted()
             }
         }
     }
@@ -219,19 +231,18 @@ class HevcDecoder {
             val target = surface
             if (target == null || !target.isValid) return false
             if (!configure(haveCsd, pendingTypes.ifEmpty { types })) return false
-            awaitingIdr = true
             Log.i(TAG, "configured ${liveCodec?.name} nals=$nalTypesSeen")
             val idrAu = pendingIdr ?: if (idr) accessUnit else null
             if (idrAu != null) {
                 val queued = queue(idrAu, keyframe = true)
-                if (queued) awaitingIdr = false
+                if (queued) randomAccess.onIrapAccepted()
                 return queued
             }
             return true
         }
-        if (awaitingIdr && !idr) return false
+        if (!randomAccess.shouldAccept(idr)) return false
         val queued = queue(accessUnit, keyframe)
-        if (queued && idr) awaitingIdr = false
+        if (queued && idr) randomAccess.onIrapAccepted()
         return queued
     }
 
@@ -256,13 +267,17 @@ class HevcDecoder {
         releaseCodecLocked()
         configured = false
         builtCsd = pendingCsd
-        awaitingIdr =
-            EncoderPresentPath.shouldBeginIDRHoldAfterParameterChange(
+        errorLifetime.resetLifetime()
+        decoderErrors.set(0)
+        pendingIdr = null
+        pendingParameterChangeEnable = !auHasIdr
+        if (EncoderPresentPath.shouldBeginIDRHoldAfterParameterChange(
                 pictureSizeChanged = pictureSizeChanged,
                 accessUnitHasIDR = auHasIdr,
             )
-        pendingIdr = null
-        pendingParameterChangeEnable = !auHasIdr
+        ) {
+            randomAccess.beginHold()
+        }
     }
 
     private fun releaseCodecLocked() {
@@ -279,8 +294,35 @@ class HevcDecoder {
 
     /** After a GOP-reset enable, ignore P-frames until the next IDR. Keeps the last picture. */
     fun beginIDRHold() {
-        synchronized(lock) { awaitingIdr = true }
+        synchronized(lock) { randomAccess.beginHold() }
     }
+
+    /**
+     * UDP is alive and this codec already has valid references — do not wait
+     * forever for an IRAP that a PLI did not cut. A new decoder without
+     * random access keeps the hold.
+     */
+    fun endIDRHold(): Boolean = synchronized(lock) { randomAccess.endHold() }
+
+    /** Depacketizer dropped a reference AU. Do not keep feeding dependent P-frames. */
+    fun noteReferenceDiscontinuity() {
+        synchronized(lock) { randomAccess.noteBrokenReferences() }
+    }
+
+    /**
+     * Watchdog decoder repair. Keeps the last picture. Requires an IRAP on the
+     * replacement codec. Does not send enable.
+     */
+    fun rebuildPresentation(): Boolean =
+        synchronized(lock) {
+            releaseCodecLocked()
+            configured = false
+            pendingIdr = null
+            randomAccess.onNewDecoder()
+            errorLifetime.resetLifetime()
+            decoderErrors.set(0)
+            surface?.isValid == true
+        }
 
     /**
      * SoftAP / codec can stall while backgrounded. Keep the last picture.
@@ -288,7 +330,15 @@ class HevcDecoder {
      * Control Center when `0x09/0xa8` was then skipped.
      */
     fun prepareAfterForeground() {
-        // MediaCodec stays configured; TextureView reattach is attachSurface.
+        // Preserve the window and its last image. A dead codec must be rebuilt;
+        // replaying a cached IDR from before suspension is not recovery proof.
+        synchronized(lock) {
+            releaseCodecLocked()
+            presentedClock.beginEpoch(System.nanoTime())
+            configured = false
+            pendingIdr = null
+            randomAccess.reset()
+        }
     }
 
     /** Drop P-frames until IDR. Do not release the codec — the last frame stays on the surface. */
@@ -314,10 +364,13 @@ class HevcDecoder {
         _isVerticalPicture.value = false
         configuredWidth = 0
         configuredHeight = 0
-        awaitingIdr = false
+        randomAccess.reset()
+        errorLifetime.resetLifetime()
         nalTypesSeen = ""
         lastKeyframeAt = null
-        lastPresentedAt = null
+        lastDecoderOutputAt = null
+        hasSeenNativeOutput = false
+        presentedClock.reset(System.nanoTime())
         _hasPicture.value = false
         pendingCsd = null
         pendingTypes = ""
@@ -380,6 +433,10 @@ class HevcDecoder {
             configuredWidth = pictureWidth
             configuredHeight = pictureHeight
             running = true
+            randomAccess.onNewDecoder()
+            errorLifetime.resetLifetime()
+            errorLifetime.bumpFormatGeneration()
+            decoderErrors.set(0)
             val started = created
             outputThread =
                 Thread(
@@ -389,19 +446,23 @@ class HevcDecoder {
                             val index =
                                 try {
                                     started.dequeueOutputBuffer(info, 10_000)
-                                } catch (_: Exception) {
+                                } catch (error: Exception) {
+                                    if (running) {
+                                        noteError(DecoderErrorOrigin.OUTPUT, error)
+                                    }
                                     break
                                 }
                             when {
                                 index >= 0 -> {
+                                    cadence.note(LivePipelineCadence.Stage.OUTPUT)
+                                    noteNativeOutput()
                                     runCatching {
                                         started.releaseOutputBuffer(index, System.nanoTime())
+                                    }.onFailure { error ->
+                                        noteError(DecoderErrorOrigin.OUTPUT_RELEASE, error)
                                     }
-                                    lastPresentedAt = SystemClock.elapsedRealtime()
-                                    if (!_hasPicture.value) {
-                                        _hasPicture.value = true
-                                        Log.i(TAG, "presented first picture")
-                                    }
+                                    // Output to an ImageReader is not a displayed image.
+                                    // Vulkan/GLES/TextureView reports the actual present.
                                     hasFormat = true
                                 }
                                 index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
@@ -422,8 +483,7 @@ class HevcDecoder {
                 configured = false
                 liveCodec = null
             }
-            decoderErrors.incrementAndGet()
-            Log.w(TAG, "${detected.name} configure failed", e)
+            noteError(DecoderErrorOrigin.CONFIGURE, e)
             false
         }
     }
@@ -433,6 +493,7 @@ class HevcDecoder {
         return try {
             val index = decoder.dequeueInputBuffer(LiveViewPresentTiming.inputWaitUs(keyframe))
             if (index < 0) {
+                cadence.inputMiss()
                 Log.w(TAG, "no input buffer (nals=$nalTypesSeen)")
                 return false
             }
@@ -443,13 +504,45 @@ class HevcDecoder {
             val pts = LiveViewPresentTiming.ptsUs(SystemClock.elapsedRealtimeNanos(), ptsUs)
             ptsUs = pts
             decoder.queueInputBuffer(index, 0, accessUnit.size, pts, flags)
+            cadence.note(LivePipelineCadence.Stage.SUBMIT)
             framesEnqueued.incrementAndGet()
             true
         } catch (e: Exception) {
-            decoderErrors.incrementAndGet()
-            Log.w(TAG, "queue failed", e)
+            noteError(DecoderErrorOrigin.QUEUE, e, inputIsIrap = keyframe)
             false
         }
+    }
+
+    private fun noteNativeOutput() {
+        hasSeenNativeOutput = true
+        lastDecoderOutputAt = SystemClock.elapsedRealtime()
+    }
+
+    private fun noteError(
+        origin: DecoderErrorOrigin,
+        error: Throwable,
+        inputIsIrap: Boolean? = null,
+    ) {
+        decoderErrors.incrementAndGet()
+        val now = SystemClock.elapsedRealtime()
+        val code =
+            (error as? MediaCodec.CodecException)?.let { "codec:${it.errorCode}" }
+                ?: error.javaClass.simpleName
+        val record =
+            DecoderErrorRecord(
+                origin = origin,
+                code = code,
+                generation = errorLifetime.generation,
+                formatGeneration = errorLifetime.formatGeneration,
+                codec = liveCodec?.name,
+                width = pictureWidth,
+                height = pictureHeight,
+                inputIsIrap = inputIsIrap,
+                lastOutputAgeMs = lastDecoderOutputAt?.let { now - it },
+                atElapsedMs = now,
+            )
+        val journaled = errorLifetime.note(record, now) ?: return
+        DiagnosticCenter.log("warning", "decoder", journaled.origin.wire, journaled.journalLine())
     }
 
     private fun mergeTypes(existing: String, incoming: String): String {

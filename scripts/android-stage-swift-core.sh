@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Cross-compiles the shared Swift monitor core for the one ABI OpenInstaCine
+# Cross-compiles the portable Swift camera core for the one ABI OpenPocketCine
 # ships today, then stages its complete dynamic-library closure for Android Gradle.
 #
 # This is deliberately a build input, not a source-tree artifact: Gradle passes
-# a directory under monitor/build/generated/, so a clean checkout cannot
+# a directory under app/build/generated/, so a clean checkout cannot
 # accidentally package an ignored, stale src/main/jniLibs/ directory.
 #
 # Copied from OpenZCine's scripts/android-stage-swift-core.sh — product name only.
@@ -82,7 +82,7 @@ sdk_id="${SWIFT_ANDROID_SDK_ID:-$DEFAULT_SWIFT_SDK}"
 target="${SWIFT_ANDROID_TARGET:-$DEFAULT_TARGET}"
 case "$target" in
     aarch64-unknown-linux-android*) ;;
-    *) fail "OpenInstaCine currently builds only arm64-v8a; refusing target $target" ;;
+    *) fail "OpenPocketCine currently ships only arm64-v8a; refusing target $target" ;;
 esac
 
 sdk_configuration="$($swift sdk configure --show-configuration "$sdk_id" "$target")" || fail \

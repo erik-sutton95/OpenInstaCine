@@ -60,27 +60,37 @@ internal object ScopeTapHzLog {
 
 /** Which scopes the GLES present path should tap, and the VECTOR look. */
 internal data class ScopeTapPolicy(
+    val inspectorOnly: Boolean = false,
+    val previewOwner: Any? = null,
+    val playback: Boolean = false,
     val waveform: Boolean = false,
     val parade: Boolean = false,
     val histogram: Boolean = false,
     val vectorscope: Boolean = false,
     val trafficLights: Boolean = false,
+    val ndMeter: Boolean = false,
     val trafficThreshold: Double = 0.0,
     val colorMode: Int = com.opencapture.openpocketcine.session.CameraCommands.COLOR_NORMAL,
     val iso: Int = ScopeExposureCeiling.REFERENCE_EI,
     val vectorLut: FeedEffectsCube? = null,
+    val allowsTransferInference: Boolean = true,
 ) {
     val activeScopeCount: Int
-        get() = listOf(waveform, parade, histogram, vectorscope, trafficLights).count { it }
+        get() = listOf(waveform, parade, histogram, vectorscope, trafficLights, ndMeter).count { it }
 
     val needsTap: Boolean
-        get() = activeScopeCount > 0
+        get() = activeScopeCount > 0 || previewOwner != null
 
     val includePoints: Boolean
         get() = waveform || parade
 
     val includeVectorPoints: Boolean
         get() = vectorscope
+
+    fun minIntervalNs(thermalMultiplier: Double): Long {
+        val existing = PocketScopeSampler.minIntervalNs(activeScopeCount, thermalMultiplier)
+        return if (inspectorOnly) maxOf(existing, (200_000_000L * thermalMultiplier.coerceAtLeast(1.0)).toLong()) else existing
+    }
 
     companion object {
         val IDLE = ScopeTapPolicy()

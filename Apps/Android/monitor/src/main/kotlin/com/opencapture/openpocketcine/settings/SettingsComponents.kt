@@ -1,19 +1,26 @@
 package com.opencapture.openpocketcine.settings
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,8 +35,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.opencapture.monitorui.LocalMonitorInspectorHelp
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,21 +45,33 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import com.opencapture.openpocketcine.assists.FalseColorReference
+import com.opencapture.openpocketcine.assists.FalseColorScale
+import com.opencapture.openpocketcine.feed.MonitorTransfer
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -61,22 +80,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.opencapture.openpocketcine.ChromeShape
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.LiveType
+import com.opencapture.monitorui.MonitorLinkHealth
 import com.opencapture.openpocketcine.OpcIcon
-import com.opencapture.openpocketcine.LocalMonitorGlass
-import com.opencapture.openpocketcine.glass.LiquidSlider
 import com.opencapture.openpocketcine.panelGlass
 import kotlin.math.roundToInt
 
 private fun chromeStyle(size: Float, weight: FontWeight, mono: Boolean = false): TextStyle =
     if (mono) LiveType.mono(size, weight) else LiveType.ui(size, weight)
 
-/** Watch band — orange, matching iOS `SettingsDashScale` (not the cyan accent). */
-private val WatchOrange = Color(0.96f, 0.52f, 0.12f)
+/** iOS `monitorCardSurface`: solid Field Monitor card with a hairline border. */
+private fun Modifier.settingsCardSurface(): Modifier =
+    background(LiveDesign.surface, ChromeShape).border(1.dp, LiveDesign.hairline, ChromeShape)
 
 // Compose ports of the iOS operator-settings primitives (SettingsRootView /
 // AppSettings: SettingsRowCard, SettingsInlineRow, SettingsSwitchInlineRow,
@@ -86,10 +103,11 @@ private val WatchOrange = Color(0.96f, 0.52f, 0.12f)
 
 /** Ripple-free click carrying a semantics [role] (the settings-panel `chromeClickable`). */
 @Composable
-internal fun Modifier.settingsClickable(role: Role, onClick: () -> Unit): Modifier =
+internal fun Modifier.settingsClickable(role: Role, enabled: Boolean = true, onClick: () -> Unit): Modifier =
     clickable(
         interactionSource = remember { MutableInteractionSource() },
         indication = null,
+        enabled = enabled,
         role = role,
         onClick = onClick,
     )
@@ -106,32 +124,31 @@ fun SettingsRowCard(
     content: @Composable () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxWidth()
-            .panelGlass(ChromeShape)
+        Modifier
+            .fillMaxWidth()
+            .settingsCardSurface()
             .padding(horizontal = 13.dp)
-            .padding(bottom = 4.dp),
+            .padding(top = if (title != null) 0.dp else 8.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(com.opencapture.monitorui.MonitorLayoutPolicy.SETTINGS_TITLE_CONTENT_GAP.dp),
     ) {
         if (title != null) {
             Row(
-                Modifier.fillMaxWidth().padding(top = 11.dp, bottom = 2.dp).defaultMinSize(minHeight = 24.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 11.dp)
+                    .heightIn(min = com.opencapture.monitorui.MonitorLayoutPolicy.SETTINGS_TITLE_MIN_HEIGHT.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    title,
-                    style = chromeStyle(13f, FontWeight.SemiBold),
-                    color = LiveDesign.text,
-                )
+                Text(title, style = chromeStyle(13f, FontWeight.SemiBold), color = LiveDesign.text)
                 Spacer(Modifier.weight(1f))
-                if (onReset != null) {
-                    SettingsResetButton(onClick = onReset)
-                }
+                if (onReset != null) SettingsResetButton(onClick = onReset)
             }
         }
         content()
     }
 }
 
-/** Circular counter-clockwise reset control (iOS `SettingsResetButton`, 28dp). */
+/** Circular refresh-cw reset control (iOS `SettingsResetButton`, 28dp). */
 @Composable
 fun SettingsResetButton(onClick: () -> Unit) {
     val description = "Reset to defaults"
@@ -143,33 +160,7 @@ fun SettingsResetButton(onClick: () -> Unit) {
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        // Simple two-arc “↺” mark without pulling in an icon dependency.
-        Canvas(Modifier.size(12.dp)) {
-            val stroke = 1.6.dp.toPx()
-            drawArc(
-                color = LiveDesign.muted,
-                startAngle = -40f,
-                sweepAngle = 260f,
-                useCenter = false,
-                style = Stroke(width = stroke, cap = StrokeCap.Round),
-            )
-            val tipX = size.width * 0.78f
-            val tipY = size.height * 0.18f
-            drawLine(
-                LiveDesign.muted,
-                Offset(tipX - 3.dp.toPx(), tipY),
-                Offset(tipX, tipY),
-                stroke,
-                StrokeCap.Round,
-            )
-            drawLine(
-                LiveDesign.muted,
-                Offset(tipX, tipY),
-                Offset(tipX, tipY + 3.dp.toPx()),
-                stroke,
-                StrokeCap.Round,
-            )
-        }
+        OpcIcon(OpcIcon.REFRESH_CW, null, Modifier.size(12.dp), LiveDesign.muted)
     }
 }
 
@@ -184,19 +175,21 @@ fun SettingsActionPill(
     tint: Color = LiveDesign.accent,
     background: Color = LiveDesign.accentDim,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     Row(
         modifier
+            .alpha(if (enabled) 1f else 0.45f)
             .background(background, CircleShape)
             .border(1.dp, tint.copy(alpha = 0.5f), CircleShape)
-            .settingsClickable(role = Role.Button, onClick = onClick)
+            .settingsClickable(role = Role.Button, enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 9.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         icon?.let {
-            OpcIcon(icon = it, contentDescription = null, tint = tint, modifier = Modifier.size(15.dp))
+            OpcIcon(icon = it, contentDescription = null, tint = tint, modifier = Modifier.size(13.dp))
         }
         Text(
             title.uppercase(),
@@ -214,33 +207,29 @@ fun SettingsActionPill(
  */
 @Composable
 fun SettingsDashScale(title: String, caption: String, score: Int) {
-    val band =
-        when {
-            score >= 80 -> LinkHealthBand.STABLE
-            score >= 50 -> LinkHealthBand.WATCH
-            else -> LinkHealthBand.POOR
-        }
-    val bandColor =
-        when (band) {
-            LinkHealthBand.POOR -> LiveDesign.rec
-            LinkHealthBand.WATCH -> WatchOrange
-            LinkHealthBand.STABLE -> LiveDesign.good
-        }
+    val band = MonitorLinkHealth.band(score)
+    val bandColor = MonitorLinkHealth.color(score)
     val litCount =
         when (band) {
-            LinkHealthBand.POOR -> 4
-            LinkHealthBand.WATCH -> 8
-            LinkHealthBand.STABLE -> 12
+            MonitorLinkHealth.Band.POOR -> 4
+            MonitorLinkHealth.Band.WATCH -> 8
+            MonitorLinkHealth.Band.STABLE -> 12
         }
     val bandSlot =
         when (band) {
-            LinkHealthBand.POOR -> 0
-            LinkHealthBand.WATCH -> 1
-            LinkHealthBand.STABLE -> 2
+            MonitorLinkHealth.Band.POOR -> 0
+            MonitorLinkHealth.Band.WATCH -> 1
+            MonitorLinkHealth.Band.STABLE -> 2
+        }
+    val bandLabel =
+        when (band) {
+            MonitorLinkHealth.Band.POOR -> "POOR"
+            MonitorLinkHealth.Band.WATCH -> "WATCH"
+            MonitorLinkHealth.Band.STABLE -> "STABLE"
         }
     Column(
         Modifier.fillMaxWidth()
-            .panelGlass(ChromeShape)
+            .settingsCardSurface()
             .padding(13.dp),
         verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
@@ -255,7 +244,7 @@ fun SettingsDashScale(title: String, caption: String, score: Int) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     if (slot == bandSlot) {
                         Text(
-                            band.label,
+                            bandLabel,
                             style = chromeStyle(9.5f, FontWeight.Bold, mono = true),
                             color = bandColor,
                             letterSpacing = 0.5.sp,
@@ -277,9 +266,9 @@ fun SettingsDashScale(title: String, caption: String, score: Int) {
                 val fill =
                     when {
                         index >= litCount -> LiveDesign.hairlineStrong
-                        index < 4 -> LiveDesign.rec.copy(alpha = 0.8f)
-                        index < 8 -> WatchOrange.copy(alpha = 0.85f)
-                        else -> LiveDesign.good.copy(alpha = 0.9f)
+                        index < 4 -> MonitorLinkHealth.poor.copy(alpha = 0.8f)
+                        index < 8 -> MonitorLinkHealth.watch.copy(alpha = 0.85f)
+                        else -> MonitorLinkHealth.stable.copy(alpha = 0.9f)
                     }
                 Box(
                     Modifier.weight(1f)
@@ -294,12 +283,6 @@ fun SettingsDashScale(title: String, caption: String, score: Int) {
             DashLegend("Stable", "80+", Modifier.weight(1f), Alignment.End)
         }
     }
-}
-
-private enum class LinkHealthBand(val label: String) {
-    POOR("POOR"),
-    WATCH("WATCH"),
-    STABLE("STABLE"),
 }
 
 @Composable
@@ -342,6 +325,21 @@ fun SettingsInlineRow(
     stacked: Boolean = false,
     trailing: @Composable () -> Unit,
 ) {
+    val inspectorHelp = LocalMonitorInspectorHelp.current
+    val label = @Composable {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                title,
+                style = chromeStyle(12.5f, FontWeight.SemiBold),
+                color = LiveDesign.text,
+                maxLines = if (stacked) 2 else 1,
+            )
+            if (inspectorHelp == null) help?.let { SettingsHelpBadge(it) }
+        }
+    }
     Column {
         if (showTopDivider) {
             Box(Modifier.fillMaxWidth().height(1.dp).background(LiveDesign.hairline))
@@ -351,36 +349,31 @@ fun SettingsInlineRow(
                 Modifier.fillMaxWidth().defaultMinSize(minHeight = 44.dp).padding(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        title,
-                        style = chromeStyle(12.5f, FontWeight.SemiBold),
-                        color = LiveDesign.text,
-                        maxLines = 2,
-                    )
-                    help?.let { SettingsHelpBadge(it) }
-                }
-                trailing()
+                label()
+                Box(Modifier.fillMaxWidth()) { trailing() }
             }
         } else {
             Row(
                 Modifier.fillMaxWidth().defaultMinSize(minHeight = 50.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    title,
-                    style = chromeStyle(12.5f, FontWeight.SemiBold),
-                    color = LiveDesign.text,
-                    maxLines = 1,
-                )
-                help?.let { SettingsHelpBadge(it) }
-                Spacer(Modifier.weight(1f))
-                trailing()
+                label()
+                Box(
+                    Modifier.weight(1f).padding(start = 4.dp),
+                    contentAlignment = Alignment.CenterEnd,
+                ) {
+                    trailing()
+                }
             }
+        }
+        if (inspectorHelp == true && !help.isNullOrEmpty()) {
+            Text(
+                help,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                style = chromeStyle(10f, FontWeight.Normal),
+                color = LiveDesign.muted,
+            )
         }
     }
 }
@@ -393,6 +386,7 @@ fun SettingsSwitchRow(
     help: String? = null,
     showTopDivider: Boolean = true,
     stacked: Boolean = false,
+    testTag: String? = null,
     onToggle: () -> Unit,
 ) {
     SettingsInlineRow(
@@ -401,7 +395,13 @@ fun SettingsSwitchRow(
         showTopDivider = showTopDivider,
         stacked = stacked,
     ) {
-        Box(Modifier.settingsClickable(role = Role.Switch, onClick = onToggle)) {
+        val access =
+            Modifier.settingsClickable(role = Role.Switch, onClick = onToggle).semantics {
+                contentDescription = title
+                toggleableState = if (isOn) ToggleableState.On else ToggleableState.Off
+                stateDescription = if (isOn) "On" else "Off"
+            }.then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
+        Box(access) {
             SettingsSwitchGraphic(isOn = isOn)
         }
     }
@@ -415,6 +415,7 @@ fun SettingsSwitchInlineRow(
     help: String? = null,
     showTopDivider: Boolean = true,
     stacked: Boolean = false,
+    testTag: String? = null,
     onToggle: () -> Unit,
 ) {
     SettingsSwitchRow(
@@ -423,6 +424,7 @@ fun SettingsSwitchInlineRow(
         help = help,
         showTopDivider = showTopDivider,
         stacked = stacked,
+        testTag = testTag,
         onToggle = onToggle,
     )
 }
@@ -450,24 +452,27 @@ fun SettingsHelpBadge(text: String) {
             contentAlignment = Alignment.Center,
         ) {
             Box(
-                Modifier.size(16.dp).border(1.dp, LiveDesign.hairlineStrong, CircleShape),
+                Modifier
+                    .size(16.dp)
+                    .background(LiveDesign.background.copy(alpha = 0.5f), CircleShape)
+                    .border(1.dp, LiveDesign.hairline, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("?", style = chromeStyle(10f, FontWeight.Bold), color = LiveDesign.muted)
+                OpcIcon(OpcIcon.INFO, null, Modifier.size(9.dp), LiveDesign.faint)
             }
         }
         if (open) {
             Popup(onDismissRequest = { open = false }) {
                 Box(
                     Modifier
-                        .widthIn(max = 280.dp)
+                        .width(248.dp)
                         .background(LiveDesign.surface, ChromeShape)
                         .border(1.dp, LiveDesign.hairline, ChromeShape)
-                        .padding(10.dp),
+                        .padding(12.dp),
                 ) {
                     Text(
                         text,
-                        style = chromeStyle(11f, FontWeight.Normal),
+                        style = chromeStyle(12f, FontWeight.Normal),
                         color = LiveDesign.text,
                     )
                 }
@@ -485,41 +490,48 @@ fun SettingsSegmented(
     options: List<String>,
     selected: String,
     compact: Boolean = true,
+    fillWidth: Boolean = compact,
+    accentSelection: Boolean = false,
+    testTag: String? = null,
     onSelect: (String) -> Unit,
 ) {
-    Row(
-        Modifier
-            .then(if (compact) Modifier.fillMaxWidth() else Modifier)
-            .background(LiveDesign.background.copy(alpha = 0.5f), ChromeShape)
-            .border(1.dp, LiveDesign.hairline, ChromeShape)
-            .padding(3.dp)
-            .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        options.forEach { option ->
-            val active = option == selected
-            Box(
-                Modifier
-                    .then(if (compact) Modifier.weight(1f) else Modifier)
-                    .defaultMinSize(minHeight = if (compact) 32.dp else 30.dp)
-                    .background(
-                        if (active) LiveDesign.surface else Color.Transparent,
-                        ChromeShape,
+    BoxWithConstraints {
+        val labelSize = if (compact && fillWidth && options.size >= 4 && maxWidth < 260.dp) 9.5f else if (compact) 11f else 11.5f
+        Row(
+            Modifier
+                .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
+                .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
+                .background(LiveDesign.background.copy(alpha = 0.5f), ChromeShape)
+                .border(1.dp, LiveDesign.hairline, ChromeShape)
+                .padding(3.dp)
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            options.forEach { option ->
+                val active = option == selected
+                Box(
+                    Modifier
+                        .then(if (fillWidth) Modifier.weight(1f) else Modifier)
+                        .defaultMinSize(minHeight = if (compact) 32.dp else 30.dp)
+                        .background(
+                            if (active) { if (accentSelection) LiveDesign.accent else LiveDesign.surface } else Color.Transparent,
+                            ChromeShape,
+                        )
+                        .selectable(
+                            selected = active,
+                            role = Role.RadioButton,
+                            onClick = { if (!active) onSelect(option) },
+                        )
+                        .padding(horizontal = if (compact && fillWidth) 2.dp else if (compact) 8.dp else 11.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        option,
+                        style = chromeStyle(labelSize, if (active) FontWeight.SemiBold else FontWeight.Medium),
+                        color = if (active) { if (accentSelection) Color(0xFF08191F) else LiveDesign.text } else LiveDesign.muted,
+                        maxLines = 1,
                     )
-                    .selectable(
-                        selected = active,
-                        role = Role.RadioButton,
-                        onClick = { if (!active) onSelect(option) },
-                    )
-                    .padding(horizontal = if (compact) 8.dp else 11.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    option,
-                    style = chromeStyle(if (compact) 11f else 11.5f, if (active) FontWeight.SemiBold else FontWeight.Medium),
-                    color = if (active) LiveDesign.text else LiveDesign.muted,
-                    maxLines = 1,
-                )
+                }
             }
         }
     }
@@ -534,6 +546,7 @@ fun SettingsColorDots(
     dots: List<SettingsColorDot>,
     selectedName: String,
     compact: Boolean = true,
+    enabled: Boolean = true,
     onSelect: (String) -> Unit,
 ) {
     val diameter = if (compact) 15.dp else 13.dp
@@ -545,14 +558,14 @@ fun SettingsColorDots(
                 Modifier
                     .size(hit)
                     .settingsClickable(role = Role.RadioButton) {
-                        if (!active) onSelect(dot.name)
+                        if (enabled && !active) onSelect(dot.name)
                     }
-                    .semantics { contentDescription = dot.name },
+                    .semantics { contentDescription = dot.name; if (!enabled) disabled() },
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
                     Modifier
-                        .size(diameter + 10.dp)
+                        .size(36.dp)
                         .background(LiveDesign.background.copy(alpha = 0.5f), CircleShape)
                         .border(
                             width = if (active) 2.dp else 1.dp,
@@ -668,18 +681,28 @@ fun SettingsNumberField(
     }
 }
 
-/**
- * iOS / Kyant liquid-glass percent slider: [LiquidSlider] thumb over a thin
- * track, with a trailing mono percent readout.
- */
+/** Compact native slider with the existing trailing numeric readout. */
 @Composable
 fun SettingsPercentSlider(
     value: Int,
     range: IntRange,
     onChange: (Int) -> Unit,
 ) {
+    SettingsValueSlider(value = value, range = range, label = "$value%", onChange = onChange)
+}
+
+/** Thin accent track + white thumb, matching iOS `Slider` in Operator Setup. */
+@Composable
+fun SettingsValueSlider(
+    value: Int,
+    range: IntRange,
+    label: String,
+    onChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    labelWidth: Int = 40,
+) {
     Row(
-        Modifier.fillMaxWidth(),
+        modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -690,102 +713,64 @@ fun SettingsPercentSlider(
             modifier = Modifier.weight(1f),
         )
         Text(
-            "$value%",
+            label,
             style = chromeStyle(12f, FontWeight.Medium, mono = true),
             color = LiveDesign.text,
             textAlign = TextAlign.End,
-            modifier = Modifier.width(40.dp),
+            modifier = Modifier.width(labelWidth.dp),
         )
     }
 }
 
-/**
- * Operator-facing brightness slider backed by Kyant's catalog [LiquidSlider]
- * (https://github.com/Kyant0/AndroidLiquidGlass). Samples the monitor feed
- * backdrop when present; otherwise records a local layer so the glass thumb
- * still has something to refract in standalone Operator Setup.
- */
+/** Existing assist values adapt to a compact iOS-like track rather than the 44dp drum slider. */
 @Composable
-fun GlassPillSlider(
-    value: Int,
-    range: IntRange,
-    onChange: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val monitorGlass = LocalMonitorGlass.current
-    // Settings never samples the live-feed Kyant backdrop. Solid capsule only.
-    val useLiquidGlass = false
-    val localBackdrop = rememberLayerBackdrop()
-    val sceneBackdrop = monitorGlass?.layerBackdrop
-    val latestOnChange by rememberUpdatedState(onChange)
-    val latestValue by rememberUpdatedState(value)
-    val floatRange = range.first.toFloat()..range.last.toFloat()
-    // Continuous thumb position while dragging. Discrete onChange (Int steps) alone cannot
-    // drive a smooth pill drag — intermediate floats would be rounded away and the thumb
-    // would stick (especially on short ranges like desqueeze 0…10).
-    var displayValue by remember { mutableFloatStateOf(value.toFloat()) }
-    // Accept external commits without yanking the pill back to the last Int mid-drag.
-    SideEffect {
-        if (displayValue.roundToInt().coerceIn(range) != value) {
-            displayValue = value.toFloat()
-        }
+fun GlassPillSlider(value: Int, range: IntRange, onChange: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val currentOnChange by rememberUpdatedState(onChange)
+    val start = range.first.toFloat()
+    val endInclusive = range.last.toFloat().coerceAtLeast(start)
+    val span = (endInclusive - start).coerceAtLeast(1f)
+    var widthPx by remember { mutableFloatStateOf(1f) }
+    val density = LocalDensity.current
+    fun atX(x: Float): Int {
+        val inset = with(density) { 10.dp.toPx() }
+        val t = ((x - inset) / (widthPx - 2f * inset).coerceAtLeast(1f)).coerceIn(0f, 1f)
+        return (start + t * span).roundToInt().coerceIn(range)
     }
-
-    Box(
+    Canvas(
         modifier
-            .height(40.dp)
-            .then(
-                if (useLiquidGlass && sceneBackdrop == null) {
-                    Modifier.layerBackdrop(localBackdrop)
-                } else {
-                    Modifier
-                },
-            )
-            .semantics(mergeDescendants = true) {
-                stateDescription = "$value%"
-                setProgress { target ->
-                    val next =
-                        (range.first + target * (range.last - range.first))
-                            .roundToInt()
-                            .coerceIn(range)
-                    displayValue = next.toFloat()
-                    latestOnChange(next)
+            .fillMaxWidth()
+            .height(44.dp)
+            .onSizeChanged { widthPx = it.width.toFloat() }
+            .semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), start..endInclusive)
+                setProgress {
+                    val next = it.roundToInt().coerceIn(range)
+                    if (next != value) onChange(next)
                     true
                 }
+            }
+            .pointerInput(range) { detectTapGestures { currentOnChange(atX(it.x)) } }
+            .pointerInput(range) {
+                detectHorizontalDragGestures { change, _ ->
+                    change.consume()
+                    currentOnChange(atX(change.position.x))
+                }
             },
-        contentAlignment = Alignment.Center,
     ) {
-        if (useLiquidGlass && sceneBackdrop == null) {
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .background(
-                        brush =
-                            Brush.horizontalGradient(
-                                colors =
-                                    listOf(
-                                        LiveDesign.surface,
-                                        LiveDesign.background,
-                                        LiveDesign.surface,
-                                    ),
-                            ),
-                    ),
-            )
-        }
-        LiquidSlider(
-            value = { displayValue },
-            onValueChange = { next ->
-                displayValue = next
-                val rounded = next.roundToInt().coerceIn(range)
-                if (rounded != latestValue) latestOnChange(rounded)
-            },
-            valueRange = floatRange,
-            visibilityThreshold = 0.5f,
-            backdrop = sceneBackdrop ?: localBackdrop,
-            modifier = Modifier.fillMaxWidth(),
-            accentColor = LiveDesign.accent,
-            useLiquidGlass = useLiquidGlass,
+        val y = size.height / 2f
+        val inset = 10.dp.toPx()
+        val track = 2.dp.toPx()
+        val t = ((value.toFloat() - start) / span).coerceIn(0f, 1f)
+        val thumbX = inset + t * (size.width - 2f * inset)
+        drawLine(
+            LiveDesign.hairlineStrong,
+            Offset(inset, y),
+            Offset(size.width - inset, y),
+            track,
+            StrokeCap.Round,
         )
+        drawLine(LiveDesign.accent, Offset(inset, y), Offset(thumbX, y), track, StrokeCap.Round)
+        drawCircle(Color.White, 10.dp.toPx(), Offset(thumbX, y))
     }
 }
 
@@ -797,6 +782,7 @@ fun GlassPillSlider(
 fun SettingsCrushClipSegmented(
     options: List<Pair<String, String>>,
     selectedLabel: String,
+    accentSelection: Boolean = false,
     onSelect: (String) -> Unit,
 ) {
     Row(
@@ -815,7 +801,7 @@ fun SettingsCrushClipSegmented(
                     .weight(1f)
                     .defaultMinSize(minHeight = 34.dp)
                     .background(
-                        if (active) LiveDesign.surface else Color.Transparent,
+                        if (active) { if (accentSelection) LiveDesign.accent else LiveDesign.surface } else Color.Transparent,
                         ChromeShape,
                     )
                     .selectable(
@@ -831,7 +817,7 @@ fun SettingsCrushClipSegmented(
                 Text(
                     compact,
                     style = chromeStyle(12f, if (active) FontWeight.SemiBold else FontWeight.Medium),
-                    color = if (active) LiveDesign.text else LiveDesign.muted,
+                    color = if (active) { if (accentSelection) Color(0xFF08191F) else LiveDesign.text } else LiveDesign.muted,
                     maxLines = 1,
                 )
             }
@@ -839,19 +825,21 @@ fun SettingsCrushClipSegmented(
     }
 }
 
-/** The accent capsule switch graphic (iOS `SettingsSwitchGraphic`, 39×22). */
+/** iOS `SettingsSwitchGraphic`: 39×22 capsule, cyan thumb on dim track when on. */
 @Composable
 fun SettingsSwitchGraphic(isOn: Boolean) {
+    val thumbX by animateFloatAsState(if (isOn) 20.5f else 3.5f, tween(160), label = "settings-switch")
     Box(
-        Modifier.size(width = 39.dp, height = 22.dp)
+        Modifier
+            .size(39.dp, 22.dp)
             .background(if (isOn) LiveDesign.accentDim else LiveDesign.surface, CircleShape)
-            .border(1.dp, if (isOn) LiveDesign.accentDim else LiveDesign.hairline, CircleShape)
-            .padding(3.5.dp),
-        contentAlignment = if (isOn) Alignment.CenterEnd else Alignment.CenterStart,
+            .border(1.dp, if (isOn) LiveDesign.accentDim else LiveDesign.hairline, CircleShape),
     ) {
         Box(
-            Modifier.size(15.dp)
-                .background(if (isOn) LiveDesign.accent else LiveDesign.muted, CircleShape)
+            Modifier
+                .offset(x = thumbX.dp, y = 3.5.dp)
+                .size(15.dp)
+                .background(if (isOn) LiveDesign.accent else LiveDesign.muted, CircleShape),
         )
     }
 }
@@ -936,8 +924,8 @@ fun SettingsGroupCard(
 ) {
     val isExpanded = expanded ?: true
     Column(
-        Modifier.fillMaxWidth().panelGlass(ChromeShape).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(11.dp),
+        Modifier.fillMaxWidth().settingsCardSurface().padding(horizontal = 13.dp, vertical = 11.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Column(
             Modifier.then(
@@ -1030,5 +1018,42 @@ fun PanelCloseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
             tint = LiveDesign.text,
             modifier = Modifier.size(13.dp),
         )
+    }
+}
+
+/** Compact settings key; uses the same transfer-aware bands as the live reference. */
+@Composable
+fun SettingsFalseColorKey(scale: FalseColorScale, colorMode: Int) {
+    val transfer = MonitorTransfer.fromColorMode(colorMode)
+    val segments = FalseColorReference.segments(scale, transfer)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(11.dp)) {
+            drawRect(Color.White.copy(alpha = 0.5f))
+            segments.forEach { segment ->
+                val lo = segment.lowerFraction.toFloat()
+                val hi = segment.upperFraction.toFloat()
+                drawRect(
+                    Color(segment.band.red.toFloat(), segment.band.green.toFloat(), segment.band.blue.toFloat()),
+                    Offset(size.width * lo, 0f),
+                    Size(maxOf(1f, size.width * (hi - lo)), size.height),
+                )
+            }
+        }
+        if (scale.usesSceneStops) {
+            BoxWithConstraints(Modifier.fillMaxWidth().height(12.dp)) {
+                val rulerWidth = maxWidth
+                FalseColorReference.sceneStopMarkers(transfer).forEach { marker ->
+                    Text(marker.label, style = LiveType.mono(7f), color = LiveDesign.muted,
+                        modifier = Modifier.offset(x = (rulerWidth * marker.fraction.toFloat() - 8.dp)
+                            .coerceIn(0.dp, (rulerWidth - 16.dp).coerceAtLeast(0.dp))))
+                }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                FalseColorReference.axisLabels(scale).forEach { label ->
+                    Text(label, style = LiveType.ui(7f), color = LiveDesign.muted)
+                }
+            }
+        }
     }
 }

@@ -11,14 +11,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.MonitorGlass
 import com.opencapture.openpocketcine.feed.FeedEffectsRenderPlan
@@ -34,36 +36,13 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/**
- * Photo-viewer HUD glass. Clip playback does not use Kyant — TextureView is
- * invisible to it, and a 480 px overlay is the wrong quality trade.
- */
+/** Compatibility environment; shared monitor materials receive passive image sources separately. */
 @Composable
 fun rememberPlaybackMonitorGlass(): MonitorGlass {
-    val context = LocalContext.current
-    val backdrop = rememberLayerBackdrop()
-    val activityManager =
-        remember(context) {
-            checkNotNull(context.getSystemService(ActivityManager::class.java))
-        }
-    val totalRamBytes =
-        remember(activityManager) {
-            ActivityManager.MemoryInfo().also(activityManager::getMemoryInfo).totalMem
-        }
-    return remember(backdrop, totalRamBytes, activityManager.isLowRamDevice) {
-        MonitorGlass(
-            resolveTier(
-                sdkInt = Build.VERSION.SDK_INT,
-                isLowRamDevice = activityManager.isLowRamDevice,
-                totalRamBytes = totalRamBytes,
-            ),
-            layerBackdrop = backdrop,
-            overlayBackdrop = backdrop,
-        )
-    }
+    return remember { MonitorGlass(com.opencapture.openpocketcine.GlassTier.FLAT) }
 }
 
-/** iOS-style darkened bars when Kyant is off so filename + transport stay readable. */
+/** Edge scrims keep filename and transport controls readable over the picture. */
 @Composable
 fun BoxScope.PlaybackDarkenedBars(
     showTop: Boolean = true,
@@ -75,6 +54,7 @@ fun BoxScope.PlaybackDarkenedBars(
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(PlaybackChromeMetrics.topScrimDp.dp)
+                .clipToBounds()
                 .background(
                     Brush.verticalGradient(
                         listOf(LiveDesign.playbackScrim, Color.Transparent),
@@ -88,6 +68,7 @@ fun BoxScope.PlaybackDarkenedBars(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .height(PlaybackChromeMetrics.bottomScrimDp.dp)
+                .clipToBounds()
                 .background(
                     Brush.verticalGradient(
                         listOf(Color.Transparent, LiveDesign.playbackScrim),
@@ -239,10 +220,10 @@ private fun publishPlaybackScopeTap(
     val pixels = IntArray(tapW * tapH)
     src.getPixels(pixels, 0, tapW, 0, 0, tapW, tapH)
     val packed = argb8888ToRgba(pixels)
-    val transfer = MonitorTransfer.fromColorMode(colorMode)
+    var transfer = MonitorTransfer.fromColorMode(colorMode)
     ScopeExposureCeiling.syncISO(iso)
-    val (_, maxC) = PocketScopeSampler.minMaxRGB(packed)
-    // Pixel brightness is scene content, not evidence of a camera transfer function.
+    val (minC, maxC) = PocketScopeSampler.minMaxRGB(packed)
+    transfer = MonitorTransfer.inferred(minC, maxC, transfer)
     ScopeExposureCeiling.observeTapMax(maxC, transfer)
     val bundle =
         PocketScopeSampler.sample(
@@ -259,4 +240,30 @@ private fun publishPlaybackScopeTap(
         )
     LiveScopeSampleBus.publish(bundle)
     return bundle
+}
+
+/** Static photo input follows the same passive geometry contract as video. */
+@Composable
+internal fun rememberPhotoBackdrop(bitmap: Bitmap?, identity: Any): com.opencapture.monitorui.MonitorBackdropSource {
+    val source = remember { com.opencapture.monitorui.MonitorBackdropSource() }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    var resumed by remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.DisposableEffect(source, lifecycle) {
+        fun update() { resumed = lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)
+            if (!resumed) source.image = null }
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, _ -> update() }
+        lifecycle.addObserver(observer); update()
+        onDispose { lifecycle.removeObserver(observer); source.image = null }
+    }
+    LaunchedEffect(bitmap, identity, resumed) {
+        source.image = null
+        if (bitmap != null && resumed) {
+            source.image = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                val scale = minOf(1f, 213f / bitmap.width, 120f / bitmap.height)
+                Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt().coerceAtLeast(1),
+                    (bitmap.height * scale).toInt().coerceAtLeast(1), true)
+            }
+        }
+    }
+    return source
 }

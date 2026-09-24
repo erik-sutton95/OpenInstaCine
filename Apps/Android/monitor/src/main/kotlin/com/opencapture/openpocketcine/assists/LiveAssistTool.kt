@@ -1,10 +1,10 @@
 package com.opencapture.openpocketcine.assists
 
 /**
- * OpenZCine cinema live-monitor set. Pocket omits LEVEL, DE-SQ, MAG, EV, PLAY.
+ * OpenZCine cinema live-monitor set. Pocket omits MAG, PLAY.
  *
- * Toolbar: LUT PEAK FALSE | ZEBRA WAVE PARADE | HISTO VECTOR LIGHTS |
- * GUIDES GRID CROSS | MIRROR | AUDIO.
+ * Toolbar: LUT PEAK FALSE | ZEBRA WAVE PARADE | HISTO VECTOR LIGHTS ND EV |
+ * GUIDES GRID CROSS LEVEL DE-SQ | MIRROR | AUDIO.
  */
 enum class LiveAssistTool {
     LUT,
@@ -16,15 +16,19 @@ enum class LiveAssistTool {
     HISTO,
     VECTOR,
     LIGHTS,
+    ND,
+    EV,
     AUDIO,
     GUIDES,
     GRID,
     CROSS,
+    LEVEL,
+    DESQ,
     MIRROR,
     ;
 
     val chipLabel: String
-        get() = name
+        get() = if (this == DESQ) "DE-SQ" else name
 
     val label: String
         get() = name
@@ -41,32 +45,44 @@ enum class LiveAssistTool {
                 HISTO -> "Histogram"
                 VECTOR -> "Vectorscope"
                 LIGHTS -> "Traffic Lights"
+                ND -> "ND Suggestion"
+                EV -> "EV Meter"
                 AUDIO -> "Audio Levels"
                 GUIDES -> "Guides"
                 GRID -> "Grid"
                 CROSS -> "Crosshair"
+                LEVEL -> "Level"
+                DESQ -> "Anamorphic Desqueeze"
                 MIRROR -> "Mirror"
             }
 
-    /** AUDIO / MIRROR are tap-only — no channel picker, no H/V flip. */
+    /** The fixed camera EV meter and LEVEL are tap-only toggles. */
     val hasConfiguration: Boolean
         get() =
             when (this) {
-                AUDIO, MIRROR -> false
+                EV, LEVEL -> false
                 else -> true
             }
 
     companion object {
-        /** Groups of three, then MIRROR. AUDIO is appended as its own trailing section. */
-        val toolbarCases: List<LiveAssistTool> =
-            listOf(LUT, PEAK, FALSE, ZEBRA, WAVE, PARADE, HISTO, VECTOR, LIGHTS, GUIDES, GRID, CROSS, MIRROR)
+        val toolbarGroups: List<List<LiveAssistTool>> =
+            listOf(
+                listOf(LUT, PEAK, FALSE),
+                listOf(ZEBRA, WAVE, PARADE),
+                listOf(HISTO, VECTOR, LIGHTS, ND, EV),
+                listOf(GUIDES, GRID, CROSS, LEVEL, DESQ),
+                listOf(MIRROR),
+            )
 
-        /** Playback drops nothing Pocket already omits; AUDIO rides last like live. */
-        val playbackToolbarCases: List<LiveAssistTool> = toolbarCases + AUDIO
+        /** AUDIO is appended as its own trailing section. */
+        val toolbarCases: List<LiveAssistTool> = toolbarGroups.flatten()
+
+        /** Camera EV and LEVEL have no clip telemetry; AUDIO rides last like live. */
+        val playbackToolbarCases: List<LiveAssistTool> = toolbarCases.filter { it != EV && it != LEVEL } + AUDIO
 
         val settingsCases: List<LiveAssistTool> = toolbarCases + AUDIO
 
-        val cleanPinCases: List<LiveAssistTool> = settingsCases
+        val cleanPinCases: List<LiveAssistTool> = settingsCases.filter { it != EV }
 
         fun fromPersisted(raw: String): LiveAssistTool? =
             entries.firstOrNull { it.name == raw || it.chipLabel == raw }
@@ -176,23 +192,33 @@ enum class PeakingSense(val label: String) {
     }
 }
 
+/**
+ * [persisted] is the saved key. [STOPS] is the scale now labeled Video; its key stays
+ * "CineStop" so saved settings keep the scale they chose. CineStop is [SCENE_STOPS].
+ */
 enum class FalseColorScale(val persisted: String, val menuLabel: String) {
-    STOPS("ZC Stops", "PStops"),
+    SCENE_STOPS("SceneStops", "CineStop"),
+    STOPS("CineStop", "Video"),
     IRE("IRE", "IRE"),
     LIMITS("Limits", "Limits"),
     ;
 
+    val usesSceneStops: Boolean get() = this == SCENE_STOPS
+
     companion object {
         fun fromPersisted(raw: String): FalseColorScale =
-            entries.firstOrNull {
-                it.persisted == raw || it.menuLabel == raw || it.name == raw || raw == "Stops"
-            } ?: STOPS
+            entries.firstOrNull { it.persisted == raw || it.name == raw }
+                ?: when (raw) {
+                    "Stops", "ZC Stops", "PStops" -> STOPS
+                    else -> SCENE_STOPS
+                }
 
         fun fromMenuLabel(label: String): FalseColorScale =
             when (label) {
+                "Video" -> STOPS
                 "IRE" -> IRE
                 "Limits" -> LIMITS
-                else -> STOPS
+                else -> SCENE_STOPS
             }
     }
 }
@@ -254,9 +280,6 @@ enum class ParadeMode(val label: String) {
 
     val laneCount: Int
         get() = if (this == YRGB) 4 else 3
-
-    val laneLabels: List<String>
-        get() = if (this == YRGB) listOf("Y", "R", "G", "B") else listOf("R", "G", "B")
 
     companion object {
         fun fromPersisted(raw: String): ParadeMode =

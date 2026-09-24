@@ -24,6 +24,7 @@ internal fun rememberLiveFeedEffectsPlan(
     cameraName: String?,
     playback: Boolean = false,
     clipColorMode: Int = -1,
+    previewTool: com.opencapture.openpocketcine.assists.LiveAssistTool? = null,
 ): FeedEffectsRenderPlan {
     val context = LocalContext.current
     var plan by remember { mutableStateOf(FeedEffectsRenderPlan.IDENTITY) }
@@ -49,12 +50,15 @@ internal fun rememberLiveFeedEffectsPlan(
     val histogram = assist.histogram
     val vectorscope = assist.vectorscope
     val trafficLights = assist.trafficLights
+    val ndMeter = assist.ndMeter
     val crushClip = assist.crushClipCompensation
     val playbackTools = assist.playbackVisibleTools
     val lutExposureStops = assist.lutExposureStops
     LaunchedEffect(
         playback,
+        previewTool,
         playbackTools,
+        assist.inspectorScopeDemand,
         lutOn,
         lutSelection,
         peaking,
@@ -78,16 +82,19 @@ internal fun rememberLiveFeedEffectsPlan(
         histogram,
         vectorscope,
         trafficLights,
+        ndMeter,
         crushClip,
         lutExposureStops,
         status.colorMode,
+        status.shootingMode,
         status.iso,
         family,
         cameraName,
         clipColorMode,
     ) {
         val app = context.applicationContext
-        if (!playback && status.colorMode >= 0) {
+        val isPhoto = !playback && status.isPhoto
+        if (!playback && previewTool == null && status.colorMode >= 0 && !isPhoto) {
             OperatorPrefs.setLastMonitorColorMode(app, status.colorMode)
         }
         val colorMode =
@@ -98,7 +105,7 @@ internal fun rememberLiveFeedEffectsPlan(
                     last = OperatorPrefs.lastMonitorColorMode(app),
                 )
             } else {
-                status.colorMode
+                status.monitorColorMode
             }
         plan =
             withContext(Dispatchers.Default) {
@@ -111,6 +118,8 @@ internal fun rememberLiveFeedEffectsPlan(
                     family = family,
                     cameraName = cameraName,
                     playback = playback,
+                    previewTool = previewTool,
+                    isPhoto = isPhoto,
                 )
             }
     }

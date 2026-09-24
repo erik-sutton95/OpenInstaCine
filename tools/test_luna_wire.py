@@ -10,8 +10,9 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from luna_ble import Session, client_identity, private_json
-from luna_wire import (blob, complete_key_exchange, decode_message, derive_key,
-                       encode_frame, encryption_schemes, fields, integer, one, options, varint)
+from luna_wire import (blob, color_recovery_set, complete_key_exchange, decode_message,
+                       derive_key, encode_frame, encryption_schemes, fields, gimbal_control,
+                       integer, one, options, photography_get, varint, zigzag32)
 from ucd2 import Reassembler, checksum
 
 
@@ -81,6 +82,22 @@ class WireTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 varint(value)
         self.assertEqual(one(integer(1, (1 << 64) - 1), 1), (1 << 64) - 1)
+
+    def test_gimbal_virtual_rc_matches_official_app(self):
+        self.assertEqual(zigzag32(99), 198)
+        self.assertEqual(zigzag32(-99), 197)
+        self.assertEqual(gimbal_control(1, 0, 99), bytes.fromhex("0801120310c601"))
+        self.assertEqual(gimbal_control(1, 99, 0), bytes.fromhex("0801120308c601"))
+        self.assertEqual(gimbal_control(2), bytes.fromhex("08021200"))
+        self.assertEqual(gimbal_control(3), bytes.fromhex("08031200"))
+        with self.assertRaises(ValueError):
+            gimbal_control(1, 100, 0)
+
+    def test_color_recovery_set73_encoding(self):
+        self.assertEqual(photography_get([73], 7), bytes.fromhex("08491007"))
+        # Field 73 tag is (73<<3)=584 → c8 04; bool on/off is 1/0.
+        self.assertEqual(color_recovery_set(True), bytes.fromhex("0a01491203c804011807"))
+        self.assertEqual(color_recovery_set(False), bytes.fromhex("0a01491203c804001807"))
 
 
 class SessionTests(unittest.IsolatedAsyncioTestCase):

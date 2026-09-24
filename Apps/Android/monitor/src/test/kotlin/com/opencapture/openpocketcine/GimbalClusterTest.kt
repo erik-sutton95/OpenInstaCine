@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine
 
+import kotlin.math.min
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -21,6 +22,15 @@ class GimbalClusterTest {
         assertTrue(cluster.zoom.minY >= well.minY)
         assertEquals(cluster.stick.maxY, cluster.bounds.maxY, 0.05f)
         assertEquals(cluster.zoom.minY, cluster.bounds.minY, 0.05f)
+        assertEquals(cluster.stick.maxX, cluster.headTrack.maxX, 0.05f)
+        assertEquals(
+            min(cluster.zoom.minY, cluster.stick.minY) - GimbalCluster.GAP,
+            cluster.headTrack.maxY,
+            0.05f,
+        )
+        assertEquals(GimbalCluster.ZOOM, cluster.headTrack.width, 0.05f)
+        assertEquals(GimbalCluster.ZOOM, cluster.headTrack.height, 0.05f)
+        assertTrue(cluster.headTrack.minY < cluster.bounds.minY)
     }
 
     @Test
@@ -50,17 +60,18 @@ class GimbalClusterTest {
     }
 
     @Test
-    fun controlsGrowLeadingOfTheStickWithoutMovingIt() {
+    fun gimbalButtonSitsLeadingOfZoomWithoutMovingTheStick() {
         val bare = GimbalCluster.inTrailingBottom(well, floorY = 330f, canvasMaxY = canvasMaxY)
-        val withControls =
-            GimbalCluster.inTrailingBottom(well, floorY = 330f, canvasMaxY = canvasMaxY, controlsWidth = 72f)
-        assertEquals(bare.stick.minX, withControls.stick.minX, 0.05f)
-        assertEquals(bare.stick.minY, withControls.stick.minY, 0.05f)
-        assertEquals(bare.zoom.minX, withControls.zoom.minX, 0.05f)
-        assertEquals(withControls.stick.minX - GimbalCluster.GAP, withControls.controls.maxX, 0.05f)
-        assertEquals(withControls.stick.minY, withControls.controls.minY, 0.05f)
-        assertEquals(withControls.stick.height, withControls.controls.height, 0.05f)
-        assertEquals(72f, withControls.controls.width, 0.05f)
+        val withButton =
+            GimbalCluster.inTrailingBottom(
+                well, floorY = 330f, canvasMaxY = canvasMaxY, showGimbalButton = true)
+        assertEquals(bare.stick.minX, withButton.stick.minX, 0.05f)
+        assertEquals(bare.stick.minY, withButton.stick.minY, 0.05f)
+        assertEquals(withButton.stick.maxX, withButton.controls.maxX, 0.05f)
+        assertEquals(withButton.zoom.minY, withButton.controls.minY, 0.05f)
+        assertEquals(GimbalCluster.ZOOM, withButton.controls.width, 0.05f)
+        assertEquals(withButton.controls.minX - GimbalCluster.GAP, withButton.zoom.maxX, 0.05f)
+        assertTrue(withButton.zoom.minX < bare.zoom.minX)
     }
 
     @Test

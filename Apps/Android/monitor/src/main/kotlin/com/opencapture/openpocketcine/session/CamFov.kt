@@ -32,7 +32,8 @@ object CamFov {
     /** Camera can pause HEVC while the lens slews. Same 4 s as AF-C. */
     const val VIDEO_GRACE_SEC = 4.0
 
-    fun shouldHoldWatchdog(secondsSinceSet: Double?): Boolean {
+    fun shouldHoldWatchdog(secondsSinceSet: Double?, pinchActive: Boolean = false): Boolean {
+        if (pinchActive) return true
         val s = secondsSinceSet ?: return false
         return s >= 0.0 && s < VIDEO_GRACE_SEC
     }
@@ -170,11 +171,19 @@ object CamFov {
         preview: Double?,
         fallback: Double,
         optimistic: Double? = null,
+    ): Double = displayTenths(continuousReadout(live, preview, fallback, optimistic))
+
+    /** Unrounded lens factor for the zoom disc. The chip still uses [readout]. */
+    fun continuousReadout(
+        live: Double?,
+        preview: Double?,
+        fallback: Double,
+        optimistic: Double? = null,
     ): Double {
-        if (preview != null) return displayTenths(preview)
-        if (optimistic != null) return displayTenths(optimistic)
-        if (live != null) return displayTenths(live)
-        return displayTenths(fallback)
+        if (preview != null) return clamp(preview)
+        if (optimistic != null) return clamp(optimistic)
+        if (live != null) return clamp(live)
+        return clamp(fallback)
     }
 
     fun hybridFactor(raw: Int, lens: Int?): Double? {

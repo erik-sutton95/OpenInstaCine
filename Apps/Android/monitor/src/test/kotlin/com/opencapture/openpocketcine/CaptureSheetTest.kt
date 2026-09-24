@@ -16,6 +16,19 @@ import kotlin.test.assertTrue
 
 class CaptureSheetTest {
     @Test
+    fun formatPickerKeepsPortraitWhenCapabilitiesHaveNotArrived() {
+        val status = CameraStatus(resolutionCode = 0x6C, fpsIndex = 2, fps = 25)
+        assertEquals(
+            listOf("3K"),
+            CaptureLists.modeTabs(LiveSheet.FORMAT, status, offersIsoAuto = false),
+        )
+        assertNull(
+            CaptureLists.nextVideoFormat(status, tab = 0, drum = "30p", fromDrum = true),
+            "empty camcap is read-only; fps change must not invent a SET",
+        )
+    }
+
+    @Test
     fun shutterWheelUsesCameraListNotHardcoded24pTable() {
         val status =
             CameraStatus(
@@ -460,6 +473,22 @@ class CaptureSheetTest {
         assertEquals("AUDIO", LiveSheet.AUDIO.headerLabel)
         assertEquals("COLOR", LiveSheet.COLOR.headerLabel)
         assertEquals("RESOLUTION", LiveSheet.FORMAT.headerLabel)
+        assertEquals("SHOOTING MODE", LiveSheet.MODE.headerLabel)
+        assertEquals("Shooting mode", LiveSheet.MODE.subtitle)
+        assertTrue(LiveSheet.MODE.isTopAnchored)
+        assertTrue(!LiveSheet.EXPO.isTopAnchored)
+        assertTrue(!LiveSheet.MODE.isRecordingSetup)
+        assertTrue(!hidesLowerCaptureValues(LiveSheet.FORMAT, stripQuick = false, topQuick = false))
+        assertTrue(!hidesLowerCaptureValues(LiveSheet.MODE, stripQuick = false, topQuick = false))
+        assertTrue(!hidesLowerCaptureValues(null, stripQuick = false, topQuick = true))
+        assertTrue(hidesLowerCaptureValues(LiveSheet.ISO, stripQuick = false, topQuick = false))
+        assertTrue(hidesLowerCaptureValues(null, stripQuick = true, topQuick = false))
+        assertEquals(
+            128f,
+            com.opencapture.monitorui.MonitorLayoutPolicy.CAPTURE_HEADER_HEIGHT
+                + 11f + 8f + 86f
+                + com.opencapture.monitorui.MonitorLayoutPolicy.compactCaptureBottomPadding(11f),
+        )
     }
 
     @Test
@@ -611,6 +640,25 @@ class CaptureSheetTest {
         assertTrue(CaptureLists.shouldRefreshFocusTrack(afc, supportsFocus = true))
         assertTrue(!CaptureLists.shouldRefreshFocusTrack(lock, supportsFocus = true))
         assertTrue(!CaptureLists.shouldRefreshFocusTrack(afc, supportsFocus = false))
+        assertEquals(
+            listOf("AF-S", "AF-C", "Showcase", "Lock", "Priority"),
+            CaptureFocusChoices.labels,
+        )
+        assertEquals(CaptureFocusChoices.labels, captureQuickFocusControl(afs).options)
+        assertEquals("AF-S", captureQuickFocusControl(afs).selection)
+        assertEquals("", captureQuickFocusControl(afc).selection)
+        assertEquals(CaptureFocusChoices.labels, captureQuickFocusControl(lock).options)
+        assertEquals("Lock", captureQuickFocusControl(lock).selection)
+    }
+
+    @Test
+    fun holdDrawerChromeMatchesThePersistentPicker() {
+        val status = CameraStatus(expoMode = CameraCommands.EXPO_MANUAL)
+        assertEquals("ISO", CaptureLists.headerTitle(LiveSheet.ISO, status.expoMode))
+        assertEquals("Sensitivity", CaptureLists.headerSubtitle(LiveSheet.ISO, status.expoMode, 0, false))
+        assertEquals("AUDIO", CaptureLists.headerTitle(LiveSheet.AUDIO, status.expoMode))
+        assertEquals(listOf("Channel", "Wind", "Dir", "Vocal"), CaptureLists.modeTabs(LiveSheet.AUDIO, status, false))
+        assertEquals("FOCUS", CaptureLists.headerTitle(LiveSheet.FOCUS, status.expoMode))
     }
 
     @Test
@@ -792,9 +840,10 @@ class CaptureSheetTest {
         assertEquals(CameraCommands.EXPO_MANUAL, CaptureLists.expoModeFromLabel("Manual"))
         assertEquals(null, CaptureLists.expoModeFromLabel("Video"))
         assertEquals(null, CaptureLists.expoModeFromLabel("Photo"))
-        assertTrue(LiveSheet.entries.none { it.subtitle == "Shooting mode" })
+        assertEquals("Exposure", LiveSheet.EXPO.subtitle)
+        assertEquals("Shooting mode", LiveSheet.MODE.subtitle)
         assertEquals(
-            setOf("ISO", "SHUTTER", "WB", "FOCUS", "EXPO", "AUDIO", "COLOR", "FORMAT"),
+            setOf("ISO", "SHUTTER", "WB", "FOCUS", "EXPO", "AUDIO", "COLOR", "FORMAT", "MODE"),
             LiveSheet.entries.map { it.name }.toSet(),
         )
     }
@@ -1291,8 +1340,9 @@ class CaptureSheetTest {
         assertEquals(VideoResolution.P4K, VideoResolution.fromTabIndex(1))
         assertEquals(VideoResolution.P1080, VideoResolution.fromTabIndex(0))
         assertEquals(
-            listOf("1080", "4K"),
+            listOf("1080"),
             CaptureLists.modeTabs(LiveSheet.FORMAT, expoMode = -1, offersIsoAuto = false),
+            "empty FORMAT table is the current pair only, not invented 1080/4K tabs",
         )
         val fourKOnly =
             live.copy(
@@ -1403,7 +1453,7 @@ class CaptureSheetTest {
         assertEquals("Custom", CaptureLists.wbChipValue(CameraStatus(wbMode = CameraCommands.WB_CUSTOM)))
         assertEquals("—", CaptureLists.wbChipValue(CameraStatus()))
         assertTrue(CaptureLists.wbIsAuto(CameraStatus(wbMode = CameraCommands.WB_AUTO)))
-        assertTrue(!CaptureLists.wbIsAuto(CameraStatus()))
+        assertTrue(CaptureLists.wbIsAuto(CameraStatus()))
         assertTrue(!CaptureLists.wbIsAuto(CameraStatus(wbMode = CameraCommands.WB_CUSTOM)))
     }
 

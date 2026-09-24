@@ -264,6 +264,67 @@ final class LunaCommandTests: XCTestCase {
         XCTAssertFalse(exchange.requiresEncryption)
         XCTAssertThrowsError(try LunaProtocol.getOptions([]))
         XCTAssertThrowsError(try LunaProtocol.getOptions([0]))
+        XCTAssertEqual(try LunaProtocol.getPhotographyOptions([73]).body, hex("08491007"))
+        XCTAssertEqual(try LunaProtocol.getPhotographyOptions([73]).command, .getPhotographyOptions)
+        XCTAssertEqual(
+            try LunaProtocol.setPhotographyOptions(types: [73], nested: integer(73, 1)).body,
+            hex("0a01491203c804011807"))
+        XCTAssertEqual(
+            try LunaProtocol.setPhotographyOptions(types: [73], nested: integer(73, 0)).body,
+            hex("0a01491203c804001807"))
+        let raw = LunaRequest(code: 9, body: hex("0a01491203c804011807"))
+        XCTAssertEqual(raw.wireCode, 9)
+        XCTAssertEqual(raw.command, .setPhotographyOptions)
+        XCTAssertEqual(try raw.message(identifier: 1).code, 9)
+    }
+
+    func testGimbalControlMatchesOfficialAppVirtualRC() throws {
+        XCTAssertEqual(ProtoMessage.zigzag32(99), 198)
+        XCTAssertEqual(ProtoMessage.zigzag32(-99), 197)
+        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 0, leftRight: 99).body, hex("0801120310c601"))
+        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 99, leftRight: 0).body, hex("0801120308c601"))
+        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: -99, leftRight: 0).body, hex("0801120308c501"))
+        XCTAssertEqual(try LunaProtocol.gimbalRecenterRequest().body, hex("08021200"))
+        XCTAssertEqual(try LunaProtocol.gimbalFlipRequest().body, hex("08031200"))
+        XCTAssertEqual(try LunaProtocol.gimbalReleaseRequest().body, hex("08011200"))
+        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 0, leftRight: 99).command, .gimbalControl)
+        XCTAssertThrowsError(try LunaProtocol.gimbalMove(upDown: 100, leftRight: 0))
+        XCTAssertThrowsError(try LunaProtocol.gimbalMove(upDown: 0, leftRight: -100))
+        XCTAssertEqual(try LunaProtocol.gimbalStick(pan: 1, tilt: 0).body, hex("0801120310c601"))
+        XCTAssertEqual(try LunaProtocol.gimbalStick(pan: 0, tilt: 1).body, hex("0801120308c601"))
+    }
+
+    func testCapturedControlBodies() throws {
+        XCTAssertEqual(LunaProtocol.takePictureRequest.command, .takePicture)
+        XCTAssertEqual(LunaProtocol.takePictureRequest.body, Data())
+        XCTAssertEqual(LunaProtocol.startCaptureRequest.body, hex("0801"))
+        XCTAssertEqual(LunaProtocol.stopCaptureRequest.command, .stopCapture)
+        XCTAssertEqual(try LunaProtocol.setColorMode(.iLog).command, .setPhotographyOptions)
+        let ev = try ProtoMessage(try LunaProtocol.setPhotographyOptions(
+            types: [7], nested: integer(7, 6)).body)
+        XCTAssertEqual(try ProtoMessage(ev.bytes(2)).unsigned(7), 6)
+        XCTAssertEqual(try ProtoMessage.double(field: 53, value: 2.0), hex("a9030000000000000040"))
+        XCTAssertEqual(try ProtoMessage(try ProtoMessage.double(field: 53, value: 6.0)).double(53), 6.0)
+        XCTAssertEqual(try LunaProtocol.deleteFiles("/storage_internal/DCIM/Camera01/IMG.jpg").command, .deleteFiles)
+        XCTAssertEqual(
+            try LunaProtocol.fileListURIs(try blob(1, Data("/storage_internal/DCIM/Camera01/VID.mp4".utf8))),
+            ["/storage_internal/DCIM/Camera01/VID.mp4"])
+        XCTAssertEqual(try LunaProtocol.setVideoSubMode(.slowMotion).command, .setOptions)
+    }
+
+    func testScreenEnvelopeRoundTrip() throws {
+        let fixture = hex("003412cdab11000052c963b1010b000100004030201003000000677569")
+        let envelope = try ScreenWire.decodeEnvelope(fixture)
+        XCTAssertEqual(envelope.kind, 0)
+        XCTAssertEqual(envelope.source, 0x1234)
+        XCTAssertEqual(envelope.destination, 0xABCD)
+        XCTAssertEqual(try envelope.encode(), fixture)
+        let hello = try ScreenWire.kind2Hello(flag: 0, transaction: 1, conversation: 2, tail: 8)
+        let decoded = try ScreenWire.decodeKind2(try ScreenWire.decodeEnvelope(hello))
+        XCTAssertEqual(decoded.flag, 0)
+        XCTAssertEqual(decoded.transaction, 1)
+        XCTAssertEqual(decoded.conversation, 2)
+        XCTAssertEqual(decoded.tail, 8)
     }
 
     func testKeyExchangeSuccessIsOneAndEncodingMustBeUncompressed() throws {
@@ -298,6 +359,8 @@ final class LunaCommandTests: XCTestCase {
         try LunaProtocol.validateAuthorizationNotification(UCD2Message(code: 8209, identifier: 0, body: hex("0800")))
         try LunaProtocol.validateAuthorizationNotification(UCD2Message(code: 8209, identifier: 0))
         try LunaProtocol.validateAuthorizationNotification(UCD2Message(code: 8228, identifier: 0, body: hex("1001")))
+        // Empty proto3 body is a successful approval (result 0, omitted operation).
+        try LunaProtocol.validateAuthorizationNotification(UCD2Message(code: 8209, identifier: 7))
         XCTAssertThrowsError(try LunaProtocol.validateAuthorizationNotification(UCD2Message(code: 8209, identifier: 0, body: hex("0801"))))
         XCTAssertThrowsError(try LunaProtocol.validateAuthorizationNotification(UCD2Message(code: 8209, identifier: 0, body: hex("1002"))))
         XCTAssertThrowsError(try LunaProtocol.validateAuthorizationNotification(UCD2Message(code: 200, identifier: 0)))

@@ -546,7 +546,9 @@ import Testing
         #expect(VideoResolution.labeledVideo.map(\.tabTitle) == ["1080", "4K"])
         #expect(VideoFrameRate.labeledVideo.map(\.fps) == [24, 25, 30, 48, 50, 60])
         #expect(
-            VideoFrameRate.labeledVideo.map(\.drumLabel) == ["24p", "25p", "30p", "48p", "50p", "60p"])
+            VideoFrameRate.labeledVideo.map(\.drumLabel) == [
+                "24p", "25p", "30p", "48p", "50p", "60p",
+            ])
         #expect(VideoFrameRate(drumLabel: "48p") == .fps48)
         #expect(VideoFrameRate(drumLabel: "120p") == .fps120)
         #expect(
@@ -1195,6 +1197,9 @@ import Testing
 
         #expect(CamFov.readout(live: 5.36, preview: nil, fallback: 1) == 5.4)
         #expect(CamFov.readout(live: 2.29, preview: 5.3, fallback: 1) == 5.3)
+        #expect(CamFov.continuousReadout(live: 1.534, preview: nil, fallback: 1) == 1.534)
+        #expect(CamFov.continuousReadout(live: 1, preview: 1.53, fallback: 1) == 1.53)
+        #expect(CamFov.readout(live: 1, preview: 1.53, fallback: 1) == 1.5)
         #expect(CamFov.readout(live: nil, preview: nil, fallback: 1) == 1)
         #expect(
             CamFov.displayLabel(factor: CamFov.readout(live: 2.29, preview: nil, fallback: 1))
@@ -1230,6 +1235,8 @@ import Testing
         #expect(CamFov.shouldHoldWatchdog(secondsSinceSet: 3.9))
         #expect(!CamFov.shouldHoldWatchdog(secondsSinceSet: 4.0))
         #expect(!CamFov.shouldHoldWatchdog(secondsSinceSet: nil))
+        #expect(CamFov.shouldHoldWatchdog(secondsSinceSet: 8, pinchActive: true))
+        #expect(GimbalStick.shouldHoldWatchdog(secondsSinceThrow: 8, stickHeld: true))
 
         #expect(CamFov.pinchCommand(live: 2.3, preview: 3, slewing: nil) == .slider(651))
         #expect(

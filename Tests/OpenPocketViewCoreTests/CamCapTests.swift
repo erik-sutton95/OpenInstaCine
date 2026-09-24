@@ -3,6 +3,113 @@ import Testing
 @testable import OpenPocketViewCore
 
 @Suite struct CamCapTests {
+    @Test func emptyCapabilityPortraitKeepsReportedResolution() {
+        let statusFormat = VideoFormat(resolution: .p3K_9x16, frameRate: .fps25)
+        let formats = CamCapVideoFormat.pickerFormats(
+            available: [], model: CameraModel.resolve(modelId: 0x20, name: nil),
+            shootingMode: -1)
+        let aspects = CamCapVideoFormat.aspects(
+            available: formats, current: statusFormat.resolution.aspect)
+        let resolutions = CamCapVideoFormat.resolutions(
+            available: formats, aspect: aspects.count > 1 ? .nineSixteen : nil,
+            current: statusFormat.resolution)
+        #expect(resolutions == [.p3K_9x16])
+        #expect(resolutions.map(\.tabTitle) == ["3K"])
+    }
+
+    @Test func emptyCapabilityPreservesReportedSizesWithoutInventingAnAspect() {
+        for current in [VideoResolution.p3K_1x1, .p2_7K, .p4K_4x3, .init(rawValue: 0xFE)] {
+            #expect(CamCapVideoFormat.resolutions(available: [], current: current) == [current])
+        }
+        #expect(CamCapVideoFormat.resolutions(available: [], current: nil).isEmpty)
+        #expect(CamCapVideoFormat.resolutions(available: [], current: .p4K) == [.p4K])
+        #expect(
+            CamCapVideoFormat.resolutions(
+                available: [], aspect: .sixteenNine, current: .p3K_9x16
+            ).isEmpty)
+    }
+
+    @Test func emptyTableDoesNotFabricateCrossResolutionSets() {
+        #expect(
+            CamCapVideoFormat.resolutions(available: [], current: .p1080) == [.p1080],
+            "1080 240 must not grow a 4K tab")
+        #expect(
+            CamCapVideoFormat.frameRates(
+                available: [], resolution: .p1080, current: .fps240) == [.fps240])
+        #expect(
+            CamCapVideoFormat.frameRates(
+                available: [], resolution: .p4K, current: .fps25) == [.fps25])
+        let current = VideoFormat(resolution: .p1080, frameRate: .fps240)
+        #expect(
+            !CamCapVideoFormat.allowsOperatorSet(
+                VideoFormat(resolution: .p4K, frameRate: .fps240),
+                available: [], model: CameraModel.resolve(modelId: 0x22, name: nil),
+                shootingMode: 0))
+        #expect(
+            !CamCapVideoFormat.allowsOperatorSet(
+                current, available: [],
+                model: CameraModel.resolve(modelId: 0x22, name: nil), shootingMode: 0))
+        let pocket3 = CameraModel.resolve(modelId: 0x20, name: "OsmoPocket3-Test")
+        #expect(
+            CamCapVideoFormat.allowsOperatorSet(
+                VideoFormat(resolution: .p4K, frameRate: .fps120),
+                available: [], model: pocket3, shootingMode: 0))
+        #expect(
+            !CamCapVideoFormat.allowsOperatorSet(
+                VideoFormat(resolution: .p4K, frameRate: .fps240),
+                available: [], model: pocket3, shootingMode: 0))
+    }
+
+    @Test func pocket3PickerIncludesDocumentedFormatsWithoutCapabilities() {
+        let model = CameraModel.resolve(modelId: 0x20, name: "OsmoPocket3-Test")
+        let formats = CamCapVideoFormat.pickerFormats(available: [], model: model, shootingMode: 1)
+        #expect(CamCapVideoFormat.resolutions(available: formats, aspect: .sixteenNine, current: .p4K).contains(.p2_7K))
+        #expect(CamCapVideoFormat.resolutions(available: formats, aspect: .nineSixteen, current: nil).contains(.p3K_9x16))
+        #expect(CamCapVideoFormat.resolutions(available: formats, aspect: .oneOne, current: nil).contains(.p3K_1x1))
+        #expect(!CamCapVideoFormat.aspects(available: formats, current: nil).contains(.fourThree))
+    }
+
+    @Test func pocket3PickerNeverOverridesReportedFormatsOrOtherModes() {
+        let pocket3 = CameraModel.resolve(modelId: 0x20, name: "OsmoPocket3-Test")
+        let reported = [VideoFormat(resolution: .p4K, frameRate: .fps25)]
+        #expect(CamCapVideoFormat.pickerFormats(available: reported, model: pocket3, shootingMode: 1) == reported)
+        for mode in [-1, 2, 0x05, 0x0A, 0x17, 26] {
+            #expect(CamCapVideoFormat.pickerFormats(available: [], model: pocket3, shootingMode: mode).isEmpty)
+        }
+        for name in ["OsmoPocket4P-Test", "OsmoNano-Test", "Unknown"] {
+            #expect(CamCapVideoFormat.pickerFormats(available: [], model: .resolve(modelId: nil, name: name), shootingMode: 1).isEmpty)
+        }
+        #expect(
+            CamCapVideoFormat.pickerFormats(available: [], model: pocket3, shootingMode: 0)
+                .isEmpty == false)
+        #expect(
+            CamCapVideoFormat.pickerFormats(
+                available: [], model: .resolve(modelId: 0x22, name: "Osmo Pocket 4 Pro"),
+                shootingMode: 0
+            ).isEmpty)
+    }
+
+    @Test func pocket3SlowMoAndLowLightFallbacksMatchAcceptedPairsOnly() {
+        let pocket3 = CameraModel.resolve(modelId: 0x20, name: "OsmoPocket3-Test")
+        let slow = CamCapVideoFormat.pickerFormats(available: [], model: pocket3, shootingMode: 0)
+        #expect(
+            slow == [
+                VideoFormat(resolution: .p4K, frameRate: .fps100),
+                VideoFormat(resolution: .p4K, frameRate: .fps120),
+                VideoFormat(resolution: .p2_7K, frameRate: .fps120),
+                VideoFormat(resolution: .p1080, frameRate: .fps120),
+                VideoFormat(resolution: .p1080, frameRate: .fps240),
+            ])
+        let lowLight = CamCapVideoFormat.pickerFormats(
+            available: [], model: pocket3, shootingMode: 0x28)
+        #expect(lowLight.count == 6)
+        #expect(Set(lowLight.map(\.resolution)) == [.p1080, .p4K])
+        #expect(Set(lowLight.map(\.frameRate)) == [.fps24, .fps25, .fps30])
+        #expect(
+            !lowLight.contains { $0.resolution == .p2_7K },
+            "Low-Light survey had no 2.7K")
+    }
+
     @Test func twentyFivePListDiffersFromSixtyP() {
         let p25 = CamCapShutter.parseDenoms(Self.shutter25p)
         let p60 = CamCapShutter.parseDenoms(Self.shutter60p)
@@ -243,7 +350,7 @@ import Testing
         #expect(ColorMode.parseImageEffect([0, 0, 0x3F], model: nano) == .normal10)
         #expect(ColorMode.parseImageEffect([0, 0, 0x3D], model: nano) == .dLogM)
         #expect(MonitorTransfer(.normal10) == .rec709)
-        #expect(MonitorTransfer(.dLogM) == .dlog)
+        #expect(MonitorTransfer(.dLogM) == .dlogm)
         var s = CameraStatus()
         #expect(
             CameraStatusDecoder.applySubscribePush(
@@ -283,7 +390,7 @@ import Testing
         #expect(
             CamCapVideoFormat.frameRates(
                 available: [], resolution: .p4K, current: .fps24
-            ).map(\.fps) == [24, 25, 30, 48, 50, 60])
+            ).map(\.fps) == [24])
     }
 
     /// Nano Video spec: 4K/2.7K/1080 × 16:9 and 4:3. 4K 4:3 has no 60.
@@ -305,8 +412,8 @@ import Testing
                 ).map(\.fps) == [24, 25, 30, 48, 50])
         }
         #expect(
-            CamCapVideoFormat.resolutions(available: [], current: .p4K) == [.p1080, .p4K],
-            "empty camcap must not grow into every catalog size")
+            CamCapVideoFormat.resolutions(available: [], current: .p4K) == [.p4K],
+            "empty camcap is the live pair only — no invented 1080 tab")
         #expect(
             CamCapVideoFormat.aspects(available: formats, current: nil)
                 == [.fourThree, .sixteenNine])
@@ -522,7 +629,9 @@ import Testing
     private static func packVideoFormats(_ groups: [(UInt8, [UInt8])]) -> [UInt8] {
         let pairs = groups.flatMap { res, rates in rates.map { (res, $0) } }
         let inner = 1 + pairs.count * 3
-        var out: [UInt8] = [0x01, UInt8(inner & 0xFF), UInt8((inner >> 8) & 0xFF), UInt8(pairs.count)]
+        var out: [UInt8] = [
+            0x01, UInt8(inner & 0xFF), UInt8((inner >> 8) & 0xFF), UInt8(pairs.count),
+        ]
         for (res, fps) in pairs {
             out += [res, fps, 0x00]
         }

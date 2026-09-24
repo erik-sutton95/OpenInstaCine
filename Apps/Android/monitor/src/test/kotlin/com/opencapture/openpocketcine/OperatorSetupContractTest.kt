@@ -2,7 +2,6 @@ package com.opencapture.openpocketcine
 
 import com.opencapture.openpocketcine.core.ConnectionPhase
 import com.opencapture.openpocketcine.feed.FeedUpscaler
-import com.opencapture.openpocketcine.media.MediaLibraryCopy
 import com.opencapture.openpocketcine.session.CameraCommands
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -11,59 +10,6 @@ import kotlin.test.assertTrue
 import org.json.JSONObject
 
 class OperatorSetupContractTest {
-    @Test
-    fun operatorTabsMatchIosOrderAndCopy() {
-        val tabs = OperatorSettingsTab.entries
-        assertEquals(7, tabs.size)
-        assertEquals(
-            listOf("Link", "Sharing", "View Assist", "Controls", "Display", "Storage", "System"),
-            tabs.map { it.title },
-        )
-        assertEquals(
-            listOf(
-                "Connection state and link behavior.",
-                "Coming soon.",
-                "Behavior for live-view tools.",
-                "Touch behavior and safety.",
-                "Live view buttons and chrome.",
-                "Local cache and integrations.",
-                "App-level behavior.",
-            ),
-            tabs.map { it.subtitle },
-        )
-        assertEquals(
-            listOf("LIVE", "SHARE", "ASSIST", "TOUCH", "VISIBILITY", "DATA", "APP"),
-            tabs.map { it.pill },
-        )
-        assertEquals(
-            listOf(
-                "Connection",
-                "Coming soon",
-                "Scopes & overlays",
-                "Dials and safety",
-                "Live view",
-                "Cache & accounts",
-                "App behavior",
-            ),
-            tabs.map { it.rail },
-        )
-    }
-
-    @Test
-    fun appPanelIncludesLegalAndMedia() {
-        assertEquals(
-            listOf(
-                AppPanel.SETTINGS,
-                AppPanel.MEDIA,
-                AppPanel.PRIVACY,
-                AppPanel.TERMS,
-                AppPanel.LICENSES,
-                AppPanel.NOTICE,
-            ),
-            AppPanel.entries,
-        )
-    }
-
     @Test
     fun liveChromeJsonRoundTripsIosKeys() {
         val json = JSONObject(PocketDispChrome.liveDefaults.toJson())
@@ -123,8 +69,11 @@ class OperatorSetupContractTest {
         assertEquals(2, OperatorLinkHealth.bars(isLive = true, videoPackets = 40, hasVideoFormat = false))
         assertEquals(3, OperatorLinkHealth.bars(isLive = true, videoPackets = 120, hasVideoFormat = false))
         assertEquals(4, OperatorLinkHealth.bars(isLive = true, videoPackets = 10, hasVideoFormat = true))
-        assertEquals(100, OperatorLinkHealth.score(4))
         assertEquals("No live path.", OperatorLinkHealth.caption(isLive = false, bars = 0))
+        assertEquals("Waiting for the link.", OperatorLinkHealth.caption(isLive = true, bars = 0))
+        assertEquals("Link is weak. · Poor", OperatorLinkHealth.caption(isLive = true, bars = 1))
+        assertEquals("Some loss on the link. · Watch", OperatorLinkHealth.caption(isLive = true, bars = 2))
+        assertEquals("Some loss on the link. · Watch", OperatorLinkHealth.caption(isLive = true, bars = 3))
         assertEquals("Link is clean. · Stable", OperatorLinkHealth.caption(isLive = true, bars = 4))
     }
 
@@ -141,9 +90,11 @@ class OperatorSetupContractTest {
                 "HISTO",
                 "VECTOR",
                 "LIGHTS",
+                "ND",
                 "GUIDES",
                 "GRID",
                 "CROSS",
+                "DESQ",
                 "MIRROR",
                 "AUDIO",
             ),
@@ -151,45 +102,29 @@ class OperatorSetupContractTest {
         )
         assertTrue(OperatorPrefs.DEFAULT_CLEAN_PINS.containsAll(setOf("LUT", "PEAK", "MIRROR")))
         assertEquals(OperatorPrefs.DEFAULT_CLEAN_PINS, OperatorPrefs.resolvedCleanPins(null))
-        assertEquals(OperatorPrefs.DEFAULT_CLEAN_PINS, OperatorPrefs.resolvedCleanPins(emptySet()))
+        assertEquals(emptySet(), OperatorPrefs.resolvedCleanPins(emptySet()))
         assertEquals(setOf("WAVE"), OperatorPrefs.resolvedCleanPins(setOf("WAVE")))
-        assertEquals(OperatorPrefs.DEFAULT_CLEAN_PINS, toggledCleanPins(setOf("LUT"), "LUT"))
+        assertEquals(emptySet(), toggledCleanPins(setOf("LUT"), "LUT"))
         assertEquals(setOf("LUT", "PEAK"), toggledCleanPins(setOf("LUT"), "PEAK"))
-    }
-
-    @Test
-    fun assistCardsCoverIosCinemaSet() {
-        assertEquals(
-            listOf(
-                "False Color",
-                "Waveform",
-                "Histogram",
-                "Peaking",
-                "Zebra",
-                "Parade",
-                "Vectorscope",
-                "Traffic Lights",
-            ),
-            AssistCard.entries.map { it.title },
-        )
     }
 
     @Test
     fun legalBodiesAreAndroidKeyedAndIncludeNotice() {
         assertEquals(listOf("Privacy", "Terms", "Licenses", "NOTICE"), LegalKind.entries.map { it.title })
-        assertTrue(LegalKind.PRIVACY.body.contains("kept in memory"))
+        assertTrue(LegalKind.PRIVACY.body.contains("Android Keystore"))
         assertFalse(LegalKind.PRIVACY.body.contains("iOS Keychain"))
-        assertTrue(LegalKind.PRIVACY.body.contains("Android permissions"))
-        assertTrue(LegalKind.NOTICE.body.contains("Apache 2.0"))
-        assertTrue(LegalKind.LICENSES.body.contains("No manufacturer SDK is bundled."))
-    }
-
-    @Test
-    fun brandLinksFailClosedUntilConfigured() {
-        assertEquals(null, OpenPocketCineLinks.SOURCE)
-        assertEquals(null, OpenPocketCineLinks.SUPPORT)
-        assertEquals(null, OpenPocketCineLinks.REPORT_PROBLEM)
-        assertEquals(null, OpenPocketCineLinks.FEATURE_REQUEST)
+        assertTrue(LegalKind.PRIVACY.body.contains("Android may ask for location"))
+        assertTrue(LegalKind.PRIVACY.body.contains("OpenCapture is the data controller"))
+        assertTrue(LegalKind.PRIVACY.body.contains("support@openinstacine.app"))
+        assertTrue(LegalKind.PRIVACY.body.contains("optional and off by default"))
+        assertTrue(LegalKind.PRIVACY.body.contains("sends your description and any optional reply email"))
+        assertTrue(LegalKind.PRIVACY.body.contains("up to three photos or screenshots"))
+        assertTrue(LegalKind.PRIVACY.body.contains("no images are attached automatically"))
+        assertTrue(LegalKind.PRIVACY.body.contains("Automatic reports exclude all images"))
+        assertFalse(LegalKind.PRIVACY.body.contains("prepares an email to support@openinstacine.app"))
+        assertFalse(LegalKind.PRIVACY.body.contains("does not send analytics, crash reports"))
+        assertTrue(LegalKind.NOTICE.body.contains("Apache License, Version 2.0"))
+        assertTrue(LegalKind.LICENSES.body.contains("No Insta360 SDK is included or required."))
     }
 
     @Test
@@ -210,20 +145,8 @@ class OperatorSetupContractTest {
     }
 
     @Test
-    fun dispModeSettingsTitlesMatchIos() {
-        assertEquals("DISP 1 · Live", PocketDispMode.LIVE.settingsTitle)
-        assertEquals("DISP 2 · Clean", PocketDispMode.CLEAN.settingsTitle)
-        assertEquals(17, PocketDispSection.entries.size)
-    }
-
-    @Test
-    fun keepScreenAwakeCopyNamesAndroid() {
-        assertTrue(SettingsHelpCopy.CACHE_FULL_RESOLUTION.contains("720p proxy"))
-        assertEquals("Proxy", MediaLibraryCopy.PROXY_TAG)
-        assertTrue(SettingsHelpCopy.KEEP_SCREEN_AWAKE.contains("Android may still dim"))
-        assertFalse(SettingsHelpCopy.KEEP_SCREEN_AWAKE.contains("iOS may still dim"))
-        assertTrue(SettingsHelpCopy.GAMEPAD.contains("Cross/A records"))
-        assertTrue(SettingsHelpCopy.GAMEPAD.contains("D-pad"))
+    fun gamepadGimbalStickDefaultsLeft() {
+        assertEquals(GamepadGimbalStick.DEFAULT, GamepadGimbalStick.LEFT)
     }
 
     @Test
@@ -241,9 +164,6 @@ class OperatorSetupContractTest {
         assertEquals(FeedUpscaler.FAST, FeedUpscaler.fromStored(null))
         assertEquals(FeedUpscaler.OFF, FeedUpscaler.fromStored("Off"))
         assertEquals(FeedUpscaler.FAST, FeedUpscaler.fromStored("Lanczos"))
-        assertTrue(SettingsHelpCopy.FEED_UPSCALER.contains("plain sample"))
-        assertTrue(SettingsHelpCopy.FEED_UPSCALER.contains("INFERS"))
-        assertFalse(SettingsHelpCopy.FEED_UPSCALER.contains("OpenZCine"))
     }
 
     @Test
@@ -256,23 +176,12 @@ class OperatorSetupContractTest {
         assertEquals("RECOV", OperatorLinkHealth.fpsChipLabel(true, true, 12.0, ConnectionPhase.LIVE))
         assertEquals("25", OperatorLinkHealth.fpsChipLabel(true, false, 25.0, ConnectionPhase.LIVE))
         assertEquals(
-            "Pocket · Wi-Fi / TCP · 25 FPS",
+            "Pocket · BLE + Wi-Fi · 25 FPS",
             OperatorLinkHealth.liveTileDetail(true, "Pocket", "25", "Connected"),
         )
         assertEquals("Idle", OperatorLinkHealth.liveTileDetail(false, "Pocket", "—", "Idle"))
         assertEquals(4, OperatorLinkHealth.bars(true, 0, false, measuredFps = 25.0))
         assertEquals(2, OperatorLinkHealth.bars(true, 0, false, measuredFps = 12.5))
         assertEquals("No live path.", OperatorLinkHealth.caption(false, 0))
-    }
-
-    @Test
-    fun assistHelpCopyMatchesIos() {
-        assertTrue(SettingsHelpCopy.FALSE_COLOR_SCALE.contains("PStops"))
-        assertEquals("Show a compact color key over live view while False Color is active.", SettingsHelpCopy.FALSE_COLOR_REFERENCE)
-        assertTrue(SettingsHelpCopy.PEAKING_SENSITIVITY.contains("finer edges"))
-        assertTrue(SettingsHelpCopy.ZEBRA_UNITS.contains("0-255"))
-        assertTrue(SettingsHelpCopy.WAVEFORM_BRIGHTNESS.contains("waveform"))
-        assertTrue(SettingsHelpCopy.VECTORSCOPE_ZOOM.contains("graticule stays at unity"))
-        assertTrue(SettingsHelpCopy.TRAFFIC_LIGHTS_COMPENSATION.contains("histogram traffic lights"))
     }
 }

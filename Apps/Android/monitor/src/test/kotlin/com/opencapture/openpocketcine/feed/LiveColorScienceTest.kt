@@ -11,6 +11,20 @@ import kotlin.test.assertTrue
 
 class FeedUpscaleTest {
     @Test
+    fun dLogMScopesPreserveSignalAcrossISO() {
+        val transfer = MonitorTransfer.fromColorMode(MonitorTransfer.COLOR_DLOG_M)
+        for (iso in listOf(100, 400, 1600, 6400)) {
+            for (byte in 0..255) {
+                val signal = byte / 255.0
+                assertEquals(signal * 100, ScopeDisplayScale.monitorPercent(signal, transfer, iso), 1e-8)
+            }
+            assertEquals(255, ScopeExposureCeiling.clipByte(transfer, iso))
+        }
+        assertEquals(0.40000007, LiveColorScience.encode(0.18, transfer), 1e-7)
+        assertEquals(0.698565282656276, LiveColorScience.encode(0.72, transfer), 1e-6)
+    }
+
+    @Test
     fun reconstructsOnlyWhenThePanelMagnifies() {
         // Fast reconstructs the 720p Rec.709 bake, not log RGB before the cube.
         assertTrue(
@@ -39,7 +53,7 @@ class LiveColorScienceTest {
         assertEquals(MonitorTransfer.HDR, MonitorTransfer.fromColorMode(CameraCommands.COLOR_HDR))
         assertEquals(MonitorTransfer.DLOG, MonitorTransfer.fromColorMode(CameraCommands.COLOR_DLOG))
         assertEquals(MonitorTransfer.DLOG2, MonitorTransfer.fromColorMode(CameraCommands.COLOR_DLOG2))
-        assertEquals(MonitorTransfer.DLOG, MonitorTransfer.fromColorMode(MonitorTransfer.COLOR_DLOG_M))
+        assertEquals(MonitorTransfer.DLOGM, MonitorTransfer.fromColorMode(MonitorTransfer.COLOR_DLOG_M))
     }
 
     @Test
@@ -249,22 +263,19 @@ class LiveColorScienceTest {
     }
 
     @Test
-    fun darkRec709FrameRetainsItsSourceTransfer() {
-        val bytes = byteArrayOf(
-            16, 16, 16, -1, 16, 16, 16, -1,
-            188.toByte(), 188.toByte(), 188.toByte(), -1, 188.toByte(), 188.toByte(), 188.toByte(), -1,
+    fun inferredTransferFromTapSignature() {
+        assertEquals(
+            MonitorTransfer.DLOG2,
+            MonitorTransfer.inferred(16, 188, MonitorTransfer.REC709),
         )
-        val sample = PocketScopeSampler.sample(
-            bytes = bytes,
-            width = 4,
-            height = 1,
-            bytesPerRow = 16,
-            transfer = MonitorTransfer.fromColorMode(CameraCommands.COLOR_NORMAL),
-            includePoints = false,
+        assertEquals(
+            MonitorTransfer.DLOG,
+            MonitorTransfer.inferred(24, 200, MonitorTransfer.REC709),
         )
-        assertEquals(MonitorTransfer.REC709, sample.transfer)
-        assertEquals(1, sample.samples.histogramRed[16])
-        assertEquals(1, sample.samples.histogramRed[188])
+        assertEquals(
+            MonitorTransfer.DLOG,
+            MonitorTransfer.inferred(16, 188, MonitorTransfer.DLOG),
+        )
     }
 
     private fun spike(code: Int, count: Int = 1000): IntArray {

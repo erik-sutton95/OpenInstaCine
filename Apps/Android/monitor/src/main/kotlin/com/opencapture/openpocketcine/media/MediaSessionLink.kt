@@ -35,7 +35,7 @@ class PocketCameraMediaLink(
     private val rememberCameraId: (String) -> Unit,
 ) : MediaSessionLink {
     override val isLive: Boolean
-        get() = session.supportsCameraMedia && session.phaseFlow.value == ConnectionPhase.LIVE
+        get() = session.phaseFlow.value == ConnectionPhase.LIVE
 
     override val cameraId: String
         get() {

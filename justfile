@@ -1,6 +1,10 @@
 default:
     @just --list
 
+# Copy current OpenPocketCine packages + native shells. Does not touch Luna adapters.
+sync-openpocketcine:
+    bash scripts/sync-openpocketcine.sh
+
 # Requires Python 3.11+, nrfutil ble-sniffer, and Wireshark/tshark.
 ble-scan label="advertisements" seconds="20":
     python3 tools/ble_lab.py scan {{quote(label)}} --seconds {{quote(seconds)}}
@@ -53,6 +57,15 @@ lab-check: check
 # Generate the thin Apple application and shared native frameworks.
 apple-generate:
     xcodegen generate --spec Apps/Apple/project.yml
+
+# USB lab bridge on the phone. Mac stays off the camera AP.
+luna-lab-bridge *args:
+    /usr/bin/python3 tools/luna_lab_bridge.py {{args}}
+
+# Physical XC driver for the official Insta360 iOS app. Host app is OpenInstaCine.
+luna-official-xc device:
+    xcodegen generate --spec Apps/Apple/project.yml
+    xcodebuild -project Apps/Apple/OpenInstaCine.xcodeproj -scheme LunaOfficialCapture -destination 'platform=iOS,id={{device}}' -allowProvisioningUpdates -derivedDataPath .local/AppleDerivedData -maximum-test-execution-time-allowance 21600 -only-testing:LunaOfficialUITests/InteractiveDriver/testDriveOfficialInsta360 test
 
 # Compiles without signing or accessing a connected phone.
 apple-build: apple-generate

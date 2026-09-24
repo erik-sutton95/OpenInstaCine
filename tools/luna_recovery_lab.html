@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenInstaCine · Recovery Test</title>
+<style>
+:root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#111113;color:#f4f4f5}
+*{box-sizing:border-box}body{margin:0;padding:22px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+h1{font-size:20px;margin:0;letter-spacing:-.4px}h1 span{color:#ffd400}p{color:#a9a9b1;font-size:13px;margin:5px 0 0}.tag{font-size:12px;font-weight:600;padding:7px 10px;border-radius:6px;background:#27272c;color:#c1c1c9}.tag.live{color:#8fe5aa;background:#173022}
+.feed{position:relative;aspect-ratio:16/9;background:#050505;overflow:hidden;border:1px solid #29292f;border-radius:10px}.feed img{width:100%;height:100%;object-fit:contain}.empty{position:absolute;inset:0;display:grid;place-items:center;color:#8e8e98;pointer-events:none}.hidden{display:none}
+.bar{display:flex;align-items:center;gap:18px;background:#1c1c20;padding:18px 20px;border:1px solid #2b2b30;border-radius:10px;margin-top:16px}.label{flex:1}.label strong{font-size:15px}.label p{max-width:620px;line-height:1.5}button{border:0;border-radius:8px;padding:13px 20px;font-size:14px;font-weight:650;cursor:pointer;background:#ffd400;color:#111;min-width:168px}button:disabled{background:#36363e;color:#93939c;cursor:default}button.secondary{min-width:auto;background:#303036;color:#ddd}button:focus-visible{outline:3px solid white;outline-offset:3px}.state{font-size:13px;font-weight:650;color:#ffd400;min-width:86px;text-align:center}footer{display:flex;justify-content:space-between;margin-top:12px;color:#81818c;font-size:12px}.error{color:#ffa29a}
+</style>
+<header><div><h1><span>OpenInstaCine</span> · Recovery Test</h1><p>Luna Ultra · Phone preview · No added display LUT</p></div><div id="live" class="tag">CONNECTING</div></header>
+<div class="feed"><img id="video" alt="Live Luna camera preview"><div class="empty" id="empty">Connecting to the Luna…</div></div>
+<div class="bar"><div class="label"><strong>Camera color recovery</strong><p id="detail">Connecting recovery control and reading the camera’s state…</p></div><div class="state" id="state">Not read yet</div><button id="toggle" disabled>Connecting recovery</button><button class="secondary" id="disconnect">Disconnect</button></div>
+<footer><span id="dimensions">Waiting for video</span><span id="message">Camera connection in progress</span></footer>
+<script>
+const token='__TOKEN__';let latest={},busy=false,stopped=false;
+const $=id=>document.getElementById(id);
+async function post(path,body={}){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':token},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw Error(d.error||'Camera request failed');return d}
+$('video').src='/stream?token='+token;
+async function update(){try{const r=await fetch('/status?token='+token);latest=await r.json();const s=latest;
+ $('live').textContent=s.live?'LIVE':s.closed?'DISCONNECTED':'CONNECTING';$('live').classList.toggle('live',s.live);
+ $('empty').classList.toggle('hidden',s.live);$('empty').textContent=s.closed?'Disconnected':s.video_error||'Waiting for live video…';
+ $('dimensions').textContent=(s.dimensions?s.dimensions+' · '+s.frames+' frames':'Waiting for video')+(s.saturation!=null?' · saturation '+s.saturation+(s.detected!=null?' · picture says '+(s.detected?'ON':'OFF'):' · calibrating'):'');
+ $('state').textContent=s.closed?'Disconnected':busy?'Sending…':(s.recovery==null?'UNKNOWN':(s.recovery?'ON':'OFF'));
+ $('toggle').disabled=busy||s.closed||!s.live;
+ $('toggle').textContent=s.closed?'Disconnected':busy?'Sending…':(s.recovery==null?'Turn recovery off':(s.recovery?'Turn recovery off':'Turn recovery on'));
+ $('detail').textContent='Sends the captured iq_ilog_lut configuration to the camera. The camera sends no readback, so the state shown is what was last commanded, not what was read. Acceptance is confirmed from the camera'+String.fromCharCode(39)+'s advancing sequence'+(s.camera_sequence?' ('+s.camera_sequence+')':'')+'. This viewer adds no LUT.';
+ $('detail').classList.remove('error');
+ if(!busy)$('message').textContent=s.message||'';
+ if(s.closed){stopped=true;$('video').removeAttribute('src');$('disconnect').disabled=true}
+ }catch(e){$('message').textContent='Connection to the Mac test service was lost';$('toggle').disabled=true}
+ if(!stopped)setTimeout(update,250)}
+$('toggle').onclick=async()=>{if(busy||latest.closed||!latest.live)return;busy=true;$('toggle').disabled=true;$('toggle').textContent='Sending…';const enabled=(latest.recovery==null)?false:!latest.recovery;try{await post('/recovery',{enabled});$('message').textContent='Sent '+(enabled?'ON':'OFF')+'. Watch the picture.'}catch(e){$('message').textContent=e.message}finally{busy=false}};
+$('disconnect').onclick=async()=>{busy=true;$('toggle').disabled=true;try{await post('/disconnect');$('disconnect').disabled=true;$('video').removeAttribute('src')}catch(e){$('message').textContent=e.message}};
+window.addEventListener('pagehide',()=>{fetch('/disconnect',{method:'POST',headers:{'Content-Type':'application/json','X-Lab-Token':token},body:'{}',keepalive:true}).catch(()=>{})});update();
+</script></html>

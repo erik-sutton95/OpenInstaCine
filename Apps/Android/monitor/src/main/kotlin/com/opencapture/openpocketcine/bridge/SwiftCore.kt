@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine.bridge
 
+import android.util.Log
+
 /**
  * JNI binding to `libOpenPocketCineAndroid.so` — OpenPocketViewCore plus
  * `OpenPocketCineAndroidFacade`. Staged by `:app:stageSwiftCore` / `just android-core`.
@@ -9,7 +11,15 @@ object SwiftCore {
         try {
             System.loadLibrary("OpenPocketCineAndroid")
             true
-        } catch (_: UnsatisfiedLinkError) {
+        } catch (e: UnsatisfiedLinkError) {
+            // Nothing that reads this flag can work without the core, and the
+            // app degrades quietly instead of crashing. Say so once in logcat,
+            // or a stripped / wrong-ABI build looks like a dead camera.
+            //
+            // Wrapped because reporting a failure must never become one: JVM
+            // unit tests have no `.so` to load and no `android.util.Log` to
+            // load it with, and the stub throws rather than no-op.
+            runCatching { Log.e("SwiftCore", "libOpenPocketCineAndroid.so did not load", e) }
             false
         }
     }
@@ -76,6 +86,15 @@ object SwiftCore {
     const val CMD_NANO_LIVE_VIEW_GATE = 60
     /** Untracked pid `0x38` GET. `waitKey` is 0 so it cannot steal other `0x8E` waiters. */
     const val CMD_GET_SELFIE_FLIP = 61
+    /** Multiview station Wi-Fi (`MulticamCommands`). Station extra `1` joins, `0` returns to AP. */
+    const val CMD_MULTICAM_WIFI_WORK_MODE = 62
+    const val CMD_MULTICAM_STATION_MODE = 63
+    const val CMD_MULTICAM_VIDEO_MODE = 64
+    /** Extra is `ssid + "\u001f" + password`; invalid input encodes nothing. */
+    const val CMD_MULTICAM_JOIN = 65
+    const val CMD_MULTICAM_WIFI_SCAN = 66
+    /** Action 6 `0x8E` pid `0x0044`. Extra is the [com.opencapture.openpocketcine.session.ApertureStrategy] byte. */
+    const val CMD_SET_APERTURE_STRATEGY = 67
 
     /** DUML set/cmd key the camera ACKs for [kind]. */
     fun waitKey(kind: Int): Int =
@@ -91,7 +110,7 @@ object SwiftCore {
             CMD_GET_VOCAL_BOOST, CMD_SET_VOCAL_BOOST,
             CMD_SET_ISO_LIMIT, CMD_GET_ISO_LIMIT, CMD_SET_FOV,
             CMD_SET_FOCUS_TRACK, CMD_GET_FOCUS_TRACK,
-            CMD_GET_GLAMOUR, CMD_SET_GLAMOUR,
+            CMD_GET_GLAMOUR, CMD_SET_GLAMOUR, CMD_SET_APERTURE_STRATEGY,
             -> 0x028E
             CMD_AUDIO_DSP_GET -> 0x02A0
             CMD_AUDIO_DSP_SET, CMD_AUDIO_DSP_PATCH_WIND, CMD_AUDIO_DSP_PATCH_DIRECTIONAL -> 0x029F
@@ -189,7 +208,7 @@ object SwiftCore {
     /** Generated Creative look (Mono / Contrast / Warm / Cool). */
     external fun packCreativeLut(title: String, exposureStops: Double, colorMode: Int): ByteArray?
 
-    /** Overlay paint cube for FALSE (`0` PStops / `1` IRE / `2` Limits). */
+    /** Overlay paint cube for FALSE (`0` Video / `1` IRE / `2` Limits / `3` CineStop). */
     external fun packFalseColorPaint(scaleOrdinal: Int, colorMode: Int, iso: Int): ByteArray?
 
     /** Overlay weight cube paired with [packFalseColorPaint]. */
@@ -232,6 +251,25 @@ object SwiftCore {
      * (`keepSocket`, `rebindUDP`, `fail`, `wait`, `resendEnable`, …).
      */
     external fun cameraSoftAPDecision(kind: String, requestJSON: String): String?
+
+    /**
+     * Multiview join / station / scan / discovery / model gates. Byte arrays are
+     * lowercase hex. See `AndroidSessionWire.multicamDecision` for kinds.
+     */
+    external fun multicamDecision(kind: String, requestJSON: String): String?
+
+    /**
+     * AE / AWB lock (`AndroidSessionWire.exposureLockDecision`). [requestJSON] is a
+     * status JSON; `aeLockHolds` adds the lock fields. Empty when there is no target.
+     */
+    external fun exposureLockDecision(kind: String, requestJSON: String): String?
+
+    external fun multiviewRecoveryCreate(): Long
+
+    /** `op`: `action` (watchdog snapshot JSON), `beginRejoin`, `fail`, `failed`, `reset`. */
+    external fun multiviewRecoveryCall(handle: Long, op: String, snapshotJSON: String): String?
+
+    external fun multiviewRecoveryDestroy(handle: Long)
 
     /** Probe JSON for playback conform preview. See `AndroidSessionWire.conformPreviewJSON`. */
     external fun conformPreviewJSON(request: String): String?

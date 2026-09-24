@@ -20,6 +20,8 @@ object StatusExtras {
             frame.cmdSet == 0x02 && frame.cmdId == CameraCommands.CMD_PARAM -> applyParamReply(frame.payload, status)
             frame.cmdSet == 0x02 && frame.cmdId == CameraCommands.CMD_AUDIO_DSP_GET ->
                 applyAudioDsp(frame.payload, status).first
+            frame.cmdSet == 0x04 && frame.cmdId == CameraCommands.CMD_GIMBAL_PARAMS ->
+                applyGimbalParams(frame.payload, status)
             else -> status
         }
     }
@@ -169,6 +171,21 @@ object StatusExtras {
         return CamFov.absorb(next)
     }
 
+    fun isGimbalParamsReply(payload: ByteArray): Boolean =
+        payload.size >= 8 && payload[0] == 0.toByte() && payload[1] == 0x01.toByte() &&
+            payload[2] == 0x04.toByte() && payload[3] == 0x01.toByte() &&
+            payload[5] == 0x05.toByte() && payload[6] == 0x01.toByte()
+
+    fun applyGimbalParams(payload: ByteArray, status: CameraStatus): CameraStatus {
+        if (!isGimbalParamsReply(payload)) return status
+        val tilt = payload[4].toInt() and 0xFF
+        val speed = payload[7].toInt() and 0xFF
+        return status.copy(
+            gimbalTiltLock = if (tilt == 0 || tilt == 1) tilt else status.gimbalTiltLock,
+            gimbalSpeed = if (speed in 0..2) speed else status.gimbalSpeed,
+        )
+    }
+
     fun applyParamReply(payload: ByteArray, status: CameraStatus): CameraStatus {
         FocusTrackMode.parseReply(payload)?.let { return status.copy(focusTrack = it.raw) }
         if (payload.size < 7) return status
@@ -197,6 +214,10 @@ object StatusExtras {
         if (blob.size < 3) return status
         return status.applyingAudioBlob(blob)
     }
+
+    /** `0x02/0x80` `@57` is the only unsolicited shooting-mode report. */
+    fun reportsShootingMode(frame: DumlFrame): Boolean =
+        frame.cmdSet == 0x02 && frame.cmdId == 0x80 && frame.payload.size >= 58
 
     fun parseSubscribe(payload: ByteArray): SubscribeItem? {
         if (payload.size < 24 || payload[0] != 0x02.toByte() || payload[1] != 0x06.toByte()) return null

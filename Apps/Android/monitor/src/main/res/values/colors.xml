@@ -2,6 +2,6 @@
 <resources>
     <color name="opc_splash_background">#0E0E0E</color>
     <color name="launcher_icon_background">#0E0E0E</color>
-    <color name="opc_gold">#FFCF00</color>
+    <color name="opc_gold">#00A3E0</color>
     <color name="opc_plate">#141414</color>
 </resources>

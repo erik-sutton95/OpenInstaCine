@@ -131,7 +131,7 @@ public enum CameraParameter: String, Sendable, Codable {
     case whiteBalanceMode, whiteBalanceKelvin, whiteBalanceTint, focusMode, focusTracking,
         focusOption
     case audioChannels, vocalBoost, windReduction, audioDirection, colorProfile, fieldOfView,
-        facePriorityExposure
+        facePriorityExposure, colorRecovery
 }
 public enum CameraParameterValue: Sendable, Equatable {
     case automatic
@@ -159,7 +159,7 @@ public enum CameraControlIntent: Sendable, Equatable {
         case .focus, .track, .stopTracking: .focus
         case .parameter(let key, _):
             switch key {
-            case .shootingMode, .colorProfile, .fieldOfView: .captureFormat
+            case .shootingMode, .colorProfile, .fieldOfView, .colorRecovery: .captureFormat
             case .whiteBalanceMode, .whiteBalanceKelvin, .whiteBalanceTint: .whiteBalance
             case .focusMode, .focusTracking, .focusOption: .focus
             case .audioChannels, .vocalBoost, .windReduction, .audioDirection: .liveAudio

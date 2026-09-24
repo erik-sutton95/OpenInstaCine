@@ -5,6 +5,46 @@ import Testing
 
 @Suite
 struct AndroidSessionWireTests {
+    @Test func shutterCommandPreservesPhotoAndSupportsTimelapseStop() {
+        for extra: String? in [nil, "", "1"] {
+            let frame = AndroidSessionWire.encodeCommand(kind: .shootPhoto, seq: 7, extra: extra)
+            #expect(frame?.cmdSet == 0x02)
+            #expect(frame?.cmdId == 0x01)
+            #expect(frame?.payload == [0x01])
+        }
+        #expect(
+            AndroidSessionWire.encodeCommand(kind: .shootPhoto, seq: 7, extra: "0")?.payload == [
+                0x00
+            ])
+        for extra in ["2", "-1", "false", "1,0"] {
+            #expect(
+                AndroidSessionWire.encodeCommand(kind: .shootPhoto, seq: 7, extra: extra) == nil)
+        }
+    }
+
+    @Test func blockedWatchdogEnableDoesNotSpendNativeRetryBudget() {
+        let handle = AndroidSessionWire.feedWatchdogCreate()
+        defer { AndroidSessionWire.feedWatchdogDestroy(handle: handle) }
+        func tick(_ now: Int) -> String {
+            AndroidSessionWire.feedWatchdogTick(
+                handle: handle,
+                snapshotJSON: """
+                    {"now":\(now),"live":true,"sawPicture":true,"pathReady":true,
+                    "hasFormat":true,"hadVideo":true,"lastVideoPacketAge":3,
+                    "lastAccessUnitAge":3,"lastDecodedFrameAge":3,"lastStatusAge":0.1}
+                    """)
+        }
+        #expect(tick(100) == "resendLiveViewEnable")
+        for _ in 0..<2 {
+            #expect(
+                AndroidSessionWire.feedWatchdogTick(
+                    handle: handle, snapshotJSON: "{\"rollbackLastAction\":true}") == "none")
+        }
+        #expect(tick(101) == "resendLiveViewEnable")
+        #expect(tick(106) == "resendLiveViewEnable")
+        #expect(tick(111) == "reopenDatalink")
+    }
+
     @Test
     func setExpoModeExtrasMatchIosPayload() {
         let auto = AndroidSessionWire.encodeCommand(kind: .setExpoMode, seq: 1, extra: "auto")
@@ -65,6 +105,32 @@ struct AndroidSessionWireTests {
     }
 
     @Test
+    func cameraModeFamilySurvivesTheAndroidStatusBoundary() {
+        var payload = [UInt8](repeating: 0, count: 50)
+        var status = CameraStatus()
+        let reports: [(UInt8, GimbalModeFamily)] = [
+            (0x24, .directionLock), (0x84, .follow), (0x44, .fpv),
+        ]
+        for (flags, expected) in reports {
+            payload[6] = flags
+            let frame = Duml.Frame(
+                sender: 4, receiver: 2, seq: 1, flags: Duml.flagNotify,
+                cmdSet: 4, cmdId: 5, payload: payload)
+            #expect(CameraStatusDecoder.apply(frame, to: &status))
+            #expect(status.gimbalModeFamily == expected)
+            status = AndroidSessionWire.status(fromJSON: AndroidSessionWire.statusJSON(status))
+            #expect(status.gimbalModeFamily == expected)
+        }
+        payload[6] = 0xC4
+        let unknown = Duml.Frame(
+            sender: 4, receiver: 2, seq: 2, flags: Duml.flagNotify,
+            cmdSet: 4, cmdId: 5, payload: payload)
+        #expect(CameraStatusDecoder.apply(unknown, to: &status))
+        #expect(status.gimbalModeFamily == nil)
+        #expect(AndroidSessionWire.status(fromJSON: "{}").gimbalModeFamily == nil)
+    }
+
+    @Test
     func statusJSONRoundTripsSelfieFlip() {
         var on = CameraStatus()
         on.selfieFlip = .on
@@ -93,6 +159,34 @@ struct AndroidSessionWireTests {
         let past =
             "{\"now\":10,\"lastDecodedFrameAge\":4.2,\"lastVideoPacketAge\":4.2,\"lastAccessUnitAge\":4.2,\"lastStatusAge\":0.3,\"flowHealthy\":true,\"pathReady\":true,\"hasFormat\":true,\"decoderFailed\":false,\"live\":true,\"sawPicture\":true,\"tcpPokeReady\":true,\"hadVideo\":true,\"secondsSinceLastEnable\":20,\"secondsSinceGimbalThrow\":3.1}"
         #expect(AndroidSessionWire.feedWatchdogAction(snapshotJSON: past) == "resendLiveViewEnable")
+    }
+
+    @Test
+    func setVideoFormatExtraKeepsTwoArgTrailerAndOptionalSlowMoMode() {
+        let unit = "\u{1f}"
+        let video = AndroidSessionWire.encodeCommand(
+            kind: .setVideoFormat, seq: 1, extra: "16\(unit)1")
+        #expect(video?.cmdId == 0x18)
+        #expect(video?.payload == [0x10, 0x01, 0x00, 0x00, 0x00])
+        #expect(
+            video?.payload
+                == Commands.setVideoFormat(resolution: .p4K, frameRate: .fps24, seq: 1).payload)
+
+        let slow120 = AndroidSessionWire.encodeCommand(
+            kind: .setVideoFormat, seq: 1, extra: "16\(unit)7\(unit)0")
+        #expect(slow120?.payload == [0x10, 0x07, 0x00, 0x04, 0x00])
+
+        let slow200 = AndroidSessionWire.encodeCommand(
+            kind: .setVideoFormat, seq: 1, extra: "16\(unit)19\(unit)0")
+        #expect(slow200?.payload == [0x10, 0x13, 0x00, 0x04, 0x00])
+
+        let slow240 = AndroidSessionWire.encodeCommand(
+            kind: .setVideoFormat, seq: 1, extra: "10\(unit)8\(unit)0")
+        #expect(slow240?.payload == [0x0A, 0x08, 0x00, 0x08, 0x00])
+
+        let lowLight = AndroidSessionWire.encodeCommand(
+            kind: .setVideoFormat, seq: 1, extra: "16\(unit)3\(unit)40")
+        #expect(lowLight?.payload == [0x10, 0x03, 0x00, 0x00, 0x00])
     }
 
     @Test

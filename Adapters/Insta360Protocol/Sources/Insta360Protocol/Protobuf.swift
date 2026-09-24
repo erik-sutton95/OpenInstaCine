@@ -127,8 +127,38 @@ public struct ProtoMessage: Equatable, Sendable {
         try tag(field: field, wire: 0) + varint(value)
     }
 
+    /// Protobuf `sint32` zigzag. Official-app gimbal VirtualRC uses this encoding.
+    public static func zigzag32(_ value: Int32) -> UInt64 {
+        let doubled = Int32(bitPattern: UInt32(bitPattern: value) << 1)
+        return UInt64(UInt32(bitPattern: doubled ^ (value >> 31)))
+    }
+
+    public static func signed32(field: Int, value: Int32) throws -> Data {
+        try integer(field: field, value: zigzag32(value))
+    }
+
     public static func blob(field: Int, value: Data) throws -> Data {
         try tag(field: field, wire: 2) + varint(UInt64(value.count)) + value
+    }
+
+    public static func double(field: Int, value: Double) throws -> Data {
+        var bits = value.bitPattern.littleEndian
+        let bytes = Data(bytes: &bits, count: 8)
+        return try tag(field: field, wire: 1) + bytes
+    }
+
+    public func double(_ number: Int) throws -> Double {
+        var result: Double?
+        for field in fields where field.number == number {
+            guard case let .fixed64(value) = field.value, value.count == 8 else {
+                throw LunaProtocolError.invalidField(number)
+            }
+            var raw: UInt64 = 0
+            _ = withUnsafeMutableBytes(of: &raw) { value.copyBytes(to: $0) }
+            result = Double(bitPattern: UInt64(littleEndian: raw))
+        }
+        guard let value = result else { throw LunaProtocolError.missingField(number) }
+        return value
     }
 
     private static func tag(field: Int, wire: UInt64) throws -> Data {

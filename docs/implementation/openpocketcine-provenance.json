@@ -1,0 +1,21 @@
+{
+  "source_repo": "OpenPocketCine",
+  "commit": "3a3f8587f52a35207266c813a836f555395db6f3",
+  "short": "3a3f858",
+  "subject": "fix: combine iOS compatibility, reporting, Multiview and Android crash fixes (#356)",
+  "date": "2026-09-16T12:08:55+02:00",
+  "synced_at": "2026-09-17T13:43:00Z",
+  "trees": [
+    "Sources/MonitorPresentation",
+    "Sources/MonitorUI",
+    "Sources/OpenPocketViewCore",
+    "Sources/CJNI",
+    "Sources/OpenPocketCineAndroidFacade",
+    "Tests/MonitorPresentationTests",
+    "Tests/OpenPocketViewCoreTests",
+    "Tests/OpenPocketCineAndroidFacadeTests",
+    "Shared/Apple/MonitorShell",
+    "Apps/Android/monitor-ui",
+    "Apps/Android/monitor/src"
+  ]
+}

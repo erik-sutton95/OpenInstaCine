@@ -1,0 +1,526 @@
+import MonitorUI
+import OpenPocketViewCore
+import SwiftUI
+import UniformTypeIdentifiers
+
+/// DJI / Creative / Custom. 50/50 is pinned on the long-press footer so
+/// landscape never hides it under the catalog; the sheet keeps it inline.
+/// `embedded` is the assist-tray form; the sheet wraps the same body.
+struct LUTPicker: View {
+    private enum Category: String, CaseIterable {
+        case dji = "Looks"
+        case creative = "Creative"
+        case custom = "Custom"
+    }
+
+    @Bindable var assist: LiveAssistState
+    var embedded = false
+    @Environment(\.dismiss) private var dismiss
+    @Environment(AppModel.self) private var model
+    @State private var category: Category = .dji
+    @State private var importing = false
+    @State private var pendingDeletion: String?
+    @State private var deletionErrorMessage: String?
+    @State private var importError: String?
+
+    /// OpenZCine `LUTPickerContent.contentHeight` — landscape has no headroom for a taller drum.
+    private let contentHeight: CGFloat = 146
+    private let captionHeight: CGFloat = 28
+
+    var body: some View {
+        if embedded {
+            picker
+        } else {
+            NavigationStack {
+                picker
+                    .padding(20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .background(LiveDesign.background.ignoresSafeArea())
+                    .navigationTitle("LUT")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { dismiss() }
+                                .foregroundStyle(LiveDesign.accent)
+                        }
+                    }
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+
+    private var picker: some View {
+        VStack(spacing: 8) {
+            LUTSegmentedButtons(
+                items: Category.allCases.map(\.rawValue),
+                selected: category.rawValue
+            ) { raw in
+                guard let next = Category(rawValue: raw), next != category else { return }
+                category = next
+                switch next {
+                case .dji:
+                    if !assist.lutSelection.isDJI { assist.selectLUT(.djiAuto) }
+                case .creative:
+                    if !assist.lutSelection.isCreative { assist.selectLUT(.creativeMono) }
+                case .custom:
+                    break
+                }
+            }
+            tabContent
+                .frame(maxWidth: .infinity)
+                .frame(height: contentHeight)
+            // Embedded long-press parks exposure + 50/50 on the panel footer
+            // so landscape never hides them under the catalog.
+            if !embedded {
+                LUTSplitComparisonBar(assist: assist)
+            }
+            if let importError {
+                Text(importError)
+                    .font(LiveType.ui(size: 12, weight: .regular, design: .rounded))
+                    .foregroundStyle(StartupColors.destructive)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear {
+            if assist.lutSelection.isCustom {
+                category = .custom
+            } else if assist.lutSelection.isCreative {
+                category = .creative
+            } else {
+                category = .dji
+            }
+            bindLiveLUT()
+        }
+        .onChange(of: model.session.status.isPhoto) { _, _ in
+            bindLiveLUT()
+        }
+        .onChange(of: model.session.status.colorMode) { _, _ in
+            bindLiveLUT()
+        }
+        .confirmationDialog(
+            pendingDeletion.map { "Clear \(CustomLUTIndex.displayName(fileName: $0))?" }
+                ?? "Clear LUT?",
+            isPresented: Binding(
+                get: { pendingDeletion != nil },
+                set: { if !$0 { pendingDeletion = nil } }),
+            titleVisibility: .visible
+        ) {
+            if let pendingDeletion {
+                Button("Clear LUT", role: .destructive) {
+                    clear(pendingDeletion)
+                }
+            }
+            Button("Cancel", role: .cancel) { pendingDeletion = nil }
+        } message: {
+            Text("This removes the stored LUT from this device. This action cannot be undone.")
+        }
+        .alert(
+            "Couldn’t Delete LUT",
+            isPresented: Binding(
+                get: { deletionErrorMessage != nil },
+                set: { if !$0 { deletionErrorMessage = nil } })
+        ) {
+            Button("OK") { deletionErrorMessage = nil }
+        } message: {
+            Text(deletionErrorMessage ?? "The LUT could not be deleted.")
+        }
+        .fileImporter(
+            isPresented: $importing,
+            allowedContentTypes: [UTType(filenameExtension: "cube") ?? .data]
+        ) { result in
+            handleImport(result)
+        }
+    }
+
+    @ViewBuilder private var tabContent: some View {
+        switch category {
+        case .dji:
+            catalogTab(
+                cases: LUTSelection.djiCatalog(isPhotoLive: livePhotoCatalog),
+                inCatalog: assist.lutSelection.isDJI
+                    && LUTSelection.djiCatalog(isPhotoLive: livePhotoCatalog).contains(
+                        assist.lutSelection),
+                fallback: .djiAuto,
+                caption: djiCaption,
+                allowsSelection: !livePhotoCatalog
+            )
+        case .creative:
+            catalogTab(
+                cases: LUTSelection.creativeCases,
+                inCatalog: assist.lutSelection.isCreative,
+                fallback: .creativeMono,
+                caption: creativeCaption
+            )
+        case .custom:
+            customTab
+        }
+    }
+
+    private func catalogTab(
+        cases: [LUTSelection],
+        inCatalog: Bool,
+        fallback: LUTSelection,
+        caption: String,
+        allowsSelection: Bool = true
+    ) -> some View {
+        VStack(spacing: 4) {
+            Text(caption)
+                .font(LiveType.ui(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(LiveDesign.muted)
+                .multilineTextAlignment(.center)
+                .frame(height: captionHeight)
+            LUTDrumWheel(
+                options: cases.map(\.title),
+                selection: Binding(
+                    get: {
+                        inCatalog ? assist.lutSelection.title : fallback.title
+                    },
+                    set: { name in
+                        // A singleton Photo catalog must not overwrite the saved Video look
+                        // when scrollPosition reports its displayed fallback on mount.
+                        guard allowsSelection else { return }
+                        guard let selection = cases.first(where: { $0.title == name }) else {
+                            return
+                        }
+                        assist.selectLUT(selection)
+                    }
+                ),
+                wheelHeight: contentHeight - captionHeight - 4
+            )
+        }
+    }
+
+    private var livePhotoCatalog: Bool {
+        model.session.status.isPhoto && !model.session.status.inPlayback && !assist.gradesClip
+            && !model.isWatchingFeed
+    }
+
+    private func bindLiveLUT() {
+        assist.bindLUTPicker(
+            live: model.session.status.colorMode,
+            inPlayback: model.session.status.inPlayback,
+            family: model.session.bodyFamily,
+            cameraName: model.session.connectedCamera?.model.name,
+            isPhoto: model.session.status.isPhoto,
+            isWatching: model.isWatchingFeed)
+    }
+
+    private var djiCaption: String {
+        if livePhotoCatalog { return LUTAssist.photoRec709Caption }
+        if assist.lutSelection == .djiAuto || assist.lutSelection == .auto {
+            return LUTResolver.autoCaption(source: assist.resolvedSource())
+        }
+        if assist.resolvedSource() == .lunaILog {
+            return "Official Insta360 I-Log cube"
+        }
+        if assist.lutSelection.isDJI {
+            return "Manufacturer Rec.709 cube"
+        }
+        return "Looks for this color / camera"
+    }
+
+    private var creativeCaption: String {
+        if assist.lutSelection.isCreative {
+            return LUTResolver.autoCaption(source: assist.resolvedSource())
+        }
+        return "Looks for the displayed picture"
+    }
+
+    @ViewBuilder private var customTab: some View {
+        let imported = CustomLUTStore.list()
+        VStack(spacing: 6) {
+            Button {
+                importing = true
+            } label: {
+                Text("Import .cube")
+                    .font(LiveType.ui(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(LiveDesign.text)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(LiveDesign.glassBright, in: Capsule())
+            }
+            .buttonStyle(.zcTapTarget)
+            if imported.isEmpty {
+                Text("Imported looks land here. Auto stays on Built-in or DJI.")
+                    .font(LiveType.ui(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(LiveDesign.muted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(imported, id: \.fileName) { lut in
+                            customFileRow(lut)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func customFileRow(_ lut: StoredCustomLUT) -> some View {
+        let selected =
+            assist.lutSelection == .customFile
+            && OperatorPrefs.selectedCustomFileName == lut.fileName
+        return HStack(spacing: 6) {
+            Button {
+                assist.selectCustomFile(lut.fileName)
+            } label: {
+                Text(lut.displayName)
+                    .font(LiveType.ui(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(selected ? LiveDesign.accent : LiveDesign.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.zcTapTarget)
+            Button {
+                pendingDeletion = lut.fileName
+            } label: {
+                Text("Clear")
+                    .font(LiveType.ui(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(StartupColors.destructive)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .background(LiveDesign.glassBright, in: Capsule())
+            }
+            .buttonStyle(.zcTapTarget)
+            .fixedSize()
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            selected ? LiveDesign.accentDim : LiveDesign.glassBright,
+            in: RoundedRectangle(cornerRadius: LiveDesign.cornerRadius, style: .continuous)
+        )
+    }
+
+    private func handleImport(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            importCube(url)
+        case .failure(let error):
+            importError = error.localizedDescription
+        }
+    }
+
+    private func importCube(_ url: URL) {
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let stored = try CustomLUTStore.importFile(from: url)
+            guard CustomLUTStore.cube(stored) != nil else {
+                try? CustomLUTStore.remove(stored)
+                throw CustomLUTStoreError.unreadable
+            }
+            assist.importCustom(fileName: stored.fileName)
+            importError = nil
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
+    private func clear(_ fileName: String) {
+        pendingDeletion = nil
+        assist.clearCustomFile(fileName)
+    }
+}
+
+/// Input exposure still follows the native half-stop compensation path.
+struct LUTExposureCompensationBar: View {
+    @Bindable var assist: LiveAssistState
+
+    var body: some View {
+        SettingsInlineRow(
+            title: LUTAssist.exposureTitle, help: LUTAssist.exposureHelp, showTopDivider: false,
+            stacked: true
+        ) {
+            HStack(spacing: 9) {
+                Slider(
+                    value: Binding(
+                        get: { assist.lutExposureStops },
+                        set: { assist.nudgeLUTExposure($0 - assist.lutExposureStops) }),
+                    in: -3...3, step: 0.5
+                )
+                .tint(MonitorTheme.accent)
+                .accessibilityLabel(LUTAssist.exposureTitle)
+                .accessibilityHint(LUTAssist.exposureHelp)
+                Text(LUTExposureCompensation.label(assist.lutExposureStops) + " ST")
+                    .font(MonitorTheme.font(11, weight: .semibold)).monospacedDigit()
+                    .foregroundStyle(
+                        assist.lutExposureStops == 0 ? MonitorTheme.text : MonitorTheme.accent
+                    )
+                    .frame(width: 58, alignment: .trailing)
+            }
+        }
+        .sensoryFeedback(trigger: assist.lutExposureStops) { _, _ in
+            OperatorPrefs.hapticsEnabled ? .selection : nil
+        }
+    }
+}
+
+/// OpenZCine 50/50: off-by-default toggle; orientation chips only while armed.
+/// Labels are `Left / Right` and `Top / Bottom`, not Vertical/Horizontal.
+///
+/// Exposure and split remain pinned beneath the catalog. Orientation choices
+/// appear only while split is armed.
+struct LUTSplitComparisonBar: View {
+    @Bindable var assist: LiveAssistState
+
+    var body: some View {
+        MonitorInspectorCard {
+            VStack(spacing: 0) {
+                LUTExposureCompensationBar(assist: assist)
+                SettingsSwitchInlineRow(title: "50 / 50 split", isOn: assist.splitComparison) {
+                    OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+                    assist.splitComparison.toggle()
+                    if assist.splitComparison && !assist.lutArmed { assist.armLastLUT() }
+                    assist.persist()
+                }
+                if assist.splitComparison {
+                    SettingsSegmented(
+                        options: LUTSplitOrientation.allCases.map(\.rawValue),
+                        selected: LUTSplitOrientation.current(vertical: assist.splitVertical)
+                            .rawValue
+                    ) { raw in
+                        guard let next = LUTSplitOrientation(rawValue: raw) else { return }
+                        assist.splitVertical = next.isVertical
+                        assist.persist()
+                    }.padding(.bottom, 8)
+                }
+            }
+        }
+    }
+}
+
+/// OpenZCine `SplitComparisonOrientation` labels.
+private enum LUTSplitOrientation: String, CaseIterable {
+    case leftRight = "Left / Right"
+    case topBottom = "Top / Bottom"
+
+    var isVertical: Bool { self == .leftRight }
+
+    static func current(vertical: Bool) -> LUTSplitOrientation {
+        vertical ? .leftRight : .topBottom
+    }
+}
+
+/// OpenZCine `SegmentedButtons` — capsule chips, gold when selected.
+private struct LUTSegmentedButtons: View {
+    let items: [String]
+    let selected: String
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            MonitorSnapshotRows(items, id: \.self) { item in
+                Button {
+                    onSelect(item)
+                } label: {
+                    Text(item)
+                        .font(LiveType.ui(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(item == selected ? LiveDesign.accent : LiveDesign.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            item == selected ? LiveDesign.accentDim : LiveDesign.glassBright,
+                            in: Capsule()
+                        )
+                }
+                .buttonStyle(.zcTapTarget)
+            }
+        }
+    }
+}
+
+/// OpenZCine `AccentDrumWheel` subset used by the LUT picker (height + delete).
+private struct LUTDrumWheel: View {
+    let options: [String]
+    @Binding var selection: String
+    var wheelHeight: CGFloat = 146
+    var onDeleteOption: ((String) -> Void)? = nil
+
+    private let rowHeight: CGFloat = 52
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    ForEach(options, id: \.self) { option in
+                        optionRow(option, isCentered: option == selection)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(
+                id: Binding(get: { selection }, set: { if let value = $0 { selection = value } })
+            )
+            .contentMargins(.vertical, max(0, (wheelHeight - rowHeight) / 2), for: .scrollContent)
+            .frame(height: wheelHeight)
+            .sensoryFeedback(.selection, trigger: selection)
+            .mask {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black, location: 0.22),
+                        .init(color: .black, location: 0.78),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .overlay {
+                Rectangle().fill(LiveDesign.hairlineStrong).frame(height: 1)
+                    .offset(y: -rowHeight / 2)
+                Rectangle().fill(LiveDesign.hairlineStrong).frame(height: 1)
+                    .offset(y: rowHeight / 2)
+            }
+            .onAppear {
+                DispatchQueue.main.async { proxy.scrollTo(selection, anchor: .center) }
+            }
+        }
+    }
+
+    @ViewBuilder private func optionRow(_ option: String, isCentered: Bool) -> some View {
+        let row = Text(option)
+            .font(
+                .system(
+                    size: isCentered ? 30 : 23,
+                    weight: isCentered ? .semibold : .regular,
+                    design: .monospaced)
+            )
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .foregroundStyle(isCentered ? LiveDesign.accent : LiveDesign.muted.opacity(0.7))
+            .frame(maxWidth: .infinity)
+            .frame(height: rowHeight)
+            .contentShape(Rectangle())
+            .id(option)
+
+        if let onDeleteOption {
+            row
+                .contextMenu {
+                    Button(role: .destructive) {
+                        onDeleteOption(option)
+                    } label: {
+                        Label {
+                            Text("Delete LUT")
+                        } icon: {
+                            OpcIcon.trash
+                        }
+                    }
+                }
+                .accessibilityAction(named: Text("Delete \(option)")) {
+                    onDeleteOption(option)
+                }
+        } else {
+            row
+        }
+    }
+}

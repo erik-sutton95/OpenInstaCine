@@ -1,5 +1,9 @@
 package com.opencapture.openpocketcine
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateOffsetAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -25,7 +29,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,7 +51,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
@@ -55,6 +58,7 @@ import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import com.opencapture.openpocketcine.core.ConnectionPhase
 import com.opencapture.openpocketcine.session.CameraCommands
 import androidx.compose.ui.geometry.CornerRadius
@@ -85,7 +89,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
-import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -141,8 +144,15 @@ fun Modifier.liveModuleFrame(rect: ChromeRect): Modifier =
     offset(rect.x.dp, rect.y.dp).size(rect.width.dp, rect.height.dp)
 
 /** Occupies [rect] and seats wrapping chrome (InfoPill, capture strip) like iOS `alignment`. */
-fun Modifier.liveModuleFrame(rect: ChromeRect, alignment: Alignment): Modifier =
-    liveModuleFrame(rect).wrapContentSize(align = alignment)
+fun Modifier.liveModuleFrame(rect: ChromeRect, alignment: Alignment): Modifier {
+    val vertical =
+        when (alignment) {
+            Alignment.TopStart, Alignment.TopCenter, Alignment.TopEnd -> Alignment.Top
+            Alignment.BottomStart, Alignment.BottomCenter, Alignment.BottomEnd -> Alignment.Bottom
+            else -> Alignment.CenterVertically
+        }
+    return liveModuleFrame(rect).wrapContentHeight(align = vertical, unbounded = true)
+}
 
 /**
  * Measures unbounded then scales down to [maxWidth] — iOS `minimumScaleFactor` for the
@@ -547,87 +557,22 @@ object LivePopupPlacement {
     fun leadingX(desired: Float, width: Float, minX: Float, maxX: Float): Float =
         min(max(desired, minX), max(minX, maxX - width))
 
-    /** OpenZCine `topPickerBody`: 340-wide card, centred on the cell, 8dp under `cell.maxY`. */
-    fun topPicker(
-        cell: ChromeRect,
-        panelHeight: Float,
-        viewportWidth: Float,
-        viewportHeight: Float,
-        safeLeading: Float,
-        safeTrailing: Float,
-        safeTop: Float,
-        safeBottom: Float,
-        floorY: Float? = null,
-        preferredWidth: Float = LiveChromeMetrics.TOP_PICKER_WIDTH,
-        gap: Float = LiveChromeMetrics.TOP_PICKER_GAP,
-    ): Box {
-        val (minX, maxX, width) =
-            horizontalBand(
-                preferredWidth = preferredWidth,
-                viewportWidth = viewportWidth,
-                safeLeading = safeLeading,
-                safeTrailing = safeTrailing,
-                margin = EDGE_MARGIN,
-            )
-        val hasCell = cell.width > 1f && cell.height > 1f
-        val x =
-            leadingX(
-                desired = if (hasCell) cell.midX - width / 2f else minX,
-                width = width,
-                minX = minX,
-                maxX = maxX,
-            )
-        val minY = max(EDGE_MARGIN, safeTop + LiveChromeMetrics.CHROME_TOP + EDGE_MARGIN)
-        val floor = floorY ?: (viewportHeight - max(EDGE_MARGIN, safeBottom))
-        val desiredTop = if (hasCell) cell.maxY + gap else minY
-        // Pin under the chip. A too-tall first measure must shrink into
-        // maxHeight — not slide up over STBY / the originating chip.
-        val y = max(minY, desiredTop)
-        return Box(x = x, y = y, width = width, maxHeight = max(0f, floor - y))
+    /** One viewport-centered floor for every camera-value picker, independent of its source readout. */
+    fun bottomCapturePanel(panelHeight: Float, viewportWidth: Float, viewportHeight: Float,
+        safeLeading: Float, safeTrailing: Float, safeTop: Float, safeBottom: Float,
+        floorY: Float? = null): Box {
+        val panel = com.opencapture.monitorui.MonitorLayoutPolicy.bottomPanel(panelHeight, viewportWidth,
+            viewportHeight, safeLeading, safeTrailing, safeTop, safeBottom, floorY)
+        return Box(panel.x, panel.y, panel.width, panel.maxHeight)
     }
 
-    /**
-     * OpenZCine `bottomPickerBody`: 420 cap, 10dp above the capture bar, centred on
-     * the originating tile (or the bar when the tile frame is missing).
-     */
-    fun capturePicker(
-        tile: ChromeRect,
-        bar: ChromeRect,
-        panelHeight: Float,
-        viewportWidth: Float,
-        viewportHeight: Float,
-        safeLeading: Float,
-        safeTrailing: Float,
-        safeTop: Float,
-        safeBottom: Float,
-        ceilingY: Float = 0f,
-        preferredWidth: Float = LiveChromeMetrics.CAPTURE_PICKER_MAX_WIDTH,
-        gap: Float = LiveChromeMetrics.POPUP_GAP,
-    ): Box {
-        val hasBar = bar.width > 1f
-        val widthPref = if (hasBar) min(bar.width, preferredWidth) else preferredWidth
-        val (minX, maxX, width) =
-            horizontalBand(
-                preferredWidth = widthPref,
-                viewportWidth = viewportWidth,
-                safeLeading = safeLeading,
-                safeTrailing = safeTrailing,
-                margin = EDGE_MARGIN,
-            )
-        val midX =
-            when {
-                tile.width > 1f -> tile.midX
-                hasBar -> bar.midX
-                else -> viewportWidth / 2f
-            }
-        val x = leadingX(desired = midX - width / 2f, width = width, minX = minX, maxX = maxX)
-        val minY = max(EDGE_MARGIN, max(safeTop + ASSIST_TOP_INSET, ceilingY))
-        val boxBottom =
-            (if (hasBar) bar.minY else viewportHeight - max(EDGE_MARGIN, safeBottom)) - gap
-        val maxHeight = max(0f, boxBottom - minY)
-        val height = min(max(0f, panelHeight), maxHeight)
-        val y = max(minY, boxBottom - height)
-        return Box(x = x, y = y, width = width, maxHeight = maxHeight)
+    /** Format / color / mode hang from the top edge, 6dp below the portrait info bar. */
+    fun topCapturePanel(panelHeight: Float, viewportWidth: Float, viewportHeight: Float,
+        safeLeading: Float, safeTrailing: Float, safeTop: Float, safeBottom: Float,
+        ceilingY: Float? = null, floorY: Float? = null): Box {
+        val panel = com.opencapture.monitorui.MonitorLayoutPolicy.topPanel(panelHeight, viewportWidth,
+            viewportHeight, safeLeading, safeTrailing, safeTop, safeBottom, ceilingY, floorY)
+        return Box(panel.x, panel.y, panel.width, panel.maxHeight)
     }
 
     /**
@@ -682,48 +627,6 @@ object LivePopupPlacement {
         val y = max(minY, boxBottom - height)
         return Box(x = x, y = y, width = width, maxHeight = maxHeight)
     }
-}
-
-/** OpenZCine `topPickerBody` convenience used by tests and the landscape host. */
-object LiveTopPickerPlacement {
-    fun leadingX(
-        cellMidX: Float,
-        width: Float,
-        viewportWidth: Float,
-        safeLeading: Float = 0f,
-        safeTrailing: Float = 0f,
-    ): Float =
-        LivePopupPlacement.topPicker(
-            cell = ChromeRect(cellMidX - 1f, 0f, 2f, 2f),
-            panelHeight = 80f,
-            viewportWidth = viewportWidth,
-            viewportHeight = 400f,
-            safeLeading = safeLeading,
-            safeTrailing = safeTrailing,
-            safeTop = 0f,
-            safeBottom = 0f,
-            preferredWidth = width,
-        ).x
-
-    fun topY(
-        cellMaxY: Float,
-        panelHeight: Float,
-        viewportHeight: Float,
-        safeTop: Float = 0f,
-        safeBottom: Float = 0f,
-        floorY: Float? = null,
-    ): Float =
-        LivePopupPlacement.topPicker(
-            cell = ChromeRect(0f, cellMaxY - 2f, 2f, 2f),
-            panelHeight = panelHeight,
-            viewportWidth = 400f,
-            viewportHeight = viewportHeight,
-            safeLeading = 0f,
-            safeTrailing = 0f,
-            safeTop = safeTop,
-            safeBottom = safeBottom,
-            floorY = floorY,
-        ).y
 }
 
 /** Hold a numeric FPS string until it moves by [step] so hundredths do not tick the chip. */
@@ -970,43 +873,83 @@ data class LiveMonitorLayout(
     val safeTrailing: Float,
     val safeTop: Float,
     val safeBottom: Float,
+    val usesFieldMonitor: Boolean = false,
 ) {
     val onFeed: ChromeRect
         get() = if (picture.width > 1f) picture else feed
 
-    val gimbalCluster: GimbalCluster
-        get() {
-            val inset = LiveChromeMetrics.STICK_INSET
-            val gap = LiveChromeMetrics.STICK_GAP
-            var barTop = Float.POSITIVE_INFINITY
-            if (showsBottomBars) {
-                if (assist.height > 1f) barTop = min(barTop, assist.minY)
-                if (capture.height > 1f) barTop = min(barTop, capture.minY)
-            }
-            val floorY =
-                if (barTop < Float.POSITIVE_INFINITY) min(feed.maxY - inset, barTop - gap)
-                else feed.maxY - inset
-            val avoid = if (record.width > 1f) record else null
-            return GimbalCluster.inTrailingBottom(
-                well = feed,
-                floorY = floorY,
-                canvasMaxY = viewportHeight - max(0f, safeBottom),
-                avoid = avoid,
-                stickSize = LiveChromeMetrics.STICK,
-                zoomSize = LiveChromeMetrics.ZOOM,
-                gap = gap,
-                inset = inset,
+    fun gimbalCluster(showGimbalButton: Boolean = false): GimbalCluster {
+        if (usesFieldMonitor) {
+            val portrait = viewportHeight > viewportWidth
+            val floor =
+                when {
+                    capture.height > 1f -> capture.y - 12f
+                    portrait && rail.height > 1f -> rail.y - 8f
+                    else ->
+                        viewportHeight -
+                            com.opencapture.monitorui.MonitorLayoutPolicy.landscapeBottomClearance(safeBottom) - 8f
+                }
+            val stick =
+                if (portrait) {
+                    com.opencapture.monitorui.MonitorLayoutPolicy.portraitStick(viewportWidth, floor)
+                } else {
+                    com.opencapture.monitorui.MonitorLayoutPolicy.landscapeStick(
+                        viewportWidth, floor, record.width, safeTrailing,
+                    )
+                }
+            val zoom = com.opencapture.monitorui.MonitorLayoutPolicy.portraitZoom(stick)
+            val gimbal = com.opencapture.monitorui.MonitorLayoutPolicy.portraitGimbal(stick, zoom)
+            return GimbalCluster(
+                ChromeRect(stick.x, stick.y, stick.width, stick.height),
+                ChromeRect(zoom.x, zoom.y, zoom.width, zoom.height),
+                if (showGimbalButton) ChromeRect(gimbal.x, gimbal.y, gimbal.width, gimbal.height)
+                else ChromeRect(0f, 0f, 0f, 0f),
             )
         }
+        val inset = LiveChromeMetrics.STICK_INSET
+        val gap = LiveChromeMetrics.STICK_GAP
+        var barTop = Float.POSITIVE_INFINITY
+        if (showsBottomBars) {
+            if (capture.height > 1f) barTop = min(barTop, capture.minY)
+        }
+        val floorY =
+            if (barTop < Float.POSITIVE_INFINITY) min(feed.maxY - inset, barTop - gap)
+            else feed.maxY - inset
+        // Landscape owns a separate trailing record/DISP rail. Park the whole
+        // cluster to its leading side instead of lifting it into DISP.
+        val landscape = viewportWidth >= viewportHeight
+        val gimbalWell = if (landscape && record.width > 1f) {
+            feed.copy(width = max(0f, min(feed.maxX, record.minX - 2f) - feed.minX))
+        } else feed
+        val avoid = if (!landscape && record.width > 1f) record else null
+        return GimbalCluster.inTrailingBottom(
+            well = gimbalWell,
+            floorY = floorY,
+            canvasMaxY = viewportHeight - max(0f, safeBottom),
+            avoid = avoid,
+            stickSize = LiveChromeMetrics.STICK,
+            zoomSize = LiveChromeMetrics.ZOOM,
+            gap = gap,
+            inset = inset,
+            showGimbalButton = showGimbalButton,
+        )
+    }
 
     val zoomButton: ChromeRect
-        get() = gimbalCluster.zoom
+        get() = gimbalCluster().zoom
 
     val gimbalStick: ChromeRect
-        get() = gimbalCluster.stick
+        get() = gimbalCluster().stick
 
     val focusReset: ChromeRect
         get() {
+            if (usesFieldMonitor) {
+                val stick = gimbalCluster().stick
+                return ChromeRect(
+                    max(safeLeading + 8f, stick.x - 50f),
+                    stick.maxY - 40f, 40f, 40f,
+                )
+            }
             val size = LiveChromeMetrics.FOCUS_RESET
             if (viewportHeight > viewportWidth) {
                 val well = onFeed
@@ -1033,6 +976,7 @@ data class LiveMonitorLayout(
             showsBottomBars: Boolean,
             chromeScale: Float = 1f,
             pictureAspect: Float? = null,
+            hasDisplayCutout: Boolean = false,
         ): LiveMonitorLayout {
             LiveChromeMetrics.scale = chromeScale
             val vw = max(0f, viewportWidth)
@@ -1084,7 +1028,94 @@ data class LiveMonitorLayout(
                     topDeck =
                         topDeckRect(layout.feed, layout.lock, layout.battery, layout.rail, constrained),
                 )
+            if (vw >= vh) {
+                val tablet = min(vw, vh) >= 600f
+                val btn = com.opencapture.monitorui.MonitorLayoutPolicy.systemButtonSize(tablet)
+                val record = if (tablet) 84f else 70f
+                val edge = 14f
+                val recordX = vw - 10f - record
+                val recordY = vh - 16f - record
+                val recordButtonX = recordX + (record - btn) / 2f
+                val buttonX = if (tablet) vw - 14f - btn else recordButtonX
+                val top = if (tablet) 12f else if (max(safeLeading, safeTrailing) < 20f) 52f else 8f
+                val cornerDrop = com.opencapture.monitorui.MonitorLayoutPolicy.cutoutPhoneCornerInset(
+                    vh, tablet, hasDisplayCutout)
+                val readoutY = if (tablet) 4f else 0f
+                val stackTop = top + cornerDrop
+                val lockY = stackTop
+                val valuesInset = if (tablet) 140f else 112f
+                layout = layout.copy(
+                    lock = ChromeRect(edge, lockY, btn, btn),
+                    battery = ChromeRect(edge, lockY + btn + 8f, 46f, 54f),
+                    topDeck = ChromeRect(max(72f, feed.minX + 12f), readoutY,
+                        max(0f, (if (tablet) buttonX - btn - 8f else buttonX) - 12f -
+                            max(72f, feed.minX + 12f)), if (tablet) 46f else 44f),
+                    settings = ChromeRect(if (tablet) buttonX - btn - 8f else buttonX, stackTop, btn, btn),
+                    media = ChromeRect(buttonX, if (tablet) stackTop else stackTop + btn + 8f, btn, btn),
+                    record = ChromeRect(recordX, recordY, record, record),
+                    disp = ChromeRect(recordButtonX, recordY - 8f - btn, btn, btn),
+                    rail = ChromeRect(recordX, 0f, record, vh),
+                    capture = ChromeRect(
+                        valuesInset,
+                        vh - com.opencapture.monitorui.MonitorLayoutPolicy.landscapeBottomClearance(safeBottom) - 44f + 4f,
+                        max(0f, vw - 2 * valuesInset), 44f),
+                    assist = com.opencapture.monitorui.MonitorLayoutPolicy.landscapeAssists(
+                        vh, tablet, edge, safeBottom).let {
+                        ChromeRect(it.x, it.y, it.width, it.height)
+                    },
+                )
+            }
             return layout
+        }
+
+        /** Production chrome. `fit` remains the OpenZCine compatibility path for tests. */
+        fun fieldMonitor(
+            viewportWidth: Float,
+            viewportHeight: Float,
+            safeLeading: Float,
+            safeTrailing: Float,
+            safeTop: Float,
+            safeBottom: Float,
+            showsBottomBars: Boolean,
+            chromeScale: Float = 1f,
+            pictureAspect: Float? = null,
+            hasDisplayCutout: Boolean = false,
+            fill: Boolean = false,
+            showsValues: Boolean = true,
+            topControlInset: Float = 0f,
+        ): LiveMonitorLayout {
+            LiveChromeMetrics.scale = chromeScale
+            val p =
+                com.opencapture.monitorui.MonitorLayoutPolicy.fieldMonitor(
+                    viewportWidth, viewportHeight, safeTop, safeLeading, safeBottom, safeTrailing,
+                    pictureAspect ?: LiveChromeMetrics.FEED_ASPECT, fill, showsValues,
+                    topControlInset, hasDisplayCutout,
+                )
+            fun slot(rect: com.opencapture.monitorui.MonitorRect) =
+                ChromeRect(rect.x, rect.y, rect.width, rect.height)
+            return LiveMonitorLayout(
+                viewportWidth = viewportWidth,
+                viewportHeight = viewportHeight,
+                feed = slot(p.picture),
+                picture = slot(p.picture),
+                lock = slot(p.lock),
+                battery = slot(p.gauges),
+                topDeck = slot(p.status),
+                assist = slot(p.assists),
+                capture = slot(p.values),
+                rail = slot(p.system),
+                settings = slot(p.settings),
+                media = slot(p.media),
+                record = slot(p.record),
+                disp = slot(p.display),
+                isWidthConstrained = !p.tablet && viewportWidth < 740f,
+                showsBottomBars = showsBottomBars,
+                safeLeading = safeLeading,
+                safeTrailing = safeTrailing,
+                safeTop = safeTop,
+                safeBottom = safeBottom,
+                usesFieldMonitor = true,
+            )
         }
 
         fun isWidthConstrained(vw: Float, vh: Float, aspect: Float = LiveChromeMetrics.FEED_ASPECT): Boolean =
@@ -1139,24 +1170,9 @@ data class LiveMonitorLayout(
                 val height = vw / aspect
                 return ChromeRect(0f, (vh - height) / 2f, vw, height)
             }
-            val remaining = max(0f, vw - width)
-            val leadCut = if (safeLeading >= LiveChromeMetrics.CUTOUT_MIN) safeLeading else 0f
-            val trailCut = if (safeTrailing >= LiveChromeMetrics.CUTOUT_MIN) safeTrailing else 0f
-            val leadingInset = if (trailCut > leadCut) 0f else leadCut
-            val xWanted =
-                if (isClassicNotch(safeLeading, safeTrailing)) {
-                    val available = max(0f, remaining - max(0f, safeLeading) - max(0f, safeTrailing))
-                    val shift = min(LiveChromeMetrics.CLASSIC_NOTCH_SHIFT, available)
-                    min(remaining, safeLeading + shift)
-                } else {
-                    min(remaining, leadingInset)
-                }
-            // S25 leftover 140. Reserve the rail plus a few dp so record
-            // clears the picture without parking the well in the lock lane.
-            // Auditor 874×402 still pins x at 59.
-            val trailLane = LiveChromeMetrics.RAIL_W + 8f
-            val x = min(xWanted, max(0f, remaining - trailLane))
-            return ChromeRect(x, 0f, width, vh)
+            // UI 2.0 keeps the picture centered when the device rotates left/right.
+            // Only the chrome changes its clearance around the physical cutout.
+            return ChromeRect(max(0f, (vw - width) / 2f), 0f, width, vh)
         }
 
         private fun isClassicNotch(leading: Float, trailing: Float): Boolean {
@@ -1355,7 +1371,7 @@ fun LockButton(locked: Boolean, modifier: Modifier = Modifier, onClick: () -> Un
     Box(
         modifier
             .size(LiveChromeMetrics.LOCK.dp)
-            .monitorGlass()
+            .monitorGlass(RoundedCornerShape(14.dp))
             .then(
                 if (locked) Modifier.border(1.5.dp, LiveDesign.accent.copy(alpha = 0.75f), ChromeShape)
                 else Modifier,
@@ -1372,7 +1388,8 @@ fun LockButton(locked: Boolean, modifier: Modifier = Modifier, onClick: () -> Un
             icon = OpcIcon.LOCK,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(16.dp),
+            // Match the reference's visible glyph height, retaining the full tile/touch area.
+            modifier = Modifier.fillMaxSize(26f / 54f),
         )
     }
 }
@@ -1399,19 +1416,20 @@ fun DispButton(
     ) {
         Text(
             "DISP",
-            color = if (clean) LiveDesign.text else LiveDesign.accent,
-            style = LiveType.ui(12f, FontWeight.Bold),
+            color = LiveDesign.muted,
+            style = LiveType.ui(com.opencapture.monitorui.MonitorLayoutPolicy.DISP_SIZE, FontWeight.Bold)
+                .copy(letterSpacing = com.opencapture.monitorui.MonitorLayoutPolicy.DISP_TRACKING.sp),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
             Box(
                 Modifier.size(width = 14.dp, height = 3.dp)
                     .clip(CircleShape)
-                    .background(if (!clean) LiveDesign.accent else LiveDesign.hairlineStrong),
+                    .background(if (!clean) LiveDesign.info else LiveDesign.hairlineStrong),
             )
             Box(
                 Modifier.size(width = 14.dp, height = 3.dp)
                     .clip(CircleShape)
-                    .background(if (clean) LiveDesign.accent else LiveDesign.hairlineStrong),
+                    .background(if (clean) LiveDesign.info else LiveDesign.hairlineStrong),
             )
         }
     }
@@ -1419,33 +1437,43 @@ fun DispButton(
 
 @Composable
 fun AuxCircleButton(modifier: Modifier = Modifier, onClick: () -> Unit, glyph: @Composable (Color) -> Unit) {
-    Box(
+    val tablet = minOf(LocalConfiguration.current.screenWidthDp, LocalConfiguration.current.screenHeightDp) >= 600
+    val side = com.opencapture.monitorui.MonitorLayoutPolicy.systemButtonSize(tablet)
+    com.opencapture.monitorui.MonitorAuxCircleButton(
         modifier
-            .size(LiveChromeMetrics.AUX.dp)
-            .monitorGlass(CircleShape)
+            .size(side.dp)
+            .monitorGlass(RoundedCornerShape(14.dp))
             .chromeClickable(onClick = onClick)
             .semantics { role = Role.Button },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier.size((LiveChromeMetrics.AUX * 0.36f).dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            glyph(LiveDesign.text.copy(alpha = 0.86f))
-        }
-    }
+        glyph = glyph,
+    )
 }
 
 @Composable
-fun RecordButton(
+internal fun RecordButton(
     recording: Boolean,
     enabled: Boolean,
     modifier: Modifier = Modifier,
     confirm: Boolean = false,
     photo: Boolean = false,
+    diameter: Float = LiveChromeMetrics.RECORD,
+    request: RecordConfirmationRequest = CaptureShutterPolicy.request(
+        shootingMode = CameraCommands.SHOOT_VIDEO,
+        recording = recording,
+        locked = !enabled,
+        busy = !enabled,
+        phase = com.opencapture.openpocketcine.core.ConnectionPhase.LIVE,
+    ),
     onClick: () -> Unit,
 ) {
     var confirmOpen by remember { mutableStateOf(false) }
+    var pending by remember { mutableStateOf<RecordConfirmationRequest?>(null) }
+    LaunchedEffect(request) {
+        if (CaptureShutterPolicy.shouldDismiss(pending, request)) {
+            confirmOpen = false
+            pending = null
+        }
+    }
     if (confirmOpen) {
         Dialog(
             onDismissRequest = { confirmOpen = false },
@@ -1479,8 +1507,10 @@ fun RecordButton(
                             Modifier
                                 .fillMaxWidth()
                                 .chromeClickable(onClick = {
+                                    val snap = pending
                                     confirmOpen = false
-                                    onClick()
+                                    pending = null
+                                    if (CaptureShutterPolicy.canCommit(snap, request)) onClick()
                                 })
                                 .padding(vertical = 14.dp),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -1502,10 +1532,16 @@ fun RecordButton(
     }
     Box(
         modifier
-            .size(LiveChromeMetrics.RECORD.dp)
+            .size(diameter.dp)
             .then(if (recording && !enabled) Modifier.graphicsLayer { alpha = 0.72f } else Modifier)
-            .shadow(2.dp, CircleShape, clip = false, ambientColor = Color.Black.copy(alpha = 0.40f))
-            .chromeClickable(enabled = enabled, onClick = { if (confirm) confirmOpen = true else onClick() })
+            .chromeClickable(enabled = enabled, onClick = {
+                if (confirm && request.canConfirm) {
+                    pending = request
+                    confirmOpen = true
+                } else if (!confirm) {
+                    onClick()
+                }
+            })
             .semantics {
                 contentDescription =
                     when {
@@ -1517,41 +1553,9 @@ fun RecordButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        RecordLamp(recording = recording)
-    }
-}
-
-@Composable
-private fun RecordLamp(recording: Boolean) {
-    val transition = rememberInfiniteTransition(label = "recordPulse")
-    val pulse by
-        transition.animateFloat(
-            initialValue = 0.22f,
-            targetValue = 0.55f,
-            animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
-            label = "recordGlow",
+        com.opencapture.monitorui.MonitorRecordLamp(
+            recording = recording, photo = photo, modifier = Modifier.fillMaxSize(),
         )
-    val glow = if (recording) pulse else 0f
-    Canvas(Modifier.fillMaxSize()) {
-        val d = size.minDimension
-        val center = Offset(size.width / 2, size.height / 2)
-        val ring = d * 0.50f
-        val ringLine = max(2.dp.toPx(), d * 0.026f)
-        if (recording) {
-            drawCircle(LiveDesign.pocketRing.copy(alpha = glow), radius = d * 0.58f, center = center)
-        }
-        drawCircle(LiveDesign.recordWell, radius = d / 2f, center = center)
-        drawCircle(Color.Black.copy(alpha = 0.55f), radius = d / 2f, center = center, style = Stroke(1.5.dp.toPx()))
-        if (recording) {
-            drawCircle(LiveDesign.pocketRing, radius = ring / 2f, center = center)
-        } else {
-            drawCircle(
-                LiveDesign.pocketRing,
-                radius = ring / 2f,
-                center = center,
-                style = Stroke(ringLine),
-            )
-        }
     }
 }
 
@@ -1679,6 +1683,8 @@ fun CameraBatteryReadout(percent: Int, modifier: Modifier = Modifier) {
 
 @Composable
 fun TimecodeReadout(timecode: String?, modifier: Modifier = Modifier, portrait: Boolean = false) {
+    val config = LocalConfiguration.current
+    val tablet = min(config.screenWidthDp, config.screenHeightDp) >= 600
     val incoming = timecode?.takeIf { it.isNotBlank() }
     val clock =
         incoming?.let { value ->
@@ -1702,35 +1708,34 @@ fun TimecodeReadout(timecode: String?, modifier: Modifier = Modifier, portrait: 
     }
     Text(
         buildAnnotatedString {
-            withStyle(SpanStyle(color = LiveDesign.text)) { append("TC $head") }
+            withStyle(SpanStyle(color = LiveDesign.text)) { append(head) }
             withStyle(SpanStyle(color = LiveDesign.accent)) { append(tail) }
         },
-        style = LiveType.mono(20f, FontWeight.Medium),
+        style = LiveType.mono(if (tablet) 25f else 23f, FontWeight.Medium)
+            ,
         maxLines = 1,
         softWrap = false,
         modifier = modifier.wrapContentWidth(align = Alignment.Start, unbounded = true),
     )
 }
 
+/** Elapsed time comes from camera telemetry; this view never starts a timer. */
 @Composable
-fun RecChip(recording: Boolean, statusKnown: Boolean = true) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-        modifier =
-            Modifier
-                .wrapContentWidth(unbounded = true)
-                .chipGlass(CircleShape)
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-    ) {
-        Box(Modifier.size(9.dp).clip(CircleShape).background(if (recording) LiveDesign.rec else LiveDesign.faint))
-        Text(
-            if (!statusKnown) "REC —" else if (recording) "REC" else "STBY",
-            color = if (recording) LiveDesign.text else LiveDesign.muted,
-            style = LiveType.ui(11f, FontWeight.Bold),
-            maxLines = 1,
-            softWrap = false,
-        )
+fun RecChip(recording: Boolean, elapsedSeconds: Int = 0) {
+    val config = LocalConfiguration.current
+    val size = if (min(config.screenWidthDp, config.screenHeightDp) >= 600) 11.5f else 10.5f
+    val pulse = com.opencapture.monitorui.monitorPulsePhase(1600, enabled = recording)
+    val elapsed = elapsedSeconds.coerceAtLeast(0)
+    val duration = "%02d:%02d".format(java.util.Locale.ROOT, elapsed / 60, elapsed % 60)
+    Row(Modifier.graphicsLayer { alpha = 1f - .75f * pulse }
+        .background(if (recording) LiveDesign.rec.copy(alpha = .9f) else Color(0xFF060708).copy(alpha = .72f), RoundedCornerShape(percent = 50))
+        .padding(horizontal = 9.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        if (recording) Box(Modifier.size(6.dp).background(Color.White, CircleShape))
+        Text(if (recording) "REC" else "STBY", color = LiveDesign.text,
+            style = LiveType.ui(size, FontWeight.Medium).copy(letterSpacing = .6.sp), maxLines = 1)
+        Text(duration, color = Color.White.copy(alpha = .75f),
+            style = LiveType.mono(size, FontWeight.Medium), maxLines = 1)
     }
 }
 
@@ -1946,6 +1951,12 @@ fun LiveGimbalStick(
 ) {
     val knobRatio = LiveDesign.GIMBAL_KNOB_DP / LiveDesign.GIMBAL_STICK_DP
     var knobOffset by remember { mutableStateOf(Offset.Zero) }
+    var pressed by remember { mutableStateOf(false) }
+    val renderedOffset by animateOffsetAsState(knobOffset,
+        if (pressed) snap() else spring(dampingRatio = .8f, stiffness = 300f), label = "stick-return")
+    val stickTint by animateColorAsState(
+        if (pressed) LiveDesign.accent.copy(alpha = .8f) else Color.White.copy(alpha = .55f),
+        tween(120), label = "stick-press")
     val scope = rememberCoroutineScope()
     var recenterJob by remember { mutableStateOf<Job?>(null) }
     Box(
@@ -1955,60 +1966,73 @@ fun LiveGimbalStick(
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 val stickPx = min(this.size.width, this.size.height).toFloat()
-                val travel = (stickPx - stickPx * knobRatio) / 2f
                 var taps = 0
                 var lastTap = 0L
                 awaitEachGesture {
                     val down = awaitFirstDown()
+                    pressed = true
                     var dragged = false
                     var translation = Offset.Zero
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (change.pressed) {
-                            translation += change.positionChange()
-                            val mag = hypot(translation.x, translation.y)
-                            if (travel > 0f && mag / travel > CameraCommands.GIMBAL_STICK_TAP_SLOP) {
-                                dragged = true
-                                taps = 0
-                                recenterJob?.cancel()
-                                val limited =
-                                    if (mag > travel && mag > 0f) translation * (travel / mag) else translation
-                                knobOffset = limited
-                                val denom = if (travel > 0f) travel else 1f
-                                onMove(limited.x / denom, -limited.y / denom)
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (change.pressed) {
+                                translation += change.positionChange()
+                                val mapped =
+                                    CameraCommands.mapGimbalStickTouch(
+                                        translation.x,
+                                        translation.y,
+                                        stickPx,
+                                        stickPx * knobRatio,
+                                        dragged,
+                                    )
+                                if (mapped.emit) {
+                                    dragged = true
+                                    taps = 0
+                                    recenterJob?.cancel()
+                                    knobOffset = Offset(mapped.visualX, mapped.visualY)
+                                    onMove(mapped.commandX, mapped.commandY)
+                                }
+                                change.consume()
+                            } else {
+                                break
                             }
-                            change.consume()
+                        }
+                        if (dragged) {
+                            knobOffset = Offset.Zero
+                            dragged = false
+                            onRelease()
                         } else {
-                            break
-                        }
-                    }
-                    if (dragged) {
-                        knobOffset = Offset.Zero
-                        onRelease()
-                    } else {
-                        knobOffset = Offset.Zero
-                        val now = System.currentTimeMillis()
-                        if (now - lastTap > 420L) taps = 0
-                        taps += 1
-                        lastTap = now
-                        when (taps) {
-                            2 -> {
-                                recenterJob?.cancel()
-                                recenterJob =
-                                    scope.launch {
-                                        delay(280)
-                                        onRecenter()
-                                        taps = 0
-                                    }
-                            }
-                            3 -> {
-                                recenterJob?.cancel()
-                                recenterJob = null
-                                taps = 0
-                                onFlip()
+                            knobOffset = Offset.Zero
+                            val now = System.currentTimeMillis()
+                            if (now - lastTap > 420L) taps = 0
+                            taps += 1
+                            lastTap = now
+                            when (taps) {
+                                2 -> {
+                                    recenterJob?.cancel()
+                                    recenterJob =
+                                        scope.launch {
+                                            delay(280)
+                                            onRecenter()
+                                            taps = 0
+                                        }
+                                }
+                                3 -> {
+                                    recenterJob?.cancel()
+                                    recenterJob = null
+                                    taps = 0
+                                    onFlip()
+                                }
                             }
                         }
+                    } finally {
+                        pressed = false
+                        knobOffset = Offset.Zero
+                        // Cancellation/rotation must release the existing stick
+                        // intent just as lifting the pointer does.
+                        if (dragged) onRelease()
                     }
                 }
             },
@@ -2019,14 +2043,14 @@ fun LiveGimbalStick(
             val knobPx = stickPx * knobRatio
             val stroke = 2.dp.toPx()
             drawCircle(
-                color = Color.White.copy(alpha = 0.30f),
+                color = stickTint,
                 radius = stickPx / 2f - stroke / 2f,
                 style = Stroke(width = stroke),
             )
             drawCircle(
-                color = Color.White.copy(alpha = 0.30f),
+                color = stickTint,
                 radius = knobPx / 2f,
-                center = center + knobOffset,
+                center = center + renderedOffset,
             )
         }
     }
@@ -2077,42 +2101,12 @@ fun CameraGlyph(tint: Color, modifier: Modifier = Modifier) {
 
 @Composable
 fun VideoGlyph(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier.size(14.dp, 11.dp)) {
-        drawRoundRect(tint, style = Stroke(1.4.dp.toPx()), cornerRadius = CornerRadius(2.dp.toPx()))
-        val path =
-            Path().apply {
-                moveTo(size.width * 0.42f, size.height * 0.32f)
-                lineTo(size.width * 0.68f, size.height * 0.5f)
-                lineTo(size.width * 0.42f, size.height * 0.68f)
-                close()
-            }
-        drawPath(path, tint)
-    }
-}
-
-@Composable
-fun ColorGlyph(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier.size(12.dp)) {
-        drawCircle(tint, radius = size.minDimension / 2, style = Stroke(1.4.dp.toPx()))
-        drawCircle(tint, radius = size.minDimension * 0.18f)
-    }
+    OpcIcon(OpcIcon.VIDEO, null, modifier.size(14.dp), tint)
 }
 
 @Composable
 fun SdCardGlyph(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier.size(11.dp, 14.dp)) {
-        val path =
-            Path().apply {
-                moveTo(size.width * 0.15f, 0f)
-                lineTo(size.width * 0.62f, 0f)
-                lineTo(size.width, size.height * 0.22f)
-                lineTo(size.width, size.height)
-                lineTo(0f, size.height)
-                lineTo(0f, size.height * 0.18f)
-                close()
-            }
-        drawPath(path, tint, style = Stroke(1.3.dp.toPx()))
-    }
+    OpcIcon(OpcIcon.CARD_SIM, null, modifier.size(14.dp), tint)
 }
 
 @Composable

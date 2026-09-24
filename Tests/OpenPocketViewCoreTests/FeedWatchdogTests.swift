@@ -4,6 +4,70 @@ import Testing
 @testable import OpenPocketViewCore
 
 @Suite struct FeedWatchdogTests {
+    @Test func packetOnlyTrafficUsesBoundedEnableLadderWhenCompletePicturesStop() {
+        var dog = FeedWatchdog()
+        var snap = Self.snap(now: 100, frameAge: 3, videoAge: 0.01)
+        snap.lastAccessUnitAge = 3
+        snap.decoderOutputExpected = true
+        snap.lastDecoderOutputAge = 3
+        #expect(dog.tick(snap) == .resendLiveViewEnable)
+        snap.now = 101
+        #expect(dog.tick(snap) == .none)
+        snap.now = 105
+        #expect(dog.tick(snap) == .resendLiveViewEnable)
+        snap.now = 110
+        #expect(dog.tick(snap) == .reopenDatalink)
+        snap.now = 111
+        snap.lastAccessUnitAge = 0.01
+        snap.lastDecoderOutputAge = 0.01
+        snap.lastDecodedFrameAge = 0.01
+        #expect(dog.tick(snap) == .none)
+        #expect(dog.stage == .idle)
+    }
+
+    @Test func continuousInputWithSilentDecoderRequestsOneOwnedRepair() {
+        var dog = FeedWatchdog()
+        var snap = Self.snap(now: 100, frameAge: 3, videoAge: 0.01)
+        snap.lastAccessUnitAge = 0.01
+        snap.decoderOutputExpected = true
+        snap.lastDecoderOutputAge = 3
+        #expect(dog.tick(snap) == .rebuildVTSession)
+        for second in 1..<16 {
+            snap.now = 100 + Double(second)
+            snap.lastDecoderOutputAge = 3 + Double(second)
+            #expect(dog.tick(snap) == .none)
+        }
+        snap.now = 116
+        #expect(dog.tick(snap) == .fullSessionRejoin)
+    }
+
+    @Test func freshDecoderOutputNeverCutsGOPForRendererStall() {
+        var dog = FeedWatchdog()
+        var snap = Self.snap(now: 100, frameAge: 20, videoAge: 0.01)
+        snap.lastAccessUnitAge = 0.01
+        snap.decoderOutputExpected = true
+        snap.lastDecoderOutputAge = 0.01
+        snap.decoderFailed = true  // An older error does not override fresh output.
+        #expect(dog.tick(snap) == .none)
+    }
+
+    @Test func decoderRepairRespectsReadinessAndResetsOnlyOnFreshOutput() {
+        var dog = FeedWatchdog()
+        var snap = Self.snap(now: 100, frameAge: 3, videoAge: 0.01)
+        snap.lastAccessUnitAge = 0.01
+        snap.decoderOutputExpected = true
+        snap.lastDecoderOutputAge = 3
+        snap.repairReady = false
+        #expect(dog.tick(snap) == .none)
+        #expect(dog.stage == .idle)
+        snap.repairReady = true
+        #expect(dog.tick(snap) == .rebuildVTSession)
+        snap.now = 101
+        snap.lastDecoderOutputAge = 0.01
+        #expect(dog.tick(snap) == .none)
+        #expect(dog.stage == .idle)
+    }
+
     @Test func ignoresHitchShorterThanStall() {
         var dog = FeedWatchdog()
         #expect(dog.tick(Self.snap(now: 10, frameAge: 1.5)) == .none)
@@ -86,6 +150,23 @@ import Testing
             "past zoom grace with young status is an encoder pause")
     }
 
+    @Test func zoomDialHoldDoesNotGopCutWhilePinchIsDown() {
+        var dog = FeedWatchdog()
+        var snap = Self.snap(
+            now: 10, frameAge: 8, videoAge: 8, statusAge: 0.3, bleAge: 0.2)
+        snap.secondsSinceLastEnable = 20
+        snap.secondsSinceZoomSet = 8
+        snap.zoomPinchActive = true
+        #expect(
+            dog.tick(snap) == .none,
+            "fingers on the zoom disc: encoder pause must not GOP-cut or rebuild UDP")
+        #expect(dog.stage == .idle)
+        snap.zoomPinchActive = false
+        #expect(
+            dog.tick(snap) == .resendLiveViewEnable,
+            "after lift, past zoom grace is an encoder pause")
+    }
+
     @Test func gimbalThrowHoldsEncoderPauseEnable() {
         var dog = FeedWatchdog()
         var snap = Self.snap(
@@ -118,6 +199,23 @@ import Testing
         #expect(
             heldDog.tick(held) == .resendLiveViewEnable,
             "25 Hz throw stamp must not freeze recover after 5s of dead HEVC")
+    }
+
+    @Test func gimbalStickHoldDoesNotGopCutWhileHeld() {
+        var dog = FeedWatchdog()
+        var snap = Self.snap(
+            now: 10, frameAge: 8, videoAge: 8, statusAge: 0.3, bleAge: 0.2)
+        snap.secondsSinceLastEnable = 20
+        snap.secondsSinceGimbalThrow = 8
+        snap.gimbalStickHeld = true
+        #expect(
+            dog.tick(snap) == .none,
+            "finger on the stick: encoder pause must not GOP-cut or rebuild UDP")
+        #expect(dog.stage == .idle)
+        snap.gimbalStickHeld = false
+        #expect(
+            dog.tick(snap) == .resendLiveViewEnable,
+            "after lift, past gimbal grace is an encoder pause")
     }
 
     @Test func encoderPauseWithFreshStatusResendsEnable() {
