@@ -272,7 +272,7 @@ final class BleLink: NSObject {
         var errorDescription: String? {
             switch self {
             case .gone: "camera disappeared"
-            case .noService: "camera has no DUML service"
+            case .noService: "camera has no control service"
             case .timeout: "Bluetooth connect timed out"
             }
         }

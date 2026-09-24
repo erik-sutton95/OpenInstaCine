@@ -74,7 +74,7 @@
             status.focusMode = .continuous
             status.audioChannel = .stereo
             status.timecode = "15:39:50:00"
-            status.colorMode = .dLog2
+            status.colorMode = .iLog
             if let raw = ProcessInfo.processInfo.environment["OPV_UI_REVIEW_METERED_EV"],
                 let value = UInt8(raw)
             {
@@ -123,16 +123,16 @@
             model.session.liveFPS = "25.00"
             var studio = SavedCamera(
                 id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-                advertisedName: "Studio camera", modelName: "Osmo Pocket 4 Pro",
-                lastConnectedAt: .distantPast, modelId: 0x22)
+                advertisedName: "Studio camera", modelName: "Luna Ultra",
+                lastConnectedAt: .distantPast, modelId: nil)
             studio.wifiSSID = "Studio-5G"
             studio.hotspotSSID = "Rig iPhone"
             model.savedCameras = [
                 studio,
                 SavedCamera(
                     id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
-                    advertisedName: "Travel camera", modelName: "Osmo Nano",
-                    lastConnectedAt: .distantPast, modelId: 0x19),
+                    advertisedName: "Travel camera", modelName: "Luna Ultra",
+                    lastConnectedAt: .distantPast, modelId: nil),
             ]
             if ProcessInfo.processInfo.environment["OPV_UI_REVIEW_CONNECTING"] == "1" {
                 model.session.reviewConnecting(

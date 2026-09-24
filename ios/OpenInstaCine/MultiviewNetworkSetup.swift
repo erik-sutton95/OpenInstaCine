@@ -132,6 +132,7 @@ struct MultiviewNetworkSetup: View {
             Text(session.ssid)
             Text("Cameras are using this network. Remove them before changing it.").font(.footnote)
             Button("Done", action: complete).buttonStyle(.borderedProminent).controlSize(.large)
+                .foregroundStyle(LiveDesign.onAccent)
         } else if session.usePhoneHotspot {
             Label {
                 Text(
@@ -153,6 +154,7 @@ struct MultiviewNetworkSetup: View {
             .textFieldStyle(.roundedBorder).textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             Button("Continue") { askPassword() }.buttonStyle(.borderedProminent).controlSize(.large)
+                .foregroundStyle(LiveDesign.onAccent)
                 .disabled(session.ssid.isEmpty || session.configuringNetwork)
         } else {
             VStack(spacing: 0) {

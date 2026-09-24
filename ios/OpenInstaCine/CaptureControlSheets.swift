@@ -1241,7 +1241,7 @@ enum CaptureLists {
 
     static let nativeIsoHopTitle = "Auto Native ISO"
     static let nativeIsoHopHelp =
-        "On: switching D-Log ↔ D-Log2 hops ISO to that curve's starred native if you were still on native. Off: keep the ISO you set."
+        "On: switching color mode hops ISO to that curve's starred native if you were still on native. Off: keep the ISO you set."
 
     static let kelvinValues = Array(stride(from: 2_000, through: 10_000, by: 100))
     static let kelvinLabels = kelvinValues.map { "\($0)K" }

@@ -986,7 +986,7 @@ struct SettingsLiveTile: View {
         let name =
             model.session.connectedCamera?.name
             ?? model.savedCameras.first?.displayName
-            ?? "Pocket"
+            ?? "Luna"
         let transport = isLinked ? "BLE + Wi-Fi" : "—"
         return "\(name) · \(transport) · \(displayedFPS) FPS"
     }

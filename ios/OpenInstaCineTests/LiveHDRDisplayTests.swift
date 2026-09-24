@@ -63,7 +63,7 @@ final class LiveHDRDisplayTests: XCTestCase {
     }
 
     func testHelpCopyDisambiguatesCameraHDR() {
-        XCTAssertTrue(SettingsHelpCopy.hdrDisplay.contains("HDR/HLG"))
+        XCTAssertTrue(SettingsHelpCopy.hdrDisplay.contains("Dolby Vision color mode"))
         XCTAssertTrue(SettingsHelpCopy.hdrDisplay.contains("Off by default"))
         XCTAssertTrue(SettingsHelpCopy.hdrDisplay.contains("decoded camera signal"))
         XCTAssertTrue(SettingsHelpCopy.hdrDisplay.contains("Screen recording"))

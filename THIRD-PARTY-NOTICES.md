@@ -101,10 +101,11 @@ SOFTWARE.
 
 ## Official DJI Rec.709 cubes
 
-The inherited Apple resource set includes DJI D-Log / D-Log2 / D-Log M → Rec.709 cubes under
-`Shared/Apple/MonitorUI/Resources/`. They remain compatibility assets from the OpenPocketCine
-baseline. This preserves the original DJI attribution and does not present them as Insta360
-profiles. Luna preview uses Rec.709; no official DJI profile is its default.
+The inherited Android asset set includes DJI D-Log / D-Log2 / D-Log M → Rec.709 cubes under
+`Apps/Android/monitor/src/main/assets/luts/`. They remain compatibility assets from the
+OpenPocketCine baseline and keep their original DJI attribution. The iOS app no longer bundles
+them; its only camera look is the Insta360 Luna I-Log cube described below. No DJI profile is
+presented as an Insta360 profile.
 
 ## Luna protocol references
 

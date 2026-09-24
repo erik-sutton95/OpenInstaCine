@@ -111,16 +111,16 @@ enum MediaDeliveryChrome {
 
 enum MediaDeliveryCopy {
     static let bakeLUT = "Bake LUT"
-    static let bakeLUTHelpUnavailable = "No LUT selected — pick one in view assists."
+    static let bakeLUTHelpUnavailable = "No LUT selected. Pick one in view assists."
     static let bakeExposure = "Bake exposure"
     static let bakeExposureHelp =
         "Write the LUT exposure pull into the file so it matches the monitor. Off bakes the cube at 0.0."
     static let convertLog = "Convert log"
     static let convertLogHelp =
-        "Choose one output curve for every selected D-Log or D-Log2 clip. Camera originals stay untouched."
+        "Choose one output curve for every selected I-Log clip. Camera originals stay untouched."
     static let convertLogDestination = "Output curve"
     static let convertLogHelpUnavailable =
-        "Needs a D-Log or D-Log2 clip — Rec.709 stays as-shot."
+        "Needs an I-Log clip. Standard stays as-shot."
 
     static func bakeLUTHelp(statusLabel: String) -> String {
         "Apply \(statusLabel) to exports."
@@ -155,7 +155,7 @@ enum MediaDeliveryError: LocalizedError {
         switch self {
         case .clipNotCached(let name): "\(name) isn't fully cached yet."
         case .noLUTSelected: "Turn on a LUT before baking one into the file."
-        case .convertLogNotLog(let name): "\(name) isn't D-Log or D-Log2."
+        case .convertLogNotLog(let name): "\(name) isn't I-Log."
         case .photosDenied: "Photos access is required to save the clip."
         case .emptySelection: "Select at least one clip."
         }

@@ -804,7 +804,7 @@ struct LiveGimbalWaypointMarks: View {
                     ) { mark in
                         Text(mark.slot.letter)
                             .font(LiveType.ui(size: 13, weight: .bold, design: .rounded))
-                            .foregroundStyle(LiveDesign.text)
+                            .foregroundStyle(LiveDesign.onAccent)
                             .frame(width: 26, height: 26)
                             .background(
                                 LiveDesign.accent.opacity(mark.onScreen ? 0.92 : 0.45), in: Circle()

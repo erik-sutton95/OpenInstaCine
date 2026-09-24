@@ -62,24 +62,24 @@ final class LUTAssistTests: XCTestCase {
 
     func testAutoLUTFollowsPersistedLiveColorWhenOffline() {
         let live = LiveAssistState()
-        live.syncLUT(to: .dLog2)
-        XCTAssertEqual(OperatorPrefs.lastMonitorColorMode, .dLog2)
+        live.syncLUT(to: .iLog)
+        XCTAssertEqual(OperatorPrefs.lastMonitorColorMode, .iLog)
 
         let offline = LiveAssistState()
-        XCTAssertEqual(offline.monitorColorMode, .dLog2)
-        XCTAssertEqual(offline.resolvedSource(), .dji(.pocketDLog2))
+        XCTAssertEqual(offline.monitorColorMode, .iLog)
+        XCTAssertEqual(offline.resolvedSource(), .lunaILog)
         offline.togglePlayback(.lut)
         XCTAssertGreaterThanOrEqual(offline.playbackEffects.lutDimension, 2)
         XCTAssertTrue(offline.playbackEffects.needsGPUFeed)
     }
 
     func testPlaybackAutoDoesNotDropLogWhenLiveReportsRec709() {
-        XCTAssertEqual(PlaybackLUTColor.resolve(live: .normal, last: .dLog2), .dLog2)
-        let color = PlaybackLUTColor.resolve(live: .normal, last: .dLog2)
+        XCTAssertEqual(PlaybackLUTColor.resolve(live: .normal, last: .iLog), .iLog)
+        let color = PlaybackLUTColor.resolve(live: .normal, last: .iLog)
         let assist = LiveAssistState()
         assist.syncLUT(to: color)
         assist.togglePlayback(.lut)
-        XCTAssertEqual(assist.resolvedSource(), .dji(.pocketDLog2))
+        XCTAssertEqual(assist.resolvedSource(), .lunaILog)
         XCTAssertGreaterThanOrEqual(assist.playbackEffects.lutDimension, 2)
     }
 
@@ -194,9 +194,9 @@ final class LUTAssistTests: XCTestCase {
 
     func testLUTExposureNudgeSnapsAndRebuildsTheCube() {
         let assist = LiveAssistState()
-        assist.syncLUT(to: .dLog2)
-        guard BundledOfficialDJILUT.cube(.pocketDLog2) != nil else {
-            XCTFail("official D-Log2 cube must load from the app bundle")
+        assist.syncLUT(to: .iLog)
+        guard BundledLunaLUT.iLogToRec709 != nil else {
+            XCTFail("official Luna I-Log cube must load from the app bundle")
             return
         }
         let nominal = assist.effects.lutRGBA
@@ -218,9 +218,9 @@ final class LUTAssistTests: XCTestCase {
 
     func testExportCubeBakesExposureOnlyWhenAsked() {
         let assist = LiveAssistState()
-        assist.syncLUT(to: .dLog2)
-        guard BundledOfficialDJILUT.cube(.pocketDLog2) != nil else {
-            XCTFail("official D-Log2 cube must load from the app bundle")
+        assist.syncLUT(to: .iLog)
+        guard BundledLunaLUT.iLogToRec709 != nil else {
+            XCTFail("official Luna I-Log cube must load from the app bundle")
             return
         }
         assist.nudgeLUTExposure(-1)
@@ -342,35 +342,29 @@ final class LUTAssistTests: XCTestCase {
     }
 
     func testOfficialCubesParseAsSize33() throws {
-        for lut in OfficialPocketLUT.allCases {
-            let url = officialCubeURL(lut.fileName)
-            let text = try String(contentsOf: url, encoding: .utf8)
-            let cube = try CubeLUT.parse(text)
-            XCTAssertEqual(cube.size, 33, lut.fileName)
-            XCTAssertEqual(cube.rgb.count, 33 * 33 * 33 * 3, lut.fileName)
-        }
+        XCTAssertNotNil(
+            Bundle.main.url(forResource: BundledLunaLUT.resourceName, withExtension: "cube"),
+            "the Luna I-Log cube must ship in the app bundle")
+        let cube = try lunaCube()
+        XCTAssertEqual(cube.size, 33)
+        XCTAssertEqual(cube.rgb.count, 33 * 33 * 33 * 3)
+        XCTAssertNotNil(BundledLunaLUT.iLogToRec709)
         for lut in OfficialDJILUT.allCases {
-            XCTAssertNotNil(
+            XCTAssertNil(
                 Bundle.main.url(forResource: lut.resourceName, withExtension: "cube"),
-                "\(lut.fileName) must ship in the app bundle")
-            let url = officialCubeURL(lut.fileName)
-            let text = try String(contentsOf: url, encoding: .utf8)
-            let cube = try CubeLUT.parse(text)
-            XCTAssertEqual(cube.size, 33, lut.fileName)
-            XCTAssertEqual(cube.rgb.count, 33 * 33 * 33 * 3, lut.fileName)
-            XCTAssertNotNil(BundledOfficialDJILUT.cube(lut), lut.fileName)
+                "\(lut.fileName) must not ship in the Luna app")
         }
     }
 
-    func testArmedDJIAutoDLog2BindsOfficialCube() {
+    func testArmedExplicitAutoILogBindsOfficialCube() {
         let assist = LiveAssistState()
         assist.selectLUT(.djiAuto)
-        assist.syncLUT(to: .dLog2, family: .pocket, cameraName: "Osmo Pocket 4 Pro")
+        assist.syncLUT(to: .iLog, family: .pocket, cameraName: "Luna Ultra")
         XCTAssertEqual(assist.lutSelection, .djiAuto)
-        XCTAssertEqual(assist.resolvedSource(), .dji(.pocketDLog2))
-        XCTAssertEqual(assist.lutStatusLabel, "Auto · D-Log2 → Rec.709")
-        guard BundledOfficialDJILUT.cube(.pocketDLog2) != nil else {
-            XCTFail("official DJI D-Log2 cube must load from the app bundle")
+        XCTAssertEqual(assist.resolvedSource(), .lunaILog)
+        XCTAssertEqual(assist.lutStatusLabel, "Auto · I-Log → Rec.709")
+        guard BundledLunaLUT.iLogToRec709 != nil else {
+            XCTFail("official Luna I-Log cube must load from the app bundle")
             return
         }
         XCTAssertEqual(assist.effects.lutDimension, 33)
@@ -378,26 +372,27 @@ final class LUTAssistTests: XCTestCase {
         XCTAssertTrue(assist.effects.needsGPUFeed)
     }
 
-    func testOfficialDLog2CubeMovesMidGrey() throws {
-        let cube = try officialCube(.dLog2ToRec709)
-        let g = Float(MonitorTransfer.dlog2.middleGrayEncoded)
+    func testOfficialILogCubeMovesMidGrey() throws {
+        let cube = try lunaCube()
+        let g = Float(MonitorTransfer.ilog.middleGrayEncoded)
         let out = cube.map(red: g, green: g, blue: g)
-        XCTAssertGreaterThan(abs(out.red - g), 0.01, "18% D-Log2 must not be identity")
+        XCTAssertGreaterThan(abs(out.red - g), 0.01, "18% I-Log must not be identity")
         XCTAssertGreaterThan(abs(out.green - g), 0.01)
         XCTAssertGreaterThan(abs(out.blue - g), 0.01)
-        let black = cube.map(red: 0.0626, green: 0.0626, blue: 0.0626)
+        let b = Float(MonitorTransfer.ilog.encodeLinear(0))
+        let black = cube.map(red: b, green: b, blue: b)
         XCTAssertLessThan(black.red, 0.04, "log black must become a real Rec.709 black")
     }
 
-    func testArmedAutoDLog2BindsOfficialCube() {
+    func testArmedAutoILogBindsOfficialCube() {
         let assist = LiveAssistState()
         XCTAssertTrue(assist.lutEnabled)
-        assist.syncLUT(to: .dLog2)
+        assist.syncLUT(to: .iLog)
         XCTAssertEqual(assist.lutSelection, .djiAuto)
-        XCTAssertEqual(assist.resolvedSource(), .dji(.pocketDLog2))
-        XCTAssertEqual(assist.lutStatusLabel, "Auto · D-Log2 → Rec.709")
-        guard BundledOfficialDJILUT.cube(.pocketDLog2) != nil else {
-            XCTFail("official D-Log2 cube must load from the app bundle")
+        XCTAssertEqual(assist.resolvedSource(), .lunaILog)
+        XCTAssertEqual(assist.lutStatusLabel, "Auto · I-Log → Rec.709")
+        guard BundledLunaLUT.iLogToRec709 != nil else {
+            XCTFail("official Luna I-Log cube must load from the app bundle")
             return
         }
         XCTAssertEqual(assist.effects.lutDimension, 33)
@@ -518,25 +513,25 @@ final class LUTAssistTests: XCTestCase {
 
     func testPhotoDoesNotMutateSavedLUTPrefs() {
         let assist = LiveAssistState()
-        assist.selectLUT(.djiDLog)
-        assist.syncLUT(to: .dLog2)
+        assist.selectLUT(.lunaILog)
+        assist.syncLUT(to: .iLog)
         XCTAssertTrue(assist.lutEnabled)
-        assist.syncLUT(to: .dLog2, isPhoto: true)
-        XCTAssertEqual(assist.lutSelection, .djiDLog)
+        assist.syncLUT(to: .iLog, isPhoto: true)
+        XCTAssertEqual(assist.lutSelection, .lunaILog)
         XCTAssertTrue(assist.lutEnabled)
-        XCTAssertEqual(OperatorPrefs.lutSelection, .djiDLog)
+        XCTAssertEqual(OperatorPrefs.lutSelection, .lunaILog)
         let restored = LiveAssistState()
-        XCTAssertEqual(restored.lutSelection, .djiDLog)
+        XCTAssertEqual(restored.lutSelection, .lunaILog)
         XCTAssertTrue(restored.lutEnabled)
-        XCTAssertEqual(OperatorPrefs.lastMonitorColorMode, .dLog2)
+        XCTAssertEqual(OperatorPrefs.lastMonitorColorMode, .iLog)
     }
 
-    func testOfficialDLog2BakeKeepsRec709Codes() throws {
+    func testOfficialILogBakeKeepsRec709Codes() throws {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw XCTSkip("Metal required")
         }
-        let cube = try officialCube(.dLog2ToRec709)
-        let g = Float(MonitorTransfer.dlog2.middleGrayEncoded)
+        let cube = try lunaCube()
+        let g = Float(MonitorTransfer.ilog.middleGrayEncoded)
         let expected = cube.map(red: g, green: g, blue: g)
         let code = UInt8(clamping: Int((Double(g) * 255).rounded()))
         let source = Self.solidImage(code: code)
@@ -592,8 +587,11 @@ final class LUTAssistTests: XCTestCase {
         return url
     }
 
-    private func officialCube(_ lut: OfficialPocketLUT) throws -> CubeLUT {
-        try CubeLUT.parse(String(contentsOf: officialCubeURL(lut.fileName), encoding: .utf8))
+    private func lunaCube() throws -> CubeLUT {
+        try CubeLUT.parse(
+            String(
+                contentsOf: officialCubeURL(BundledLunaLUT.resourceName + ".cube"),
+                encoding: .utf8))
     }
 
     private func officialCubeURL(_ fileName: String) -> URL {

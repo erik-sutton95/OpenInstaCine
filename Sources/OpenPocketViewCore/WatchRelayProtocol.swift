@@ -32,7 +32,7 @@ public enum WatchConnectionState: String, Codable, Equatable, Sendable {
 
 /// Operator-facing watch copy. No sister-app names, no opcodes.
 public enum WatchRelayCopy: Sendable {
-    public static let openOnIPhone = "Open OpenPocketCine on iPhone"
+    public static let openOnIPhone = "Open the app on iPhone"
     public static let noCamera = "No camera connected"
     public static let waitingLive = "Waiting for live view"
     public static let connectFirst = "Connect the camera first."

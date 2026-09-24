@@ -17,11 +17,11 @@ enum LiveMonitorColorScience {
 }
 
 extension LUTSelection {
-    /// DJI / official log conversions and log-specific custom slots. Not Creative or generic Custom.
+    /// Manufacturer / official log conversions and log-specific custom slots. Not Creative or generic Custom.
     var appliesTechnicalLogConversion: Bool {
         switch self {
         case .auto, .djiAuto, .officialDLog, .officialDLog2, .djiDLog, .djiDLog2, .djiDLogM,
-            .customDLog, .customDLog2:
+            .lunaILog, .customDLog, .customDLog2:
             true
         default:
             false
@@ -29,7 +29,8 @@ extension LUTSelection {
     }
 
     static func djiCatalog(isPhotoLive: Bool) -> [LUTSelection] {
-        isPhotoLive ? [.djiAuto] : djiCases
+        // Luna ships one official cube; the DJI cubes are not bundled in this app.
+        isPhotoLive ? [.djiAuto] : [.djiAuto, .lunaILog]
     }
 }
 

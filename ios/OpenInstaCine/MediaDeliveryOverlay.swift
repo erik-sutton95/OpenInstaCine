@@ -259,7 +259,7 @@ enum MediaDeliveryRunner {
                     message: request.configuration.convertLog
                         ? MediaDeliveryError.convertLogNotLog(ready[0].filename)
                             .errorDescription
-                            ?? "None of the clips are D-Log or D-Log2."
+                            ?? "None of the clips are I-Log."
                         : MediaDeliveryError.emptySelection.localizedDescription)
             }
             switch request.postExportAction {
@@ -345,7 +345,7 @@ enum MediaDeliveryRunner {
                     message: skipped > 0
                         ? MediaDeliveryError.convertLogNotLog(ready[0].filename)
                             .errorDescription
-                            ?? "None of the clips are D-Log or D-Log2."
+                            ?? "None of the clips are I-Log."
                         : (parts.isEmpty ? "Nothing to upload." : parts.joined(separator: ", ")))
             }
             return .frameio(summary: parts.joined(separator: ", "))

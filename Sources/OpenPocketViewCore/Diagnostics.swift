@@ -240,7 +240,7 @@ public enum DiagnosticReport: Sendable {
         recent: [String]
     ) -> String {
         var lines = [
-            "OpenPocketCine diagnostics (no name, no location)",
+            "Field monitor diagnostics (no name, no location)",
             "app \(environment.appVersion) (\(environment.appBuild)) \(environment.osName) \(environment.osVersion) \(environment.deviceModel)",
             "camera \(environment.cameraModel) family=\(environment.cameraFamily) phase=\(environment.phase) vpn=\(environment.vpnActive ? "on" : "off")",
         ]
@@ -262,7 +262,7 @@ public enum DiagnosticReport: Sendable {
         var sections: [String] = []
         sections.append(
             """
-            OpenPocketCine diagnostic report
+            Field monitor diagnostic report
             Privacy: no personal name, email, location, device name, or Wi-Fi password.
             Generated for a tester to paste or share. Not uploaded.
 
@@ -421,7 +421,7 @@ public enum DiagnosticReport: Sendable {
         stamp.timeZone = TimeZone(secondsFromGMT: 0)
         stamp.formatOptions = [.withInternetDateTime]
         var lines = [
-            "OpenPocketCine diagnostic report",
+            "Field monitor diagnostic report",
             "Privacy: no personal name, email, location, device name, or Wi-Fi password.",
             "Generated: \(stamp.string(from: Date()))",
             "Prepared for explicit manual submission.",

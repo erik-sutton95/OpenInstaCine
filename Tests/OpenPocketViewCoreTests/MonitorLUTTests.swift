@@ -91,6 +91,23 @@ import Testing
                 == .dji(.pocketDLog2))
     }
 
+    @Test func autoAppliesLunaCubeForILog() {
+        for selection in [LUTSelection.auto, .djiAuto, .lunaILog] {
+            #expect(
+                LUTResolver.resolve(
+                    selection: selection, colorMode: .iLog, hasCustomDLog: false,
+                    hasCustomDLog2: false) == .lunaILog)
+        }
+        #expect(
+            LUTResolver.resolve(
+                selection: .djiAuto, colorMode: .normal, hasCustomDLog: false,
+                hasCustomDLog2: false) == .off)
+        #expect(LUTSelection.lunaILog.title == "I-Log → Rec.709")
+        #expect(LUTSelection.lunaILog.isDJI)
+        #expect(
+            LUTResolver.autoCaption(source: .lunaILog) == "Applying official I-Log → Rec.709")
+    }
+
     @Test func playbackAutoKeepsLastLogWhenTheFileAndLiveSayRec709() {
         #expect(PlaybackLUTColor.resolve(live: .normal, last: .dLog2) == .dLog2)
         #expect(PlaybackLUTColor.resolve(live: .hdr, last: .dLog) == .dLog)

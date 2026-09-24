@@ -230,9 +230,8 @@ enum PocketScopeSampler {
     static func monitorCube(for transfer: MonitorTransfer, effects: LiveImageEffects) -> CubeLUT? {
         if let armed = ScopeMonitorLook.cube(from: effects) { return armed }
         switch transfer {
-        case .dlog: return BundledOfficialDJILUT.cube(.pocketDLog)
-        case .dlog2: return BundledOfficialDJILUT.cube(.pocketDLog2)
-        case .rec709, .hdr, .dlogm, .ilog: return nil
+        case .ilog: return BundledLunaLUT.iLogToRec709
+        case .rec709, .hdr, .dlog, .dlog2, .dlogm: return nil
         }
     }
 

@@ -3,13 +3,13 @@ import OpenPocketViewCore
 import SwiftUI
 import UIKit
 
-/// Operator Setup rail tabs — Pocket subset of OpenZCine `OperatorSettingsTab`.
+/// Operator Setup rail tabs: Luna subset of OpenZCine `OperatorSettingsTab`.
 /// Operator-facing Settings help. Never name a sister app or another camera brand.
 enum SettingsHelpCopy {
     static let currentTransport =
-        "Pocket uses Bluetooth to pair, then the camera's own Wi-Fi for HEVC. USB-C, hotspot, and HDMI capture are not in this build."
+        "Luna uses Bluetooth to pair, then the camera's own 5 GHz Wi-Fi for HEVC. USB-C, hotspot, and HDMI capture are not in this build."
     static let stream =
-        "The Pocket sends HEVC over the camera access point. Stream quality presets are not on this body."
+        "The Luna sends 720p HEVC over the camera access point. Stream quality presets are not on this body."
     static let shareFeed =
         "Watching devices join this camera’s Wi-Fi, then receive the shared picture from this phone."
     static let editView =
@@ -49,9 +49,9 @@ enum SettingsHelpCopy {
     static let keepScreenAwake =
         "Prevents auto-lock while OpenInstaCine is open. A monitor should stay lit. iOS may still dim when the device overheats."
     static let hdrDisplay =
-        "Outdoor panel brightness, not a grade. WAVE, HISTO, PARADE, VECTOR, zebras and false color still read the decoded camera signal — judge exposure there, not from how bright the picture looks. Screen recording and AirPlay drop back to a normal SDR picture so the file is not HDR-boosted. This is not the camera's HDR/HLG color mode. Off by default."
+        "Outdoor panel brightness, not a grade. WAVE, HISTO, PARADE, VECTOR, zebras and false color still read the decoded camera signal, so judge exposure there, not from how bright the picture looks. Screen recording and AirPlay drop back to a normal SDR picture so the file is not HDR-boosted. This is not the camera's Dolby Vision color mode. Off by default."
     static let themeHelp =
-        "Charcoal field-monitor chrome with Sky Blue accents, tuned for low reflection on set."
+        "Charcoal field-monitor chrome with yellow accents, tuned for low reflection on set."
     static let sourceHelp =
         "View the OpenInstaCine project on GitHub. Opening this may leave the camera Wi-Fi if that is the only network."
     static let linkHealth =
@@ -1083,14 +1083,14 @@ struct SettingsRootView: View {
                 help: SettingsHelpCopy.themeHelp,
                 showTopDivider: false
             ) {
-                SettingsValueText(value: "DJI Black")
+                SettingsValueText(value: "Charcoal")
             }
             SettingsInlineRow(
                 title: "Protocol Implementation",
                 help:
-                    "Camera control speaks DUML over Bluetooth and the camera's Wi-Fi. No DJI SDK is bundled or required."
+                    "Camera control speaks Insta360's protocol over Bluetooth and the camera's Wi-Fi. No Insta360 SDK is bundled or required."
             ) {
-                SettingsValueText(value: "DUML / BLE + Wi-Fi")
+                SettingsValueText(value: "Insta360 / BLE + Wi-Fi")
             }
             SettingsInlineRow(
                 title: "App Version",

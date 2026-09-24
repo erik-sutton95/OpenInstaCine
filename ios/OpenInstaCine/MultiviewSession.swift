@@ -73,15 +73,16 @@ final class MultiviewSession {
             }
             var next = LiveImageEffects()
             next.colorMode = settings.colorMode ?? .normal
-            let lut = OfficialDJILUT.auto(
+            let lut = LUTResolver.builtInAutoSource(
                 colorMode: settings.colorMode,
                 family: camera?.model.family ?? .pocket, cameraName: camera?.model.name)
             lutCaption =
                 settings.colorMode == nil
                 ? "Waiting for camera color" : "Auto · no conversion needed"
-            if let lut {
+            if lut != .off {
                 lutCaption = "Auto · " + lut.title
-                if lutEnabled, let cube = BundledOfficialDJILUT.cube(lut) {
+                // Only the Luna I-Log cube ships in this app.
+                if lutEnabled, lut == .lunaILog, let cube = BundledLunaLUT.iLogToRec709 {
                     let gpu = cube.colorCube
                     next.lutDimension = gpu.size
                     next.lutRGBA = gpu.rgbaComponents.withUnsafeBytes { Data($0) }
@@ -802,7 +803,7 @@ final class MultiviewSession {
                     ]
                 else {
                     throw ProvisioningFailure.message(
-                        "The Nano did not confirm its Wi-Fi wake. Keep it powered on and try again."
+                        "The camera did not confirm its Wi-Fi wake. Keep it powered on and try again."
                     )
                 }
                 try await Task.sleep(for: .seconds(1))

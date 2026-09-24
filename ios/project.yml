@@ -96,6 +96,7 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: OpenInstaCine
         INFOPLIST_KEY_CFBundleName: OpenInstaCine
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_UIFileSharingEnabled: YES
         INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
@@ -139,6 +140,8 @@ targets:
       - target: OpenInstaCine
       - package: OpenPocketViewCore
         product: OpenPocketViewCore
+      - package: Insta360Protocol
+        product: Insta360Protocol
     settings:
       base:
         SWIFT_VERSION: "5.0"
@@ -172,6 +175,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: OpenInstaCineWatch/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SDKROOT: watchos
         WATCHOS_DEPLOYMENT_TARGET: "10.0"
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"

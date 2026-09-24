@@ -88,7 +88,7 @@ struct LegalDocumentView: View {
             switch self {
             case .privacy:
                 """
-                OpenInstaCine talks to your Osmo Pocket over Bluetooth and the camera's own Wi-Fi. The app has no account. Automatic error reports are optional and off by default.
+                OpenInstaCine talks to your Insta360 Luna over Bluetooth and the camera's own Wi-Fi. The app has no account. Automatic error reports are optional and off by default.
 
                 OpenCapture is the data controller. Privacy or deletion requests: support@openinstacine.app.
 
@@ -105,7 +105,7 @@ struct LegalDocumentView: View {
                 • Imported .cube files you choose to open.
 
                 What never leaves the phone
-                • Live HEVC, DUML telemetry, and pairing traffic stay on the local link. We do not operate a cloud.
+                • Live HEVC, camera telemetry, and pairing traffic stay on the local link. We do not operate a cloud.
 
                 Third parties
                 • Apple (or Google) may process permission prompts and OS diagnostics under their own policies. TestFlight or Play betas may send crash reports to the developer under Apple or Google terms.
@@ -120,9 +120,9 @@ struct LegalDocumentView: View {
                 """
                 OpenInstaCine is free software under the Apache License 2.0. You may use, modify, and share it under that license.
 
-                This is an unofficial field monitor. It is not affiliated with, endorsed by, or supported by DJI. "DJI", "Osmo", and "Osmo Pocket" are trademarks of SZ DJI Technology Co., Ltd., used only to identify the cameras the app can talk to.
+                This is an unofficial field monitor. It is not affiliated with, endorsed by, or supported by Arashi Vision Inc. (Insta360). "Insta360" and "Luna" are trademarks of Arashi Vision Inc., used only to identify the camera the app can talk to.
 
-                Reverse-engineered protocol behavior can be incomplete or wrong. Do not rely on this app as the only way to start or stop a take — record from the camera body until those commands are proven.
+                Reverse-engineered protocol behavior can be incomplete or wrong. Do not rely on this app as the only way to start or stop a take. Record from the camera body until those commands are proven.
 
                 The software is provided on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND. See LICENSE in the repository.
 
@@ -141,9 +141,9 @@ struct LegalDocumentView: View {
 
                 HUD icons are Lucide (ISC; some glyphs also MIT from Feather). See THIRD-PARTY-NOTICES.
 
-                I learned the BLE pairing and camera Wi-Fi connection path with the help of Osmosis by Konrad Iturbe, and I'm grateful. OpenInstaCine is its own implementation. The field-monitor architecture follows OpenZCine.
+                The app shell is adapted from OpenPocketCine (Apache 2.0), whose camera pairing work credits Osmosis by Konrad Iturbe, and I'm grateful. The Luna connection path is OpenInstaCine's own implementation. The field-monitor architecture follows OpenZCine.
 
-                No DJI SDK is included or required.
+                No Insta360 SDK is included or required.
 
                 Full license text: LICENSE in the repository. Attribution: NOTICE.
                 """
@@ -156,10 +156,10 @@ struct LegalDocumentView: View {
                 The portable .cube parser (`CubeLUT`) is adapted from OpenZCine (Apache 2.0).
                 HUD icons are Lucide (ISC; Feather-derived glyphs also MIT).
 
-                This project is not affiliated with or endorsed by SZ DJI Technology Co., Ltd.
-                "DJI", "Osmo", "Osmo Pocket", and "Mimo" are trademarks of SZ DJI Technology Co., Ltd.,
-                used for identification only.
-                No DJI SDK or proprietary DJI documentation is included in, distributed with, or required
+                This project is not affiliated with, endorsed by, or supported by Arashi Vision Inc. (Insta360).
+                "Insta360" and "Luna" are trademarks of Arashi Vision Inc.,
+                used only to identify the camera.
+                No Insta360 SDK or proprietary Insta360 documentation is included in, distributed with, or required
                 by this project.
                 """
             }

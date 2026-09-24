@@ -87,7 +87,7 @@ struct BrandBackdrop: View {
 
             RadialGradient(
                 colors: [
-                    Color(red: 45 / 255, green: 111 / 255, blue: 160 / 255).opacity(0.28),
+                    Color(red: 120 / 255, green: 102 / 255, blue: 70 / 255).opacity(0.28),
                     .clear,
                 ],
                 center: .topLeading,

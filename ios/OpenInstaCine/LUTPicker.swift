@@ -3,12 +3,12 @@ import OpenPocketViewCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// DJI / Creative / Custom. 50/50 is pinned on the long-press footer so
+/// Insta360 / Creative / Custom. 50/50 is pinned on the long-press footer so
 /// landscape never hides it under the catalog; the sheet keeps it inline.
 /// `embedded` is the assist-tray form; the sheet wraps the same body.
 struct LUTPicker: View {
     private enum Category: String, CaseIterable {
-        case dji = "DJI"
+        case dji = "Insta360"
         case creative = "Creative"
         case custom = "Custom"
     }
@@ -212,9 +212,9 @@ struct LUTPicker: View {
             return LUTResolver.autoCaption(source: assist.resolvedSource())
         }
         if assist.lutSelection.isDJI {
-            return "Official DJI Rec.709 cube"
+            return "Official Insta360 Rec.709 cube"
         }
-        return "Official DJI looks for this color / camera"
+        return "Official Insta360 looks for this color / camera"
     }
 
     private var creativeCaption: String {
@@ -239,7 +239,7 @@ struct LUTPicker: View {
             }
             .buttonStyle(.zcTapTarget)
             if imported.isEmpty {
-                Text("Imported looks land here. Auto stays on Built-in or DJI.")
+                Text("Imported looks land here. Auto stays on Insta360.")
                     .font(LiveType.ui(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(LiveDesign.muted)
                     .multilineTextAlignment(.center)

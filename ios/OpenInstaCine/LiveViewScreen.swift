@@ -123,7 +123,7 @@ struct LiveViewScreen: View {
                 }
             )
             #if targetEnvironment(simulator)
-                if !MonitorUIReview.isActive { model.session.status.colorMode = .dLog2 }
+                if !MonitorUIReview.isActive { model.session.status.colorMode = .iLog }
             #endif
             model.syncLiveMonitorColor()
             model.session.decoder.startSimulatorSampleIfNeeded()

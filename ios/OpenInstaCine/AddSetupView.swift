@@ -559,7 +559,7 @@ struct AddSetupView: View {
                 landscape ? nil : "Lets the camera join without a prompt.")
             numbered(
                 2, "Maximize Compatibility",
-                landscape ? nil : "Uses 2.4 GHz, which every Osmo camera supports.")
+                landscape ? nil : "Keeps 2.4 GHz on for devices that need it.")
             Button {
                 if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
             } label: {

@@ -2,9 +2,9 @@ import Foundation
 import OpenPocketViewCore
 import SwiftUI
 
-/// LUT long-press body: DJI / Creative / Custom, then exposure and 50/50.
+/// LUT long-press body: Insta360 / Creative / Custom, then exposure and 50/50.
 ///
-/// DJI Auto follows color with the official Rec.709 cubes. Creative is Mono /
+/// Auto follows color with the official Insta360 I-Log to Rec.709 cube. Creative is Mono /
 /// Contrast / Warm / Cool. Custom is imported `.cube` files. The assist-bar
 /// chip is off. Exposure is input-referred stops before the cube (ETTR pull).
 enum LUTAssist {
@@ -87,6 +87,25 @@ enum BundledOfficialDJILUT {
             return url
         }
         return Bundle.main.url(forResource: id.fileName, withExtension: nil)
+    }
+}
+
+/// Official Insta360 Luna I-Log to Rec.709 cube from the app bundle. Parsed once.
+enum BundledLunaLUT {
+    static let resourceName = "Luna_I-Log_to_Rec709_BT1886_s33_v2"
+    private static let lock = NSLock()
+    private static var cache: CubeLUT?
+
+    static var iLogToRec709: CubeLUT? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cache { return cache }
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "cube"),
+            let text = try? String(contentsOf: url, encoding: .utf8),
+            let parsed = try? CubeLUT.parse(text)
+        else { return nil }
+        cache = parsed
+        return parsed
     }
 }
 

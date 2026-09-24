@@ -591,6 +591,8 @@ final class LiveAssistState {
             return BundledPocketLUT.cube(id)
         case .dji(let id):
             return BundledOfficialDJILUT.cube(id)
+        case .lunaILog:
+            return BundledLunaLUT.iLogToRec709
         case .creative(let look):
             return look.cube()
         case .custom(let slot):
@@ -1110,7 +1112,11 @@ enum OperatorPrefs {
             snap.apply(to: state)
         }
         migrateLegacyLUTIfNeeded(into: state)
-        let migrated = lutSelection.migratedToDJICatalog
+        var migrated = lutSelection.migratedToDJICatalog
+        // This app bundles no DJI cubes: a stale locked DJI pick falls back to Auto.
+        if migrated.isDJI, !LUTSelection.djiCatalog(isPhotoLive: false).contains(migrated) {
+            migrated = .djiAuto
+        }
         if migrated != lutSelection { lutSelection = migrated }
         state.lutSelection = migrated
     }

@@ -105,10 +105,10 @@ final class PlaybackAssistTests: XCTestCase {
 
     func testPlaybackLUTReplacesIdentityOnceACubeIsArmed() {
         let assist = LiveAssistState()
-        assist.syncLUT(to: .dLog2)
+        assist.syncLUT(to: .iLog)
         assist.togglePlayback(.lut)
-        guard BundledOfficialDJILUT.cube(.pocketDLog2) != nil else {
-            XCTFail("official D-Log2 cube must load from the app bundle")
+        guard BundledLunaLUT.iLogToRec709 != nil else {
+            XCTFail("official Luna I-Log cube must load from the app bundle")
             return
         }
         XCTAssertGreaterThanOrEqual(assist.playbackEffects.lutDimension, 2)

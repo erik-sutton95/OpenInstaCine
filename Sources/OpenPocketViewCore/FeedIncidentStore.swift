@@ -159,7 +159,7 @@ public enum FeedIncidentExport: Sendable {
 
     public static func text(from bundles: [FeedIncidentBundle]) -> String {
         var lines = [
-            "OpenPocketCine feed incidents (typed snapshots, no journal)",
+            "Field monitor feed incidents (typed snapshots, no journal)",
             "count=\(bundles.count) schema=\(FeedIncidentSchema.version)",
         ]
         for bundle in bundles {

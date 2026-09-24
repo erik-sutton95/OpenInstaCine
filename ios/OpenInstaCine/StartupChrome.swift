@@ -34,6 +34,8 @@ enum LiveDesign {
     static var faint: Color { LiveHDRDisplay.chromeColor(hex: 0x5E6262) }
     static var accent: Color { LiveHDRDisplay.chromeColor(hex: MonitorTheme.accentRGB) }
     static let accentDim = MonitorTheme.accent.opacity(0.16)
+    /// Ink for text/icons on a solid accent fill (dark on the light Luna yellow).
+    static var onAccent: Color { MonitorTheme.onAccent }
     static var amber: Color { LiveHDRDisplay.chromeColor(red: 0.914, green: 0.674, blue: 0.208) }
     static var good: Color { LiveHDRDisplay.chromeColor(red: 0.18, green: 0.78, blue: 0.42) }
     static var rec: Color { LiveHDRDisplay.chromeColor(hex: 0xD13034) }
@@ -387,7 +389,7 @@ struct StartupIndeterminateBar: View {
 
 struct StartupEmptyDiscoveryCard: View {
     var title: String = "Looking for cameras"
-    var hint: String = "Turn the camera on — Pocket and Nano both appear over Bluetooth."
+    var hint: String = "Turn the camera on. Luna appears over Bluetooth."
     var compact: Bool = false
 
     var body: some View {

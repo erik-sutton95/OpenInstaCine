@@ -209,7 +209,7 @@ enum WiFiJoiner {
         let extras = configured.filter { $0 != keep && CameraSoftAP.isOsmoSoftAPSSID($0) }
         if !extras.isEmpty {
             journal(
-                "wifi: removing other Osmo SoftAPs \(extras.joined(separator: ","))"
+                "wifi: removing other camera SoftAPs \(extras.joined(separator: ","))"
             )
             leave(ssids: extras)
         }

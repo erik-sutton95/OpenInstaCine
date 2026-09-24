@@ -214,7 +214,8 @@ struct ReliabilityConsentPrompt: View {
                 .foregroundStyle(.secondary)
                 Button("Reporting privacy") { showPrivacy = true }
                 Button("Enable automatic reports") { onChoice(true) }
-                    .buttonStyle(.borderedProminent).accessibilityIdentifier(
+                    .buttonStyle(.borderedProminent).foregroundStyle(LiveDesign.onAccent)
+                    .accessibilityIdentifier(
                         "reliability.consent.enable")
                 Button("Not now") { onChoice(false) }
                     .buttonStyle(.bordered).accessibilityIdentifier("reliability.consent.decline")

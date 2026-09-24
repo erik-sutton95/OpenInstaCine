@@ -216,7 +216,7 @@ extension ZebraPaint: Identifiable {
         case .white: LiveDesign.text
         case .amber: LiveDesign.amber
         case .red: LiveDesign.rec
-        case .cyan: LiveDesign.info
+        case .cyan: LiveHDRDisplay.chromeColor(red: 0, green: 0.85, blue: 0.9)
         case .green: LiveDesign.good
         }
     }

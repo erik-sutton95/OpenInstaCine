@@ -180,7 +180,7 @@ public enum WatcherRelayJoin: Sendable {
         guard hello.version == WatcherRelayProtocol.version else {
             return .failure(
                 WatcherRelayJoinDenied(
-                    reason: "This OpenPocketCine build cannot watch that feed.",
+                    reason: "This app version cannot watch that feed.",
                     passcodeRequired: false))
         }
         let need = requiredPasscode.trimmingCharacters(in: .whitespacesAndNewlines)

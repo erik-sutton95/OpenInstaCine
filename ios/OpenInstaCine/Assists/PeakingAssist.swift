@@ -44,7 +44,7 @@ enum PeakingAssist {
         var swatch: SwiftUI.Color {
             switch self {
             case .white: LiveDesign.text
-            case .blue: LiveDesign.info
+            case .blue: LiveHDRDisplay.chromeColor(red: 64.0 / 255, green: 142.0 / 255, blue: 1)
             case .red: LiveDesign.rec
             case .green: LiveDesign.good
             }

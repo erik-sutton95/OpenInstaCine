@@ -122,8 +122,8 @@
                 else { return nil }
                 return MonitorMediaItem(
                     id: file.id, filename: file.filename,
-                    metadata: "4K 25p · \(index % 3 == 0 ? "D-Log" : "Normal") · 300 MB",
-                    format: "4K 25p", color: index % 3 == 0 ? "D-Log" : "Normal", duration: "0:12",
+                    metadata: "4K 25p · \(index % 3 == 0 ? "I-Log" : "Standard") · 300 MB",
+                    format: "4K 25p", color: index % 3 == 0 ? "I-Log" : "Standard", duration: "0:12",
                     date: "2026-09-12",
                     availability: index % 3 == 0 ? .camera : index % 3 == 1 ? .proxy : .original,
                     progress: index == 3 ? 0.62 : nil, favorite: favorites.contains(file.id),
@@ -156,8 +156,8 @@
                     ZStack {
                         LinearGradient(
                             colors: [
-                                .init(red: 0.18, green: 0.23, blue: 0.27),
-                                .init(red: 0.08, green: 0.11, blue: 0.14),
+                                .init(red: 0.25, green: 0.23, blue: 0.20),
+                                .init(red: 0.12, green: 0.11, blue: 0.09),
                             ],
                             startPoint: .topLeading, endPoint: .bottomTrailing)
                         OpcIcon.mountain.frame(width: 46, height: 46)

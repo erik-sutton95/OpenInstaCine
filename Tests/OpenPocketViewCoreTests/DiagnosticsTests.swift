@@ -137,7 +137,7 @@ import Testing
             "warning feed stall gapMs=400",
         ]
         let incidents = """
-            OpenPocketCine feed incidents (typed snapshots, no journal)
+            Field monitor feed incidents (typed snapshots, no journal)
             count=1 schema=1
             id=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee kind=freshInputStaleOutput
             """
