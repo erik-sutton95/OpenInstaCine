@@ -295,7 +295,7 @@ final class MediaLibraryTests: XCTestCase {
         }
         XCTAssertEqual(
             MediaDeliveryError.convertLogNotLog(file.filename).errorDescription,
-            "DJI_20260814125250_0034_D.MP4 isn't D-Log or D-Log2.")
+            "DJI_20260814125250_0034_D.MP4 isn't I-Log.")
         let photo = MediaFile(
             path: "DCIM/DJI_001/DJI_20260814125250_0034_D.JPG",
             thumbPath: "MISC/THM/clip.scr")

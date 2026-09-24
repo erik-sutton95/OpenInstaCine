@@ -493,7 +493,7 @@ final class LUTAssistTests: XCTestCase {
         XCTAssertEqual(assist.lutSelection, .customDLog)
         XCTAssertEqual(assist.resolvedSource(), .off)
         XCTAssertEqual(LUTSelection.djiCatalog(isPhotoLive: true), [.djiAuto])
-        XCTAssertEqual(LUTSelection.djiCatalog(isPhotoLive: false), LUTSelection.djiCases)
+        XCTAssertEqual(LUTSelection.djiCatalog(isPhotoLive: false), [.djiAuto, .lunaILog])
         XCTAssertEqual(LUTAssist.photoRec709Caption, "Photo live view is Rec.709 — log conversions are off")
     }
 

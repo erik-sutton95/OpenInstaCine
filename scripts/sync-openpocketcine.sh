@@ -31,6 +31,17 @@ LUNA_OWNED=(
   LunaOfficialUITests
 )
 
+# Upstream files that only test or serve the Osmo DUML session. Deleted after every sync.
+OSMO_ONLY=(
+  OpenInstaCineTests/MediaLiveRecoveryOwnershipTests.swift
+  OpenInstaCineTests/SessionRecoveryLifecycleTests.swift
+  OpenInstaCineTests/ConnectionLifecycleRegressionTests.swift
+  OpenInstaCineTests/EVMeterAssistTests.swift
+  OpenInstaCineTests/GimbalModeSelectionTests.swift
+  OpenInstaCineTests/HandshakeBindTests.swift
+  OpenInstaCineTests/CameraDialReconciliationTests.swift
+)
+
 rename_tree() {
   local dir="$1"
   find "$dir" -depth -name "*OpenPocketCine*" | while read -r path; do
@@ -61,6 +72,7 @@ rename_tree "$STAGE/ios"
 EXCLUDES=()
 for owned in "${LUNA_OWNED[@]}"; do EXCLUDES+=(--exclude "/$owned"); done
 rsync -a --exclude .DS_Store "${EXCLUDES[@]}" "$STAGE/ios/" "$ROOT/ios/"
+for gone in "${OSMO_ONLY[@]}"; do rm -f "$ROOT/ios/$gone"; done
 
 # 3. Tools the Xcode build phases call.
 for tool in stamp-source-revision.sh build-identity.py pull-control-log.sh analyze-live-log.py; do

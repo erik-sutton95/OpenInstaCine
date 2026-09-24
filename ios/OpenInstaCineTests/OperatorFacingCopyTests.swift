@@ -105,7 +105,7 @@ final class OperatorFacingCopyTests: XCTestCase {
             "Fit feed in frame",
             "Fill frame with feed",
             "Recording options",
-            "Bluetooth reached a different camera than the one you tapped. Pocket and Nano are separate — pick the Nano or Pocket row in the list.",
+            "The Wi-Fi connection reached a different camera. Join the selected camera's network and retry.",
             "couldn't switch from other camera — tap Connect again",
             SettingsHelpCopy.frameIO,
             SettingsHelpCopy.shareThisFeed,
