@@ -477,8 +477,8 @@ final class CameraSession {
         case .discovered(let camera):
             descriptors[camera.id] = camera
             let item = FoundCamera(
-                id: camera.id, name: camera.name, model: LunaShellMapping.cameraModel,
-                modelId: nil)
+                id: camera.id, name: LunaCameraNames.title(advertised: camera.name),
+                model: LunaShellMapping.cameraModel, modelId: nil)
             if let index = found.firstIndex(where: { $0.id == item.id }) {
                 if found[index].name != item.name { found[index] = item }
             } else {

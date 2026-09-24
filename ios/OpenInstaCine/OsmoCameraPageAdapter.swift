@@ -2,8 +2,8 @@ import MonitorPresentation
 import OpenPocketViewCore
 import SwiftUI
 
-/// Maps the existing Osmo session into shared page values. No discovery timers,
-/// connection policy, or invented camera telemetry belong in this adapter.
+/// Maps the Luna session into shared page values (type name kept from the shared shell).
+/// No discovery timers, connection policy, or invented camera telemetry belong here.
 @MainActor
 enum OsmoCameraPageAdapter {
     static func paired(_ model: AppModel) -> [CameraListItem] {
@@ -18,7 +18,6 @@ enum OsmoCameraPageAdapter {
                 : model.session.setupProgress ?? model.session.phase.label
             let preferred = saved.preferredSetup
             let network = saved.ssid(for: preferred)
-            let body = CameraModel.resolve(modelId: saved.modelId, name: saved.advertisedName)
             let failure = connectFailure(model, saved: saved, busy: connecting)
             return CameraListItem(
                 id: saved.id.uuidString, name: saved.displayName,
@@ -41,9 +40,8 @@ enum OsmoCameraPageAdapter {
                                 ? model.session.connectionSetup : preferred),
                         canForget: $0.movesCamera)
                 },
-                // Every Osmo body answers the captured station sequence (#406).
-                canAddSetup: saved.setups.count < CameraConnectionSetup.allCases.count
-                    && MulticamSupport.appears(body),
+                // Luna has one path: its own camera Wi-Fi.
+                canAddSetup: false,
                 steps: connecting ? connectSteps(model, saved: saved) : [],
                 failure: failure)
         }
@@ -135,11 +133,8 @@ enum OsmoCameraPageAdapter {
     {
         CameraListItem(
             id: camera.id.uuidString,
-            name: FoundCameraIdentity.listTitle(
-                advertisedName: camera.name, modelName: camera.model.name),
-            subtitle: FoundCameraIdentity.listSubtitle(
-                advertisedName: camera.name, modelName: camera.model.name)
-                + (camera.model.verified ? "" : " · unverified"),
+            name: LunaCameraNames.title(advertised: camera.name),
+            subtitle: "Insta360 · nearby",
             badge: "NEW", status: "Needs approval on the camera", actionTitle: "Pair",
             isPrimary: selected == camera.id, isBusy: model.isBusy)
     }
@@ -160,9 +155,9 @@ enum OsmoCameraPageAdapter {
             "Find your camera", "Approve on the camera", "Join camera Wi-Fi", "Open video link",
         ]
         let bodies = [
-            "Turn the camera on and keep the phone nearby. Pocket and Nano both appear — choose the one you want.",
-            "If the camera shows Approve, tap it on that camera's screen. First-time pairing can wait up to 90 seconds.",
-            "We read the camera's network over Bluetooth, then join its Wi-Fi for you.",
+            "Turn the Luna on and keep this iPhone nearby. It shows up by the last characters of its serial number.",
+            "If the camera asks to allow this iPhone, tap Allow on its screen. First-time pairing can wait up to 90 seconds.",
+            "We read the camera's Wi-Fi over Bluetooth, then join it for you.",
             "Exposure, LUTs and scopes go live as soon as the video link is up.",
         ]
         var instructions: [CameraPairingInstruction] = []
@@ -170,7 +165,7 @@ enum OsmoCameraPageAdapter {
             instructions = [
                 .init(
                     title: "On the camera", icon: .camera,
-                    lines: ["Look for an Approve / pairing prompt", "Tap it on the camera screen"]),
+                    lines: ["Look for the connection request", "Tap Allow on the camera screen"]),
                 .init(
                     title: "On iPhone", icon: .phone,
                     lines: [
@@ -182,8 +177,8 @@ enum OsmoCameraPageAdapter {
                 .init(
                     title: "On the camera", icon: .camera,
                     lines: [
-                        "Leave the camera on — it brings up its own Wi-Fi",
-                        "On 5.8 GHz that can take about a minute; we keep trying",
+                        "Leave the camera on. It brings up its own 5 GHz Wi-Fi",
+                        "Close the Insta360 app on other phones so the camera is free",
                     ]),
                 .init(
                     title: "On iPhone", icon: .phone,
