@@ -161,6 +161,30 @@ public struct ProtoMessage: Equatable, Sendable {
         return value
     }
 
+    /// Inverse of `zigzag32` for protobuf `sint32` readback.
+    public static func unzigzag32(_ value: UInt64) -> Int32 {
+        let raw = UInt32(truncatingIfNeeded: value)
+        return Int32(bitPattern: (raw >> 1) ^ (0 &- (raw & 1)))
+    }
+
+    /// Protobuf `float` (wire type 5). Official-app ROI rectangles use this.
+    public static func float(field: Int, value: Float) throws -> Data {
+        var bits = value.bitPattern.littleEndian
+        return try tag(field: field, wire: 5) + Data(bytes: &bits, count: 4)
+    }
+
+    public func float(_ number: Int) throws -> Float {
+        var result: Float?
+        for field in fields where field.number == number {
+            guard case let .fixed32(value) = field.value, value.count == 4 else {
+                throw LunaProtocolError.invalidField(number)
+            }
+            result = Float(bitPattern: value.littleEndian(at: 0, as: UInt32.self))
+        }
+        guard let value = result else { throw LunaProtocolError.missingField(number) }
+        return value
+    }
+
     private static func tag(field: Int, wire: UInt64) throws -> Data {
         guard field > 0, field < 1 << 29 else { throw LunaProtocolError.invalidField(field) }
         return varint(UInt64(field) << 3 | wire)

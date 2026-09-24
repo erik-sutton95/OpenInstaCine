@@ -285,6 +285,7 @@ extension MonitorTransfer {
         case .dlog: "DLOG"
         case .dlogm: "DLM ≈"
         case .dlog2: "DL2"
+        case .ilog: "ILOG"
         }
     }
 }

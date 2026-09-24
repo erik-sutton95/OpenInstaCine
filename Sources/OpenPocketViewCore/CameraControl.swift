@@ -455,6 +455,8 @@ public enum IsoIndex: UInt8, CaseIterable, Sendable {
     case iso6400 = 0x09
     case iso12800 = 0x0A
     case iso25600 = 0x0B
+    /// Insta360 Luna ISO stop. Not a DJI index byte.
+    case iso160 = 0xE0
 
     /// nil for Auto.
     public var isoValue: Int? {
@@ -469,6 +471,7 @@ public enum IsoIndex: UInt8, CaseIterable, Sendable {
         case .iso6400: 6400
         case .iso12800: 12800
         case .iso25600: 25600
+        case .iso160: 160
         }
     }
 
@@ -519,6 +522,10 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
     case dLog2 = 0x41
     case normal10 = 0x3D
     case dLogM = 0x00
+    /// Insta360 I-Log. Not a DJI SET byte.
+    case iLog = 0xE2
+    /// Insta360 Dolby Vision. Not a DJI SET byte.
+    case dolbyVision = 0xE5
 
     public var label: String {
         switch self {
@@ -528,13 +535,15 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
         case .dLog2: "D-Log2"
         case .normal10: "Normal 10-bit"
         case .dLogM: "D-Log M 10-bit"
+        case .iLog: "I-Log"
+        case .dolbyVision: "Dolby Vision"
         }
     }
 
     /// Log encodings Auto can bind a Rec.709 cube to.
     public var bindsAutoLUT: Bool {
         switch self {
-        case .dLog, .dLog2, .dLogM: true
+        case .dLog, .dLog2, .dLogM, .iLog: true
         default: false
         }
     }
@@ -628,6 +637,8 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
         switch self {
         case .dLog2: [.iso100, .iso200, .iso400, .iso800, .iso1600, .iso3200]
         case .dLog: [.auto, .iso400, .iso800, .iso1600, .iso3200, .iso6400]
+        case .iLog, .dolbyVision:
+            [.auto, .iso100, .iso160, .iso200, .iso400, .iso800, .iso1600, .iso3200, .iso6400]
         case .normal, .hdr, .normal10, .dLogM:
             [
                 .auto, .iso100, .iso200, .iso400, .iso800, .iso1600, .iso3200, .iso6400, .iso12800,
@@ -648,7 +659,8 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
         switch self {
         case .dLog2: nil
         case .dLog: 400
-        case .normal, .hdr, .normal10, .dLogM: model?.isoAutoRangeFloor ?? 100
+        case .normal, .hdr, .normal10, .dLogM, .iLog, .dolbyVision:
+            model?.isoAutoRangeFloor ?? 100
         }
     }
 
@@ -657,7 +669,7 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
         switch self {
         case .dLog2: []
         case .dLog: [.max800, .max1600, .max3200, .max6400]
-        case .normal, .hdr, .normal10, .dLogM:
+        case .normal, .hdr, .normal10, .dLogM, .iLog, .dolbyVision:
             [
                 .max200, .max400, .max800, .max1600, .max3200, .max6400, .max12800, .max25600,
             ]

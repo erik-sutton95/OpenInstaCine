@@ -17,11 +17,14 @@ public enum LunaCommand: UInt16, Sendable {
     case deleteFiles = 12
     case getFileList = 13
     case captureStatus = 15
+    case getTimelapseOptions = 17
+    case getFileInfoList = 38
     case checkAuthorization = 39
     case execCmd = 81
     case requestAuthorization = 86
     case getCameraParamsJSON = 216
     case setAccessCameraFileState = 118
+    case darkEISStatus = 157
     case gimbalControl = 226
     case openTracking = 237
     case cancelTracking = 238
@@ -30,32 +33,80 @@ public enum LunaCommand: UInt16, Sendable {
 }
 
 /// Photography option numbers used by the official iOS app on Luna Ultra v1.0.288.
-public enum LunaPhotographyType: UInt32, Sendable {
-    case sharpness = 6
-    case exposureBias = 7
-    case videoExposure = 21
-    case recordResolution = 31
-    case colorMode = 35
-    case whiteBalanceKelvin = 39
-    case zoomScale = 53
-    case iLogSwitch = 72
-    case colorRecovery = 73
-    case gimbalOptions = 91
-    case afTrigger = 94
+/// Numbers marked Observed were SET by the official app; the rest were only
+/// read by it (GET on connect) and are Source-backed as SET targets.
+public enum LunaPhotographyType: UInt32, Sendable, CaseIterable {
+    case sharpness = 6              // Observed SET
+    case exposureBias = 7           // Observed SET
+    case whiteBalance = 13          // Source-backed preset enum, 0 = auto
+    case gammaMode = 18             // Filter; GET only
+    case stillExposure = 20         // GET only
+    case videoExposure = 21         // Observed SET
+    case videoISOTopLimit = 24      // Observed inside shutter SETs
+    case recordResolution = 31      // Observed SET
+    case fovType = 33               // GET only
+    case colorMode = 35             // Observed SET
+    case whiteBalanceKelvin = 39    // Observed SET, 0 = auto
+    case photoResolution = 40       // GET only
+    case darkEIS = 42               // Source-backed
+    case flowStateLevel = 43        // GET only
+    case zoomScale = 53             // Observed SET
+    case hdrSwitch = 63             // Observed in resolution SET type list
+    case iLogSwitch = 72            // GET only
+    case colorRecovery = 73         // Accepted but not stored on v1.0.288
+    case gimbalOptions = 91         // Observed SET
+    case gimbalStatus = 92          // GET only
+    case afMode = 93                // GET only
+    case afTrigger = 94             // Observed SET
+    case gimbalPanoType = 98        // GET only (pano mode)
+    case remainingTime = 99         // Observed GET, polled
+    case iq3AMode = 100             // Observed inside exposure SETs
+    case gammaModeLevel = 104       // Filter strength; GET only
 }
 
 /// Device option 41 is the official-app shooting-mode write (not photography 31).
-public enum LunaVideoSubMode: UInt64, Sendable {
+/// Observed: normal, timelapse, timeShift, slowMotion, pureVideo. Others Source-backed.
+public enum LunaVideoSubMode: UInt64, Sendable, CaseIterable {
     case normal = 0
+    case bulletTime = 1
     case timelapse = 2
+    case hdr = 3
     case timeShift = 4
+    case superVideo = 5
+    case loopRecording = 6
+    case fpv = 7
+    case movie = 8
     case slowMotion = 9
+    case selfie = 10
     case pureVideo = 11
+    case liveView = 12
+    case cameraLiveView = 13
+    case dashCam = 14
+    case ptz = 15
+    case mosquito = 16
+    case none = 100
 }
 
+/// Device option 40. Observed: single (photo mode) and gimbalPano (8). Others Source-backed.
+public enum LunaPhotoSubMode: UInt64, Sendable, CaseIterable {
+    case single = 0
+    case hdr = 1
+    case interval = 2
+    case burst = 3
+    case aebNight = 4
+    case instaPano = 5
+    case instaPanoHDR = 6
+    case starlapse = 7
+    case gimbalPano = 8
+    case none = 100
+}
+
+/// Observed SETs: 1, 2, 5. Schema also names 3 VIVID and 4 HDR (not offered by the iOS app).
 public enum LunaColorMode: UInt64, Sendable {
     case standard = 1
     case iLog = 2
+    case vivid = 3
+    case hdr = 4
     case dolbyVision = 5
 }
 
@@ -64,6 +115,8 @@ public enum LunaExposureProgram: UInt64, Sendable {
     case isoPriority = 1
     case shutterPriority = 2
     case manual = 3
+    case adaptive = 4
+    case fullAuto = 5
 }
 
 /// Captured `GimbalAction` values from official-app cmd 226.
@@ -162,13 +215,25 @@ public enum LunaProtocol {
     public static let hkdfInfo = Data("AES-SESSION-KEY".utf8)
     public static let sessionKeyByteCount = 16
 
-    public static func getOptions(_ numbers: [UInt32], encrypted: Bool = false) throws -> LunaRequest {
+    /// `packed: true` matches the official app's GET bodies byte-for-byte; the
+    /// camera accepts both encodings.
+    public static func getOptions(_ numbers: [UInt32], encrypted: Bool = false,
+                                  packed: Bool = false) throws -> LunaRequest {
+        LunaRequest(command: .getOptions, body: try optionTypes(numbers, packed: packed),
+                    requiresEncryption: encrypted)
+    }
+
+    static func optionTypes(_ numbers: [UInt32], packed: Bool) throws -> Data {
         guard !numbers.isEmpty, numbers.count <= 256, numbers.allSatisfy({ $0 > 0 && $0 < 1 << 29 }) else {
             throw LunaProtocolError.malformedProtobuf
         }
+        if packed {
+            return try ProtoMessage.blob(
+                field: 1, value: numbers.reduce(into: Data()) { $0.append(ProtoMessage.varint(UInt64($1))) })
+        }
         var body = Data()
         for number in numbers { body.append(try ProtoMessage.integer(field: 1, value: UInt64(number))) }
-        return LunaRequest(command: .getOptions, body: body, requiresEncryption: encrypted)
+        return body
     }
 
     public static func deviceInformationRequest(encrypted: Bool = false,
@@ -277,28 +342,28 @@ public enum LunaProtocol {
     }
 
     /// Official-app GET photography options. Field 2 is `FunctionMode` (7 = normal video).
-    public static func getPhotographyOptions(_ types: [UInt32], mode: UInt32 = 7) throws -> LunaRequest {
-        guard !types.isEmpty, types.count <= 256, types.allSatisfy({ $0 > 0 && $0 < 1 << 29 }) else {
-            throw LunaProtocolError.malformedProtobuf
-        }
-        var body = Data()
-        for number in types { body.append(try ProtoMessage.integer(field: 1, value: UInt64(number))) }
+    public static func getPhotographyOptions(_ types: [UInt32], mode: UInt32 = 7,
+                                             packed: Bool = false) throws -> LunaRequest {
+        var body = try optionTypes(types, packed: packed)
         body.append(try ProtoMessage.integer(field: 2, value: UInt64(mode)))
         return LunaRequest(command: .getPhotographyOptions, body: body, requiresEncryption: false)
     }
 
     /// Official-app cmd 226. Stick axes are protobuf sint32 zigzag, observed ±99.
     /// Zero axes encode an empty VirtualRC, matching captured release/center/flip.
+    /// `field4` reproduces the raw varint 4 the official app appended to every
+    /// MOVE in the FPV-V joystick take; its meaning (schema `cali_id` sint32) is unproven.
     public static func gimbalControl(action: LunaGimbalAction, upDown: Int32 = 0,
-                                     leftRight: Int32 = 0) throws -> LunaRequest {
+                                     leftRight: Int32 = 0, field4: UInt64? = nil) throws -> LunaRequest {
         guard (-99...99).contains(upDown), (-99...99).contains(leftRight) else {
             throw LunaProtocolError.malformedProtobuf
         }
         var remote = Data()
         if upDown != 0 { remote.append(try ProtoMessage.signed32(field: 1, value: upDown)) }
         if leftRight != 0 { remote.append(try ProtoMessage.signed32(field: 2, value: leftRight)) }
-        let body = try ProtoMessage.integer(field: 1, value: action.rawValue)
+        var body = try ProtoMessage.integer(field: 1, value: action.rawValue)
             + ProtoMessage.blob(field: 2, value: remote)
+        if let field4 { body += try ProtoMessage.integer(field: 4, value: field4) }
         return LunaRequest(command: .gimbalControl, body: body, requiresEncryption: false)
     }
 
@@ -337,18 +402,6 @@ public enum LunaProtocol {
         let body = try ProtoMessage.blob(field: 1, value: packed)
             + ProtoMessage.blob(field: 2, value: nested)
         return LunaRequest(command: .setOptions, body: body, requiresEncryption: false)
-    }
-
-    public static func setVideoSubMode(_ mode: LunaVideoSubMode) throws -> LunaRequest {
-        return try setDeviceOptions(
-            types: [41], nested: try ProtoMessage.integer(field: 41, value: mode.rawValue))
-    }
-
-    public static func setColorMode(_ mode: LunaColorMode, functionMode: UInt32 = 7) throws -> LunaRequest {
-        return try setPhotographyOptions(
-            types: [LunaPhotographyType.colorMode.rawValue],
-            nested: try ProtoMessage.integer(field: 35, value: mode.rawValue),
-            mode: functionMode)
     }
 
     /// Integer flag the official schema names COLOR_RECOVERY_SWITCH. Proven no-op
@@ -398,77 +451,6 @@ public enum LunaProtocol {
             requiresEncryption: false)
     }
 
-    /// Official-app EV: UI +0.3 → 6. Units are 20 per stop.
-    public static func setExposureBias(_ stops: Double, functionMode: UInt32 = 7) throws -> LunaRequest {
-        let units = UInt64(clamping: Int((stops * 20).rounded()))
-        return try setPhotographyOptions(
-            types: [LunaPhotographyType.exposureBias.rawValue],
-            nested: try ProtoMessage.integer(field: 7, value: units),
-            mode: functionMode)
-    }
-
-    public static func setZoomScale(_ factor: Double, functionMode: UInt32 = 7) throws -> LunaRequest {
-        guard factor > 0, factor <= 12 else { throw LunaProtocolError.malformedProtobuf }
-        return try setPhotographyOptions(
-            types: [LunaPhotographyType.zoomScale.rawValue],
-            nested: try ProtoMessage.double(field: 53, value: factor),
-            mode: functionMode)
-    }
-
-    public static func setWhiteBalanceKelvin(_ kelvin: UInt64, functionMode: UInt32 = 7) throws -> LunaRequest {
-        guard (2000...10000).contains(kelvin) else { throw LunaProtocolError.malformedProtobuf }
-        return try setPhotographyOptions(
-            types: [LunaPhotographyType.whiteBalanceKelvin.rawValue],
-            nested: try ProtoMessage.integer(field: 39, value: kelvin),
-            mode: functionMode)
-    }
-
-    public static func setRecordResolution(_ value: UInt64, functionMode: UInt32 = 7) throws -> LunaRequest {
-        return try setPhotographyOptions(
-            types: [LunaPhotographyType.recordResolution.rawValue, 63],
-            nested: try ProtoMessage.integer(field: 31, value: value),
-            mode: functionMode)
-    }
-
-    public static func setVideoExposure(
-        program: LunaExposureProgram, iso: UInt64? = nil, shutterSeconds: Double? = nil,
-        functionMode: UInt32 = 7
-    ) throws -> LunaRequest {
-        var nested = try ProtoMessage.integer(field: 1, value: program.rawValue)
-        if let iso { nested += try ProtoMessage.integer(field: 2, value: iso) }
-        if let shutterSeconds {
-            nested += try ProtoMessage.double(field: 3, value: shutterSeconds)
-        }
-        return try setPhotographyOptions(
-            types: [LunaPhotographyType.videoExposure.rawValue],
-            nested: try ProtoMessage.blob(field: 21, value: nested),
-            mode: functionMode)
-    }
-
-    /// Official-app tap-to-focus: AF_TRIGGER_PARAMS type=1 START + ROI floats.
-    public static func setTapFocus(
-        x: Double, y: Double, width: Double = 0.15, height: Double = 0.27, functionMode: UInt32 = 7
-    ) throws -> LunaRequest {
-        let roi = try ProtoMessage.double(field: 1, value: x)
-            + (try ProtoMessage.double(field: 2, value: y))
-            + (try ProtoMessage.double(field: 3, value: width))
-            + (try ProtoMessage.double(field: 4, value: height))
-        let params = try ProtoMessage.integer(field: 1, value: 1)
-            + (try ProtoMessage.blob(field: 2, value: roi))
-        return try setPhotographyOptions(
-            types: [LunaPhotographyType.afTrigger.rawValue],
-            nested: try ProtoMessage.blob(field: 94, value: params),
-            mode: functionMode)
-    }
-
-    public static func openTracking(x: Double, y: Double, width: Double, height: Double) throws -> LunaRequest {
-        let body = try ProtoMessage.double(field: 1, value: x)
-            + (try ProtoMessage.double(field: 2, value: y))
-            + (try ProtoMessage.double(field: 3, value: width))
-            + (try ProtoMessage.double(field: 4, value: height))
-        return LunaRequest(command: .openTracking, body: body, requiresEncryption: false)
-    }
-
     public static let cancelTrackingRequest = LunaRequest(
         command: .cancelTracking, body: Data(), requiresEncryption: false)
 
@@ -477,24 +459,6 @@ public enum LunaProtocol {
         return LunaRequest(
             command: .deleteFiles,
             body: try ProtoMessage.blob(field: 1, value: Data(uri.utf8)),
-            requiresEncryption: false)
-    }
-
-    /// Source-backed paging used by public Luna clients: internal storage = 2, page 50.
-    public static func fileListRequest(start: UInt32 = 0, count: UInt32 = 50, location: UInt32 = 2)
-        throws -> LunaRequest
-    {
-        let body = try ProtoMessage.integer(field: 1, value: UInt64(location))
-            + ProtoMessage.integer(field: 2, value: UInt64(start))
-            + ProtoMessage.integer(field: 3, value: UInt64(count))
-        return LunaRequest(command: .getFileList, body: body, requiresEncryption: false)
-    }
-
-    public static func fileExtraRequest(_ path: String) throws -> LunaRequest {
-        guard !path.isEmpty else { throw LunaProtocolError.malformedProtobuf }
-        return LunaRequest(
-            command: .getFileExtra,
-            body: try ProtoMessage.blob(field: 1, value: Data(path.utf8)),
             requiresEncryption: false)
     }
 
