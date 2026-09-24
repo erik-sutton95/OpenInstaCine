@@ -292,7 +292,8 @@ extension CameraSession {
 
     private func fireWhiteBalance(_ wb: WhiteBalance) {
         guard canSendControl else { return }
-        pins.whiteBalance = CameraValuePin(wb, now: pinNow)
+        // fw 1.1.15 applies kelvin 3.5 to 3.9 s after the SET.
+        pins.whiteBalance = CameraValuePin(wb, now: pinNow, settle: 5)
         status.whiteBalance = wb
         if wb.mode == .custom { status.whiteBalanceKelvin = wb.kelvin }
         status.whiteBalanceTint = 0

@@ -25,9 +25,9 @@ enum LunaShellMapping {
     static let cameraModel = CameraModel(name: "Luna Ultra", datalinkPort: 0, tcpPoke: false, verified: true)
     /// Observed preview: 1280×720 HEVC at 25 fps.
     static let previewFPS: Double = 25
-    /// fw 1.0.288 zoomed to 6×; the fw 1.1.15 notes promise 15×.
-    static let defaultZoomCeiling: Double = 6
-    static let zoomChips: [Double] = [1, 2, 3, 6]
+    /// fw 1.1.15 verified: 1.0…15.0 (values outside are ignored, not clamped).
+    static let defaultZoomCeiling: Double = 15
+    static let zoomChips: [Double] = [1, 2, 4, 8, 15]
 
     // MARK: Shooting mode
 
@@ -118,6 +118,8 @@ enum LunaShellMapping {
         case (2688...2720, false): return .p2_7K
         case (2688...2720, true): return .p2_7K_9x16
         case (2880...3072, true): return .p3K_9x16
+        case (3840, false) where height < 2000: return .luna4K_235
+        case (7680, false) where height < 4000: return .luna8K_235
         case (2880...3072, false): return .luna3K
         case (3840, false): return .p4K
         case (3840, true): return .luna4K_9x16
@@ -133,9 +135,20 @@ enum LunaShellMapping {
             resolution: resolution(width: luna.width, height: luna.height), frameRate: rate)
     }
 
-    /// Observed/accepted RecordResolution values for normal video on this body.
-    /// Updated from the fw 1.1.15 hardware verification (see docs/research).
-    static let videoFormatValues: [UInt64] = [52, 48, 24, 454, 211, 14, 31, 43, 214]
+    /// Every RecordResolution the camera stored in normal video on fw 1.1.15
+    /// (docs/research/luna-fw-1.1.15-verification.md). 4:3, 5.3K and 6K were rejected.
+    static let videoFormatValues: [UInt64] = [
+        210, 211, 154,  // 8K 24/25/30
+        219, 212, 213,  // 8K 2.35:1
+        49, 48, 24, 258, 92, 23, 220, 214,  // 4K 24…120
+        440, 439, 438, 437, 436, 435, 434, 433,  // 4K 2.35:1
+        248, 247, 246, 331, 245, 244, 243, 242,  // 2.7K 2688x1520
+        53, 52, 29, 260, 81, 40, 150, 28, 26, 27,  // 1080p 24…240
+        126, 125, 124,  // 9:16 4K
+        455, 454, 453, 452, 451, 450,  // 9:16 3K
+        445, 468, 442, 441,  // 9:16 2.7K
+        85, 71, 64, 298, 82, 68,  // 9:16 1080
+    ]
 
     static func formatTable(values: [UInt64]) -> [VideoFormat: UInt64] {
         var table: [VideoFormat: UInt64] = [:]
@@ -313,7 +326,8 @@ extension LunaPhotographySettings {
 extension OperatorPrefs {
     /// Operator says Color Recovery is off on the camera, so the I-Log preview is flat.
     static var lunaFlatPreview: Bool {
-        get { UserDefaults.standard.bool(forKey: "OpenInstaCine.luna.flatPreview") }
+        // fw 1.1.15: the I-Log phone preview measures flat (log black ~Y 37), so default on.
+        get { UserDefaults.standard.object(forKey: "OpenInstaCine.luna.flatPreview") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "OpenInstaCine.luna.flatPreview") }
     }
 }

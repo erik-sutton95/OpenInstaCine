@@ -73,12 +73,22 @@ final class LunaOfficialSetTests: XCTestCase {
         XCTAssertEqual(manual.videoExposure?.exposureProgram, .manual)
         XCTAssertEqual(manual.videoExposure?.iso, 400)
         XCTAssertEqual(manual.videoExposure?.shutterSeconds, 0.01)
-        XCTAssertEqual(manual.isoTopLimit, LunaProtocol.officialISOTopLimit)
+        // fw v1.1.15 regression: the ISO top-limit sentinel converted this to
+        // program 2 and dropped ISO 400. Types 21,100 were stored as sent.
+        XCTAssertNil(manual.isoTopLimit)
+        XCTAssertEqual(try LunaProtocol.setManualExposure(iso: 400, shutterSeconds: 0.02).body,
+                       hex("0a021564121da20100aa010e0803109003197b14ae47e17a943ff80101c00501a006021807"))
         // sint32: negative EV encodes as zigzag, not a clamped zero.
         XCTAssertEqual(try LunaSettingsProbe.nested(LunaProtocol.setExposureBias(-1.0)).exposureBiasTenths, -10)
         XCTAssertEqual(try LunaSettingsProbe.nested(LunaProtocol.setExposureBias(-0.3)).exposureBiasStops, -0.3)
         XCTAssertThrowsError(try LunaProtocol.setExposureBias(5))
         XCTAssertThrowsError(try LunaProtocol.setZoomScale(0.5))
+        // fw v1.1.15 regression: omitted FOV 33 was ignored (stayed 1); explicit 0 stored.
+        XCTAssertEqual(try LunaProtocol.setPhotographyValue(.fovType, 0).body,
+                       hex("0a0121120fa20100aa0100f80101880200c005011807"))
+        // fw v1.1.15 stores up to 15x; 15.5 and 20 are ignored by the camera.
+        XCTAssertEqual(try LunaSettingsProbe.nested(LunaProtocol.setZoomScale(15)).zoom, 15)
+        XCTAssertThrowsError(try LunaProtocol.setZoomScale(15.5))
         XCTAssertThrowsError(try LunaProtocol.setVideoExposure(program: .shutterPriority, shutterSeconds: 0))
         XCTAssertThrowsError(try LunaProtocol.setTapFocus(x: 1.5, y: 0))
     }
@@ -315,6 +325,13 @@ final class LunaStatusDecodeTests: XCTestCase {
         XCTAssertEqual(change.types, [31])
         XCTAssertEqual(change.recordResolution, 454)
         XCTAssertEqual(change.functionMode, 7)
+        // fw v1.1.15: 8334 carries the same shape for filter group changes (18, 104).
+        guard case let .photographyChanged(filter) = try n(8334, "081208681206900101c006021807") else {
+            return XCTFail("8334")
+        }
+        XCTAssertEqual(filter.types, [18, 104])
+        XCTAssertEqual(filter.filter, 1)
+        XCTAssertEqual(filter.filterStrength, 2)
 
         guard case let .captureStatus(pano) = try n(8208, "08203800880113900105") else { return XCTFail("8208") }
         XCTAssertEqual(pano.state, 32)

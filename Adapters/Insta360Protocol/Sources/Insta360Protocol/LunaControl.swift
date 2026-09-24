@@ -138,11 +138,15 @@ extension LunaProtocol {
     /// Observed for 6 (sharpness), 35, 39. Source-backed for any other
     /// scalar option: filter 18, strength 104, FOV 33, flowstate 43, dark EIS 42,
     /// AF mode 93, I-Log switch 72, WB preset 13, ISO limit 24.
+    /// Zero is encoded explicitly: fw v1.1.15 ignores an omitted FOV 33 (stays 1)
+    /// but stores an explicit 0; explicit 0 also verified for 18, 39 and 93.
     public static func setPhotographyValue(
         _ type: LunaPhotographyType, _ value: UInt64, functionMode: UInt32 = 7
     ) throws -> LunaRequest {
-        try officialPhotographySet(
-            types: [type], fields: nonZero(Int(type.rawValue), value), functionMode: functionMode)
+        let field = Int(type.rawValue)
+        return try officialPhotographySet(
+            types: [type], fields: [field: try ProtoMessage.integer(field: field, value: value)],
+            functionMode: functionMode)
     }
 
     /// Observed: SET 2 = High (GET 1 = Medium).
@@ -174,12 +178,16 @@ extension LunaProtocol {
 
     /// Observed: official WB Auto is type 39 with the value omitted (0).
     public static func setWhiteBalanceAuto(functionMode: UInt32 = 7) throws -> LunaRequest {
-        try setPhotographyValue(.whiteBalanceKelvin, 0, functionMode: functionMode)
+        try officialPhotographySet(types: [.whiteBalanceKelvin], fields: [:], functionMode: functionMode)
     }
 
-    /// Observed: 1.0, 2.0, 3.0, 6.0. Range 1...12 is external (Ripwords).
+    /// Observed: 1.0, 2.0, 3.0, 6.0. fw v1.1.15 stores 1...15 (12.5 and 15
+    /// verified); values outside are ignored, not clamped. Zoom ramps, so an
+    /// immediate GET can return an intermediate value.
+    public static let maximumZoomScale = 15.0
+
     public static func setZoomScale(_ factor: Double, functionMode: UInt32 = 7) throws -> LunaRequest {
-        guard factor >= 1, factor <= 12 else { throw LunaProtocolError.malformedProtobuf }
+        guard factor >= 1, factor <= maximumZoomScale else { throw LunaProtocolError.malformedProtobuf }
         return try officialPhotographySet(
             types: [.zoomScale], fields: [53: try ProtoMessage.double(field: 53, value: factor)],
             functionMode: functionMode)
@@ -196,7 +204,9 @@ extension LunaProtocol {
     /// Official exposure SETs (field 21, IQ_3A_MODE 100 = 2 PRO).
     /// Observed: auto (types 21,100, empty 21), ISO priority (21,100),
     /// shutter priority and manual-with-shutter (21,24,100 with ISO top limit).
-    /// Manual with both ISO and shutter is Source-backed (the app never sent an ISO in program 3).
+    /// Manual with an explicit ISO omits type 24: on fw v1.1.15 the ISO top-limit
+    /// sentinel turns program 3 into program 2 and drops the ISO (hardware-verified,
+    /// docs/research/luna-fw-1.1.15-verification.md); types 21,100 store all three.
     public static func setVideoExposure(
         program: LunaExposureProgram, iso: UInt64? = nil, shutterSeconds: Double? = nil,
         functionMode: UInt32 = 7
@@ -212,14 +222,15 @@ extension LunaProtocol {
             100: try ProtoMessage.integer(field: 100, value: 2),
         ]
         var types: [LunaPhotographyType] = [.videoExposure, .iq3AMode]
-        if program == .shutterPriority || program == .manual {
+        let autoISO = program == .shutterPriority || (program == .manual && (iso ?? 0) == 0)
+        if autoISO {
             types = [.videoExposure, .videoISOTopLimit, .iq3AMode]
             fields[24] = try ProtoMessage.integer(field: 24, value: officialISOTopLimit)
         }
         return try officialPhotographySet(types: types, fields: fields, functionMode: functionMode)
     }
 
-    /// Source-backed convenience for program 3 with both values.
+    /// Program 3 with both values. Verified on fw v1.1.15: stored as sent.
     public static func setManualExposure(iso: UInt64, shutterSeconds: Double,
                                          functionMode: UInt32 = 7) throws -> LunaRequest {
         try setVideoExposure(program: .manual, iso: iso, shutterSeconds: shutterSeconds,

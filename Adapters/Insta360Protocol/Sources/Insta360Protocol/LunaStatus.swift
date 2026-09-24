@@ -282,7 +282,8 @@ public struct LunaDeviceStatus: Equatable, Sendable {
 /// 4 SINGLE_SHOOTING (photo), 32 GIMBAL_PANO_SHOOTING.
 public struct LunaCaptureStatus: Equatable, Sendable {
     public var state: UInt64
-    /// `capture_time`; Observed 0 at every poll, so units (seconds) are Source-backed.
+    /// `capture_time` in seconds: cmd 15 counted 0, 1, 2 during a 3 s take on fw v1.1.15.
+    /// Notification 8208 still reports 0.
     public var captureSeconds: UInt64
     /// `CaptureStateSubmode`: Observed 5 starting, 2 record save, 13 pano synthesis.
     public var submode: UInt64
@@ -342,6 +343,8 @@ public enum LunaNotification: Equatable, Sendable {
     /// 8275 `NotifyCameraSubMode`. Observed after every shooting-mode change.
     case subMode(photo: UInt64, video: UInt64, sensor: UInt64)
     /// 8293: same shape as a photography GET reply. Observed after each resolution SET.
+    /// 8334 (fw v1.1.15, unnamed in the schema) has the same shape and fires on
+    /// filter 18 / strength 104 changes, including those implied by a color change.
     case photographyChanged(LunaPhotographySettings)
     case livePhoto(errorCode: UInt64, mode: UInt64)         // 8298 Observed (0, 1 OFF)
     /// 8302: external measurement says 9 varints = `GimbalStatus`. Not seen in our takes.
@@ -380,7 +383,7 @@ public enum LunaNotification: Equatable, Sendable {
             self = .trackExport(uri: String(decoding: try m.optionalBytes(6) ?? Data(), as: UTF8.self),
                                 succeeded: try u(3) == 1)
         case 8275: self = .subMode(photo: try u(1), video: try u(2), sensor: try u(3))
-        case 8293: self = .photographyChanged(try LunaPhotographySettings(response: body))
+        case 8293, 8334: self = .photographyChanged(try LunaPhotographySettings(response: body))
         case 8298: self = .livePhoto(errorCode: try u(1), mode: try u(2))
         case 8302: self = .gimbalStatus(try LunaGimbalStatus(body))
         case 8308: self = .screenBattery(try LunaBattery(m.optionalBytes(1) ?? Data()))
@@ -398,6 +401,11 @@ public enum LunaNotification: Equatable, Sendable {
 public struct LunaMediaFile: Equatable, Sendable {
     public var uri: String
     public var metadata: LunaFileMetadata?
+
+    public init(uri: String, metadata: LunaFileMetadata? = nil) {
+        self.uri = uri
+        self.metadata = metadata
+    }
 
     public var isVideo: Bool { uri.lowercased().hasSuffix(".mp4") }
     public var isProxy: Bool { uri.lowercased().hasSuffix(".lrv") }

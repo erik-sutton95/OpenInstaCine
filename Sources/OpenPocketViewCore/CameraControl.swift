@@ -1176,6 +1176,8 @@ public struct VideoResolution: Equatable, Hashable, Sendable {
     public static let luna6K = Self(rawValue: 0xD1)
     public static let luna4K_9x16 = Self(rawValue: 0xD3)
     public static let luna3K = Self(rawValue: 0xD4)
+    public static let luna8K_235 = Self(rawValue: 0xD5)
+    public static let luna4K_235 = Self(rawValue: 0xD6)
 
     public var aspect: VideoAspect? {
         switch rawValue {
@@ -1226,9 +1228,9 @@ public struct VideoResolution: Equatable, Hashable, Sendable {
         case 0x10, 0x67, 0x7D: "4K"
         case 0x6A: "2160"
         case 0x6B, 0x6C, 0xD4: "3K"
-        case 0xD0: "8K"
+        case 0xD0, 0xD5: "8K"
         case 0xD1: "6K"
-        case 0xD3: "4K"
+        case 0xD3, 0xD6: "4K"
         default: String(format: "%02X", rawValue)
         }
     }
@@ -1243,6 +1245,8 @@ public struct VideoResolution: Equatable, Hashable, Sendable {
         case 0xD0: "8K"
         case 0xD1: "6K"
         case 0xD3: "4K"
+        case 0xD5: "8K 2.35:1"
+        case 0xD6: "4K 2.35:1"
         default: String(format: "0x%02X", rawValue)
         }
     }
@@ -2365,7 +2369,8 @@ public struct GimbalLimitWatch: Equatable, Sendable {
 public enum CamFov {
     public static let unit: UInt32 = 1024
     public static let minFactor = 1.0
-    public static let maxFactor = 12.0
+    /// Zoom ceiling for readouts and pinch. DJI Pocket 4 Pro is 12×; brands may raise it at launch.
+    nonisolated(unsafe) public static var maxFactor = 12.0
     /// Operator jump stops. Mimo chips 1× / 3×; 6× and 12× are pinch detents.
     public static let jumps: [Double] = [1, 3, 6, 12]
     /// `cam_fov` `@0` at operator 1× (Mimo 1× → 12× take, start).
@@ -2513,7 +2518,7 @@ public enum CamFov {
 
     public static func displayLabel(factor: Double) -> String {
         let shown = displayTenths(factor)
-        if abs(shown - maxFactor) < 0.05 { return "12×" }
+        if abs(shown - maxFactor) < 0.05 { return "\(Int(maxFactor.rounded()))×" }
         let nearest = shown.rounded()
         if abs(shown - nearest) < 0.05, (1...12).contains(Int(nearest)) {
             return "\(Int(nearest))×"

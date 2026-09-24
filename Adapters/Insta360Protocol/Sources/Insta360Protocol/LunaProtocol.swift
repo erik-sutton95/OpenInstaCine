@@ -38,6 +38,8 @@ public enum LunaCommand: UInt16, Sendable {
 public enum LunaPhotographyType: UInt32, Sendable, CaseIterable {
     case sharpness = 6              // Observed SET
     case exposureBias = 7           // Observed SET
+    /// fw v1.1.15 answers a GET of 13 by writing field 39 = 0, clobbering the
+    /// kelvin if 13 is listed after 39. Request 39 alone (or 13 before 39).
     case whiteBalance = 13          // Source-backed preset enum, 0 = auto
     case gammaMode = 18             // Filter; GET only
     case stillExposure = 20         // GET only
