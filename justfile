@@ -54,32 +54,39 @@ lab-check: check
     /usr/bin/python3 -m py_compile tools/luna_mac.py tools/luna_tcp.py tools/luna_wire.py tools/ucd2.py
     .venv/bin/python -m unittest discover -s tools -p 'test_luna_*.py'
 
-# Generate the thin Apple application and shared native frameworks.
-apple-generate:
-    xcodegen generate --spec Apps/Apple/project.yml
+# Generate the iOS project (ios/project.yml, same layout as OpenPocketCine).
+ios-generate:
+    cd ios && xcodegen generate
+
+# Compiles without signing or accessing a connected phone.
+ios-build: ios-generate
+    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'generic/platform=iOS Simulator' -derivedDataPath .local/DD CODE_SIGNING_ALLOWED=NO build
+
+# Development-signed build + install + launch on a USB iPhone (devicectl id).
+ios-run device="B1138BFC-5392-56A1-93F1-5B722F7BA10F": ios-generate
+    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'generic/platform=iOS' -derivedDataPath .local/DDdev -allowProvisioningUpdates build
+    xcrun devicectl device install app --device {{device}} .local/DDdev/Build/Products/Debug-iphoneos/OpenInstaCine.app
+    xcrun devicectl device process launch --device {{device}} --activate --terminate-existing com.opencapture.openinstacine
+
+ios-test *args: ios-generate
+    #!/usr/bin/env bash
+    set -euo pipefail
+    device_id="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ && !found { print $2; found = 1 }')"
+    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination "platform=iOS Simulator,id=$device_id" -derivedDataPath .local/DD {{args}} test
+
+# Drive a DEBUG build on the phone without XCUITest (screenshots, state, actions).
+oic-remote *args:
+    /usr/bin/python3 tools/oic_remote.py {{args}}
+
+# Physical XC driver for the official Insta360 iOS app (lab captures). Needs UI Automation
+# enabled on the phone; iOS asks for Face ID/passcode the first time automation mode starts.
+luna-official-xc device:
+    cd ios && xcodegen generate
+    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme LunaOfficialCapture -destination 'platform=iOS,id={{device}}' -allowProvisioningUpdates -derivedDataPath .local/AppleDerivedData -maximum-test-execution-time-allowance 21600 -only-testing:LunaOfficialUITests/InteractiveDriver/testDriveOfficialInsta360 test
 
 # USB lab bridge on the phone. Mac stays off the camera AP.
 luna-lab-bridge *args:
     /usr/bin/python3 tools/luna_lab_bridge.py {{args}}
-
-# Physical XC driver for the official Insta360 iOS app. Host app is OpenInstaCine.
-luna-official-xc device:
-    xcodegen generate --spec Apps/Apple/project.yml
-    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme LunaOfficialCapture -destination 'platform=iOS,id={{device}}' -allowProvisioningUpdates -derivedDataPath .local/AppleDerivedData -maximum-test-execution-time-allowance 21600 -only-testing:LunaOfficialUITests/InteractiveDriver/testDriveOfficialInsta360 test
-
-# Compiles without signing or accessing a connected phone.
-apple-build: apple-generate
-    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'generic/platform=iOS Simulator' -configuration Debug -derivedDataPath .local/AppleDerivedData CODE_SIGNING_ALLOWED=NO build
-
-apple-test simulator: apple-generate
-    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'platform=iOS Simulator,id={{simulator}}' -configuration Debug -derivedDataPath .local/AppleDerivedData CODE_SIGNING_ALLOWED=NO test
-
-apple-simulator simulator:
-    bash scripts/apple-simulator.sh {{quote(simulator)}}
-
-# Uses a local recording; never substitutes replay into release builds.
-apple-replay simulator video:
-    bash scripts/apple-simulator.sh {{quote(simulator)}} {{quote(video)}}
 
 core-test:
     swift test
