@@ -34,6 +34,7 @@ LUNA_OWNED=(
 # Upstream files that only test or serve the Osmo DUML session. Deleted after every sync.
 OSMO_ONLY=(
   OpenInstaCineTests/MediaLiveRecoveryOwnershipTests.swift
+  OpenInstaCineTests/MultiviewStageTests.swift
   OpenInstaCineTests/SessionRecoveryLifecycleTests.swift
   OpenInstaCineTests/ConnectionLifecycleRegressionTests.swift
   OpenInstaCineTests/EVMeterAssistTests.swift

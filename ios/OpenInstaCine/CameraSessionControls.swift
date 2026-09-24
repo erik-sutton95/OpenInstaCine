@@ -539,9 +539,10 @@ extension CameraSession {
         }
     }
 
+    /// Luna reports no gimbal attitude, so Level cannot judge the horizon. Say so
+    /// (same refusal as the shared shell) instead of silently doing something else.
     func levelGimbalToWorld() {
-        // No attitude telemetry on Luna: Level falls back to recenter.
-        recenterGimbal()
+        controlNote = WorldLevelSnap.noLevelData
     }
 
     func recenterGimbal() {

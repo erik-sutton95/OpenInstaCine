@@ -47,11 +47,8 @@ struct SavedCamerasView: View {
                 },
                 onCancel: { model.cancelPairing() }, onMedia: { model.homePanel = .media },
                 onSettings: { model.homePanel = .settings },
-                onMultiview: {
-                    guard !connectionBusy else { return }
-                    model.session.disconnect()
-                    showMultiview = true
-                },
+                // Multiview stages several DJI bodies over RTMP; Luna has no equivalent.
+                onMultiview: nil,
                 onWatchFeed: {
                     guard !connectionBusy else { return }
                     model.openWatcherBrowse()
