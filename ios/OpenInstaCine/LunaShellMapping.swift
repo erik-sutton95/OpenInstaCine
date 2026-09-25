@@ -109,6 +109,8 @@ enum LunaShellMapping {
 
     /// Shared `VideoResolution` for a Luna frame size. DJI bytes where the shape
     /// matches, Luna bytes (0xD0…) otherwise; labels come from the core table.
+    static let unknownResolution = VideoResolution(rawValue: 0xDF)
+
     static func resolution(width: Int, height: Int) -> VideoResolution {
         let long = max(width, height)
         let portrait = height > width
@@ -125,7 +127,7 @@ enum LunaShellMapping {
         case (3840, true): return .luna4K_9x16
         case (5120...5760, false): return .luna6K
         case (7680, false): return .luna8K
-        default: return VideoResolution(rawValue: 0xDF)
+        default: return unknownResolution
         }
     }
 
@@ -224,8 +226,17 @@ enum LunaShellMapping {
         pins: inout LunaControlPins, table: inout [VideoFormat: UInt64]
     ) {
         let now = Date.timeIntervalSinceReferenceDate
-        if let exposure = settings.videoExposure ?? settings.stillExposure {
-            let mode: ExpoMode = exposure.program == 0 ? .auto : .manual
+        let exposure =
+            status.isPhoto
+            ? settings.stillExposure ?? settings.videoExposure
+            : settings.videoExposure ?? settings.stillExposure
+        if let exposure {
+            // Stills report adaptive/full-auto programs (4, 5); only 1...3 fix a value.
+            let mode: ExpoMode =
+                switch exposure.exposureProgram {
+                case .isoPriority, .shutterPriority, .manual: .manual
+                default: .auto
+                }
             status.expoMode = CameraValuePin.reconcile(&pins.expoMode, reported: mode, now: now) ?? mode
             let reportedISO: IsoIndex? = exposure.iso == 0 ? .auto : isoIndex(Int(exposure.iso))
             if let held = CameraValuePin.reconcile(&pins.isoIndex, reported: reportedISO, now: now) {
@@ -256,8 +267,9 @@ enum LunaShellMapping {
         }
         status.availableColorModes = colorModes
         if table.isEmpty { table = formatTable(values: videoFormatValues) }
+        // Photo mode reports a still size (unknown 0xDF here); keep the last video format.
         if let raw = settings.recordResolution, let luna = LunaVideoResolution(rawValue: raw),
-            let format = videoFormat(luna)
+            let format = videoFormat(luna), format.resolution != unknownResolution
         {
             if table[format] == nil { table[format] = raw }
             let shown = CameraValuePin.reconcile(&pins.format, reported: format, now: now) ?? format
