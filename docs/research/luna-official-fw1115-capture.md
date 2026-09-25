@@ -362,6 +362,36 @@ state (above), 8234 live params, 8248 export status, 8275 submode change,
 8317 AF scene change (empty), 8334 photography changed (zoom reset on mode
 switch, filter / strength, beauty).
 
+## Deep Track, framing and gimbal wake (19-tracking)
+
+Take 19, camera upright on a desk facing a printed face photo. Raw pcap and tap log
+are in `.local/official-fw1115/` (not committed; the frames show a person).
+
+| UI | wire |
+| --- | --- |
+| Enter the shooting view | cmd **118** `{1:5}`; 8302 `PTZ_STATE` field 5 goes 1 to 0 about 50 ms later (gimbal wakes). Leaving for the album sends `{1:1}` and the gimbal folds down to sleep |
+| Tap on the preview | cmd 9 `[94]` AF trigger, box **0.1545 x 0.271...0.275** with the camera upright (the 0.0869 x 0.1545 box in take 07 was the camera lying on its side) |
+| Long press 2 s on a face | nothing (no 237, no AF) |
+| Press-drag a box | cmd **237** `{1: ms, 2 x, 3 y, 4 w, 5 h}` with the drawn rectangle; reply `{}`; 8317 `AF_SCENE_CHANGE`; toast "Start Smart Tracking", green corner box with an x |
+| x on the tracking box | cmd **238** `{}`; 8315 `{1:4, 2:2, 3:5, 4:0}` |
+| Tracking Framing button (top right while tracking) | cmd **245** `GET_PRESET_COMPOSITION` `{}` |
+| Framing grid point (3 x 3) | cmd **244** `SET_PRESET_COMPOSITION` `{1: ms, 2 x, 3 y, 4 0.0591, 5 0.1051}`: top-left x 0.267 y 0.224, centre x 0.470 y 0.447, bottom-right x 0.674 y 0.671. The gimbal re-frames the subject at that point |
+| Record while tracking | normal cmd 4 / 5; tracking continues |
+| Joystick while tracking | stick commands as usual (a short XC drag only produced two empty moves) |
+| Double tap | two separate AF triggers (the driver cannot tap twice within 0.9 s, so a real double tap is untested) |
+
+**Tracking state is in the video stream, not in notifications.** While Deep Track
+runs, every video frame is followed by a media frame (UCD2 type 1) with subtype
+**0x85**: 9-byte media header, then protobuf
+`{1: ms, 2: state, 3: 0, 4: {1 x, 2 y, 3 w, 4 h}}` (float32, top-left preview
+fractions). States seen: **5 idle**, **2 tracking** (box follows the subject),
+**3 lost** (box frozen at the last position). Covering the subject gave 3 after
+about a second; the camera then re-acquired on its own after 10 s and went back to 2,
+with a new (larger) box. 8315 is only sent on cancel; nothing else marks lost.
+
+The phone never sent a per-frame command during tracking: the camera drives the
+gimbal itself.
+
 ## Gaps in OpenInstaCine, prioritized
 
 Checked against `Adapters/Insta360Protocol` (`LunaProtocol.swift`,

@@ -124,9 +124,9 @@ the physical iPhone against the camera; test files were deleted, and the camera 
 | Photo mode shutter writes still (20) and video (21) exposure | GET read back 1/1000 in both |
 | Photo EV adds type 77 = 1 | +0.7 stored, restored to 0 |
 | Gimbal: shell's fourth mode is FPV-V (91 field 4 = 4); names Roll Lock / Roll & Tilt / FPV / FPV-V | Stored 4, restored Roll Lock |
-| Stick moves and releases carry field 4 = 4 | Sent without error; the camera faced a blank surface, so movement was not visible for either encoding |
+| Stick moves and releases carry field 4 = 4 | Verified later: the gimbal was asleep in this test (see Deep Track and gimbal wake) |
 | Zoom presets 1 / 2 / 3 / 6 / 15 | 3x and 6x read back |
-| Tap focus box 0.0869 x 0.1545 (0.1159 wide in photo) | Unit-tested only |
+| Tap focus box | Superseded: 0.1545 x 0.2727 (see below) |
 | Formats: 1:1 3K (119/120/121/446/447/448), 9:16 2.7K 30/25 (443/444); 1080p 240 also writes Standard colour | 3K 1:1 25p, 2.7K 9:16 30p and 1080p 240 (colour went to Standard) stored |
 
 Not done, because the shared shell has no control for them: filters (18), sharpness,
@@ -137,6 +137,21 @@ record timer needs it and nothing showed a cost.
 
 A reinstall resets iOS's approval to join the camera network, so the first connect after an
 install shows the system "Join Wi-Fi Network" alert and waits for the tap.
+
+### Deep Track and gimbal wake (fw 1.1.15, 12:30 on the iPhone)
+
+From take 19 of [the official app capture](../research/luna-official-fw1115-capture.md).
+
+| Change | Result on the camera |
+| --- | --- |
+| cmd 118 `{1:5}` before every live start | Fixes a picture that was grey or black and a stick that did nothing: the gimbal sleeps pointing down until an app enters the shooting view. Cold test: 118 `{1:1}` folded the gimbal, returning from media woke it |
+| Deep Track box from the 0x85 stream frames | Drag-to-track on a face: state 2 about 1 s after cmd 237 and the green box sat on the face; cancel gave state 5 and cleared it. Lost (3) shows the last box white, like the search box |
+| Joystick, now with the gimbal awake | Right panned, up tilted, recenter returned to the start frame |
+| Tap focus box 0.1545 x 0.2727 | Matches the official app with the camera upright |
+| Join after the system "Join Wi-Fi Network" alert | A tap after the 35 s timeout now counts as joined |
+
+Not implemented: Tracking Framing (cmd 244/245, the 3 x 3 grid of where the gimbal holds
+the subject). The shared shell has no control for it.
 
 ## Known issues
 
