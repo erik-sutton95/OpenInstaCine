@@ -27,6 +27,27 @@ class LocalReplayBackend(context: Context) : CameraBackend, CameraControls {
     override suspend fun tapFocus(x: Double, y: Double) = false
     override suspend fun startTracking(x: Double, y: Double, width: Double, height: Double) = false
     override suspend fun stopTracking() = false
+    // A fixed Luna-shaped readout so the live chrome shows mapped values; no camera answers the setters.
+    override val readout = MutableStateFlow(
+        CameraReadout(
+            batteryPercent = 66,
+            storages = listOf(CameraStorage(location = 2, usable = true, freeBytes = 42_100_000_000, totalBytes = 50_490_900_480)),
+            shootingMode = CameraShootingMode.VIDEO,
+            videoExposure = CameraExposure(program = 3, iso = 400, shutterSeconds = 1.0 / 50),
+            exposureBiasTenths = 0,
+            whiteBalanceKelvin = 5600,
+            color = CameraColorProfile.LOG,
+            recordFormat = CameraRecordFormat(48, 3840, 2160, 25.0),
+            recordFormats = listOf(
+                CameraRecordFormat(49, 3840, 2160, 24.0), CameraRecordFormat(48, 3840, 2160, 25.0),
+                CameraRecordFormat(24, 3840, 2160, 30.0), CameraRecordFormat(52, 1920, 1080, 25.0),
+            ),
+            zoom = 1.0,
+            gimbalMode = CameraGimbalMode.ROLL_LOCK,
+            gimbalSpeed = CameraGimbalSpeed.MEDIUM,
+            afMode = 3,
+        ),
+    )
     private val camera = CameraIdentity("local-replay", "LOCAL REPLAY — Luna Ultra", "Luna recording · not a live camera")
     override val phase = MutableStateFlow(ConnectionPhase.IDLE)
     override val found = MutableStateFlow(listOf(camera))

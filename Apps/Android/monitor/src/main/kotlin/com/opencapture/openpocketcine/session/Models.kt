@@ -108,6 +108,10 @@ data class CameraModel(
 
         /** DJI color wheel. D-Log2 is Pocket 4 Pro only. Pocket 3 is HLG / D-Log M. */
         fun colorModesFor(name: String, family: String): List<Int> {
+            // Insta360 Luna: the official app offers Standard, I-Log and Dolby Vision.
+            if (name.contains("Luna", ignoreCase = true)) {
+                return listOf(CameraCommands.COLOR_NORMAL, CameraCommands.COLOR_ILOG, CameraCommands.COLOR_DOLBY_VISION)
+            }
             if (family == "nano") {
                 return listOf(CameraCommands.COLOR_NORMAL, CameraCommands.COLOR_NORMAL10, CameraCommands.COLOR_DLOG_M)
             }

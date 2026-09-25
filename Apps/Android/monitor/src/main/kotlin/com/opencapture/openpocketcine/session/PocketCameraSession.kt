@@ -72,6 +72,8 @@ import com.opencapture.openpocketcine.core.CameraBackend
 import com.opencapture.openpocketcine.core.CameraCapability
 import com.opencapture.openpocketcine.core.CameraControls
 import com.opencapture.openpocketcine.core.CameraIdentity
+import com.opencapture.openpocketcine.core.CameraMediaStore
+import com.opencapture.openpocketcine.core.CameraReadout
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
@@ -195,7 +197,14 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun presentControlNote(note: String) { _controlNote.value = note }
     private fun unavailable(what: String) = presentControlNote("$what is not available on the Luna Ultra yet.")
 
-    val controlBusy: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
+    private val _controlBusy = MutableStateFlow(false)
+    val controlBusy: StateFlow<Boolean> = _controlBusy.asStateFlow()
+    /** Camera media over the control link, when the backend offers it (Luna: UCD2 list + HTTP). */
+    val media: CameraMediaStore? get() = (backend as? CameraMediaStore)?.takeIf { CameraCapability.CAMERA_MEDIA in capabilities }
+    private val pins = LunaControlPins()
+    private var formatTable: Map<VideoFormat, Long> = emptyMap()
+    private var lastReadout = CameraReadout()
+    private var recordStartedAt: Long? = null
     private val _focusPoint = MutableStateFlow(0.5f to 0.5f)
     val focusPoint: StateFlow<Pair<Float, Float>> = _focusPoint.asStateFlow()
     val gimbalPoseViewFlip: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
@@ -212,8 +221,10 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     val gimbalMoveReadout: StateFlow<String> = MutableStateFlow("").asStateFlow()
     var gimbalRamp: GimbalRamp = GimbalRamp.OFF
     var gimbalDoubleTap: GimbalDoubleTap = GimbalDoubleTap.RECENTER
-    val gimbalMode: StateFlow<GimbalMode> = MutableStateFlow(GimbalMode.FOLLOW).asStateFlow()
-    val gimbalSpeed: StateFlow<GimbalSpeed> = MutableStateFlow(GimbalSpeed.DEFAULT).asStateFlow()
+    private val _gimbalMode = MutableStateFlow(GimbalMode.FOLLOW)
+    val gimbalMode: StateFlow<GimbalMode> = _gimbalMode.asStateFlow()
+    private val _gimbalSpeed = MutableStateFlow(GimbalSpeed.DEFAULT)
+    val gimbalSpeed: StateFlow<GimbalSpeed> = _gimbalSpeed.asStateFlow()
     val gimbalProgram: StateFlow<GimbalProgram> = MutableStateFlow(GimbalProgram()).asStateFlow()
     val gimbalMovePaused: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
     val gimbalMoveRunning: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
@@ -265,10 +276,19 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     val isFocusResetAvailable: Boolean get() = false
 
     init {
+        // Luna vocabulary for the shared screens: mode names, and media served at its own path on the camera AP.
+        CameraCommands.shootingModeLabelOverrides = LunaShellMapping.shootingModeLabels
+        com.opencapture.openpocketcine.media.MediaHTTP.host = "192.168.42.1"
+        com.opencapture.openpocketcine.media.MediaHTTP.directPath = true
         scope.launch {
             backend.snapshot.collect { value ->
-                _status.value = _status.value.copy(batteryPercent = value.batteryPercent ?: -1)
+                value.batteryPercent?.let { _status.value = _status.value.copy(batteryPercent = it) }
             }
+        }
+        controls?.let { link ->
+            scope.launch { link.readout.collect(::applyReadout) }
+            // Re-apply every second: the REC timer ticks and settled pins fall back to the camera's value.
+            scope.launch { while (isActive) { delay(1_000); applyReadout(lastReadout) } }
         }
         scope.launch {
             backend.connected.collect { value ->
@@ -282,7 +302,10 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
                     ConnectionPhase.LIVE -> { holdsMonitor = true; _recoveryState.value = SessionRecoveryUi.Idle }
                     ConnectionPhase.FAILED ->
                         if (holdsMonitor) _recoveryState.value = SessionRecoveryUi.WaitingForOperator(1)
-                    ConnectionPhase.IDLE -> { holdsMonitor = false; _recoveryState.value = SessionRecoveryUi.Idle }
+                    ConnectionPhase.IDLE -> {
+                        holdsMonitor = false; _recoveryState.value = SessionRecoveryUi.Idle
+                        pins.clear(); recordStartedAt = null; _controlBusy.value = false
+                    }
                     else -> Unit
                 }
             }
@@ -345,16 +368,177 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun retrySessionRecovery() { backend.connected.value?.let { backend.connect(it.id) } }
     fun abandonRecoveryToMenu() = disconnect()
 
-    // Capture and exposure: not mapped on Android yet (iOS maps them through photography options).
-    fun pressRecord() = unavailable("Recording from the app")
-    fun pressShutter() = unavailable("The shutter")
-    fun setEv(thirds: Int) = unavailable("Exposure compensation")
+    // Status mapping (Luna readout to the shared CameraStatus), iOS `applyDeviceStatus`/`applySettings`/`applyCapture`.
+    private fun applyReadout(readout: CameraReadout) {
+        lastReadout = readout
+        val now = SystemClock.elapsedRealtime()
+        var next = LunaShellMapping.applyDevice(readout, _status.value, pins, now)
+        val (settled, table) = LunaShellMapping.applySettings(readout, next, pins, now)
+        next = settled
+        formatTable = table
+        readout.gimbalMode?.let(LunaShellMapping::gimbalMode)?.let { mode ->
+            if (pins::gimbalMode.hold(mode, now) == null) _gimbalMode.value = mode
+        }
+        readout.gimbalSpeed?.let(LunaShellMapping::gimbalSpeed)?.let { speed ->
+            if (pins::gimbalSpeed.hold(speed, now) == null) _gimbalSpeed.value = speed
+        }
+        readout.zoom?.let { if (zoomTarget == null && zoomPinchPreview == null) _zoomReadout.value = it }
+        // Capture: the REC lamp holds its pin until capture status confirms.
+        val recording = readout.recording
+        if (recording && recordStartedAt == null) recordStartedAt = now - readout.captureSeconds * 1_000L
+        if (!recording) recordStartedAt = null
+        if (pins::recording.hold(recording, now) == null) next = next.copy(isRecording = recording)
+        val elapsed = if (recording) maxOf(readout.captureSeconds, recordStartedAt?.let { ((now - it) / 1_000).toInt() } ?: 0) else 0
+        next = next.copy(recordElapsedSec = elapsed, timecode = if (recording) LunaShellMapping.clock(elapsed) else null)
+        _status.value = next
+        if (pins.recording == null && _controlBusy.value && !pins.photoInFlight) _controlBusy.value = false
+    }
+
+    private fun canSendControl(): Boolean {
+        if (phase == ConnectionPhase.LIVE && can(CameraCapability.CAMERA_SETTINGS)) return true
+        presentControlNote("Connect the camera to use its controls.")
+        return false
+    }
+
+    /** One Luna request off the main flow. Failure reverts through [onFail]; success re-reads settings. */
+    private fun sendControl(
+        name: String,
+        refresh: Boolean = true,
+        onFail: () -> Unit = {},
+        onSuccess: () -> Unit = {},
+        request: suspend CameraControls.() -> Boolean,
+    ) {
+        val link = controls ?: return
+        scope.launch {
+            if (link.request()) {
+                onSuccess()
+                if (refresh) link.requestSettingsRefresh()
+            } else {
+                presentControlNote("$name was not applied by the camera.")
+                onFail()
+            }
+        }
+    }
+
+    /** Coalesces rapid drum edits into one send per key per ~120 ms, latest wins (iOS `LunaExposureCoalescer`). */
+    private val coalesced = HashMap<String, () -> Unit>()
+    private fun coalesce(key: String, work: () -> Unit) {
+        val scheduled = coalesced.containsKey(key)
+        coalesced[key] = work
+        if (scheduled) return
+        scope.launch { delay(120); coalesced.remove(key)?.invoke() }
+    }
+
+    // Record and photo. Record never lies: the lamp holds controlBusy until capture status confirms.
+    fun pressRecord() {
+        if (!canSendControl()) return
+        val starting = !_status.value.isRecording
+        _controlBusy.value = true
+        pins.recording = pin(starting, SystemClock.elapsedRealtime(), 4_000)
+        sendControl(
+            if (starting) "Record" else "Stop", refresh = false,
+            onFail = { pins.recording = null; _controlBusy.value = false },
+            onSuccess = {
+                if (starting) recordStartedAt = SystemClock.elapsedRealtime()
+                else recordStartedAt = null
+                _status.value = _status.value.copy(isRecording = starting, recordElapsedSec = if (starting) _status.value.recordElapsedSec else 0)
+                _controlBusy.value = false
+            },
+        ) { if (starting) startRecording() else stopRecording() }
+    }
+
+    /** Rec lamp: a still in Photo, otherwise start/stop video (timelapse modes record too). */
+    fun pressShutter() {
+        if (!_status.value.isPhoto) return pressRecord()
+        if (!canSendControl()) return
+        _controlBusy.value = true
+        pins.photoInFlight = true
+        presentControlNote("Photo")
+        sendControl(
+            "Photo", refresh = false,
+            onFail = { pins.photoInFlight = false; _controlBusy.value = false },
+            onSuccess = { pins.photoInFlight = false; _controlBusy.value = false },
+        ) { takePhoto() }
+    }
+
+    fun setShootingMode(raw: Int) {
+        if (!canSendControl()) return
+        val mode = LunaShellMapping.cameraShootingMode(raw) ?: return
+        val previous = _status.value
+        if (previous.isRecording) return presentControlNote(ControlHud.RECORDING_COLOR_LOCK_NOTE)
+        pins.shootingMode = pin(raw, SystemClock.elapsedRealtime(), 3_000)
+        pins.format = null
+        _status.value = if (previous.shootingMode != raw) previous.clearedModeDependentCapabilities().copy(shootingMode = raw) else previous
+        sendControl(
+            CameraCommands.shootingModeLabel(raw).orEmpty(), refresh = false,
+            onFail = { pins.shootingMode = null; _status.value = _status.value.copy(shootingMode = previous.shootingMode) },
+        ) { setShootingMode(mode) }
+    }
+
+    // Exposure. Luna has one exposure message (program + ISO + shutter); the shell's ISO and
+    // shutter drums map onto its four programs.
+    private val currentIso: Int?
+        get() = _status.value.isoIndex.takeIf { it > 0 }?.let(CameraCommands::isoValue)
+    private val currentShutterSeconds: Double?
+        get() = _status.value.shutterDenom.takeIf { it > 0 }?.let { 1.0 / it }
+
+    private fun sendExposure(iso: Int?, shutterSeconds: Double?, name: String) = sendControl(
+        name, onFail = { pins.isoIndex = null; pins.shutterDenom = null; pins.expoMode = null },
+    ) { setExposure(iso, shutterSeconds) }
+
+    fun setIsoIndex(index: Int) {
+        if (!canSendControl()) return
+        val now = SystemClock.elapsedRealtime()
+        val iso = if (index == 0) null else CameraCommands.isoValue(index) ?: return
+        val shutter = if (_status.value.expoMode == CameraCommands.EXPO_MANUAL) currentShutterSeconds else null
+        val mode = if (iso == null && shutter == null) CameraCommands.EXPO_AUTO else CameraCommands.EXPO_MANUAL
+        pins.isoIndex = pin(index, now)
+        pins.expoMode = pin(mode, now)
+        _status.value = _status.value.copy(isoIndex = index, iso = iso ?: _status.value.iso, expoMode = mode)
+        coalesce("exposure") { sendExposure(iso, shutter, "ISO ${CameraCommands.isoLabel(index)}") }
+    }
+
+    fun setShutterDenom(denom: Int) {
+        if (!canSendControl() || denom <= 0) return
+        val now = SystemClock.elapsedRealtime()
+        pins.shutterDenom = pin(denom, now)
+        pins.expoMode = pin(CameraCommands.EXPO_MANUAL, now)
+        _status.value = _status.value.copy(shutterDenom = denom, expoMode = CameraCommands.EXPO_MANUAL)
+        val iso = currentIso
+        coalesce("exposure") { sendExposure(iso, 1.0 / denom, "1/$denom") }
+    }
+
+    fun setExpoMode(mode: Int) {
+        if (!canSendControl()) return
+        val now = SystemClock.elapsedRealtime()
+        pins.expoMode = pin(mode, now)
+        if (mode == CameraCommands.EXPO_AUTO) {
+            pins.isoIndex = pin(0, now)
+            _status.value = _status.value.copy(expoMode = mode, isoIndex = 0)
+            return sendExposure(null, null, "Auto exposure")
+        }
+        // Manual needs a shutter: keep the current one, else the 180 degree default.
+        val denom = _status.value.shutterDenom.takeIf { it > 0 } ?: (maxOf(_status.value.fps, 25) * 2)
+        pins.shutterDenom = pin(denom, now)
+        _status.value = _status.value.copy(expoMode = CameraCommands.EXPO_MANUAL, shutterDenom = denom)
+        sendExposure(currentIso, 1.0 / denom, "Manual exposure")
+    }
+
+    fun setEv(thirds: Int) {
+        if (!canSendControl()) return
+        val ev = EvComp.fromThirds(thirds)
+        pins.ev = pin(ev.rawValue, SystemClock.elapsedRealtime())
+        _status.value = _status.value.copy(evComp = ev.rawValue)
+        coalesce("ev") { sendControl("EV ${ev.label}", onFail = { pins.ev = null }) { setExposureBias(ev.thirds) } }
+    }
+
+    // Face priority needs on-phone face detection feeding EV; the Luna shell does not run it yet.
     fun setFacePriorityEnabled(on: Boolean) { if (on) unavailable("Face priority") }
-    fun setIsoLimit(raw: Int) = unavailable("ISO limit")
+    /** Luna's ISO ceiling is not an operator setting in the official app. */
+    fun setIsoLimit(raw: Int) = presentControlNote("Auto ISO ceiling is managed by the camera.")
     fun setApertureStrategy(raw: Int) = Unit
     fun getIsoLimit() = Unit
     suspend fun refreshIsoLimit(): Boolean = false
-    fun setShootingMode(raw: Int) = unavailable("Shooting mode")
 
     // Zoom (1x to the camera's reported ceiling, 15x on Luna Ultra).
     fun zoomCycleFrom(): Double = zoomPinchPreview ?: zoomTarget ?: _zoomReadout.value
@@ -434,8 +618,25 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
         stick = 0.0 to 0.0
         if (hasGimbal) scope.launch { controls?.gimbalStick(0.0, 0.0) }
     }
-    fun setGimbalMode(mode: GimbalMode) = unavailable("Gimbal mode")
-    fun setGimbalSpeed(speed: GimbalSpeed) = unavailable("Gimbal speed")
+    private fun canSetGimbalConfiguration() = hasGimbal && phase == ConnectionPhase.LIVE && !isBrowsingMedia
+    fun setGimbalMode(mode: GimbalMode) {
+        if (!canSetGimbalConfiguration()) return
+        val previous = _gimbalMode.value
+        pins.gimbalMode = pin(mode, SystemClock.elapsedRealtime(), 3_000)
+        _gimbalMode.value = mode
+        sendControl("Gimbal ${mode.label}", onFail = { pins.gimbalMode = null; _gimbalMode.value = previous }) {
+            setGimbalMode(LunaShellMapping.cameraGimbalMode(mode))
+        }
+    }
+    fun setGimbalSpeed(speed: GimbalSpeed) {
+        if (!canSetGimbalConfiguration()) return
+        val previous = _gimbalSpeed.value
+        pins.gimbalSpeed = pin(speed, SystemClock.elapsedRealtime(), 3_000)
+        _gimbalSpeed.value = speed
+        sendControl("Gimbal speed ${speed.label}", onFail = { pins.gimbalSpeed = null; _gimbalSpeed.value = previous }) {
+            setGimbalSpeed(LunaShellMapping.cameraGimbalSpeed(speed))
+        }
+    }
     fun setGimbalWaypoint(slot: GimbalWaypointSlot) = unavailable("Programmed moves")
     fun clearGimbalWaypoint(slot: GimbalWaypointSlot) = Unit
     fun setGimbalLegDuration(ab: Double? = null, bc: Double? = null) = Unit
@@ -476,14 +677,39 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
         _trackingHud.value = TrackingHud()
         scope.launch { controls?.stopTracking() }
     }
-    fun handleGamepadAction(action: GamepadOperatorAction) = Unit
+    fun handleGamepadAction(action: GamepadOperatorAction) {
+        when (action) {
+            GamepadOperatorAction.RECORD -> if (!_controlBusy.value) pressShutter()
+            GamepadOperatorAction.RECENTER -> performGimbalDoubleTap()
+            GamepadOperatorAction.FLIP -> flipGimbal()
+            GamepadOperatorAction.TRACK -> handleGamepadTrackToggle()
+            GamepadOperatorAction.ZOOM_CHIP_IN -> setZoom(CamFov.nextJump(zoomCycleFrom(), zoomStops()))
+            GamepadOperatorAction.ZOOM_CHIP_OUT -> setZoom(CamFov.previousJump(zoomCycleFrom(), zoomStops()))
+            GamepadOperatorAction.ISO_UP, GamepadOperatorAction.ISO_DOWN -> {
+                val status = _status.value
+                if (status.isoIndex < 0) return
+                val steps = if (action == GamepadOperatorAction.ISO_UP) 1 else -1
+                CameraCommands.isoStepped(status.isoIndex, steps, status.availableIsoIndices)?.let(::setIsoIndex)
+            }
+            GamepadOperatorAction.SHUTTER_OPEN, GamepadOperatorAction.SHUTTER_CLOSE -> {
+                val status = _status.value
+                val steps = if (action == GamepadOperatorAction.SHUTTER_OPEN) 1 else -1
+                val next = CameraCommands.shutterSteppedDenom(status.shutterDenom, steps, status.availableShutterDenoms) ?: return
+                if (GamepadShutterSync.shouldPersistPreferredAngle(
+                        OperatorPrefs.shutterUsesAngle(appContext), status.isPhoto, status.expoMode == CameraCommands.EXPO_AUTO,
+                    )
+                ) OperatorPrefs.setShutterAngleDegrees(appContext, GamepadShutterSync.preferredAngle(next, status.fps))
+                setShutterDenom(next)
+            }
+        }
+    }
     fun handleGamepadTrackToggle() = if (isTrackingActive) cancelTracking() else startTracking(0.5f, 0.5f)
     fun resetFocusPoint() { _focusPoint.value = 0.5f to 0.5f }
     fun applyDetectedFaces(faces: List<TrackingBox>) = Unit
     fun considerFaceFrame(bitmap: android.graphics.Bitmap) = Unit
     fun noteLiveFrame() = Unit
 
-    // Camera media is not mapped on Android yet.
+    // Camera media: MediaLibraryController drives [media]; these hold the browse state.
     private var mediaOwner = 0L
     fun markBrowsingMedia(browsing: Boolean, resumePending: Boolean = false): Long {
         isBrowsingMedia = browsing
@@ -497,20 +723,69 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun beginMediaBrowse() { isBrowsingMedia = true }
     fun endMediaBrowse() { isBrowsingMedia = false }
     fun listMedia() = Unit
-    fun deleteMedia(handle: Int) = unavailable("Camera media")
-    fun setMediaFavorite(handle: Int, favorite: Boolean) = unavailable("Camera media")
+    // Luna deletes by URI through MediaLibraryController; favorites stay local like the official app.
+    fun deleteMedia(handle: Int) = Unit
+    fun setMediaFavorite(handle: Int, favorite: Boolean) = Unit
 
-    fun setIsoIndex(index: Int) = unavailable("ISO")
-    fun setShutterDenom(denom: Int) = unavailable("Shutter")
-    fun setExpoMode(mode: Int) = unavailable("Exposure mode")
-    fun setWhiteBalanceAuto(tint: Int? = null) = unavailable("White balance")
-    fun setWhiteBalance(kelvin: Int, tint: Int) = unavailable("White balance")
+    // White balance: kelvin 2000...10000 or auto; the Luna has no tint.
+    fun setWhiteBalanceAuto(tint: Int? = null) = fireWhiteBalance(CameraCommands.WB_AUTO, 0)
+    fun setWhiteBalance(kelvin: Int, tint: Int) = fireWhiteBalance(CameraCommands.WB_CUSTOM, kelvin.coerceIn(2_000, 10_000))
+    private fun fireWhiteBalance(mode: Int, kelvin: Int) {
+        if (!canSendControl()) return
+        // fw 1.1.15 applies kelvin 3.5 to 3.9 s after the SET.
+        pins.whiteBalance = pin(mode to kelvin, SystemClock.elapsedRealtime(), 5_000)
+        _status.value = _status.value.copy(wbMode = mode, wbKelvin = if (kelvin > 0) kelvin else _status.value.wbKelvin, wbTint = 0)
+        coalesce("wb") {
+            sendControl(if (mode == CameraCommands.WB_AUTO) "WB Auto" else "WB ${kelvin}K", onFail = { pins.whiteBalance = null }) {
+                setWhiteBalance(kelvin.takeIf { mode == CameraCommands.WB_CUSTOM })
+            }
+        }
+    }
+    // Luna video AF is continuous-only in the official app; no AF-S/AF-C chip.
     fun setFocusMode(continuous: Boolean) = Unit
     fun setFocusTrack(mode: Int) = Unit
     fun refreshFocusTrack() = Unit
-    fun setColorMode(mode: Int, hopEnabled: Boolean = false) = unavailable("Color profile")
-    fun setVideoFormat(format: VideoFormat, fromOperator: Boolean = true): Boolean { unavailable("Format"); return false }
-    fun setResolutionFps(res: Int, fpsIndex: Int): Boolean { unavailable("Format"); return false }
+
+    fun setColorMode(mode: Int, hopEnabled: Boolean = false) {
+        if (!canSendControl()) return
+        val previous = _status.value.colorMode
+        if (_status.value.isRecording && mode != previous) return presentControlNote(ControlHud.RECORDING_COLOR_LOCK_NOTE)
+        if (mode !in LunaShellMapping.colorModes) return
+        pins.color = pin(mode, SystemClock.elapsedRealtime(), 3_000)
+        _status.value = _status.value.copy(colorMode = mode)
+        sendControl(CameraCommands.colorLabel(mode), onFail = { pins.color = null; _status.value = _status.value.copy(colorMode = previous) }) {
+            setColorProfile(LunaShellMapping.colorProfile(mode))
+        }
+    }
+
+    fun setVideoFormat(format: VideoFormat, fromOperator: Boolean = true): Boolean {
+        if (!canSendControl()) return false
+        val previous = _status.value
+        if (previous.isPhoto) return false
+        if (previous.isRecording) { presentControlNote(ControlHud.RECORDING_COLOR_LOCK_NOTE); return false }
+        val raw = formatTable[format] ?: run { presentControlNote("${format.chipLabel} is not available in this mode."); return false }
+        val formatPin = pin(format, SystemClock.elapsedRealtime(), 3_000)
+        pins.format = formatPin
+        _status.value = previous.copy(resolutionCode = format.resolution.rawValue, fpsIndex = format.frameRate.rawValue, fps = format.frameRate.fps)
+        sendControl(format.chipLabel, onFail = {
+            if (pins.format === formatPin) {
+                pins.format = null
+                _status.value = _status.value.copy(resolutionCode = previous.resolutionCode, fpsIndex = previous.fpsIndex, fps = previous.fps)
+            }
+        }) { setRecordFormat(raw) }
+        // Angle mode is ours: keep the chosen degrees and rewrite 1/N for the new fps.
+        CaptureLists.rematchShutterDenomAfterFps(
+            usesAngle = OperatorPrefs.shutterUsesAngle(appContext),
+            degrees = OperatorPrefs.shutterAngleDegrees(appContext),
+            previousFps = previous.fps,
+            nextFps = format.frameRate.fps,
+            expoMode = previous.expoMode,
+            currentDenom = previous.shutterDenom,
+            available = previous.availableShutterDenoms,
+        )?.let(::setShutterDenom)
+        return true
+    }
+    fun setResolutionFps(res: Int, fpsIndex: Int): Boolean = VideoFormat.parse(res, fpsIndex)?.let(::setVideoFormat) ?: false
     // The Luna exposes no audio controls or level meters.
     fun setAudioChannel(value: Int) = Unit
     fun setVocalBoost(on: Boolean) = Unit

@@ -58,6 +58,10 @@ object CameraCommands {
     const val COLOR_NORMAL10 = 0x3D
     /** Semantic D-Log M. Nano and Pocket 3 SET is `3D`. */
     const val COLOR_DLOG_M = 0x00
+    /** Insta360 I-Log: the monitor's neutral I-Log id (`MonitorTransfer.ILOG_BRIDGE_ID`), not a DJI SET byte. */
+    const val COLOR_ILOG = 65_536
+    /** Insta360 Dolby Vision. Not a DJI SET byte. */
+    const val COLOR_DOLBY_VISION = 0xE5
 
     private val COLOR_KNOWN =
         setOf(COLOR_NORMAL, COLOR_HDR, COLOR_DLOG, COLOR_DLOG2, COLOR_NORMAL10, COLOR_DLOG_M)
@@ -396,8 +400,11 @@ object CameraCommands {
      * Both photo encodings read back as "Photo" — the body decides which it uses.
      * Pocket 3 presents `0x28` as Low-Light video; other bodies keep SuperNight.
      */
+    /** Brand storefronts may rename modes (Insta360 TimeShift / PureVideo). Set once at launch. */
+    @Volatile var shootingModeLabelOverrides: Map<Int, String> = emptyMap()
+
     fun shootingModeLabel(raw: Int, cameraName: String? = null): String? =
-        when (raw) {
+        shootingModeLabelOverrides[raw] ?: when (raw) {
             SHOOT_SLOWMO -> "SlowMo"
             SHOOT_VIDEO -> "Video"
             SHOOT_TIMELAPSE -> "TimeLapse"
@@ -911,12 +918,16 @@ object CameraCommands {
             COLOR_DLOG2 -> "D-Log2"
             COLOR_NORMAL10 -> "Normal 10-bit"
             COLOR_DLOG_M -> if (family == "nano") "D-Log M 10-bit" else "D-Log M"
+            COLOR_ILOG -> "I-Log"
+            COLOR_DOLBY_VISION -> "Dolby Vision"
             else -> "—"
         }
 
     /** `IsoIndex.allCases` raw bytes. Unknown camcap entries are dropped. */
     val ISO_INDEX_ALL = listOf(0x00, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B)
-    val ISO_INDEX_BYTES = ISO_INDEX_ALL.toSet()
+    /** Insta360 Luna ISO stop. Not a DJI index byte, so not in the DJI ladder above. */
+    const val ISO_160 = 0xE0
+    val ISO_INDEX_BYTES = (ISO_INDEX_ALL + ISO_160).toSet()
 
     fun isoLabel(index: Int): String =
         when (index) {
@@ -930,6 +941,7 @@ object CameraCommands {
             0x09 -> "6400"
             0x0A -> "12800"
             0x0B -> "25600"
+            ISO_160 -> "160"
             else -> "—"
         }
 
@@ -945,6 +957,7 @@ object CameraCommands {
             0x09 -> 6400
             0x0A -> 12800
             0x0B -> 25600
+            ISO_160 -> 160
             else -> null
         }
 
@@ -959,6 +972,7 @@ object CameraCommands {
             6400 -> 0x09
             12800 -> 0x0A
             25600 -> 0x0B
+            160 -> ISO_160
             else -> null
         }
 

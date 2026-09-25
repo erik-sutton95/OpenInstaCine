@@ -34,6 +34,8 @@ data class MediaFile(
     /** `YYYYMMDDHHmmss` baked into `DJI_20260814125250_0034_D.MP4`. */
     val filenameTimestamp: String?
         get() = TIMESTAMP_REGEX.find(filename)?.groupValues?.getOrNull(1)
+            // Insta360 `VID_20260916_123456_00_001.mp4` / `IMG_...`.
+            ?: INSTA360_REGEX.find(filename)?.groupValues?.let { it[1] + it[2] }
 
     val dateKey: String
         get() = filenameTimestamp?.take(8).orEmpty()
@@ -52,6 +54,7 @@ data class MediaFile(
 
     companion object {
         private val TIMESTAMP_REGEX = Regex("_(\\d{14})_")
+        private val INSTA360_REGEX = Regex("_(\\d{8})_(\\d{6})_")
         private val SEQUENCE_REGEX = Regex("_(\\d{4})_D")
         private val BURST_REGEX = Regex("""^(.+)_(\d{3})\.\w+$""")
     }
@@ -96,7 +99,13 @@ object MediaHTTP {
     const val HOST = "192.168.2.1"
     const val PORT = 80
 
-    fun pathUrlString(storage: Int, path: String): String = "http://$HOST/v2?storage=$storage&path=$path"
+    /** Brand hook: DJI serves `/v2?storage=&path=`; Insta360 serves each file at its own path. Set at launch. */
+    @Volatile var host = HOST
+    @Volatile var directPath = false
+
+    fun pathUrlString(storage: Int, path: String): String =
+        if (directPath) "http://$host${if (path.startsWith("/")) path else "/$path"}"
+        else "http://$host/v2?storage=$storage&path=$path"
 
     fun pathUrl(storage: Int, path: String): HttpUrl = pathUrlString(storage, path).toHttpUrl()
 

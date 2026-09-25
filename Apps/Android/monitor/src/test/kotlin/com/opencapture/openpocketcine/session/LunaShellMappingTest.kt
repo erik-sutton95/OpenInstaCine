@@ -1,0 +1,175 @@
+package com.opencapture.openpocketcine.session
+
+import com.opencapture.openpocketcine.core.CameraColorProfile
+import com.opencapture.openpocketcine.core.CameraExposure
+import com.opencapture.openpocketcine.core.CameraGimbalMode
+import com.opencapture.openpocketcine.core.CameraGimbalSpeed
+import com.opencapture.openpocketcine.core.CameraReadout
+import com.opencapture.openpocketcine.core.CameraRecordFormat
+import com.opencapture.openpocketcine.core.CameraShootingMode
+import com.opencapture.openpocketcine.core.CameraStorage
+import com.opencapture.openpocketcine.feed.MonitorTransfer
+import com.opencapture.openpocketcine.media.MediaFile
+import com.opencapture.openpocketcine.media.MediaHTTP
+import kotlin.test.*
+import org.junit.Test
+
+/** Port checks for iOS `LunaShellMapping`: Luna readout to the shared CameraStatus and back. */
+class LunaShellMappingTest {
+    private val m = LunaShellMapping
+
+    private val formats = listOf(
+        CameraRecordFormat(211, 7680, 4320, 25.0), CameraRecordFormat(48, 3840, 2160, 25.0),
+        CameraRecordFormat(49, 3840, 2160, 24.0), CameraRecordFormat(248, 2688, 1520, 24.0),
+        CameraRecordFormat(51, 2720, 1530, 24.0), CameraRecordFormat(454, 1728, 3072, 25.0),
+        CameraRecordFormat(439, 3840, 1632, 25.0), CameraRecordFormat(52, 1920, 1080, 25.0),
+    )
+
+    private val readout = CameraReadout(
+        batteryPercent = 66, charging = true,
+        storages = listOf(
+            CameraStorage(2, true, 50_384_863_232, 50_490_900_480),
+            CameraStorage(3, false, 0, 0),
+        ),
+        shootingMode = CameraShootingMode.VIDEO,
+        videoExposure = CameraExposure(3, 400, 0.02),
+        exposureBiasTenths = -3,
+        whiteBalanceKelvin = 5600,
+        color = CameraColorProfile.LOG,
+        recordFormat = formats[1],
+        recordFormats = formats,
+        zoom = 2.5,
+        afMode = 3,
+    )
+
+    @Test fun enumsRoundTrip() {
+        for (mode in CameraShootingMode.entries) {
+            val back = m.cameraShootingMode(m.shootingMode(mode))
+            assertEquals(if (mode == CameraShootingMode.PANO) CameraShootingMode.PHOTO else mode, back)
+        }
+        for (profile in listOf(CameraColorProfile.STANDARD, CameraColorProfile.LOG, CameraColorProfile.DOLBY_VISION, CameraColorProfile.HDR)) {
+            assertEquals(profile, m.colorProfile(m.colorMode(profile)))
+        }
+        assertEquals(CameraCommands.COLOR_NORMAL, m.colorMode(CameraColorProfile.VIVID))
+        for (mode in GimbalMode.entries) assertEquals(mode, m.gimbalMode(m.cameraGimbalMode(mode)))
+        assertEquals(GimbalMode.FPV, m.gimbalMode(CameraGimbalMode.FPV_VERTICAL))
+        assertNull(m.gimbalMode(CameraGimbalMode.STABILIZED_VERTICAL))
+        for (speed in GimbalSpeed.entries) assertEquals(speed, m.gimbalSpeed(m.cameraGimbalSpeed(speed)))
+        assertEquals(GimbalSpeed.FAST, m.gimbalSpeed(CameraGimbalSpeed.SENSITIVE))
+        // The I-Log color id is the monitor's I-Log transfer, so scopes and LUTs read log.
+        assertEquals(MonitorTransfer.ILOG, MonitorTransfer.fromColorMode(m.colorMode(CameraColorProfile.LOG)))
+        assertEquals(MonitorTransfer.REC709, MonitorTransfer.fromColorMode(CameraCommands.COLOR_DOLBY_VISION))
+    }
+
+    @Test fun formatTableRoundTripsAndFirstValueWins() {
+        val table = m.formatTable(formats)
+        assertEquals(211L, table[VideoFormat(VideoResolution.LUNA_8K, VideoFrameRate.FPS25)])
+        assertEquals(48L, table[VideoFormat(VideoResolution.P4K, VideoFrameRate.FPS25)])
+        // 2688x1520 and 2720x1530 are both the shared 2.7K chip; the first listed wins.
+        assertEquals(248L, table[VideoFormat(VideoResolution.P2_7K, VideoFrameRate.FPS24)])
+        assertEquals(454L, table[VideoFormat(VideoResolution.P3K_9X16, VideoFrameRate.FPS25)])
+        assertEquals(439L, table[VideoFormat(VideoResolution.LUNA_4K_235, VideoFrameRate.FPS25)])
+        for ((format, raw) in table) {
+            val source = formats.first { it.id == raw }
+            assertEquals(format, m.videoFormat(source), "$raw")
+        }
+        assertEquals("8K", VideoResolution.LUNA_8K.label)
+        assertEquals("4K 2.35:1", VideoResolution.LUNA_4K_235.label)
+        assertEquals("4K 9:16", VideoResolution.LUNA_4K_9X16.label)
+        assertEquals("3K 9:16", m.resolution(1728, 3072).label)
+        assertEquals(m.unknownResolution, m.resolution(4000, 3000))
+    }
+
+    @Test fun settingsMapOntoSharedStatus() {
+        val pins = LunaControlPins()
+        val (s, table) = m.applySettings(readout, CameraStatus(shootingMode = CameraCommands.SHOOT_VIDEO), pins, now = 0)
+        assertEquals(CameraCommands.EXPO_MANUAL, s.expoMode)
+        assertEquals("400", s.isoLabel)
+        assertEquals("1/50", s.shutterLabel)
+        assertEquals(-1, com.opencapture.openpocketcine.EvComp.fromRaw(s.evComp)?.thirds)
+        assertEquals("5600K", s.wbLabel)
+        assertEquals("I-Log", s.colorLabel)
+        assertEquals("4K · 25p", s.recFormatLabel)
+        assertEquals(25, s.fps)
+        assertEquals(2.5, s.zoomFactor)
+        assertEquals(CameraCommands.FOCUS_CONTINUOUS, s.focusMode)
+        assertEquals(m.colorModes, s.availableColorModes)
+        assertEquals(table.keys, s.availableVideoFormats.toSet())
+        assertTrue(CameraCommands.ISO_160 in s.availableIsoIndices)
+        assertEquals("160", CameraCommands.isoLabel(CameraCommands.ISO_160))
+        assertEquals(CameraCommands.ISO_160, CameraCommands.isoIndexFromValue(160))
+        assertEquals(listOf("Normal", "I-Log", "Dolby Vision"), m.colorModes.map { CameraCommands.colorLabel(it) })
+        assertEquals(m.colorModes, CameraModel.colorModesFor("Insta360 Luna Ultra", "generic"))
+        // Auto: ISO 0 and shutter 0 are the camera's choice; WB 0 is auto.
+        val auto = m.applySettings(readout.copy(videoExposure = CameraExposure(0, 0, 0.0), whiteBalanceKelvin = 0), s, pins, 0).first
+        assertEquals(CameraCommands.EXPO_AUTO, auto.expoMode)
+        assertEquals("Auto", auto.isoLabel)
+        assertEquals(-1, auto.shutterDenom)
+        assertEquals("Auto", auto.wbLabel)
+        assertEquals(5600, auto.wbKelvin) // Auto keeps the last custom kelvin.
+        // Nothing read yet leaves the shared unknown state alone.
+        assertEquals(CameraStatus(), m.applySettings(CameraReadout(), CameraStatus(), pins, 0).first)
+    }
+
+    @Test fun pinsHoldTheOperatorChoiceUntilReportedOrExpired() {
+        val pins = LunaControlPins()
+        pins.whiteBalance = pin(CameraCommands.WB_CUSTOM to 3200, now = 0, settleMs = 5_000)
+        pins.isoIndex = pin(CameraCommands.ISO_160, now = 0)
+        val held = m.applySettings(readout, CameraStatus(), pins, now = 1_000).first
+        assertEquals(3200, held.wbKelvin)
+        assertEquals("160", held.isoLabel)
+        // The camera reports the new ISO: that pin releases, WB (5 s settle) still holds.
+        m.applySettings(readout.copy(videoExposure = CameraExposure(3, 160, 0.02)), held, pins, now = 1_500)
+        assertNull(pins.isoIndex)
+        assertNotNull(pins.whiteBalance)
+        val expired = m.applySettings(readout, held, pins, now = 5_000).first
+        assertEquals(5600, expired.wbKelvin)
+        assertNull(pins.whiteBalance)
+    }
+
+    @Test fun deviceStatusBatteryStorageAndMode() {
+        val pins = LunaControlPins()
+        val start = CameraStatus(shootingMode = CameraCommands.SHOOT_VIDEO, availableVideoFormats = listOf(VideoFormat(VideoResolution.P4K, VideoFrameRate.FPS25)))
+        val s = m.applyDevice(readout, start, pins, now = 0)
+        assertEquals(66, s.batteryPercent)
+        assertTrue(s.charging)
+        assertEquals(50_490, s.internalTotalMb)
+        assertEquals(50_384, s.storageFreeMb)
+        assertEquals(0, s.sdTotalMb) // SD slot reports NOCARD
+        assertEquals(start.availableVideoFormats, s.availableVideoFormats)
+        // A mode change on the camera clears the previous mode's wheels.
+        val photo = m.applyDevice(readout.copy(shootingMode = CameraShootingMode.PHOTO), s, pins, now = 0)
+        assertEquals(CameraCommands.SHOOT_PHOTO, photo.shootingMode)
+        assertTrue(photo.isPhoto)
+        assertTrue(photo.availableVideoFormats.isEmpty())
+        // The operator's pending mode survives a stale report.
+        pins.shootingMode = pin(CameraCommands.SHOOT_SLOWMO, now = 0, settleMs = 3_000)
+        val pending = m.applyDevice(readout, s.copy(shootingMode = CameraCommands.SHOOT_SLOWMO), pins, now = 1_000)
+        assertEquals(CameraCommands.SHOOT_SLOWMO, pending.shootingMode)
+    }
+
+    @Test fun lunaModeLabelsAndMediaAddressing() {
+        val saved = CameraCommands.shootingModeLabelOverrides
+        try {
+            CameraCommands.shootingModeLabelOverrides = m.shootingModeLabels
+            assertEquals("TimeShift", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_HYPERLAPSE))
+            assertEquals("PureVideo", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_SUPER_NIGHT))
+            assertEquals("Video", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_VIDEO))
+        } finally {
+            CameraCommands.shootingModeLabelOverrides = saved
+        }
+        val host = MediaHTTP.host
+        try {
+            MediaHTTP.host = "192.168.42.1"
+            MediaHTTP.directPath = true
+            val path = "/storage_internal/DCIM/Camera01/VID_20260916_124229_002.mp4"
+            assertEquals("http://192.168.42.1$path", MediaHTTP.pathUrlString(0, path))
+        } finally {
+            MediaHTTP.host = host
+            MediaHTTP.directPath = false
+        }
+        assertEquals("20260916124229", MediaFile("/DCIM/Camera01/VID_20260916_124229_002.mp4", "").filenameTimestamp)
+        assertEquals("20260814125250", MediaFile("DJI_20260814125250_0034_D.MP4", "").filenameTimestamp)
+        assertEquals("00:01:05:00", m.clock(65))
+    }
+}
