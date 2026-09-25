@@ -1,140 +1,138 @@
 # OpenInstaCine
 
-Native iOS and Android field monitor for Insta360 cameras, starting with **Luna
-Ultra**. OpenInstaCine carries forward OpenPocketCine's monitor shell, with a
-yellow `#FFCF00` identity and a separate Insta360 connection adapter.
+Native iOS field monitor for the **Insta360 Luna Ultra**. The app is a 1:1 copy
+of the sister app OpenPocketCine (DJI Osmo monitor, sibling checkout
+`../OpenPocketCine`, synced
+from commit `c1e8f94`, see `docs/implementation/openpocketcine-sync-commit.txt`)
+with the same screens and UX, a yellow `#FFCF00` accent, and a Luna backend in
+place of the DJI link. Supported camera firmware: **Luna Ultra v1.1.15**
+([hardware verification](docs/research/luna-fw-1.1.15-verification.md)).
 
-The native Apple app is the current OpenPocketCine monitor shell, vendored and
-kept in sync with `just sync-openpocketcine`, with a yellow `#FFCF00` identity
-and a Luna Ultra adapter. Re-sync from the sibling OpenPocketCine checkout
-instead of forking screens. OpenPocketCine and OpenZCine have **not yet been
-switched to consume this repo**.
+Feature-by-feature status and parity with OpenPocketCine:
+[docs/implementation/luna-ios-status.md](docs/implementation/luna-ios-status.md).
 
-The earlier Python Mac viewer completed real BLE → Wi-Fi → displayed-video
-sessions. Native simulator/emulator review uses an explicitly labeled **LOCAL
-REPLAY** of private camera footage. That proves decode/render/UI behavior, not a
-new camera connection. Native first-install consent, Wi-Fi association and
-reconnect still need physical-device validation. The overnight app review does
-not operate the connected phone.
+OpenInstaCine is an independent project, unaffiliated with Insta360.
 
-## What is included
+## Layout
 
-| Area | Current scope |
+| Path | What |
 | --- | --- |
-| Live monitor | Inherited landscape/portrait layouts, status chrome, DISP modes and editor, interface lock, settings overlays, feed warmup/recovery presentation |
-| Image assists | Official I-Log → Rec.709 SDR look, LUT import/look selection, peaking, false color, highlight/midtone zebras, guides, grids, crosshair and mirror |
-| Scopes | Waveform, RGB parade, histogram, vectorscope and traffic lights, driven by decoded image samples |
-| Media shell | Library, sorting/filtering, favorites, cache states, playback and playback assists; Luna list / HTTP download / delete use captured commands 13 / 11 / 12 |
-| Delivery | Existing local-media share/export surfaces; Apple retains LUT bake and Frame.io delivery, which requires local configuration |
-| Luna adapter | Discovery, owner approval, encrypted credential bootstrap, camera Wi-Fi handoff, HEVC preview, record/photo, exposure, color, zoom, gimbal, tap-focus, Deep Track |
-| Deferred | Color Recovery (detached-screen RPC, not phone option 73), filter SET 18, camera-side star, UCD2 playback 89–99, live audio meters, Watcher / Osmo multiview |
+| `ios/` | XcodeGen project (`ios/project.yml`), app `ios/OpenInstaCine`, tests, watch app |
+| `Sources/` | Shared OpenPocketCine core (`OpenPocketViewCore`, `MonitorContracts`, `MonitorUI`, ...) with small Luna hooks (I-Log color mode, Luna resolutions, `.lrv` proxy) |
+| `Adapters/Insta360Protocol` | Portable Luna codec: UCD2 framing, protobuf, status, settings, media and control messages |
+| `Adapters/Insta360Apple` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport |
+| `tools/LunaProbe` | Swift CLI that drives the camera from a Mac on its Wi-Fi (used for the fw 1.1.15 verification) |
+| `tools/` | Python lab tools: BLE capture, Mac preview, DEBUG remote client |
+| `Apps/Android` | Android app from the pre-rebase shell, **not yet synced** to the new iOS shell |
 
-Unsupported operations do not invent opcodes. The observed preview is 1280×720
-HEVC Main at 25 fps, 8-bit Rec.709 limited range on firmware v1.0.288; these are
-preview properties, not the camera's recording settings. Signal colors such as
-false color, clipping and record red retain their meaning alongside the yellow
-app accent.
+Luna-specific app code lives in `ios/OpenInstaCine/CameraSession.swift`,
+`CameraSessionControls.swift`, `CameraMedia.swift` (Luna extension),
+`LunaShellMapping.swift`, `LunaThumbnailImage.swift`, `DebugRemote.swift`,
+`OpenInstaCineBrand.swift`, `OsmoCameraPageAdapter.swift` and
+`OsmoMonitorPresentation.swift` (the `Osmo*` names are kept so shared call sites
+bind unchanged). Everything else in `ios/OpenInstaCine` is the shared shell.
+`just sync-openpocketcine` re-copies the shell from the sibling checkout and
+leaves the Luna files alone.
 
-See the [OpenPocketCine foundation](docs/implementation/openpocketcine-foundation.md),
-[command catalog](docs/research/luna-command-catalog.md), and
-[shared-engine design](docs/SHARED-MONITOR-ENGINE.md).
+## Build and run
 
-## Build and review
+Needs Xcode 26, XcodeGen and `just`. Run from the repository root.
 
-Run commands from this repository root. Apple development uses Xcode with an
-iOS Simulator runtime, XcodeGen and Swift 6; the inspected environment has Xcode
-26.2 and XcodeGen 2.46. Android targets API 29+ and arm64-v8a, using SDK 36,
-NDK 28.2.13676358, CMake 3.22.1, Java 17+ and the matching Swift 6.3.3 Android
-toolchain/SDK. Android stages the complete Swift runtime automatically.
+| Recipe | What it does |
+| --- | --- |
+| `just ios-generate` | `xcodegen generate` in `ios/` |
+| `just ios-build` | Simulator build, no signing, derived data in `.local/DD` |
+| `just ios-run [device]` | Development-signed build, install and launch on a USB iPhone (devicectl id) |
+| `just ios-test` | App unit tests on the first available iPhone simulator |
+| `just core-test` | `swift test` for the shared core and `Adapters/Insta360Protocol` |
+| `just oic-remote ...` | DEBUG remote client (see below) |
+| `just sync-openpocketcine` | Re-sync the shell from `../OpenPocketCine` |
+| `just luna-official-xc device` | XCUITest driver for the official Insta360 app (lab captures) |
+| `just lab-setup`, `just luna-view` | Python venv and the Mac live-view lab |
+| `just android-build`, `just android-check` | Android APK and checks (old shell) |
 
-```sh
-# Portable shared core and protocol tests; no camera or phone access.
-swift test
-swift test --package-path Adapters/Insta360Protocol
+## Simulator live testing rig
 
-# Generate and compile the native Apple app for Simulator.
-just apple-generate
-just apple-build
+The Simulator has no Bluetooth or hotspot API but shares the Mac's network. In
+the Simulator build the backend skips BLE and talks straight to a camera on the
+current network (`LunaSessionHub` in `CameraSession.swift`,
+`LunaCameraBackend(useExistingNetwork: true)`).
 
-# Select an existing simulator explicitly; these commands never select a phone.
-xcrun simctl list devices available
-just apple-test SIMULATOR_UUID
-just apple-simulator SIMULATOR_UUID
+1. Join the Mac's `en0` to the camera AP (camera `192.168.42.1`, Mac gets a
+   `192.168.42.x` address). `.local/wake-and-join.sh` wakes the camera Wi-Fi
+   over BLE with the lab identity and joins `en0` using the password in
+   `.local/luna-wifi.json`. Keep internet on another interface.
+2. `just ios-build`, then install the DEBUG app in a booted simulator:
+   `xcrun simctl install booted .local/DD/Build/Products/Debug-iphonesimulator/OpenInstaCine.app`
+3. Launch with the already approved client identity (Simulator builds only read
+   `LUNA_IDENTITY`, see `LunaSecureStore.swift`):
 
-# Private replay requires ffmpeg/ffprobe and an existing local HEVC recording.
-just apple-replay SIMULATOR_UUID /absolute/path/to/private-preview.hevc
-```
+   ```sh
+   SIMCTL_CHILD_LUNA_IDENTITY="$(python3 -c "import json;print(json.load(open('.local/luna-client-identity.json'))['authorization_id'])")" \
+     xcrun simctl launch --terminate-running-process booted com.opencapture.openinstacine
+   ```
 
-The underlying Apple generation/build commands are:
+   The identity value is private: it lives only in `.local/` (gitignored).
+   Never paste it into commits, docs or logs.
+4. Drive the app with the DEBUG remote: `scan`, then `connectFirst`.
 
-```sh
-xcodegen --spec Apps/Apple/project.yml
-xcodebuild -project Apps/Apple/OpenInstaCine.xcodeproj \
-  -scheme OpenInstaCine -configuration Debug \
-  -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath .local/AppleDerivedData CODE_SIGNING_ALLOWED=NO build
-```
+## DEBUG remote
 
-`apple-test`, `apple-simulator` and `apple-replay` require a simulator UUID.
-Replay media and generated indexes stay private and are not bundled with the
-app. Without a replay source, Simulator cannot exercise CoreBluetooth. Mac
-Catalyst also builds and has displayed private replay through the shared
-monitor; native live-camera operation on Catalyst still needs validation.
-
-```sh
-# Native Android APK, inherited monitor tests, protocol tests and lint.
-Apps/Android/gradlew -p Apps/Android :app:assembleDebug
-Apps/Android/gradlew -p Apps/Android :monitor:testDebugUnitTest :luna-adapter:testDebugUnitTest
-Apps/Android/gradlew -p Apps/Android :app:lintDebug :monitor:lintDebug :luna-adapter:lintDebug
-```
-
-Android output: `Apps/Android/app/build/outputs/apk/debug/app-debug.apk`.
-The existing SDK-36 AAR metadata exemption is retained and documented in the
-Gradle files; some inherited dependencies request SDK 37 metadata. Native JNI
-loading and rendering must be checked in addition to JVM tests. Android
-emulator replay is also explicitly labeled; its software decode/GPU limits do
-not establish real-device performance.
-
-Re-sync the OpenPocketCine engine with `just sync-openpocketcine`. Portable
-shared-engine tests (`swift test`) and Insta360 protocol tests are the gates
-for that vendored tree plus the Luna codec. `just apple-build` compiles the
-native Apple storefront for Simulator without signing. Android still needs its
-Gradle modules pointed at the newly vendored `monitor-ui` / monitor sources
-before APK claims. Physical Luna connect remains a device check.
-
-## Existing Mac live-view lab
-
-The small Python viewer remains available independently of the native shell:
+DEBUG builds (never Release) run an HTTP listener on TCP 18780
+(`ios/OpenInstaCine/DebugRemote.swift`). In the Simulator it is on localhost;
+on a USB iPhone `tools/oic_remote.py` finds the CoreDevice tunnel itself when
+`OIC_URL` is unset.
 
 ```sh
-just lab-setup
-just luna-view
+export OIC_URL=http://127.0.0.1:18780
+python3 tools/oic_remote.py state          # JSON: phase, live stats, camera settings, panels, assists
+python3 tools/oic_remote.py log            # recent control log
+python3 tools/oic_remote.py do '{"action":"iso","value":400}'
+python3 tools/oic_remote.py shot out.png   # key window snapshot
+python3 tools/oic_remote.py frame out.jpg  # last decoded live frame
 ```
 
-Keep the camera awake and close the official Insta360 app's connection first.
-On a new setup use `just luna-authorize 'EXACT_ADVERTISED_NAME'` to request
-approval on the camera, then `just luna-view 'EXACT_ADVERTISED_NAME'`. Close the
-video window to stop. These commands connect to the real camera and may change
-the Mac's Wi-Fi association; they are separate from simulator-only review.
-[Mac instructions and measured evidence](docs/mac-preview.md).
+Use a Python 3.10+ `python3` (the script uses `dict | None`); the
+`just oic-remote` recipe calls `/usr/bin/python3`, which is 3.9 on macOS.
 
-Protocol and capture references:
+Actions (`"action"` plus the keys shown; every action takes an optional
+`"pause"` in seconds):
 
+| Group | Actions |
+| --- | --- |
+| Connection | `scan`, `connectFirst`, `reconnect` (`id` optional), `disconnect`, `pairNew` (`value` bool) |
+| Capture | `record`, `mode` (`value` label, e.g. `"Timelapse"`), `format` (`value` chip label) |
+| Exposure | `iso` (`value` number or `"auto"`), `shutter` (`value` denominator), `expo` (`"auto"`/`"manual"`), `ev` (`value` stops), `wb` (`value` kelvin or `"auto"`), `color` (`value` label) |
+| Zoom | `zoom` (`value`), `pinch` (`value`, `steps`) |
+| Gimbal | `stick` (`x`, `y`, `seconds`), `recenter`, `flip`, `gimbalMode` (`value`), `gimbalSpeed` (`value`) |
+| Focus | `tap` (`x`, `y`), `track` (`x`, `y`, `w`, `h`), `cancelTrack` |
+| UI | `lock` (`value` bool), `clean` (`value` bool), `panel` (`settings`, `media`, `homeSettings`, `homeMedia`), `settingsTab` (`value`), `sheet` (`value`), `assist` (`value` tool, e.g. `"WAVE"`) |
+| Media | `mediaBrowse`, `mediaEnd`, `files`, `thumb`, `download`, `delete` (`value` filename) |
+| Lab | `refreshStatus`, `raw` (`code`, `hex` body), `wait` (`seconds`) |
+
+## Mac live-view lab
+
+The Python viewer works independently of the app: `just lab-setup`, then
+`just luna-authorize 'EXACT_ADVERTISED_NAME'` once and `just luna-view`.
+It connects to the real camera and may change the Mac's Wi-Fi. Details:
+[docs/mac-preview.md](docs/mac-preview.md).
+
+## Protocol and research
+
+- [fw 1.1.15 hardware verification](docs/research/luna-fw-1.1.15-verification.md)
+- [Command catalog](docs/research/luna-command-catalog.md)
 - [Public sources and command research](docs/research/insta360-protocol-sources.md)
 - [Verified BLE bootstrap](docs/research/luna-ble-bootstrap-2026-09-11.md)
 - [Own Wi-Fi handoff](docs/research/luna-own-network-2026-09-11.md)
-- [TCP reconnect and decoded HEVC proof](docs/research/luna-reconnect-2026-09-11.md)
+- [TCP reconnect and decoded HEVC](docs/research/luna-reconnect-2026-09-11.md)
 - [Portable Swift protocol](docs/implementation/luna-swift-protocol.md)
+- [I-Log color](docs/implementation/i-log.md) and [white paper notes](docs/research/luna-i-log-white-paper.md)
+- [Color Recovery (detachable screen link)](docs/implementation/luna-color-recovery.md)
 - [Passive BLE capture workflow](docs/capture-guide.md)
-- [Shared-engine design standard](docs/SHARED-MONITOR-ENGINE.md)
 
-Raw captures, HCI logs, camera footage, identifiers, Wi-Fi credentials and
-replay indexes remain in gitignored `captures/` or `.local/`. Apple stores its
-approval identity and Wi-Fi credentials in Keychain. Android persists its own
-installation identity and keeps Wi-Fi passwords/session keys in memory.
-Frame.io configuration is local/CI supplied; no account or OAuth credential is
-bundled.
+Raw captures, HCI logs, camera footage, identities and Wi-Fi credentials stay
+in gitignored `captures/` and `.local/`. The app keeps its approval identity and
+camera Wi-Fi password in the Keychain.
 
 Licensed under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) and
-[third-party notices](THIRD-PARTY-NOTICES.md) for inherited code, fonts and icons.
-OpenInstaCine is an independent project, unaffiliated with Insta360.
+[third-party notices](THIRD-PARTY-NOTICES.md).
