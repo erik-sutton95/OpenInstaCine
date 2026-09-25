@@ -22,6 +22,9 @@ public final class LunaCameraBackend: CameraBackend {
     public var onSettings: ((LunaPhotographySettings) -> Void)?
     public var onCapture: ((LunaCaptureStatus) -> Void)?
     public var onNotification: ((LunaNotification) -> Void)?
+    /// Deep Track box and state from the stream; only changes are delivered.
+    public var onTrackFrame: ((LunaTrackFrame) -> Void)?
+    private var lastTrackFrame: LunaTrackFrame?
     public var onDeviceInformation: ((LunaDeviceInformation) -> Void)?
     /// Every request/notification summary, for the shell's diagnostics journal.
     public var onLog: ((String) -> Void)?
@@ -142,6 +145,8 @@ public final class LunaCameraBackend: CameraBackend {
             eventHandler?(.phase(.openingVideo))
             try await openControl(token: token, identity: identity, expectedSerial: expectedSerial)
             liveStartAttempted = true
+            _ = try? await send(
+                LunaProtocol.setAccessCameraFileState(LunaProtocol.shootingViewAccessState))
             _ = try await send(LunaProtocol.startLiveRequest)
             try validate(token)
             handshakeComplete = true
@@ -192,6 +197,9 @@ public final class LunaCameraBackend: CameraBackend {
                 return
             } catch {
                 try validate(token)
+                // The timeout can fire while the system "Join" alert is up; if the
+                // operator then tapped Join, the phone is on the camera network.
+                if LunaWiFi.localAddress != nil { return }
                 onLog?("luna: Wi-Fi join attempt \(attempt) failed: \(error.localizedDescription)")
                 guard ContinuousClock.now < deadline else { throw error }
                 // The AP may not beacon yet: drop the config so the next apply
@@ -382,6 +390,7 @@ public final class LunaCameraBackend: CameraBackend {
     public func restartLive() async throws {
         guard isControlReady else { return }
         _ = try? await send(LunaProtocol.stopLiveRequest)
+        _ = try? await send(LunaProtocol.setAccessCameraFileState(LunaProtocol.shootingViewAccessState))
         _ = try await send(LunaProtocol.startLiveRequest)
     }
 
@@ -594,6 +603,12 @@ public final class LunaCameraBackend: CameraBackend {
                         lastVideoAt = Date()
                         eventHandler?(
                             .videoAccessUnit(video, timestampMilliseconds: media.timestamp))
+                    } else if let track = media.trackFrame, track != lastTrackFrame {
+                        if track.rawState != lastTrackFrame?.rawState {
+                            onLog?("luna: track state \(track.rawState)")
+                        }
+                        lastTrackFrame = track
+                        onTrackFrame?(track)
                     }
                     continue
                 }
@@ -779,7 +794,7 @@ public final class LunaCameraBackend: CameraBackend {
         guard isControlReady else {
             throw CameraBackendError.unavailable("Connect the camera to browse clips.")
         }
-        _ = try? await send(LunaProtocol.setAccessCameraFileState(1))
+        _ = try? await send(LunaProtocol.setAccessCameraFileState(LunaProtocol.albumAccessState))
         let listing = try LunaProtocol.fileList(response: await send(LunaProtocol.fileListRequest()))
         var files = listing.uris.map { LunaMediaFile(uri: $0) }
         if let body = try? await send(LunaProtocol.fileInfoListRequest()),

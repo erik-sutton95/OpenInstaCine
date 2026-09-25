@@ -655,7 +655,7 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun tapFocus(x: Float, y: Float) {
         if (!supportsTapFocus) return
         _focusPoint.value = x to y
-        // The backend centres its official ROI on the tap (iOS: 0.0869 x 0.1545, 0.1159 wide in photo).
+        // The backend centres its official ROI on the tap (iOS: 0.1545 x 0.2727).
         scope.launch { if (controls?.tapFocus(x.toDouble(), y.toDouble()) != true) presentControlNote("Focus did not reach the camera.") }
     }
     fun startTracking(x: Float, y: Float, width: Float = 0.2f, height: Float = 0.2f) =

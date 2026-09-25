@@ -265,6 +265,7 @@ final class CameraSession {
         backend.onSettings = { [weak self] in self?.applySettings($0) }
         backend.onCapture = { [weak self] in self?.applyCapture($0) }
         backend.onNotification = { [weak self] in self?.applyNotification($0) }
+        backend.onTrackFrame = { [weak self] in self?.applyTrackFrame($0) }
         backend.onLog = { ControlLiveLog.line($0) }
     }
 

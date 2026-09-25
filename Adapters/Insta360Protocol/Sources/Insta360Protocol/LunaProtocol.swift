@@ -513,6 +513,12 @@ public enum LunaProtocol {
             requiresEncryption: false)
     }
 
+    /// Official app: 5 on entering the shooting view, 1 on leaving it for the album.
+    /// 5 also wakes the gimbal, which sleeps pointing down (8302 field 5 = 1) when no
+    /// app is in the shooting view (fw 1.1.15, hardware-verified).
+    public static let shootingViewAccessState: UInt64 = 5
+    public static let albumAccessState: UInt64 = 1
+
     public static func setAccessCameraFileState(_ state: UInt64) throws -> LunaRequest {
         LunaRequest(
             command: .setAccessCameraFileState,
@@ -644,6 +650,7 @@ public struct LunaMediaPacket: Equatable, Sendable {
     public let timestamp: UInt64
     public let bytes: Data
     public var hevcAnnexB: Data? { subtype == 0x20 ? bytes : nil }
+    public var trackFrame: LunaTrackFrame? { subtype == 0x85 ? try? LunaTrackFrame(bytes) : nil }
 
     public init(frame: UCD2Frame) throws {
         guard frame.type == UCD2Frame.mediaType, frame.isPlain else {
@@ -655,5 +662,36 @@ public struct LunaMediaPacket: Equatable, Sendable {
         timestamp = payload.littleEndian(at: 1)
         bytes = payload.bytes(in: 9..<payload.count)
         guard subtype != 0x20 || !bytes.isEmpty else { throw LunaProtocolError.malformedMedia }
+    }
+}
+
+/// Deep Track result, media subtype 0x85, sent with every video frame (fw 1.1.15
+/// official-app capture). `{1: ms, 2: state, 3: 0, 4: {1 x, 2 y, 3 w, 4 h}}`, the
+/// box in top-left preview fractions. The camera tracks on its own after a lost
+/// spell and can pick a new subject; 8315 only arrives when tracking is cancelled.
+public struct LunaTrackFrame: Equatable, Sendable {
+    public enum State: UInt64, Sendable {
+        case tracking = 2
+        case lost = 3
+        case idle = 5
+    }
+
+    public let rawState: UInt64
+    public let x: Double
+    public let y: Double
+    public let width: Double
+    public let height: Double
+    public var state: State? { State(rawValue: rawState) }
+
+    public init(_ data: Data) throws {
+        let message = try ProtoMessage(data, maximumBytes: 256, maximumFields: 32)
+        rawState = try message.unsigned(2, default: 0)
+        let box = try ProtoMessage(message.optionalBytes(4) ?? Data(), maximumBytes: 64, maximumFields: 8)
+        // Proto3 omits zero floats.
+        func value(_ field: Int) -> Double { Double((try? box.float(field)) ?? 0) }
+        x = value(1)
+        y = value(2)
+        width = value(3)
+        height = value(4)
     }
 }

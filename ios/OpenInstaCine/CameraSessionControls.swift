@@ -650,10 +650,11 @@ extension CameraSession {
         let y = min(max(Double(normalized.y), 0), 1)
         focusPoint = CGPoint(x: x, y: y)
         guard canSendControl else { return }
-        // fw 1.1.15 official ROI, centred on the tap: square on the sensor, so
-        // 0.0869 × 0.1545 of a 16:9 preview and 0.1159 × 0.1545 of a 4:3 one.
-        let w = currentShootingMode?.isPhoto == true ? 0.1159 : 0.0869
-        let h = 0.1545
+        // fw 1.1.15 official ROI with the camera upright, centred on the tap:
+        // 0.1545 × 0.271…0.275 of the 16:9 preview (square on the sensor). The
+        // smaller 0.0869 × 0.1545 box was captured with the camera lying on its side.
+        let w = 0.1545
+        let h = 0.2727
         let left = min(max(x - w / 2, 0), 1 - w)
         let top = min(max(y - h / 2, 0), 1 - h)
         let mode = backend.functionMode
@@ -687,7 +688,34 @@ extension CameraSession {
             onSuccess: { [weak self] _ in self?.armTrackingTimeout() })
     }
 
-    /// The camera reports lock/loss on notification 8315; until then the search box stays.
+    /// Stream-borne Deep Track state (media 0x85, every frame): tracking moves the
+    /// green subject box with the camera's box; lost shows the last box white, like
+    /// the search box, until the camera reacquires (it may pick a new subject) or the
+    /// operator cancels; idle after a lock means the camera ended tracking.
+    func applyTrackFrame(_ frame: LunaTrackFrame) {
+        let box = TrackingBox(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
+        switch frame.state {
+        case .tracking:
+            trackingTimeout?.cancel()
+            isTracking = true
+            trackingSawLock = true
+            lastSubjectPushAt = Date()
+            searchBox = nil
+            faceBox = nil
+            subjectBox = box
+        case .lost:
+            guard trackingSawLock else { return }
+            subjectBox = nil
+            searchBox = box
+        case .idle:
+            // Idle frames also arrive between cmd 237 and the lock; only a lock ending counts.
+            if trackingSawLock { clearLocalTracking() }
+        case nil:
+            break
+        }
+    }
+
+    /// The camera reports the end of tracking on notification 8315 (cancel).
     func applyTrackingState(_ state: UInt64) {
         switch state {
         case 1, 2:

@@ -48,6 +48,28 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertTrue(table.values.contains(443))
     }
 
+    func testDeepTrackStreamStatesDriveTheBoxes() throws {
+        func frame(state: UInt8, x: Float) throws -> LunaTrackFrame {
+            var box = Data([0x0d]) + withUnsafeBytes(of: x.bitPattern.littleEndian) { Data($0) }
+            box += Data([0x1d]) + withUnsafeBytes(of: Float(0.15).bitPattern.littleEndian) { Data($0) }
+            box += Data([0x25]) + withUnsafeBytes(of: Float(0.27).bitPattern.littleEndian) { Data($0) }
+            return try LunaTrackFrame(Data([0x10, state, 0x22, UInt8(box.count)]) + box)
+        }
+        let session = CameraSession(borrowing: HevcDecoder())
+        session.applyTrackFrame(try frame(state: 5, x: 0.4))
+        XCTAssertFalse(session.isTrackingActive, "idle before any lock is ignored")
+        session.applyTrackFrame(try frame(state: 2, x: 0.4))
+        XCTAssertEqual(try XCTUnwrap(session.subjectBox).x, 0.4, accuracy: 0.001)
+        session.applyTrackFrame(try frame(state: 3, x: 0.42))
+        XCTAssertNil(session.subjectBox)
+        XCTAssertEqual(try XCTUnwrap(session.searchBox).x, 0.42, accuracy: 0.001)
+        XCTAssertTrue(session.isTrackingActive, "lost keeps tracking on so cancel stays available")
+        session.applyTrackFrame(try frame(state: 2, x: 0.3))
+        XCTAssertNotNil(session.subjectBox)
+        session.applyTrackFrame(try frame(state: 5, x: 0.3))
+        XCTAssertFalse(session.isTrackingActive, "idle after a lock ends tracking")
+    }
+
     func testCameraNaming() {
         XCTAssertEqual(LunaCameraNames.title(advertised: "XBQFN7"), "Luna Ultra XBQFN7")
         XCTAssertEqual(LunaCameraNames.title(advertised: "Luna Ultra XBQFN7"), "Luna Ultra XBQFN7")

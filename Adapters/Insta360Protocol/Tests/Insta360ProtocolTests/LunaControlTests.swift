@@ -131,6 +131,24 @@ final class LunaOfficialSetTests: XCTestCase {
         XCTAssertEqual(lapseStop.body, hex("080112196a0230019a0100aa0100ba0100d20100e20200ba0400820a00"))
     }
 
+    func testDeepTrackStreamFrames() throws {
+        // Captured 0x85 media payloads (fw 1.1.15): idle before tracking, then locked.
+        func packet(_ payload: String) throws -> LunaMediaPacket {
+            try LunaMediaPacket(frame: UCD2Frame.plain(type: UCD2Frame.mediaType, sequence: 0, payload: hex(payload)))
+        }
+        let idle = try XCTUnwrap(try packet(
+            "85f83881020000000008c0919ac69c011005180022140d8988e03e1519357c3e1defee1e3e25dc14a33e").trackFrame)
+        XCTAssertEqual(idle.state, .idle)
+        let locked = try XCTUnwrap(try packet(
+            "852a4c83020000000008908886879d011002180022140d2222b23e15316af83e1dabaa1a3e25b6608b3e").trackFrame)
+        XCTAssertEqual(locked.state, .tracking)
+        XCTAssertEqual(locked.x, 0.348, accuracy: 0.001)
+        XCTAssertEqual(locked.y, 0.485, accuracy: 0.001)
+        XCTAssertEqual(locked.width, 0.151, accuracy: 0.001)
+        XCTAssertEqual(locked.height, 0.272, accuracy: 0.001)
+        XCTAssertNil(try packet("40ea4a830200000000277576f01b78843f").trackFrame)
+    }
+
     func testFirmware1115PhotoModeWrites() throws {
         let photo = LunaFunctionMode.normalImage.rawValue
         let still = try ProtoMessage(LunaProtocol.setVideoExposure(

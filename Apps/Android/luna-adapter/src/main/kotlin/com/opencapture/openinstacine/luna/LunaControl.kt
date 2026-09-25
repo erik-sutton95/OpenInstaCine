@@ -134,10 +134,9 @@ internal object LunaControl {
             .fold(ByteArray(0)) { acc, (offset, value) -> acc + float(firstField + offset, value.toFloat()) }
     }
 
-    /** fw 1.1.15 official ROI: square on the sensor, so 0.0869 x 0.1545 of a 16:9 preview and 0.1159 wide in 4:3 photo. */
-    const val FOCUS_WIDTH = 0.0869
-    const val FOCUS_WIDTH_PHOTO = 0.1159
-    const val FOCUS_HEIGHT = 0.1545
+    /** fw 1.1.15 official ROI with the camera upright: 0.1545 x 0.271..0.275 of the 16:9 preview. */
+    const val FOCUS_WIDTH = 0.1545
+    const val FOCUS_HEIGHT = 0.2727
 
     fun tapFocus(x: Double, y: Double, width: Double = FOCUS_WIDTH, height: Double = FOCUS_HEIGHT, functionMode: Int = FUNCTION_MODE_VIDEO): Request {
         val params = LunaWire.integer(1, 1) + roi(listOf(x, y, width, height), 2)

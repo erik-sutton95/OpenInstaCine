@@ -309,7 +309,7 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
     override suspend fun gimbalFlip() = send { LunaControl.gimbal(3) }
     /** Official ROI centred on the tap, kept inside the frame. */
     override suspend fun tapFocus(x: Double, y: Double) = send {
-        val w = if (mode.isPhoto) LunaControl.FOCUS_WIDTH_PHOTO else LunaControl.FOCUS_WIDTH
+        val w = LunaControl.FOCUS_WIDTH
         val h = LunaControl.FOCUS_HEIGHT
         LunaControl.tapFocus((x - w / 2).coerceIn(0.0, 1 - w), (y - h / 2).coerceIn(0.0, 1 - h), w, h, functionMode)
     }
