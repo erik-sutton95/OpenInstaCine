@@ -614,6 +614,7 @@ extension CameraSession {
     var programmedZoomUnavailableReason: String? {
         "Luna does not report gimbal position, so programmed moves are unavailable."
     }
+    var supportsProgrammedMoves: Bool { false }
     var canRunProgrammedMove: Bool { false }
     func runProgrammedMove() {}
     func restartProgrammedMove() {}

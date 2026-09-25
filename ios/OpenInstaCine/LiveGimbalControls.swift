@@ -387,6 +387,9 @@ private struct LiveGimbalMoveEditor: View {
 
             ScrollView {
                 settings
+                    // Waypoints need gimbal attitude; without it SET would only post a note.
+                    .disabled(!model.session.supportsProgrammedMoves)
+                    .opacity(model.session.supportsProgrammedMoves ? 1 : 0.4)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .modifier(MotionSettingsBottomReporter())
