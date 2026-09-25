@@ -7,6 +7,8 @@
   tools/oic_remote.py frame out.jpg     # last decoded live frame (VT path)
   tools/oic_remote.py log
 """
+from __future__ import annotations
+
 import json
 import os
 import re

@@ -75,6 +75,18 @@ current network (`LunaSessionHub` in `CameraSession.swift`,
    The identity value is private: it lives only in `.local/` (gitignored).
    Never paste it into commits, docs or logs.
 4. Drive the app with the DEBUG remote: `scan`, then `connectFirst`.
+5. Optional scripted walkthrough with real taps (XCUITest, same Simulator):
+
+   ```sh
+   TEST_RUNNER_OIC_WALKTHROUGH_DIR=$PWD/.local/live-walkthrough/ui \
+   TEST_RUNNER_LUNA_IDENTITY=<identity> \
+   xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCineUIReview \
+     -destination "platform=iOS Simulator,id=<sim>" \
+     -only-testing:OpenInstaCineUITests/LunaLiveWalkthroughTests test
+   ```
+
+   Screenshots land in the given folder. `testF_DeleteOwnClip` also needs
+   `TEST_RUNNER_OIC_DELETE_CLIP=<a clip you recorded>`.
 
 ## DEBUG remote
 
@@ -91,9 +103,6 @@ python3 tools/oic_remote.py do '{"action":"iso","value":400}'
 python3 tools/oic_remote.py shot out.png   # key window snapshot
 python3 tools/oic_remote.py frame out.jpg  # last decoded live frame
 ```
-
-Use a Python 3.10+ `python3` (the script uses `dict | None`); the
-`just oic-remote` recipe calls `/usr/bin/python3`, which is 3.9 on macOS.
 
 Actions (`"action"` plus the keys shown; every action takes an optional
 `"pause"` in seconds):

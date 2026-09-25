@@ -20,7 +20,7 @@ Parity values:
 | --- | --- | --- |
 | Connect / pairing | Luna-adapted | BLE scan, owner approval on the camera, encrypted Wi-Fi credential read, then camera AP join and TCP 6666. Bluetooth first whenever the camera advertises (it wakes the AP); saved Wi-Fi is the fallback. Join retries for 60 s, alternating persistent and join-once configs, and continues as soon as the phone is on 192.168.42.x (`LunaCameraBackend.swift`). Camera named "Luna Ultra XXXXXX" (`LunaCameraNames`) |
 | Live view | Luna-adapted | 1280x720 HEVC, 25 fps, 2 s keyframe interval, UCD2 subtype 0x20 over TCP. I-Log preview treated as flat log by default (`OperatorPrefs.lunaFlatPreview`, `previewColorMode`) |
-| ISO | Same | Auto plus 100, 160, 200, 400, 800, 1600, 3200, 6400 (`LunaShellMapping.isoValues`) |
+| ISO | Luna-adapted | Auto plus 100, 160, 200, 400, 800, 1600, 3200, 6400 (`LunaShellMapping.isoValues`). No auto ISO ceiling or native-ISO hop (`supportsIsoLimit` false): the Auto tab shows a read-only Auto stop, holding the tile in Auto offers the manual ISO drum |
 | Shutter | Same | 1/8000 to 1/5 (`shutterDenoms`); manual exposure sends program, ISO and shutter in one message |
 | White balance | Luna-adapted | Auto or kelvin 2000 to 10000; no tint (sent as 0). Camera applies kelvin 3.5 to 3.9 s after the SET, pinned for 5 s |
 | EV | Same | Exposure bias in thirds |
@@ -33,7 +33,7 @@ Parity values:
 | Gimbal speed | Luna-adapted | Slow, Default = medium, Fast |
 | Gimbal recenter / flip | Same | Luna recenter and flip requests |
 | Gimbal Level (double tap) | Hidden-not-supported | Refuses with "no level data": Luna reports no gimbal attitude |
-| Programmed moves (A/B/C) | Hidden-not-supported | Controls show the reason ("Luna does not report gimbal position"); waypoints cannot be set |
+| Programmed moves (A/B/C) | Hidden-not-supported | Motion Control opens with waypoints, loop and Start dimmed and the reason ("Luna does not report gimbal position"); `supportsProgrammedMoves` false |
 | Tap focus | Luna-adapted | ROI 0.15 x 0.27 of the preview centred on the tap (official app geometry) |
 | Deep Track | Luna-adapted | Drag or tap a face box opens Luna tracking (cmd 237) with the drawn rectangle; cancel supported |
 | Record + timer | Luna-adapted | Start/stop and photo; lamp waits for camera capture status. REC timer is elapsed time from capture status (no timecode) |
@@ -62,7 +62,8 @@ Parity values:
 | Favorites | Luna-adapted | Stored on the phone; Luna has no favorite write |
 | Disconnect / reconnect | Luna-adapted | Reconnect uses the BLE-first path above |
 | Recovery card | Same | Shared bounded session recovery after a drop |
-| Audio (setting, meters) | Hidden-not-supported | `supportsAudio` false: AUDIO tile, AUDIO assist and meter overlay hidden |
+| Audio (setting, meters) | Hidden-not-supported | `supportsAudio` false: AUDIO tile, live AUDIO assist and meter overlay hidden (playback audio meters stay) |
+| Timecode | Hidden-not-supported | `supportsTimecode` false: status-bar timecode and its DISP toggle hidden; the REC chip carries elapsed time |
 | AF mode (AF-S/AF-C) | Hidden-not-supported | `supportsFocusMode` false; Luna video AF is continuous |
 | Aperture | Hidden-not-supported | `supportsAperture` false; fixed iris |
 | Head tracking | Hidden-not-supported | Needs gimbal attitude; capability false |
@@ -73,7 +74,36 @@ Parity values:
 
 ## Verified live (2026-09-25)
 
-<!-- LIVE-RESULTS -->
+Run from the iOS Simulator (DEBUG build) connected to the real camera over the
+Mac's Wi-Fi (camera AP 192.168.42.x), fw v1.1.15. Driven with the DEBUG remote
+(`tools/oic_remote.py`) and the opt-in XCUITest
+`OpenInstaCineUITests/LunaLiveWalkthroughTests` (real taps; screenshots in
+`.local/live-walkthrough/`, not committed). The room was dark, so picture
+content was checked against a recorded clip rather than by eye. Every camera
+setting changed was restored.
+
+| Area | Result | How |
+| --- | --- | --- |
+| Connect, live feed | Pass | ~24 fps; after the Simulator fixes the feed is the real camera (matches a recorded clip) |
+| ISO / shutter / EV / WB / exposure mode | Pass | Remote set and readback, sheets opened; manual 400 and 1/100, EV +0.7, 4300K |
+| Format / color / shooting mode | Pass | 1080p 30p and back, Normal and back to I-Log, Photo and back |
+| Photo mode readouts | Fixed, pass | Was "M" with an empty shutter and a `0xDF` format |
+| Zoom chip + pinch | Pass | 1x to 2x chip, pinch to 6x, back to 1x |
+| Gimbal mode / speed / recenter / flip / stick | Pass (command accepted) | Remote; gimbal sheet tabs Mode, Speed, Ramp, Double-tap by UI |
+| Programmed moves | Fixed, pass | Reason shown; waypoints were live-looking no-ops, now dimmed |
+| Tap focus | Pass | UI tap moves the focus box; control accepted |
+| Deep Track | Partial | Drag sends Track (camera "ok"); no lock on a uniform dark scene, box clears as designed |
+| Record with confirmation, REC timer | Pass | UI confirm popover; REC 00:02 with red frame; 5 s clip on the camera |
+| Lock, DISP clean view | Pass | UI taps; locked tiles ignore taps; long-press unlock |
+| Assists (all 16) | Pass | Toggled each by remote, screenshots; LEVEL shows "No level data" |
+| LUT Auto and I-Log look | Pass | Options sheet: Insta360 tab, "Applying official I-Log to Rec.709"; LUT off shows the flat I-Log preview |
+| Settings, 7 tabs | Pass | Link, Sharing, View Assist, Controls, Display, Storage, System |
+| Media grid / list / favorites | Pass | Favorites tab shows the starred clip; 8K clip labelled 4K (fixed) |
+| Playback from the camera | Pass | Proxy plays while the original caches, then "Original · on phone" |
+| Download / delete own clip | Pass | Download by remote; deleted the clip recorded in this run from the player |
+| Disconnect / reconnect | Pass | Camera list, then reconnect to live in ~15 s |
+| Link loss and recovery card | Pass | Mac Wi-Fi off: "Reconnecting" pill, then "Connection keeps dropping" card at ~45 s; Retry connection restores live |
+| Landscape | Pass | Live, ISO sheet, format sheet, gimbal sheet, settings |
 
 ## Known issues
 
@@ -87,12 +117,20 @@ Parity values:
    (`just luna-official-xc`).
 3. **Android** is not synced to the new shell.
 4. **Color Recovery** (screen protocol) is not exposed in the UI.
+5. **Simulator crash, not reproduced on device**: `HevcDecoder.publishWatchPreview`
+   crashed wrapping the VT buffer in a `CIImage` (bad colour attachments). It now
+   runs only with a paired watch; the root cause in the Simulator decoder is open.
+6. **Unit tests with Osmo assumptions still fail** (pre-existing):
+   `FormatCeilingNoteTests`, `MediaCacheSchedulingTests` (proxy streaming stubs),
+   `CapturePreviewTrafficTests` (expects peer commands) and the `.focus` case of
+   `CapturePanelRenderComparisonTests`.
 
 ## Next steps
 
 - Resolve the hotspot error 8 (test with the Insta360-saved network forgotten).
 - Capture official-app traffic on fw 1.1.15 once automation is re-enabled.
-- Verify `.lrv` playback, delete and favorites live on the phone.
+- Repeat the Simulator walkthrough on the phone (hotspot join, thermal, real-light picture, Deep Track lock).
+- Port or drop the Osmo-assumption unit tests listed above.
 - Sync `Apps/Android` to the new shell.
 - Decide how to expose Color Recovery.
 
