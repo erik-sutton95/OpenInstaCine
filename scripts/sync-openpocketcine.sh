@@ -47,6 +47,8 @@ LUNA_OWNED=(
 OSMO_ONLY=(
   OpenInstaCineTests/MediaLiveRecoveryOwnershipTests.swift
   OpenInstaCineTests/MultiviewStageTests.swift
+  OpenInstaCineTests/FormatCeilingNoteTests.swift
+  OpenInstaCineTests/MediaCacheSchedulingTests.swift
   OpenInstaCineTests/SessionRecoveryLifecycleTests.swift
   OpenInstaCineTests/ConnectionLifecycleRegressionTests.swift
   OpenInstaCineTests/EVMeterAssistTests.swift

@@ -138,3 +138,11 @@ Sources: `ios/OpenInstaCine/CameraSession*.swift`, `CameraMedia.swift` (Luna
 extension), `LunaShellMapping.swift`, `OsmoMonitorPresentation.swift`,
 `OsmoCameraPageAdapter.swift`, `Adapters/Insta360Apple`,
 [fw 1.1.15 verification](../research/luna-fw-1.1.15-verification.md).
+
+## Unit test deltas vs OpenPocketCine
+
+Removed as Osmo-only (listed in `OSMO_ONLY` in `scripts/sync-openpocketcine.sh`): session internals
+(DUML handshake, recovery lifecycle, dial reconciliation), multiview, per-format zoom ceiling notes,
+and DJI dual-storage media retries. Two inherited UI tests still fail by design:
+`CapturePanelRenderComparisonTests` (Luna hides the AF mode panel) and `CapturePreviewTrafficTests`
+(Luna controls only change state while the camera link is live).
