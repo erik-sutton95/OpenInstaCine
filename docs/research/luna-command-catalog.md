@@ -1,6 +1,6 @@
 # Luna Ultra command catalog
 
-Updated: 2026-09-16. This is the Insta360-app equivalent of OpenPocketCine’s
+Updated: 2026-09-25 (firmware v1.1.15 section added). This is the Insta360-app equivalent of OpenPocketCine’s
 DUML command handbook. Luna does **not** use DUML. Phone control is UCD2 frames
 carrying a 16-bit `MessageCode` plus protobuf. ISO, colour, resolution, zoom and
 most “settings chips” are not top-level opcodes; they are fields of
@@ -451,6 +451,41 @@ OpenPocketCine motion control is DUML `0x04/0x14` (yaw/pitch i16 tenths + durati
 Aimed A→B like Pocket’s motion editor therefore cannot be a single Luna opcode today. The workable analogue is: **recenter or snapshot, drive `gimbalMove` at ±99, stop with empty RC**, then later close the loop if a pose source is found (8302 fields beyond limits, or a fused IMU). Digital `RENDER_VLP_EULER` (option 74) is a 360-render pose, not the mechanical gimbal; the official app did not GET 74 in video mode.
 
 Do not invent a timed-angle packet. Stick + recenter + flip are the verified mechanical controls.
+
+## Firmware v1.1.15: official app capture 2026-09-25
+
+Full per-UI-action record, takes and decoder usage:
+[luna-official-fw1115-capture.md](luna-official-fw1115-capture.md)
+(`tools/luna_pcap_decode.py`). Everything above still holds on v1.1.15 except
+where this table says otherwise.
+
+| Area | v1.1.15 official wire | New or changed vs the sections above |
+| --- | --- | --- |
+| Keep-alive | one phone type-5 frame after the preface, then none; camera type 5 at 1 Hz | new |
+| Polls | every 10 s: cmd 8 `[11,20,85,180]`, cmd 8 `[65,128]`, cmd 10 `[99]`; cmd 15 only around capture | new |
+| Live start | cmd 1 `10 01 20 80 f7 02 38 2b 50 0e 60 01` | unchanged |
+| Mode switch | cmd 7 `[41]` (video family) or `[40]` (photo family); camera 8275, 8334 `{53:1.0}` (zoom reset), 8234 | 8334 zoom reset new |
+| Record | cmd 4 `{1:1}` normal, `{1:4}` TimeShift, `{1:9}` slow motion; timelapse cmd **22** `{1:1}` / **23** `{1:1, 2:X}` | per-mode field 1, cmds 22/23 |
+| Stop | cmd 5 `{1:X, 2:mode}`, reply `{1:{1:uri}}` | reply carries the file |
+| Photo | cmd 3 `{2:X+GPS}`; reply `{}` then an unmatched-id 200 `{1:{1:uri}}` | new |
+| During capture | cmd 53 UPLOAD_GPS every 1 s | new |
+| Filter | cmd 9 `[18]`: Leica Natural 15, Leica Vivid 16, Leica Chrome 36, Positive Film 34, GR-F 26, NC Film 24, Fresh 38, Cinematic 37, Standard 0 | first live filter SETs |
+| Sharpness | `[6]` Low 0 (omitted), Medium 1, High 2 | Low value |
+| Contrast / saturation / metering / AF / BC | one whole-panel SET, types `31,63,21,24,100,7,39,72,18,104,6,46,53,91,35,93,101,3,4` | contrast 3, saturation 4, BC likely 101 |
+| Exposure | always types `[21,24,100]`; Auto shutter `21:{1:1}`; ISO ceiling via 24 (400/1600/3200/6400) | ceiling values |
+| Photo exposure | `[20,21,100]` same ExposureOptions in both; photo EV `[7,77]` with `77:1` | new |
+| Resolution | 1:1 3K 119/120/121/448/447/446; 9:16 2.7K 30/25 = 443/444; 1080p240 also writes `35:1` | new values |
+| Photo size | `[40,63,30]`: 1:1 `30:1 40:30`, 16:9 `40:29`, 9:16 `30:2 40:54`, 3:4 `30:6 40:56`, 4:3 `30:4 40:34`; UHD `40:33` | new |
+| Photo extras | RAW `[25]`, Live Photo `[85]` `{2:2}`/`{2:1}`, timer `[26]` 3/5, beauty `[90]` | new |
+| Timelapse | interval cmd **18** `{1:{1:0xFFFFFFFF, 2:ms}, 2:1}`; duration `[54]` seconds | new |
+| Grid | cmd 7 `[128]` `{128:1}` | new |
+| Gimbal modes | 91 field 4: Roll Lock 2, Roll & Tilt 3, FPV 1, FPV-V 4 (no 5 offered) | FPV-V confirmed as UI option |
+| Joystick | cmd 226 `{1:1, 2:RC, 4:4}` at 50 ms, field 4 = 4 in every gimbal mode | field 4 is not the mode |
+| Zoom | presets 1/2/3/6/**15**; bar streams `[53]` every 10 to 25 ms | 15x preset |
+| Tap focus | `[94]` box 0.0869 x 0.1545 (16:9), 0.1159 x 0.1545 (4:3) | smaller box |
+| Delete | cmd 12 lists MP4 and LRV; reply lists URIs not deleted | reply semantics |
+| Download | cmd 173 DOWNLOAD_INFO around the HTTP GET | new |
+| Absent from the iOS UI | audio, stabilization / FlowState, Stage Mode, Color Recovery, quick EV on preview | |
 
 ## Number index
 
