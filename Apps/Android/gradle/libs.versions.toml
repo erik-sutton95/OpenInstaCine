@@ -1,19 +1,19 @@
 [versions]
 androidCompileSdk = "37"
-agp = "9.4.0"
-kotlin = "2.4.10"
+agp = "9.4.1"
+kotlin = "2.4.20"
 coroutines = "1.11.0"
-composeBom = "2026.08.00"
+composeBom = "2026.09.00"
 activityCompose = "1.13.0"
 androidxCore = "1.19.0"
 coreSplashscreen = "1.2.0"
 json = "20260814"
-media3 = "1.11.0"
+media3 = "1.11.1"
 okhttp = "5.5.0"
 kyantBackdrop = "2.0.1"
 kyantShapes = "1.2.1"
 mlkitFaceDetection = "16.1.7"
-sentry = "8.56.0"
+sentry = "8.57.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }

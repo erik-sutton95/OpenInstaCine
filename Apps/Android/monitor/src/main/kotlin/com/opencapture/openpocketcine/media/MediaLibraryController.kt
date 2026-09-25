@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.opencapture.openpocketcine.core.ConnectionPhase
@@ -55,7 +56,7 @@ class MediaLibraryController(
         private set
     var fetchInProgress by mutableStateOf(false)
         private set
-    var listedCount by mutableStateOf(0)
+    var listedCount by mutableIntStateOf(0)
         private set
     var note by mutableStateOf<String?>(null)
     var downloadProgress by mutableStateOf<Map<String, Double>>(emptyMap())
@@ -83,6 +84,14 @@ class MediaLibraryController(
             note = if (files.isEmpty()) MediaOperatorCopy.NOT_CONNECTED else null
             return
         }
+        if (session.cameraGalleryOpen.value) {
+            // The camera owns playback (#273). DJI Mimo sends no enter or listing;
+            // ours put "Playback in progress" on the body. Show the cached catalog.
+            fetchInProgress = false
+            note = MediaOperatorCopy.BROWSING_ON_CAMERA
+            Log.i(TAG, "media: opened for camera gallery — no enter playback")
+            return
+        }
         fetchInProgress = true
         listedCount = files.size
         note = MediaOperatorCopy.LISTING
@@ -98,7 +107,7 @@ class MediaLibraryController(
         assembler.reset()
         browsing = false
         playbackHeld = false
-        session.markBrowsingMedia(false)
+        val pictureOwner = session.markBrowsingMedia(false, resumePending = isLive)
         note = null
         unhookFrames?.invoke()
         unhookFrames = null
@@ -106,7 +115,9 @@ class MediaLibraryController(
         val token = nextResumeId()
         resumeJob =
             resumeScope.launch {
-                resumeLiveView(token)
+                session.withMediaLiveResumeOwner(pictureOwner) {
+                    resumeLiveView(token, pictureOwner)
+                }
             }
     }
 
@@ -451,44 +462,31 @@ class MediaLibraryController(
         }
     }
 
-    private suspend fun resumeLiveView(token: Int) {
-        var exitAcked = false
+    private suspend fun resumeLiveView(token: Int, pictureOwner: Long) {
         val resumeAt = SystemClock.elapsedRealtime()
-        for (attempt in 1..(MediaLiveResume.MAX_EXIT_ATTEMPTS + 2)) {
-            if (token != resumeGeneration || browsing) return
-            val pictureFresh =
-                MediaLiveResume.isPictureFresh(session.decoder.lastPresentedAt, resumeAt)
-            when (
-                MediaLiveResume.action(
-                    attempt = attempt,
-                    inPlayback = link.inPlayback,
-                    exitAcknowledged = exitAcked,
-                    pictureFresh = pictureFresh,
-                )
-            ) {
-                MediaLiveResume.Action.DONE -> return
-                MediaLiveResume.Action.EXIT_PLAYBACK -> {
-                    var acked = false
-                    val unhook =
-                        link.addFrameListener { frame ->
-                            if (frame.cmdSet == MediaCommands.SET_CAMERA &&
-                                frame.cmdId == MediaCommands.CMD_PLAYBACK &&
-                                MediaCommands.isReplySuccess(frame.payload)
-                            ) {
-                                acked = true
-                            }
-                        }
+        val result = MediaLiveResumeRunner.run(
+            timeoutMs = com.opencapture.openpocketcine.session.LiveViewEnablePolicy.ENDPOINT_PICTURE_GRACE_MS,
+            nowMs = SystemClock::elapsedRealtime,
+            isCurrent = { token == resumeGeneration && !browsing && session.ownsMediaLiveResume(pictureOwner) },
+            inPlayback = { link.inPlayback },
+            pictureFresh = { session.hasRecoveryPicture(resumeAt) },
+            exitPlayback = {
+                var acked = false
+                val unhook = link.addFrameListener { frame ->
+                    if (frame.cmdSet == MediaCommands.SET_CAMERA &&
+                        frame.cmdId == MediaCommands.CMD_PLAYBACK &&
+                        MediaCommands.isReplySuccess(frame.payload)) acked = true
+                }
+                try {
                     link.sendExitPlayback()
                     delay(450)
-                    unhook()
-                    if (acked) exitAcked = true
-                    delay(180)
-                }
-                MediaLiveResume.Action.ENABLE_LIVE_VIEW -> {
-                    link.enableLiveView()
-                    delay(350)
-                }
-            }
+                } finally { unhook() }
+                acked
+            },
+            enableLiveView = link::enableLiveView,
+        )
+        if (result == MediaLiveResumeRunner.Result.EXHAUSTED) {
+            session.mediaLiveResumeExhausted(pictureOwner)
         }
     }
 

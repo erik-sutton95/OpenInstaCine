@@ -428,7 +428,7 @@ internal object ManualProblemReport {
             when {
                 code in 200..299 -> {
                     meta.status = "sent"
-                    meta.detail = "Report sent. Thank you for helping improve OpenPocketCine."
+                    meta.detail = "Report sent. Thank you for helping improve OpenInstaCine."
                     deleteEnvelopeLocked()
                     meta.envelopePresent = false
                     writeMeta(meta)

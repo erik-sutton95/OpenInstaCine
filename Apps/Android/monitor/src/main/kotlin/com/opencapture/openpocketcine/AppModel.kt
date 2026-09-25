@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
@@ -17,6 +18,7 @@ import com.opencapture.openpocketcine.pairing.isBusy
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.openpocketcine.session.CameraCommands
+import com.opencapture.openpocketcine.session.GimbalDoubleTap
 import com.opencapture.openpocketcine.session.GimbalRamp
 import com.opencapture.openpocketcine.session.FoundCamera
 import com.opencapture.openpocketcine.session.PocketCameraSession
@@ -26,14 +28,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-class AppModel(context: Context) {
+/** [borrowing] builds a Live View model over a Multiview tile's decoder (iOS `CameraSession(borrowing:)`). */
+class AppModel(context: Context, borrowing: com.opencapture.openpocketcine.session.HevcDecoder? = null) {
     private val appContext = context.applicationContext
     init {
         DiagnosticCenter.install(appContext)
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val store = SharedPreferencesSavedCameraStore(context)
-    val session = PocketCameraSession(context)
+    val session = PocketCameraSession(context, borrowing)
+    /** Set while this Live View borrows a Multiview tile; replaces the lock button. */
+    var multiviewExit by mutableStateOf<(() -> Unit)?>(null)
     val assist = LiveAssistState.from(appContext)
 
     var savedCameras by mutableStateOf(store.load())
@@ -42,6 +47,8 @@ class AppModel(context: Context) {
     var showsLaunchSplash by mutableStateOf(true)
     var coreVersion by mutableStateOf<String?>(null)
     var homePanel by mutableStateOf<AppPanel?>(null)
+    /** The Multiview stage covers the camera home until it closes. */
+    var showsMultiview by mutableStateOf(false)
     var liveOperatorPanel by mutableStateOf<LiveOperatorPanel?>(null)
     var operatorSettingsTab by mutableStateOf(OperatorSettingsTab.LINK)
     var chromeEditorMode by mutableStateOf<PocketDispMode?>(null)
@@ -49,19 +56,24 @@ class AppModel(context: Context) {
     var liveChromeInteractive by mutableStateOf(true)
     var keepScreenAwake by mutableStateOf(OperatorPrefs.keepScreenAwake(appContext))
         private set
+    var hdrDisplay by mutableStateOf(OperatorPrefs.hdrDisplay(appContext))
+        private set
+    var screenCaptured by mutableStateOf(false)
+    val hdrDisplayActive: Boolean
+        get() = HdrDisplay.isEffective(hdrDisplay, screenCaptured)
     var cacheFullResolution by mutableStateOf(OperatorPrefs.cacheFullResolution(appContext))
         private set
     var recordConfirmationEnabled by mutableStateOf(OperatorPrefs.recordConfirmationEnabled(appContext))
         private set
     var hapticsEnabled by mutableStateOf(OperatorPrefs.hapticsEnabled(appContext))
         private set
-    var gimbalStickSensitivity by mutableStateOf(OperatorPrefs.gimbalStickSensitivity(appContext))
+    var gimbalStickSensitivity by mutableIntStateOf(OperatorPrefs.gimbalStickSensitivity(appContext))
         private set
     var virtualJoystickInvertPan by mutableStateOf(OperatorPrefs.virtualJoystickInvertPan(appContext))
         private set
     var virtualJoystickInvertTilt by mutableStateOf(OperatorPrefs.virtualJoystickInvertTilt(appContext))
         private set
-    var virtualJoystickDeadzonePercent by mutableStateOf(
+    var virtualJoystickDeadzonePercent by mutableIntStateOf(
         OperatorPrefs.virtualJoystickDeadzonePercent(appContext),
     )
         private set
@@ -81,6 +93,8 @@ class AppModel(context: Context) {
             )
     var gimbalRamp by mutableStateOf(OperatorPrefs.gimbalRamp(appContext))
         private set
+    var gimbalDoubleTap by mutableStateOf(OperatorPrefs.gimbalDoubleTap(appContext))
+        private set
     var liveGimbalPanel by mutableStateOf(LiveGimbalPanel.NONE)
     /** Canvas-space centre of the programmed-move editor / Run pill. Null until first open or drag. */
     var gimbalFloatCenter by mutableStateOf<Offset?>(null)
@@ -88,6 +102,7 @@ class AppModel(context: Context) {
 
     init {
         session.gimbalRamp = gimbalRamp
+        session.gimbalDoubleTap = gimbalDoubleTap
     }
     var dispLive by mutableStateOf(OperatorPrefs.dispLive(appContext))
         private set
@@ -106,7 +121,7 @@ class AppModel(context: Context) {
     var lutSelection by mutableStateOf(OperatorPrefs.lutSelection(appContext))
         private set
     var assistClean by mutableStateOf(false)
-    var phoneBatteryPercent by mutableStateOf(-1)
+    var phoneBatteryPercent by mutableIntStateOf(-1)
         private set
     var phoneCharging by mutableStateOf(false)
         private set
@@ -185,6 +200,11 @@ class AppModel(context: Context) {
         OperatorPrefs.setKeepScreenAwake(appContext, value)
     }
 
+    fun updateHdrDisplay(value: Boolean) {
+        hdrDisplay = value
+        OperatorPrefs.setHdrDisplay(appContext, value)
+    }
+
     fun updateCacheFullResolution(value: Boolean) {
         cacheFullResolution = value
         OperatorPrefs.setCacheFullResolution(appContext, value)
@@ -198,6 +218,12 @@ class AppModel(context: Context) {
     fun updateHapticsEnabled(value: Boolean) {
         hapticsEnabled = value
         OperatorPrefs.setHapticsEnabled(appContext, value)
+    }
+
+    fun updateGimbalDoubleTap(value: GimbalDoubleTap) {
+        gimbalDoubleTap = value
+        OperatorPrefs.setGimbalDoubleTap(appContext, value)
+        session.gimbalDoubleTap = value
     }
 
     fun updateGimbalRamp(value: GimbalRamp) {
@@ -289,6 +315,8 @@ class AppModel(context: Context) {
     fun setEv(thirds: Int) = session.setEv(thirds)
 
     fun setIsoLimit(raw: Int) = session.setIsoLimit(raw)
+
+    fun setApertureStrategy(raw: Int) = session.setApertureStrategy(raw)
 
     fun refreshIsoLimit() = session.getIsoLimit()
 
@@ -457,6 +485,19 @@ class AppModel(context: Context) {
         isPairingNewCamera = false
     }
 
+    /** iOS `SavedCamerasView.onMultiview`: the single-camera session hands the radio to the stage. */
+    fun openMultiview() {
+        if (session.phaseFlow.value.isBusy() || session.isReconnecting.value) return
+        if (!session.supportsMultiview) return
+        session.disconnect()
+        showsMultiview = true
+    }
+
+    fun closeMultiview() {
+        showsMultiview = false
+        session.startScan()
+    }
+
     fun disconnect() {
         session.disconnect()
         if (!SavedCameras.launchShowsWizard(savedCameras)) session.startScan()
@@ -466,4 +507,11 @@ class AppModel(context: Context) {
         gimbalGamepad.stopListening()
         session.close()
     }
+
+    /** The tile's LUT choice travels into and out of its borrowed Live View. */
+    fun setBorrowedLut(enabled: Boolean) {
+        if (assist.lutOn != enabled) assist.toggle(com.opencapture.openpocketcine.assists.LiveAssistTool.LUT)
+    }
+
+    fun borrowedLutEnabled(): Boolean = assist.lutOn
 }

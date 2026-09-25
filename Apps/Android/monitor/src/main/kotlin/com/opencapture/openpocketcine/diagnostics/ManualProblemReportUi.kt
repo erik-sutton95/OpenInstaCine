@@ -74,7 +74,7 @@ internal fun ManualProblemReportDialog(
             title = { Text("Report unavailable", color = LiveDesign.text) },
             text = {
                 Text(
-                    "This build cannot send a report. You can still save a diagnostic report under Diagnostic options.",
+                    "This build cannot send a report. Use Share Diagnostics in the pairing menu, or Diagnostic options in System, to save a diagnostic report.",
                     color = LiveDesign.muted,
                 )
             },
@@ -427,7 +427,7 @@ internal fun AutomaticReportsPrompt(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    "Help improve OpenPocketCine",
+                    "Help improve OpenInstaCine",
                     style = LiveType.ui(21f, FontWeight.SemiBold),
                     color = LiveDesign.text,
                 )

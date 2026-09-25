@@ -13,8 +13,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 object BrandColors {
-    val accent: Color = com.opencapture.monitorui.MonitorPalette.accent
-    val accentSoft: Color = Color(0x2E00A3E0)
+    val accent: Color get() = com.opencapture.monitorui.MonitorPalette.accent
+    val accentSoft: Color get() = accent.copy(alpha = 0.18f)
     val background: Color = com.opencapture.monitorui.MonitorPalette.background
     val backgroundDeep: Color = com.opencapture.monitorui.MonitorPalette.backgroundDeep
     val surface: Color = com.opencapture.monitorui.MonitorPalette.surface
@@ -88,12 +88,12 @@ object LiveDesign {
     val muted = com.opencapture.monitorui.MonitorPalette.muted
     val secondary = com.opencapture.monitorui.MonitorPalette.secondary
     val faint = Color(94 / 255f, 98 / 255f, 98 / 255f)
-    val accent = com.opencapture.monitorui.MonitorPalette.accent
+    val accent get() = com.opencapture.monitorui.MonitorPalette.accent
     val good = Color(0.18f, 0.78f, 0.42f)
     val rec = com.opencapture.monitorui.MonitorPalette.recording
-    val info = accent
+    val info get() = accent
     val amber = Color(0.914f, 0.674f, 0.208f)
-    val accentDim = Color(0x2900A3E0)
+    val accentDim get() = accent.copy(alpha = 0.16f)
     val hairlineStrong = Color.White.copy(alpha = 0.10f)
     val hairline = com.opencapture.monitorui.MonitorPalette.border
     val recordWell = Color(44 / 255f, 43 / 255f, 43 / 255f)

@@ -61,6 +61,8 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -81,7 +83,7 @@ import java.io.File
 import kotlin.math.abs
 
 private enum class LutTab(val label: String) {
-    DJI("DJI"),
+    CAMERA("Camera"),
     CREATIVE("Creative"),
     CUSTOM("Custom"),
 }
@@ -118,7 +120,7 @@ private const val DRUM_NOT_LAID_OUT = -1
 @Composable
 fun LUTPicker(model: AppModel, onClose: () -> Unit) {
     val assist = model.assist
-    val status by model.session.status.collectAsState()
+    val status by model.session.chromeStatus.collectAsState()
     LUTPicker(
         selection = model.lutSelection,
         onSelect = model::updateLutSelection,
@@ -139,7 +141,7 @@ fun LUTPicker(model: AppModel, onClose: () -> Unit) {
 }
 
 /**
- * Built-in / DJI / Custom catalog with an AccentDrumWheel (iOS `LUTPicker`).
+ * Camera / Creative / Custom catalog with an AccentDrumWheel (iOS `LUTPicker`).
  * `embedded` is the assist-tray form; the sheet wraps the same body.
  */
 @Composable
@@ -165,7 +167,8 @@ internal fun LUTPicker(
     val djiEntries =
         remember(context, isPhoto) {
             val names = context.assets.list(LutCatalog.ASSET_DIRECTORY)?.toList().orEmpty()
-            LutCatalog.djiEntries(names, isPhotoLive = isPhoto)
+            if (LutCatalog.cameraLooks.isEmpty()) LutCatalog.djiEntries(names, isPhotoLive = isPhoto)
+            else if (isPhoto) listOf(LutCatalog.auto) else LutCatalog.cameraEntries(names)
         }
     val creativeEntries = remember { LutCatalog.creative }
     var tab by remember {
@@ -173,7 +176,7 @@ internal fun LUTPicker(
             when (LutCatalog.categoryOf(selection)) {
                 LutCategory.CREATIVE -> LutTab.CREATIVE
                 LutCategory.CUSTOM -> LutTab.CUSTOM
-                LutCategory.DJI -> LutTab.DJI
+                LutCategory.DJI -> LutTab.CAMERA
             }
         )
     }
@@ -205,9 +208,9 @@ internal fun LUTPicker(
         if (next != tab) {
             tab = next
             when (next) {
-                LutTab.DJI ->
+                LutTab.CAMERA ->
                     if (LutCatalog.categoryOf(selection) != LutCategory.DJI) {
-                        onSelect(LutCatalog.DJI_AUTO)
+                        onSelect(LutCatalog.AUTO)
                         onArmLut()
                     }
                 LutTab.CREATIVE ->
@@ -232,7 +235,7 @@ internal fun LUTPicker(
                 selection = selection,
                 onSelect = onPick,
                 creativeEntries = creativeEntries,
-                djiEntries = djiEntries,
+                cameraEntries = djiEntries,
                 customEntries = customEntries,
                 onImport = { importer.launch(arrayOf("*/*")) },
                 onClear = { pendingDeletion = it },
@@ -327,7 +330,7 @@ private fun LUTPickerBody(
     selection: String,
     onSelect: (String) -> Unit,
     creativeEntries: List<LutEntry>,
-    djiEntries: List<LutEntry>,
+    cameraEntries: List<LutEntry>,
     customEntries: List<LutEntry>,
     onImport: () -> Unit,
     onClear: (String) -> Unit,
@@ -369,12 +372,12 @@ private fun LUTPickerBody(
         }
         Box(Modifier.fillMaxWidth().height(contentH)) {
             when (tab) {
-                LutTab.DJI ->
+                LutTab.CAMERA ->
                     CatalogTab(
-                        caption = djiCaption(selection, colorMode, family, cameraName, isPhoto),
-                        entries = djiEntries,
+                        caption = cameraCaption(selection, colorMode, family, cameraName, isPhoto),
+                        entries = cameraEntries,
                         selection = selection,
-                        fallbackId = LutCatalog.DJI_AUTO,
+                        fallbackId = LutCatalog.AUTO,
                         onSelect = onSelect,
                         contentHeight = contentH,
                     )
@@ -490,7 +493,7 @@ private fun CustomTab(
         if (imported.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
-                    "Imported looks land here. Auto stays on Built-in or DJI.",
+                    "Imported looks land here. Auto keeps the Rec.709 preview unchanged.",
                     color = LiveDesign.muted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
@@ -548,7 +551,8 @@ internal fun LUTExposureCompensationBar(stops: Double, onChange: (Double) -> Uni
             Text(LutExposureCompensation.label(stops) + " EV", style = LiveType.ui(11f, FontWeight.Medium),
                 color = LiveDesign.muted)
         }
-        com.opencapture.monitorui.MonitorSlider(stops.toFloat(), -3f..3f) {
+        com.opencapture.monitorui.MonitorSlider(stops.toFloat(), -3f..3f,
+            Modifier.semantics { contentDescription = "Exposure compensation in stops" }) {
             val next = LutExposureCompensation.snap(it.toDouble())
             if (next != stops) onChange(next)
         }
@@ -788,7 +792,7 @@ private fun creativeCaption(
         "Looks for the displayed picture"
     }
 
-private fun djiCaption(
+private fun cameraCaption(
     selection: String,
     colorMode: Int,
     family: String,
@@ -803,10 +807,11 @@ private fun djiCaption(
                 LutLookResolver.resolve(selection, true, colorMode, family, cameraName, isPhoto),
             )
         else ->
-            if (LutCatalog.categoryOf(selection) == LutCategory.DJI) {
-                "Official DJI Rec.709 cube"
+            if (selection.startsWith("camera:")) {
+                LutCatalog.cameraLooks.firstOrNull { it.id == selection }?.caption
+                    ?: "Manual camera conversion"
             } else {
-                "Official DJI looks for this color / camera"
+                "Camera looks for this color profile"
             }
     }
 

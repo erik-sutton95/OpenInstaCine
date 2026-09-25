@@ -57,7 +57,7 @@ import com.opencapture.openpocketcine.core.ConnectionPhase
 private fun startupType(size: Float, weight: FontWeight = FontWeight.Normal) =
     LiveType.ui(size, weight, LiveTypeDesign.Rounded)
 
-/** Pairing chrome — DJI Sky Blue `#00A3E0` on Black, no Nikon gold. */
+/** Pairing chrome — brand accent on Black, no Nikon gold. */
 object StartupColors {
     val surface: Color = LiveDesign.surface
     val tile: Color = LiveDesign.tile
@@ -76,7 +76,7 @@ object StartupColors {
      * Operator Setup wash. iOS uses Sky Blue at 10% / 760 pt; Android is 20%
      * quieter and tighter on top of the OLED dim (6% / 608 pt).
      */
-    val backdropGlow: Color = Color(0f, 163 / 255f, 230 / 255f, 0.06f)
+    val backdropGlow: Color get() = com.opencapture.monitorui.MonitorPalette.accent.copy(alpha = 0.06f)
 }
 
 fun Modifier.startupBackdrop(): Modifier = background(StartupColors.backdropBase)

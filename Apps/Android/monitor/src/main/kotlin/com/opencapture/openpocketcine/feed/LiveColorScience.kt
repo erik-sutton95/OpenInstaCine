@@ -26,6 +26,7 @@ enum class MonitorTransfer {
     DLOG,
     DLOG2,
     DLOGM,
+    ILOG,
     ;
 
     val colorMode: Int
@@ -36,6 +37,7 @@ enum class MonitorTransfer {
                 DLOG -> CameraCommands.COLOR_DLOG
                 DLOG2 -> CameraCommands.COLOR_DLOG2
                 DLOGM -> COLOR_DLOG_M
+                ILOG -> ILOG_BRIDGE_ID
             }
 
     val peakLinear: Double
@@ -46,6 +48,7 @@ enum class MonitorTransfer {
                 DLOG -> DLog.PEAK_LINEAR
                 DLOG2 -> DLog2.PEAK_LINEAR
                 DLOGM -> DLogM.decode(1.0)
+                ILOG -> ILog.PEAK_LINEAR
             }
 
     val middleGrayEncoded: Double
@@ -63,6 +66,7 @@ enum class MonitorTransfer {
                 CameraCommands.COLOR_DLOG -> DLOG
                 COLOR_DLOG_M -> DLOGM
                 CameraCommands.COLOR_DLOG2 -> DLOG2
+                ILOG_BRIDGE_ID -> ILOG
                 else -> REC709
             }
 
@@ -75,6 +79,10 @@ enum class MonitorTransfer {
             if (minByte in 20..30 && maxByte in 160..240) return DLOG
             return fallback
         }
+
+        /** Neutral monitor/JNI identifier, not a camera command or Osmo wire byte. */
+        const val ILOG_BRIDGE_ID = 65_536
+
     }
 }
 
@@ -159,7 +167,7 @@ object ScopeExposureCeiling {
         refinedDlog: Int = this.refinedDlog,
     ): Int {
         return when (transfer) {
-            MonitorTransfer.REC709, MonitorTransfer.HDR, MonitorTransfer.DLOGM -> 255
+            MonitorTransfer.REC709, MonitorTransfer.HDR, MonitorTransfer.DLOGM, MonitorTransfer.ILOG -> 255
             MonitorTransfer.DLOG2 -> {
                 val ei = if (iso > 0) iso else REFERENCE_EI
                 val refLinear = LiveColorScience.linearize(refined1600 / 255.0, MonitorTransfer.DLOG2)
@@ -518,7 +526,7 @@ object LiveColorScience {
     fun lumaWeights(transfer: MonitorTransfer): Triple<Double, Double, Double> =
         when (transfer) {
             MonitorTransfer.REC709, MonitorTransfer.DLOG, MonitorTransfer.DLOGM -> Triple(0.2126, 0.7152, 0.0722)
-            MonitorTransfer.HDR, MonitorTransfer.DLOG2 -> Triple(0.2627, 0.6780, 0.0593)
+            MonitorTransfer.HDR, MonitorTransfer.DLOG2, MonitorTransfer.ILOG -> Triple(0.2627, 0.6780, 0.0593)
         }
 
     fun monitorIRE(encoded: Double, transfer: MonitorTransfer, iso: Int? = null): Double {
@@ -534,6 +542,7 @@ object LiveColorScience {
             MonitorTransfer.DLOG -> DLog.decode(encoded)
             MonitorTransfer.DLOG2 -> DLog2.decode(encoded)
             MonitorTransfer.DLOGM -> DLogM.decode(encoded)
+            MonitorTransfer.ILOG -> ILog.decode(encoded)
         }
 
     private fun encodeRaw(linear: Double, transfer: MonitorTransfer): Double =
@@ -543,6 +552,7 @@ object LiveColorScience {
             MonitorTransfer.DLOG -> DLog.encode(linear)
             MonitorTransfer.DLOG2 -> DLog2.encode(linear)
             MonitorTransfer.DLOGM -> DLogM.encode(linear)
+            MonitorTransfer.ILOG -> ILog.encode(linear)
         }
 
     private fun clamp01(x: Double): Double = x.coerceIn(0.0, 1.0)
@@ -645,4 +655,24 @@ private object DLogM {
         }
         return (log2(t + 2.428226947784424) - 0.9327186346054077) / 5.612990379333496
     }
+}
+
+/** Insta360 10-bit I-Log White Paper (June 2026), forward and inverse equations. RGB gamut is BT.2020. */
+internal object ILog {
+    const val LINEAR_CUT = 0.01104854
+    const val ENCODED_CUT = 0.154402
+    const val BLACK = 0.09055934
+    private const val SLOPE = 5.77837328
+    private const val LOG_SCALE = 0.280055
+    private const val LOG_OFFSET = 0.623992
+    private const val TOE_OFFSET = 0.01
+    val PEAK_LINEAR = decode(1.0)
+
+    fun decode(encoded: Double): Double =
+        if (encoded < ENCODED_CUT) (encoded - BLACK) / SLOPE
+        else 10.0.pow((encoded - LOG_OFFSET) / LOG_SCALE) - TOE_OFFSET
+
+    fun encode(linear: Double): Double =
+        if (linear <= LINEAR_CUT) SLOPE * linear + BLACK
+        else LOG_OFFSET + LOG_SCALE * log10(linear + TOE_OFFSET)
 }

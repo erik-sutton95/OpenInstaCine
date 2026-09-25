@@ -51,6 +51,14 @@ internal class LiveFeedEffectsSession(
     private val playback: Boolean = false,
     private val backdrop: MonitorBackdropFeed? = null,
 ) {
+    @Volatile private var stretchToRect = false
+
+    /** Only the final presentation changes; the OES source and grading raster stay native. */
+    fun setStretchToRect(enabled: Boolean) {
+        stretchToRect = enabled
+        requestRender()
+    }
+
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -62,6 +70,7 @@ internal class LiveFeedEffectsSession(
     private val frameLock = java.lang.Object()
     @Volatile private var frameAvailable = false
     @Volatile private var oesFramePending = false
+    @Volatile private var redrawRequested = false
     @Volatile private var planDirty = true
     @Volatile private var displayTexture: SurfaceTexture? = null
     @Volatile private var displayWidth = 0
@@ -75,11 +84,16 @@ internal class LiveFeedEffectsSession(
         }
     private val sampleBusy = AtomicBoolean(false)
     private val previewSource = InspectorPreviewSource()
+    @Volatile private var scopeSource: LiveScopeSampleBus.Source? = null
+    @Volatile private var scopeActive = false
+    private var scopeAttached = false
     @Volatile private var nextScopeAtNs = 0L
+    @Volatile private var lastScopeWorkNs = 0L
     @Volatile private var previousBundle = ScopeAssistBundle.EMPTY
 
     fun attachDisplay(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
         detachDisplay()
+        setScopeAttached(true)
         backdrop?.attach(this)
         displayTexture = surfaceTexture
         displayWidth = width.coerceAtLeast(1)
@@ -110,6 +124,7 @@ internal class LiveFeedEffectsSession(
         val h = height.coerceAtLeast(16)
         if (w == sourceWidth && h == sourceHeight) return
         previewSource.invalidate()
+        resetScopeSource()
         InspectorPreviewPipeline.sourceChanged(playback)
         backdrop?.invalidate(this)
         sourceWidth = w
@@ -117,14 +132,18 @@ internal class LiveFeedEffectsSession(
         requestRender()
     }
 
-    fun configurePreviewSource(identity: Any, ready: Boolean) {
-        if (previewSource.configure(identity, ready)) {
+    @Synchronized fun configurePreviewSource(identity: Any, ready: Boolean, active: Boolean = true) {
+        val changed = previewSource.configure(identity, ready && active)
+        if (changed || scopeActive != active) {
+            scopeActive = active
+            resetScopeSource()
             InspectorPreviewPipeline.sourceChanged(playback)
             backdrop?.invalidate(this)
         }
     }
 
     fun detachDisplay() {
+        setScopeAttached(false)
         previewSource.invalidate()
         InspectorPreviewPipeline.sourceChanged(playback)
         backdrop?.invalidate(this)
@@ -135,11 +154,23 @@ internal class LiveFeedEffectsSession(
         displayTexture = null
         previousBundle = ScopeAssistBundle.EMPTY
         nextScopeAtNs = 0L
-        mainHandler.post { LiveScopeSampleBus.reset() }
+        lastScopeWorkNs = 0L
+    }
+
+    @Synchronized private fun setScopeAttached(attached: Boolean) {
+        scopeAttached = attached
+        resetScopeSource()
+    }
+
+    @Synchronized private fun resetScopeSource() {
+        LiveScopeSampleBus.closeSource(scopeSource)
+        previousBundle = ScopeAssistBundle.EMPTY
+        scopeSource = if (scopeActive && scopeAttached) LiveScopeSampleBus.openSource() else null
     }
 
     private fun requestRender() {
         synchronized(frameLock) {
+            redrawRequested = true
             frameAvailable = true
             frameLock.notifyAll()
         }
@@ -162,28 +193,30 @@ internal class LiveFeedEffectsSession(
         if ((!policy.needsTap && backdrop?.hasDemand(this) != true) || tapTarget == null || tapPixels == null || tapScratch == null) return
         val now = System.nanoTime()
         if (now < nextScopeAtNs) return
+        val sourceEpoch = previewSource.captureEpoch() ?: return
+        val scopeOwner = scopeSource
+        if (!LiveScopeSampleBus.isCurrent(scopeOwner)) return
         if (!sampleBusy.compareAndSet(false, true)) return
-        val sourceEpoch = previewSource.captureEpoch()
-        val previewTicket = if (sourceEpoch != null) {
-            InspectorPreviewPipeline.acquire(policy.previewOwner, playback, now)?.takeIf {
-                if (previewSource.isCurrent(sourceEpoch)) true
-                else { InspectorPreviewPipeline.cancel(it); false }
-            }
-        } else null
+        val previewTicket = InspectorPreviewPipeline.acquire(policy.previewOwner, playback, now)?.takeIf {
+            if (previewSource.isCurrent(sourceEpoch)) true
+            else { InspectorPreviewPipeline.cancel(it); false }
+        }
         val thermal =
             runCatching {
                 val pm = appContext.getSystemService(Context.POWER_SERVICE) as PowerManager
                 PocketScopeSampler.thermalMultiplier(pm.currentThermalStatus)
             }.getOrDefault(1.0)
-        val backdropTicket = if (sourceEpoch != null && previewSource.isCurrent(sourceEpoch)) {
-            backdrop?.acquire(this, now, thermal)
+        val backdropTicket = if (previewSource.isCurrent(sourceEpoch)) {
+            backdrop?.acquire(this, now)
         } else null
-        if (policy.activeScopeCount == 0 && previewTicket == null && backdropTicket == null) {
+        val scopeDue = policy.scopeWorkDue(now, lastScopeWorkNs, thermal)
+        if (!scopeDue && previewTicket == null && backdropTicket == null) {
             sampleBusy.set(false)
             return
         }
-        nextScopeAtNs = now + PocketScopeSampler.chromeSampleIntervalNs(
-            policy.activeScopeCount, thermal, backdropTicket != null || backdrop?.hasDemand(this) == true)
+        if (scopeDue) lastScopeWorkNs = now
+        nextScopeAtNs = now + policy.tapIntervalNs(
+            thermal, backdropTicket != null || backdrop?.hasDemand(this) == true)
         var handedOff = false
         try {
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, tapTarget.framebufferId)
@@ -221,7 +254,8 @@ internal class LiveFeedEffectsSession(
                             InspectorPreviewFrame.fromTap(packed, width, height, bottomUp = true))
                         previewSubmitted = true
                     }
-                    if (policy.activeScopeCount == 0) return@execute
+                    if (!scopeDue || !previewSource.isCurrent(sourceEpoch) ||
+                        !LiveScopeSampleBus.isCurrent(scopeOwner)) return@execute
                     var transfer = MonitorTransfer.fromColorMode(policy.colorMode)
                     ScopeExposureCeiling.syncISO(policy.iso)
                     val (minC, maxC) = PocketScopeSampler.minMaxRGB(packed)
@@ -243,8 +277,11 @@ internal class LiveFeedEffectsSession(
                             previous = previous,
                             iso = ScopeExposureCeiling.resolvedISO(),
                         )
-                    previousBundle = sampled
-                    mainHandler.post { LiveScopeSampleBus.publish(sampled) }
+                    mainHandler.post {
+                        if (previewSource.isCurrent(sourceEpoch) && LiveScopeSampleBus.publish(scopeOwner, sampled)) {
+                            previousBundle = sampled
+                        }
+                    }
                     ScopeTapHzLog.note(
                         TAG,
                         scopes = policy.activeScopeCount,
@@ -317,8 +354,10 @@ internal class LiveFeedEffectsSession(
                     onDecoderSurface(decoderSurface)
                 }
             }
-            sourceTarget = SourceTarget.create(srcW, srcH)
-            gradedTarget = SourceTarget.create(srcW, srcH)
+            // Decode stays native; looks run on the FeedPresentPolicy working raster.
+            val work = FeedPresentPolicy.workingSize(srcW, srcH)
+            sourceTarget = SourceTarget.create(work.first, work.second)
+            gradedTarget = SourceTarget.create(work.first, work.second)
             tapTarget = SourceTarget.create(tapSize.first, tapSize.second)
             val tapBytes = tapSize.first * tapSize.second * 4
             tapPixels = ByteBuffer.allocateDirect(tapBytes).order(ByteOrder.nativeOrder())
@@ -327,6 +366,10 @@ internal class LiveFeedEffectsSession(
             var hasOesFrame = false
             var signaledFirstFrame = false
             var lastOesTimestampNs = 0L
+            // A held (paused, stalled) source is not redrawn: the 100 ms wake below only
+            // retries tap consumers. New pictures, looks, sizes and upscaler changes present.
+            var needsPresent = false
+            var presentedUpscaler: FeedUpscaler? = null
             while (running.get()) {
                 val pullOes: Boolean
                 synchronized(frameLock) {
@@ -336,23 +379,30 @@ internal class LiveFeedEffectsSession(
                     pullOes = oesFramePending
                     oesFramePending = false
                     frameAvailable = false
+                    if (redrawRequested) needsPresent = true
+                    redrawRequested = false
                 }
                 if (!running.get()) break
                 val nextPlan = plan.get()
                 if (nextPlan !== activePlan || effects == null) {
-                    effects?.release()
-                    effects = FeedEffectsGlProgram(appContext, nextPlan, flipInputVertically = false)
+                    if (effects?.adopt(nextPlan) != true) {
+                        effects?.release()
+                        effects = FeedEffectsGlProgram(appContext, nextPlan, flipInputVertically = false)
+                    }
                     activePlan = nextPlan
                     planDirty = false
+                    needsPresent = true
                 }
+                if (FeedUpscaleSwitch.rendererReads != presentedUpscaler) needsPresent = true
                 if (sourceWidth != srcW || sourceHeight != srcH) {
                     srcW = sourceWidth
                     srcH = sourceHeight
                     oesSurfaceTexture.setDefaultBufferSize(srcW, srcH)
+                    val work = FeedPresentPolicy.workingSize(srcW, srcH)
                     sourceTarget?.release()
-                    sourceTarget = SourceTarget.create(srcW, srcH)
+                    sourceTarget = SourceTarget.create(work.first, work.second)
                     gradedTarget?.release()
-                    gradedTarget = SourceTarget.create(srcW, srcH)
+                    gradedTarget = SourceTarget.create(work.first, work.second)
                     val nextTap = PocketScopeSampler.tapSize(srcW, srcH)
                     tapTarget?.release()
                     tapTarget = SourceTarget.create(nextTap.first, nextTap.second)
@@ -371,11 +421,12 @@ internal class LiveFeedEffectsSession(
                         lastOesTimestampNs = timestampNs
                         oesSurfaceTexture.getTransformMatrix(texMatrix)
                         hasOesFrame = true
+                        needsPresent = true
                         previewSource.didLatch(previewLatch)
                     }
                 }
                 if (!hasOesFrame) continue
-                if (skipDuplicate && !planDirty) continue
+                if (skipDuplicate && !needsPresent) continue
                 val width = displayWidth
                 val height = displayHeight
                 if (
@@ -388,55 +439,26 @@ internal class LiveFeedEffectsSession(
                 ) {
                     continue
                 }
-                val source = checkNotNull(sourceTarget)
                 val copy = oesCopy ?: continue
-                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, source.framebufferId)
-                GLES20.glViewport(0, 0, source.width, source.height)
-                copy.draw(oesTexture, texMatrix)
-                val content =
-                    if (letterboxSource) {
-                        liveFeedContentRect(
-                            width.toFloat(),
-                            height.toFloat(),
-                            source.width,
-                            source.height,
-                        )
-                    } else {
-                        null
-                    }
-                val presentWidth = content?.width ?: width
-                val presentHeight = content?.height ?: height
-                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
-                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-                if (content != null) {
-                    GLES20.glViewport(content.left, content.top, content.width, content.height)
-                } else {
-                    GLES20.glViewport(0, 0, width, height)
-                }
-                // First picture is a bilinear blit of 720p RGB. Cube then stretch
-                // on that submit missed the enable IDR (WAITING FOR LIVE VIEW).
-                if (!signaledFirstFrame) {
-                    effects.draw(
-                        source.textureId,
-                        source.width.toFloat(),
-                        source.height.toFloat(),
-                        presentWidth.toFloat(),
-                        presentHeight.toFloat(),
-                        look = false,
-                        upscale = false,
-                    )
-                } else {
-                    val graded = checkNotNull(gradedTarget)
-                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, graded.framebufferId)
-                    GLES20.glViewport(0, 0, graded.width, graded.height)
-                    effects.draw(
-                        source.textureId,
-                        source.width.toFloat(),
-                        source.height.toFloat(),
-                        presentWidth.toFloat(),
-                        presentHeight.toFloat(),
-                        look = true,
-                    )
+                if (needsPresent) {
+                    val source = checkNotNull(sourceTarget)
+                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, source.framebufferId)
+                    GLES20.glViewport(0, 0, source.width, source.height)
+                    val spread = FeedPresentPolicy.downsampleSpread(srcW, source.width)
+                    copy.draw(oesTexture, texMatrix, spread / source.width, spread / source.height)
+                    val content =
+                        if (letterboxSource && !stretchToRect) {
+                            liveFeedContentRect(
+                                width.toFloat(),
+                                height.toFloat(),
+                                source.width,
+                                source.height,
+                            )
+                        } else {
+                            null
+                        }
+                    val presentWidth = content?.width ?: width
+                    val presentHeight = content?.height ?: height
                     GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
                     GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
                     if (content != null) {
@@ -444,20 +466,65 @@ internal class LiveFeedEffectsSession(
                     } else {
                         GLES20.glViewport(0, 0, width, height)
                     }
-                    effects.draw(
-                        graded.textureId,
-                        source.width.toFloat(),
-                        source.height.toFloat(),
-                        presentWidth.toFloat(),
-                        presentHeight.toFloat(),
-                        look = false,
-                    )
-                }
-                check(EGL14.eglSwapBuffers(eglDisplay, eglSurface)) { "live present failed" }
-                onFramePresented(lastOesTimestampNs)
-                if (!signaledFirstFrame) {
-                    signaledFirstFrame = true
-                    mainHandler.post(onFirstFrame)
+                    // First picture is a bilinear blit of 720p RGB. Cube then stretch
+                    // on that submit missed the enable IDR (WAITING FOR LIVE VIEW).
+                    if (!signaledFirstFrame) {
+                        effects.draw(
+                            source.textureId,
+                            source.width.toFloat(),
+                            source.height.toFloat(),
+                            presentWidth.toFloat(),
+                            presentHeight.toFloat(),
+                            look = false,
+                            upscale = false,
+                        )
+                    } else if (!nextPlan.hasPlaybackLook) {
+                        // No cube or assist: the grade pass would be an exact copy.
+                        effects.draw(
+                            source.textureId,
+                            source.width.toFloat(),
+                            source.height.toFloat(),
+                            presentWidth.toFloat(),
+                            presentHeight.toFloat(),
+                            look = false,
+                        )
+                    } else {
+                        val graded = checkNotNull(gradedTarget)
+                        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, graded.framebufferId)
+                        GLES20.glViewport(0, 0, graded.width, graded.height)
+                        effects.draw(
+                            source.textureId,
+                            source.width.toFloat(),
+                            source.height.toFloat(),
+                            presentWidth.toFloat(),
+                            presentHeight.toFloat(),
+                            look = true,
+                        )
+                        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+                        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+                        if (content != null) {
+                            GLES20.glViewport(content.left, content.top, content.width, content.height)
+                        } else {
+                            GLES20.glViewport(0, 0, width, height)
+                        }
+                        effects.draw(
+                            graded.textureId,
+                            source.width.toFloat(),
+                            source.height.toFloat(),
+                            presentWidth.toFloat(),
+                            presentHeight.toFloat(),
+                            look = false,
+                        )
+                    }
+                    check(EGL14.eglSwapBuffers(eglDisplay, eglSurface)) { "live present failed" }
+                    onFramePresented(lastOesTimestampNs)
+                    presentedUpscaler = FeedUpscaleSwitch.rendererReads
+                    // The first present is the look-free blit; the graded one follows.
+                    needsPresent = !signaledFirstFrame
+                    if (!signaledFirstFrame) {
+                        signaledFirstFrame = true
+                        mainHandler.post(onFirstFrame)
+                    }
                 }
                 maybeTapScopes(
                     policy = nextPlan.scopeTap,

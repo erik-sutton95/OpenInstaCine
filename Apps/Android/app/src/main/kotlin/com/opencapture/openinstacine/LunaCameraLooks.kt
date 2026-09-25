@@ -10,7 +10,7 @@ internal object LunaCameraLooks {
         LutEntry(
             id = "camera:insta360-luna-ilog-rec709-v2",
             title = "I-Log → Rec.709",
-            category = LutCategory.CAMERA,
+            category = LutCategory.DJI,
             fileName = "Luna_I-Log_to_Rec709_BT1886_s33_v2.cube",
             inputTransfer = MonitorTransfer.ILOG,
             caption = "Manual conversion · source must be I-Log",

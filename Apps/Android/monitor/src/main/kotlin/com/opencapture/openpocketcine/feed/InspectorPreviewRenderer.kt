@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.GLES20
+import androidx.core.graphics.createBitmap
 import androidx.media3.common.util.GlUtil
 import java.nio.ByteBuffer
 
@@ -37,8 +38,10 @@ internal class InspectorPreviewRenderer : AutoCloseable {
             pixels = ByteBuffer.allocateDirect(width * height * 4)
         }
         if (lookKey != plan.playbackLookKey) {
-            effects?.release()
-            effects = FeedEffectsGlProgram(app, plan)
+            if (effects?.adopt(plan) != true) {
+                effects?.release()
+                effects = FeedEffectsGlProgram(app, plan)
+            }
             lookKey = plan.playbackLookKey
         }
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, input)
@@ -51,7 +54,7 @@ internal class InspectorPreviewRenderer : AutoCloseable {
         GLES20.glReadPixels(0, 0, width, height, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buffer)
         GlUtil.checkGlError()
         buffer.rewind()
-        return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(buffer) }
+        return createBitmap(width, height, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(buffer) }
     }
 
     private fun initialize() {

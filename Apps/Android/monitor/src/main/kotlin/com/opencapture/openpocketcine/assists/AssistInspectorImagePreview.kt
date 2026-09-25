@@ -25,12 +25,12 @@ import com.opencapture.openpocketcine.feed.rememberLiveFeedEffectsPlan
 @Composable
 internal fun AssistInspectorImagePreview(tool: LiveAssistTool, state: LiveAssistState, model: AppModel,
     lutSelection: String, colorMode: Int, playback: Boolean) {
-    if (tool !in listOf(LiveAssistTool.LUT, LiveAssistTool.PEAK, LiveAssistTool.FALSE, LiveAssistTool.ZEBRA)) return
+    if (tool !in listOf(LiveAssistTool.LUT, LiveAssistTool.PEAK, LiveAssistTool.FALSE, LiveAssistTool.ZEBRA, LiveAssistTool.DESQ)) return
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
-    val status by model.session.status.collectAsState()
+    val status by model.session.chromeStatus.collectAsState()
     val camera = model.session.connectedCamera
     val owner = remember(tool, playback, camera?.id, colorMode, configuration.screenWidthDp,
         configuration.screenHeightDp, density.density, density.fontScale) { Any() }
@@ -64,5 +64,7 @@ internal fun AssistInspectorImagePreview(tool: LiveAssistTool, state: LiveAssist
         }
     }
     SideEffect { InspectorPreviewPipeline.update(owner, plan) }
-    com.opencapture.monitorui.MonitorImagePreview(image?.asImageBitmap(), "${tool.title} image preview")
+    val sourceAspect = image?.let { it.width.toFloat() / it.height } ?: (16f / 9f)
+    com.opencapture.monitorui.MonitorImagePreview(image?.asImageBitmap(), "${tool.title} image preview",
+        aspectRatio = if (tool == LiveAssistTool.DESQ) state.presentedAspect(sourceAspect, preview = true) else null)
 }

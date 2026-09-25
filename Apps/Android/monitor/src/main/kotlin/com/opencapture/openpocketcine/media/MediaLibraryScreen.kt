@@ -257,7 +257,7 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
                 navigationWidth = 206f,
                 heading = {
                     com.opencapture.openpocketcine.monitor.MonitorPageHeading(
-                        "Media", model.session.connectedCamera?.name ?: "OpenPocketCine")
+                        "Media", model.session.connectedCamera?.name ?: "OpenInstaCine")
                 },
                 navigation = { compact ->
                     Column(
@@ -387,6 +387,7 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
         }
         viewingPhoto?.let { file ->
             MediaPhotoViewer(
+                model = model,
                 file = file,
                 controller = controller,
                 onClose = { viewingPhoto = null },

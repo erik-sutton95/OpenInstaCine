@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.scale
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.MonitorGlass
 import com.opencapture.openpocketcine.feed.FeedEffectsRenderPlan
@@ -92,26 +94,29 @@ internal fun PlaybackFrameSample(
 ) {
     LaunchedEffect(textureView, enabled, plan, colorMode, iso) {
         if (!enabled) return@LaunchedEffect
-        var previousBundle = ScopeAssistBundle.EMPTY
-        val buf = arrayOfNulls<Bitmap>(2)
-        var slot = 0
-        while (isActive) {
-            delay(PlaybackChromeMetrics.SAMPLE_MS)
-            if (!textureView.isAvailable) continue
-            val srcW = textureView.width
-            val srcH = textureView.height
-            if (srcW <= 1 || srcH <= 1) continue
-            val longest = max(srcW, srcH).toFloat()
-            val scale = min(1f, PlaybackChromeMetrics.SAMPLE_MAX_SIDE / longest)
-            val dw = (srcW * scale).roundToInt().coerceAtLeast(1)
-            val dh = (srcH * scale).roundToInt().coerceAtLeast(1)
-            val dst =
-                buf[slot]?.takeIf { it.width == dw && it.height == dh && it.isMutable }
-                    ?: Bitmap.createBitmap(dw, dh, Bitmap.Config.ARGB_8888).also { buf[slot] = it }
-            textureView.getBitmap(dst)
-            previousBundle = publishPlaybackScopeTap(dst, colorMode, iso, plan, previousBundle)
-            slot = 1 - slot
-        }
+        val source = LiveScopeSampleBus.openSource()
+        try {
+            var previousBundle = ScopeAssistBundle.EMPTY
+            val buf = arrayOfNulls<Bitmap>(2)
+            var slot = 0
+            while (isActive) {
+                delay(PlaybackChromeMetrics.SAMPLE_MS)
+                if (!textureView.isAvailable) continue
+                val srcW = textureView.width
+                val srcH = textureView.height
+                if (srcW <= 1 || srcH <= 1) continue
+                val longest = max(srcW, srcH).toFloat()
+                val scale = min(1f, PlaybackChromeMetrics.SAMPLE_MAX_SIDE / longest)
+                val dw = (srcW * scale).roundToInt().coerceAtLeast(1)
+                val dh = (srcH * scale).roundToInt().coerceAtLeast(1)
+                val dst =
+                    buf[slot]?.takeIf { it.width == dw && it.height == dh && it.isMutable }
+                        ?: createBitmap(dw, dh, Bitmap.Config.ARGB_8888).also { buf[slot] = it }
+                textureView.getBitmap(dst)
+                previousBundle = publishPlaybackScopeTap(dst, colorMode, iso, plan, previousBundle, source)
+                slot = 1 - slot
+            }
+        } finally { LiveScopeSampleBus.closeSource(source) }
     }
 }
 
@@ -214,6 +219,7 @@ private fun publishPlaybackScopeTap(
     iso: Int,
     plan: FeedEffectsRenderPlan,
     previous: ScopeAssistBundle,
+    source: LiveScopeSampleBus.Source,
 ): ScopeAssistBundle {
     val tapW = src.width
     val tapH = src.height
@@ -238,7 +244,7 @@ private fun publishPlaybackScopeTap(
             previous = previous,
             iso = ScopeExposureCeiling.resolvedISO(),
         )
-    LiveScopeSampleBus.publish(bundle)
+    LiveScopeSampleBus.publish(source, bundle)
     return bundle
 }
 
@@ -260,8 +266,10 @@ internal fun rememberPhotoBackdrop(bitmap: Bitmap?, identity: Any): com.opencapt
         if (bitmap != null && resumed) {
             source.image = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                 val scale = minOf(1f, 213f / bitmap.width, 120f / bitmap.height)
-                Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt().coerceAtLeast(1),
-                    (bitmap.height * scale).toInt().coerceAtLeast(1), true)
+                bitmap.scale(
+                    (bitmap.width * scale).toInt().coerceAtLeast(1),
+                    (bitmap.height * scale).toInt().coerceAtLeast(1),
+                )
             }
         }
     }

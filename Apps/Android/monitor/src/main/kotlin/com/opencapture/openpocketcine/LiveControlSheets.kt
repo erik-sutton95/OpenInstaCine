@@ -39,6 +39,7 @@ import com.opencapture.monitorui.MonitorQuickPreview
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +75,7 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.opencapture.openpocketcine.glass.LiquidSlider
 import com.opencapture.openpocketcine.assists.AssistLongPress
+import com.opencapture.openpocketcine.session.ApertureStrategy
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraModel
 import com.opencapture.openpocketcine.settings.SettingsHelpBadge
@@ -94,6 +96,8 @@ enum class LiveSheet {
     SHUTTER,
     WB,
     FOCUS,
+    /** Action 6 aperture strategy, in the FOCUS slot. */
+    APERTURE,
     /** Capture-bar MODE: expo Auto/Manual. Not shooting Video/Photo. */
     EXPO,
     AUDIO,
@@ -248,7 +252,7 @@ private fun LiveControlSheetContent(
     }
     var drumSelection by remember(sheet) { mutableStateOf("") }
     var lastApplied by remember(sheet) { mutableStateOf("") }
-    var preferredAngle by remember(sheet) { mutableStateOf(OperatorPrefs.shutterAngleDegrees(context)) }
+    var preferredAngle by remember(sheet) { mutableDoubleStateOf(OperatorPrefs.shutterAngleDegrees(context)) }
     val isIsoAutoTab = sheet == LiveSheet.ISO && offersIsoAuto && selectedMode == 0
     val isAngleSheet = CaptureLists.isAngleSheet(
         sheet, status.expoMode, selectedMode, status.shootingMode,
@@ -712,6 +716,15 @@ private fun LiveControlSheetContent(
                         )
                     }
                 }
+                LiveSheet.APERTURE -> {
+                    CheckedRows(
+                        options = CaptureLists.apertureLabels(status),
+                        selected = ApertureStrategy.label(status.apertureStrategy),
+                        enabled = enabled,
+                    ) { label ->
+                        CaptureLists.apertureFromLabel(label)?.let(model::setApertureStrategy)
+                    }
+                }
                 LiveSheet.EXPO -> {
                     CheckedRows(
                         options = CaptureLists.expoLabels,
@@ -1085,6 +1098,7 @@ val LiveSheet.headerLabel: String
             LiveSheet.SHUTTER -> "SHUTTER"
             LiveSheet.WB -> "WB"
             LiveSheet.FOCUS -> "FOCUS"
+            LiveSheet.APERTURE -> "APERTURE"
             LiveSheet.EXPO -> "MODE"
             LiveSheet.AUDIO -> "AUDIO"
             LiveSheet.COLOR -> "COLOR"
@@ -1099,6 +1113,7 @@ val LiveSheet.subtitle: String
             LiveSheet.SHUTTER -> "Angle / speed"
             LiveSheet.WB -> "Kelvin / auto / tint"
             LiveSheet.FOCUS -> "AF-S / AF-C"
+            LiveSheet.APERTURE -> "Aperture strategy"
             LiveSheet.EXPO -> "Exposure"
             LiveSheet.AUDIO -> "Channel · wind · direction · vocal"
             LiveSheet.COLOR -> "Color mode"
@@ -2063,6 +2078,13 @@ object CaptureLists {
 
     fun supportsFocusModeOrDefault(model: CameraModel?): Boolean =
         supportsFocusMode(model?.name, model?.family, model?.supportsFocusMode)
+
+    /** Action 6 APERTURE choices: the camera's capability, else the captured fallback. */
+    fun apertureLabels(status: CameraStatus): List<String> =
+        ApertureStrategy.choices(status).mapNotNull(ApertureStrategy::label)
+
+    fun apertureFromLabel(label: String): Int? =
+        (ApertureStrategy.F2..ApertureStrategy.AUTO).firstOrNull { ApertureStrategy.label(it) == label }
 
     /** iOS `focusMode == .continuous`. Unknown / AF-S is the AF-S tab. */
     fun focusIsContinuous(status: CameraStatus): Boolean =

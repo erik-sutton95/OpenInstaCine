@@ -3,6 +3,7 @@ package com.opencapture.openpocketcine.assists
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.opencapture.openpocketcine.NDFilterNotation
@@ -47,6 +48,10 @@ class LiveAssistState(
         private set
     var ndMeter by mutableStateOf(false)
         private set
+    var evMeter by mutableStateOf(false)
+        private set
+    var level by mutableStateOf(false)
+        private set
     var audioMeters by mutableStateOf(false)
         private set
     var guides by mutableStateOf(false)
@@ -75,6 +80,47 @@ class LiveAssistState(
     var lutExposureStops by mutableDoubleStateOf(0.0)
         private set
 
+    var desqueeze by mutableStateOf(false)
+        private set
+    var desqueezePreset by mutableStateOf(DesqueezePreset.X133)
+        private set
+    var desqueezeCustom by mutableStateOf(false)
+        private set
+    var desqueezeCustomFactor by mutableDoubleStateOf(1.33)
+        private set
+    var desqueezeDirection by mutableStateOf(DesqueezeDirection.HORIZONTAL)
+        private set
+
+    val desqueezeFactor: Double
+        get() = if (desqueezeCustom) desqueezeCustomFactor else desqueezePreset.factor
+
+    fun selectDesqueezePreset(preset: DesqueezePreset) {
+        desqueezePreset = preset
+        desqueezeCustom = false
+        persist()
+    }
+
+    fun selectCustomDesqueeze() {
+        desqueezeCustom = true
+        persist()
+    }
+
+    fun updateDesqueezeFactor(value: Double) {
+        desqueezeCustomFactor = AnamorphicDesqueeze.snap(value)
+        desqueezeCustom = true
+        persist()
+    }
+
+    fun updateDesqueezeDirection(value: DesqueezeDirection) {
+        desqueezeDirection = value
+        persist()
+    }
+
+    fun presentedAspect(sourceAspect: Float, playback: Boolean = false, preview: Boolean = false): Float =
+        AnamorphicDesqueeze.aspect(sourceAspect,
+            preview || if (playback) isPlaybackVisible(LiveAssistTool.DESQ) else isVisible(LiveAssistTool.DESQ),
+            desqueezeFactor, desqueezeDirection)
+
     var clean by mutableStateOf(false)
     var pinned by mutableStateOf(parsePins(pinnedNames))
 
@@ -102,14 +148,14 @@ class LiveAssistState(
     var zebraMidtoneColor by mutableStateOf(ZebraPaint.AMBER)
 
     var waveMode by mutableStateOf(WaveformMode.RGB)
-    var waveBrightness by mutableStateOf(100)
+    var waveBrightness by mutableIntStateOf(100)
     var waveGuides by mutableStateOf(ScopeGuides())
     var waveScale by mutableDoubleStateOf(1.0)
     var waveCenter by mutableStateOf<StoredCenter?>(null)
     var waveCenterPortrait by mutableStateOf<StoredCenter?>(null)
 
     var paradeMode by mutableStateOf(ParadeMode.RGB)
-    var paradeBrightness by mutableStateOf(100)
+    var paradeBrightness by mutableIntStateOf(100)
     var paradeGuides by mutableStateOf(ScopeGuides())
     var paradeScale by mutableDoubleStateOf(1.0)
     var paradeCenter by mutableStateOf<StoredCenter?>(null)
@@ -121,7 +167,7 @@ class LiveAssistState(
     var histoCenterPortrait by mutableStateOf<StoredCenter?>(null)
 
     var vectorZoom by mutableStateOf(VectorscopeZoom.X1)
-    var vectorBrightness by mutableStateOf(100)
+    var vectorBrightness by mutableIntStateOf(100)
     var vectorScale by mutableDoubleStateOf(1.0)
     var vectorCenter by mutableStateOf<StoredCenter?>(null)
     var vectorCenterPortrait by mutableStateOf<StoredCenter?>(null)
@@ -194,16 +240,20 @@ class LiveAssistState(
             LiveAssistTool.VECTOR -> vectorscope
             LiveAssistTool.LIGHTS -> trafficLights
             LiveAssistTool.ND -> ndMeter
+            LiveAssistTool.EV -> evMeter
+            LiveAssistTool.LEVEL -> level
             LiveAssistTool.AUDIO -> audioMeters
             LiveAssistTool.GUIDES -> guides
             LiveAssistTool.GRID -> grid
             LiveAssistTool.CROSS -> crosshair
             LiveAssistTool.MIRROR -> mirror
+            LiveAssistTool.DESQ -> desqueeze
         }
 
     /** Pins filter DISP 2; they never flip [isOn]. */
     fun isVisible(tool: LiveAssistTool): Boolean {
         if (!isOn(tool)) return false
+        if (tool == LiveAssistTool.EV && clean) return false
         return if (clean) pinned.contains(tool) else true
     }
 
@@ -242,6 +292,8 @@ class LiveAssistState(
             LiveAssistTool.VECTOR -> vectorscope = !vectorscope
             LiveAssistTool.LIGHTS -> trafficLights = !trafficLights
             LiveAssistTool.ND -> ndMeter = !ndMeter
+            LiveAssistTool.EV -> evMeter = !evMeter
+            LiveAssistTool.LEVEL -> level = !level
             LiveAssistTool.AUDIO -> audioMeters = !audioMeters
             LiveAssistTool.GUIDES -> {
                 guides = !guides
@@ -250,6 +302,7 @@ class LiveAssistState(
             LiveAssistTool.GRID -> grid = !grid
             LiveAssistTool.CROSS -> crosshair = !crosshair
             LiveAssistTool.MIRROR -> mirror = !mirror
+            LiveAssistTool.DESQ -> desqueeze = !desqueeze
         }
         if (tool in stackableScopeTools && isOn(tool)) bringToFront(tool)
         persist()
@@ -275,6 +328,7 @@ class LiveAssistState(
         playbackVisibleTools.any { it in lookOverlayTools }
 
     fun togglePlayback(tool: LiveAssistTool) {
+        if (tool !in LiveAssistTool.playbackToolbarCases) return
         playbackVisibleTools =
             if (tool in playbackVisibleTools) playbackVisibleTools - tool else playbackVisibleTools + tool
         onPersistPlayback?.invoke(playbackVisibleTools.map { it.name }.toSet())
@@ -468,11 +522,14 @@ class LiveAssistState(
         vectorscope = LiveAssistTool.VECTOR in tools
         trafficLights = LiveAssistTool.LIGHTS in tools
         ndMeter = LiveAssistTool.ND in tools
+        evMeter = LiveAssistTool.EV in tools
+        level = LiveAssistTool.LEVEL in tools
         audioMeters = LiveAssistTool.AUDIO in tools
         guides = LiveAssistTool.GUIDES in tools
         grid = LiveAssistTool.GRID in tools
         crosshair = LiveAssistTool.CROSS in tools
         mirror = LiveAssistTool.MIRROR in tools
+        desqueeze = LiveAssistTool.DESQ in tools
         if (guideRatio != null && guideRatio > 0f) {
             guideAspect = GuideAspect.entries.minBy { kotlin.math.abs(it.ratio - guideRatio) }
             selectedGuides = setOf(guideAspect)
@@ -492,6 +549,10 @@ class LiveAssistState(
         for (g in selectedGuides) guidesJson.put(g.label)
         return JSONObject()
             .put("tools", tools)
+            .put("desqueezePreset", desqueezePreset.name)
+            .put("desqueezeCustom", desqueezeCustom)
+            .put("desqueezeCustomFactor", desqueezeCustomFactor)
+            .put("desqueezeDirection", desqueezeDirection.name)
             .put("guideAspect", guideAspect.label)
             .put("guideFamily", guideFamily.label)
             .put("selectedGuides", guidesJson)
@@ -572,12 +633,20 @@ class LiveAssistState(
         vectorscope = LiveAssistTool.VECTOR in on
         trafficLights = LiveAssistTool.LIGHTS in on
         ndMeter = LiveAssistTool.ND in on
-        ndMeter = LiveAssistTool.ND in on
+        evMeter = LiveAssistTool.EV in on
+        level = LiveAssistTool.LEVEL in on
         audioMeters = LiveAssistTool.AUDIO in on
         guides = LiveAssistTool.GUIDES in on
         grid = LiveAssistTool.GRID in on
         crosshair = LiveAssistTool.CROSS in on
         mirror = LiveAssistTool.MIRROR in on
+        desqueeze = LiveAssistTool.DESQ in on
+        desqueezePreset = DesqueezePreset.entries.firstOrNull { it.name == obj.optString("desqueezePreset") }
+            ?: DesqueezePreset.X133
+        desqueezeCustom = obj.optBoolean("desqueezeCustom", false)
+        desqueezeCustomFactor = AnamorphicDesqueeze.snap(obj.optDouble("desqueezeCustomFactor", 1.33))
+        desqueezeDirection = DesqueezeDirection.entries.firstOrNull { it.name == obj.optString("desqueezeDirection") }
+            ?: DesqueezeDirection.HORIZONTAL
         lutOn = if (obj.has("lutArmed")) obj.optBoolean("lutArmed", true) else LiveAssistTool.LUT in on
         lutExposureStops = LutExposureCompensation.snap(obj.optDouble("lutExposureStops", 0.0))
         splitComparison = obj.optBoolean("splitComparison", false)
@@ -655,7 +724,7 @@ class LiveAssistState(
 
     companion object {
         val defaultPinned: Set<LiveAssistTool> =
-            setOf(LiveAssistTool.LUT, LiveAssistTool.PEAK, LiveAssistTool.MIRROR)
+            setOf(LiveAssistTool.LUT, LiveAssistTool.PEAK, LiveAssistTool.MIRROR, LiveAssistTool.DESQ)
 
         val stackableScopeTools: List<LiveAssistTool> =
             listOf(
@@ -704,13 +773,11 @@ class LiveAssistState(
             )
         }
 
-        private fun parsePins(names: Set<String>): Set<LiveAssistTool> {
-            val parsed = names.mapNotNull(LiveAssistTool::fromPersisted).toSet()
-            return parsed.ifEmpty { defaultPinned }
-        }
+        private fun parsePins(names: Set<String>): Set<LiveAssistTool> =
+            names.mapNotNull(LiveAssistTool::fromPersisted).filter { it in LiveAssistTool.cleanPinCases }.toSet()
 
         private fun parsePlayback(names: Set<String>): Set<LiveAssistTool> =
-            names.mapNotNull(LiveAssistTool::fromPersisted).toSet()
+            names.mapNotNull(LiveAssistTool::fromPersisted).filter { it in LiveAssistTool.playbackToolbarCases }.toSet()
 
         private fun encodeGuides(guides: ScopeGuides): JSONObject =
             JSONObject().put("clip", guides.clip).put("crush", guides.crush).put("middle", guides.middle)

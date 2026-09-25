@@ -19,6 +19,7 @@ import com.opencapture.monitorui.MonitorBackdropSource
 import com.opencapture.monitorui.MonitorBlurCapability
 import androidx.compose.ui.platform.LocalView
 import android.view.View
+import androidx.core.graphics.createBitmap
 import java.util.concurrent.Executors
 
 /**
@@ -52,7 +53,7 @@ internal class MonitorBackdropFeed(context: Context) {
         }
     }
     fun hasDemand(producer: Any) = gate.hasDemand(producer)
-    fun acquire(producer: Any, nowNs: Long, thermal: Double) = gate.acquire(producer, nowNs, thermal)
+    fun acquire(producer: Any, nowNs: Long) = gate.acquire(producer, nowNs)
     fun cancel(ticket: BackdropFrameAdmission.Ticket?) { if (ticket != null) gate.complete(ticket) }
 
     fun submit(ticket: BackdropFrameAdmission.Ticket, frame: InspectorPreviewFrame, plan: FeedEffectsRenderPlan) {
@@ -66,7 +67,7 @@ internal class MonitorBackdropFeed(context: Context) {
                 } else {
                     val bitmap = synchronized(this@MonitorBackdropFeed) {
                         recycled?.takeIf { it.width == frame.width && it.height == frame.height }
-                            ?: Bitmap.createBitmap(frame.width, frame.height, Bitmap.Config.ARGB_8888)
+                            ?: createBitmap(frame.width, frame.height, Bitmap.Config.ARGB_8888)
                     }
                     bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(frame.rgba))
                     bitmap

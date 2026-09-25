@@ -19,8 +19,11 @@ android {
 
     defaultConfig {
         minSdk = 29
-        buildConfigField("String", "VERSION_NAME", "\"0.1.0\"")
-        buildConfigField("int", "VERSION_CODE", "1")
+        buildConfigField("String", "VERSION_NAME", "\"$resolvedVersionName\"")
+        buildConfigField("int", "VERSION_CODE", "$resolvedVersionCode")
+        buildConfigField("String", "SOURCE_REVISION", "\"unknown\"")
+        buildConfigField("String", "SENTRY_DSN_ANDROID", "\"\"")
+        buildConfigField("String", "BUILD_IDENTITY", "\"unknown\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
@@ -115,7 +118,8 @@ afterEvaluate {
 }
 
 dependencies {
-    implementation(project(":core-api"))
+    api(project(":core-api"))
+    api(project(":monitor-ui"))
 
     implementation(platform(libs.compose.bom))
     api(libs.androidx.activity.compose)
@@ -132,10 +136,17 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.okhttp)
     implementation(libs.mlkit.face.detection)
+    implementation(libs.sentry.android)
+
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:core:1.7.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation(libs.kotlin.test.junit)
 
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
 }
 
 // Existing dependency catalog asks for SDK 37, which is not in the installed SDK

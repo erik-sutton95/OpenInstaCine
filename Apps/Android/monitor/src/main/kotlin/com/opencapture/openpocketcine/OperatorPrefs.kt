@@ -1,6 +1,7 @@
 package com.opencapture.openpocketcine
 
 import android.content.Context
+import androidx.core.content.edit
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.feed.FeedUpscaleSwitch
 import com.opencapture.openpocketcine.feed.FeedUpscaler
@@ -202,6 +203,7 @@ enum class LiveOperatorPanel {
 object OperatorPrefs {
     private const val PREFS = "openpocketcine.operator"
     private const val AWAKE = "OpenPocketCine.KeepScreenAwake"
+    private const val HDR_DISPLAY = "OpenPocketCine.HDRDisplay"
     private const val AWAKE_LEGACY = "keep-screen-awake"
     private const val RECORD_CONFIRM = "OpenPocketCine.RecordConfirmation"
     private const val HAPTICS = "OpenPocketCine.HapticsEnabled"
@@ -211,6 +213,7 @@ object OperatorPrefs {
     private const val VIRTUAL_DEADZONE_PERCENT = "OpenPocketCine.VirtualJoystickDeadzonePercent"
     private const val VIRTUAL_RESPONSE_CURVE = "OpenPocketCine.VirtualJoystickResponseCurve"
     private const val GIMBAL_RAMP = "OpenPocketCine.GimbalRamp"
+    private const val GIMBAL_DOUBLE_TAP = "OpenPocketCine.GimbalDoubleTap"
     private const val DISP_LIVE = "OpenPocketCine.DispChrome.Live"
     private const val DISP_CLEAN = "OpenPocketCine.DispChrome.Clean"
     private const val CLEAN_PINS = "OpenPocketCine.CleanViewPins.v1"
@@ -230,11 +233,11 @@ object OperatorPrefs {
     private const val FEED_UPSCALER = "OpenPocketCine.feedUpscaler"
 
     const val DEFAULT_GIMBAL_SENSITIVITY = 4
-    val DEFAULT_CLEAN_PINS = setOf("LUT", "PEAK", "MIRROR")
+    val DEFAULT_CLEAN_PINS = setOf("LUT", "PEAK", "MIRROR", "DESQ")
 
-    /** Absent or empty pin set → stock LUT / PEAK / MIRROR, matching iOS load. */
+    /** Only absent preferences receive defaults; an explicitly empty set stays empty. */
     fun resolvedCleanPins(raw: Set<String>?): Set<String> =
-        if (raw.isNullOrEmpty()) DEFAULT_CLEAN_PINS else raw
+        raw ?: DEFAULT_CLEAN_PINS
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -249,42 +252,48 @@ object OperatorPrefs {
     }
 
     fun setKeepScreenAwake(context: Context, value: Boolean) {
-        prefs(context).edit().putBoolean(AWAKE, value).apply()
+        prefs(context).edit { putBoolean(AWAKE, value) }
+    }
+
+    fun hdrDisplay(context: Context): Boolean = prefs(context).getBoolean(HDR_DISPLAY, false)
+
+    fun setHdrDisplay(context: Context, value: Boolean) {
+        prefs(context).edit { putBoolean(HDR_DISPLAY, value) }
     }
 
     fun recordConfirmationEnabled(context: Context): Boolean =
         prefs(context).getBoolean(RECORD_CONFIRM, true)
 
     fun setRecordConfirmationEnabled(context: Context, value: Boolean) {
-        prefs(context).edit().putBoolean(RECORD_CONFIRM, value).apply()
+        prefs(context).edit { putBoolean(RECORD_CONFIRM, value) }
     }
 
     fun hapticsEnabled(context: Context): Boolean =
         prefs(context).getBoolean(HAPTICS, true)
 
     fun setHapticsEnabled(context: Context, value: Boolean) {
-        prefs(context).edit().putBoolean(HAPTICS, value).apply()
+        prefs(context).edit { putBoolean(HAPTICS, value) }
     }
 
     fun gimbalStickSensitivity(context: Context): Int =
         prefs(context).getInt(GIMBAL, DEFAULT_GIMBAL_SENSITIVITY).coerceIn(1, 5)
 
     fun setGimbalStickSensitivity(context: Context, value: Int) {
-        prefs(context).edit().putInt(GIMBAL, value.coerceIn(1, 5)).apply()
+        prefs(context).edit { putInt(GIMBAL, value.coerceIn(1, 5)) }
     }
 
     fun virtualJoystickInvertPan(context: Context): Boolean =
         prefs(context).getBoolean(VIRTUAL_INVERT_PAN, false)
 
     fun setVirtualJoystickInvertPan(context: Context, value: Boolean) {
-        prefs(context).edit().putBoolean(VIRTUAL_INVERT_PAN, value).apply()
+        prefs(context).edit { putBoolean(VIRTUAL_INVERT_PAN, value) }
     }
 
     fun virtualJoystickInvertTilt(context: Context): Boolean =
         prefs(context).getBoolean(VIRTUAL_INVERT_TILT, false)
 
     fun setVirtualJoystickInvertTilt(context: Context, value: Boolean) {
-        prefs(context).edit().putBoolean(VIRTUAL_INVERT_TILT, value).apply()
+        prefs(context).edit { putBoolean(VIRTUAL_INVERT_TILT, value) }
     }
 
     fun virtualJoystickDeadzonePercent(context: Context): Int {
@@ -296,10 +305,12 @@ object OperatorPrefs {
     }
 
     fun setVirtualJoystickDeadzonePercent(context: Context, value: Int) {
-        prefs(context).edit().putInt(
-            VIRTUAL_DEADZONE_PERCENT,
-            CameraCommands.VirtualJoystickMapping.clampedDeadzonePercent(value),
-        ).apply()
+        prefs(context).edit {
+            putInt(
+                VIRTUAL_DEADZONE_PERCENT,
+                CameraCommands.VirtualJoystickMapping.clampedDeadzonePercent(value),
+            )
+        }
     }
 
     fun virtualJoystickResponseCurve(context: Context): CameraCommands.VirtualJoystickCurve =
@@ -311,7 +322,7 @@ object OperatorPrefs {
         context: Context,
         value: CameraCommands.VirtualJoystickCurve,
     ) {
-        prefs(context).edit().putString(VIRTUAL_RESPONSE_CURVE, value.raw).apply()
+        prefs(context).edit { putString(VIRTUAL_RESPONSE_CURVE, value.raw) }
     }
 
     fun virtualJoystickMapping(context: Context): CameraCommands.VirtualJoystickMapping =
@@ -328,21 +339,29 @@ object OperatorPrefs {
         com.opencapture.openpocketcine.session.GimbalRamp.fromRaw(prefs(context).getInt(GIMBAL_RAMP, 0))
 
     fun setGimbalRamp(context: Context, value: com.opencapture.openpocketcine.session.GimbalRamp) {
-        prefs(context).edit().putInt(GIMBAL_RAMP, value.raw).apply()
+        prefs(context).edit { putInt(GIMBAL_RAMP, value.raw) }
+    }
+
+    /** Stick double-tap / gamepad Circle/B. Absent key is Recenter (iOS parity). */
+    fun gimbalDoubleTap(context: Context): com.opencapture.openpocketcine.session.GimbalDoubleTap =
+        com.opencapture.openpocketcine.session.GimbalDoubleTap.fromRaw(prefs(context).getInt(GIMBAL_DOUBLE_TAP, 0))
+
+    fun setGimbalDoubleTap(context: Context, value: com.opencapture.openpocketcine.session.GimbalDoubleTap) {
+        prefs(context).edit { putInt(GIMBAL_DOUBLE_TAP, value.raw) }
     }
 
     fun dispLive(context: Context): PocketDispChrome =
         PocketDispChrome.fromJson(prefs(context).getString(DISP_LIVE, null), PocketDispChrome.liveDefaults)
 
     fun setDispLive(context: Context, value: PocketDispChrome) {
-        prefs(context).edit().putString(DISP_LIVE, value.toJson()).apply()
+        prefs(context).edit { putString(DISP_LIVE, value.toJson()) }
     }
 
     fun dispClean(context: Context): PocketDispChrome =
         PocketDispChrome.fromJson(prefs(context).getString(DISP_CLEAN, null), PocketDispChrome.cleanDefaults)
 
     fun setDispClean(context: Context, value: PocketDispChrome) {
-        prefs(context).edit().putString(DISP_CLEAN, value.toJson()).apply()
+        prefs(context).edit { putString(DISP_CLEAN, value.toJson()) }
     }
 
     fun cleanViewPinnedTools(context: Context): Set<String> {
@@ -351,7 +370,7 @@ object OperatorPrefs {
     }
 
     fun setCleanViewPinnedTools(context: Context, value: Set<String>) {
-        prefs(context).edit().putStringSet(CLEAN_PINS, HashSet(resolvedCleanPins(value))).apply()
+        prefs(context).edit { putStringSet(CLEAN_PINS, HashSet(resolvedCleanPins(value))) }
     }
 
     fun feedUpscaler(context: Context): FeedUpscaler {
@@ -362,42 +381,42 @@ object OperatorPrefs {
 
     fun setFeedUpscaler(context: Context, value: FeedUpscaler) {
         FeedUpscaleSwitch.rendererReads = value
-        prefs(context).edit().putString(FEED_UPSCALER, value.label).apply()
+        prefs(context).edit { putString(FEED_UPSCALER, value.label) }
     }
 
     fun portraitFeedAspect(context: Context): PortraitFeedAspect =
         PortraitFeedAspect.fromRaw(prefs(context).getString(PORTRAIT_ASPECT, null))
 
     fun setPortraitFeedAspect(context: Context, value: PortraitFeedAspect) {
-        prefs(context).edit().putString(PORTRAIT_ASPECT, value.raw).apply()
+        prefs(context).edit { putString(PORTRAIT_ASPECT, value.raw) }
     }
 
     fun nativeISOHopEnabled(context: Context): Boolean =
         prefs(context).getBoolean(NATIVE_ISO_HOP, true)
 
     fun setNativeISOHopEnabled(context: Context, value: Boolean) {
-        prefs(context).edit().putBoolean(NATIVE_ISO_HOP, value).apply()
+        prefs(context).edit { putBoolean(NATIVE_ISO_HOP, value) }
     }
 
     fun facePriorityExposureEnabled(context: Context): Boolean =
         prefs(context).getBoolean(FACE_PRIORITY, false)
 
     fun setFacePriorityExposureEnabled(context: Context, value: Boolean) {
-        prefs(context).edit().putBoolean(FACE_PRIORITY, value).apply()
+        prefs(context).edit { putBoolean(FACE_PRIORITY, value) }
     }
 
     fun gimbalGamepadStick(context: Context): GamepadGimbalStick =
         GamepadGimbalStick.parse(prefs(context).getString(GIMBAL_GAMEPAD_STICK, null))
 
     fun setGimbalGamepadStick(context: Context, value: GamepadGimbalStick) {
-        prefs(context).edit().putString(GIMBAL_GAMEPAD_STICK, value.raw).apply()
+        prefs(context).edit { putString(GIMBAL_GAMEPAD_STICK, value.raw) }
     }
 
     fun shutterUsesAngle(context: Context): Boolean =
         prefs(context).getBoolean(SHUTTER_ANGLE, false)
 
     fun setShutterUsesAngle(context: Context, value: Boolean) {
-        prefs(context).edit().putBoolean(SHUTTER_ANGLE, value).apply()
+        prefs(context).edit { putBoolean(SHUTTER_ANGLE, value) }
     }
 
     fun shutterAngleDegrees(context: Context): Double {
@@ -407,7 +426,7 @@ object OperatorPrefs {
 
     fun setShutterAngleDegrees(context: Context, value: Double) {
         val snapped = ShutterAngle.nearestDegrees(value)
-        prefs(context).edit().putFloat(SHUTTER_DEGREES, snapped.toFloat()).apply()
+        prefs(context).edit { putFloat(SHUTTER_DEGREES, snapped.toFloat()) }
     }
 
     fun lutSelection(context: Context): String {
@@ -416,7 +435,7 @@ object OperatorPrefs {
     }
 
     fun setLutSelection(context: Context, value: String) {
-        prefs(context).edit().putString(LUT_SELECTION, value).apply()
+        prefs(context).edit { putString(LUT_SELECTION, value) }
     }
 
     fun lastMonitorColorMode(context: Context): Int =
@@ -428,9 +447,9 @@ object OperatorPrefs {
 
     fun setLastMonitorColorMode(context: Context, value: Int) {
         if (value < 0) {
-            prefs(context).edit().remove(LAST_MONITOR_COLOR).apply()
+            prefs(context).edit { remove(LAST_MONITOR_COLOR) }
         } else {
-            prefs(context).edit().putInt(LAST_MONITOR_COLOR, value).apply()
+            prefs(context).edit { putInt(LAST_MONITOR_COLOR, value) }
         }
     }
 
@@ -453,7 +472,7 @@ object OperatorPrefs {
                 JSONObject()
             }
         json.put(path, value)
-        prefs.edit().putString(CLIP_SHOT_COLOR, json.toString()).apply()
+        prefs.edit { putString(CLIP_SHOT_COLOR, json.toString()) }
     }
 
     fun legacyClipShotColorJson(context: Context): JSONObject? {
@@ -466,7 +485,7 @@ object OperatorPrefs {
     }
 
     fun clearLegacyClipShotColor(context: Context) {
-        prefs(context).edit().remove(CLIP_SHOT_COLOR).apply()
+        prefs(context).edit { remove(CLIP_SHOT_COLOR) }
     }
 
     fun cacheFullResolution(context: Context): Boolean =
@@ -477,14 +496,14 @@ object OperatorPrefs {
         }
 
     fun setCacheFullResolution(context: Context, value: Boolean) {
-        prefs(context).edit().putBoolean(CACHE_FULL_RESOLUTION, value).apply()
+        prefs(context).edit { putBoolean(CACHE_FULL_RESOLUTION, value) }
     }
 
     fun assistEncoded(context: Context): String? =
         prefs(context).getString(ASSIST_V1, null)
 
     fun setAssistEncoded(context: Context, value: String) {
-        prefs(context).edit().putString(ASSIST_V1, value).apply()
+        prefs(context).edit { putString(ASSIST_V1, value) }
     }
 
     fun assistToolUsage(context: Context): com.opencapture.monitorui.MonitorToolUsageState {
@@ -521,13 +540,13 @@ object OperatorPrefs {
             .put("counts", counts)
             .put("lastUsed", lastUsed)
             .put("clock", value.clock)
-        prefs(context).edit().putString(ASSIST_TOOL_USAGE, obj.toString()).apply()
+        prefs(context).edit { putString(ASSIST_TOOL_USAGE, obj.toString()) }
     }
 
     fun playbackVisibleAssistTools(context: Context): Set<String> =
         prefs(context).getStringSet(PLAYBACK_ASSISTS, null)?.toSet() ?: emptySet()
 
     fun setPlaybackVisibleAssistTools(context: Context, value: Set<String>) {
-        prefs(context).edit().putStringSet(PLAYBACK_ASSISTS, value).apply()
+        prefs(context).edit { putStringSet(PLAYBACK_ASSISTS, value) }
     }
 }

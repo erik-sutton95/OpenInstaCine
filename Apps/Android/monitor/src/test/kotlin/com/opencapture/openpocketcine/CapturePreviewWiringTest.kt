@@ -8,9 +8,9 @@ import kotlin.test.assertTrue
 /** Source-contract checks supplement policy tests; these do not claim rendered Compose coverage. */
 class CapturePreviewWiringTest {
     private val repository: File get() = generateSequence(File(".").absoluteFile) { it.parentFile }
-        .first { File(it, "Apps/Android/app/src/main").isDirectory }
+        .first { File(it, "Apps/Android/monitor/src/main").isDirectory }
     private fun app(name: String) = File(repository,
-        "Apps/Android/app/src/main/kotlin/com/opencapture/openpocketcine/$name").readText()
+        "Apps/Android/monitor/src/main/kotlin/com/opencapture/openpocketcine/$name").readText()
 
     @Test fun heldReadoutUsesTheCompactDialVariantOfTheTappedHost() {
         val caller = app("LivePortraitChrome.kt").substringAfter("quickPreview =")

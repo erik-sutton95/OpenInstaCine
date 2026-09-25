@@ -5,6 +5,7 @@ package com.opencapture.openpocketcine.feed
 import android.content.Context
 import android.graphics.Bitmap
 import android.opengl.GLES20
+import androidx.core.graphics.createBitmap
 import androidx.media3.common.util.GlProgram
 import androidx.media3.common.util.GlUtil
 import java.nio.ByteBuffer
@@ -23,7 +24,7 @@ private const val PEAKING_MASK_FRAGMENT_SHADER = "shaders/peaking_mask_fragment_
  */
 internal class FeedEffectsGlProgram(
     context: Context,
-    private val plan: FeedEffectsRenderPlan,
+    private var plan: FeedEffectsRenderPlan,
     flipInputVertically: Boolean = false,
 ) {
     private val program = GlProgram(context, FEED_EFFECTS_VERTEX_SHADER, FEED_EFFECTS_FRAGMENT_SHADER)
@@ -69,9 +70,24 @@ internal class FeedEffectsGlProgram(
                 GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
             )
             mask.setFloatsUniform("uFlipInputY", flag(flipInputVertically))
-            mask.setFloatsUniform("uPeakingRatioThreshold", floatArrayOf(plan.peakingRatioThreshold))
-            mask.setFloatsUniform("uPeakingNoiseGate", floatArrayOf(plan.peakingNoiseGate))
         }
+        bindMaskUniforms()
+    }
+
+    /**
+     * Keeps the compiled programs and uploaded cubes when [next] differs only in scalars
+     * or scope policy (ISO, zebra levels, colours, scopes). False means the caller rebuilds.
+     */
+    fun adopt(next: FeedEffectsRenderPlan): Boolean {
+        if (!plan.sharesGlResources(next)) return false
+        plan = next
+        bindMaskUniforms()
+        return true
+    }
+
+    private fun bindMaskUniforms() {
+        maskProgram?.setFloatsUniform("uPeakingRatioThreshold", floatArrayOf(plan.peakingRatioThreshold))
+        maskProgram?.setFloatsUniform("uPeakingNoiseGate", floatArrayOf(plan.peakingNoiseGate))
     }
 
     /**
@@ -252,17 +268,17 @@ internal class FeedEffectsGlProgram(
 
     private fun uploadCube(cube: FeedEffectsCube?): UploadedFeedEffectsCube {
         if (cube == null) {
-            val stub = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+            val stub = createBitmap(1, 1, Bitmap.Config.ARGB_8888)
             return UploadedFeedEffectsCube(upload(stub), 0)
         }
         val atlas = feedEffectsCubeAtlas(cube)
-        val bitmap = Bitmap.createBitmap(atlas.width, atlas.height, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(atlas.width, atlas.height, Bitmap.Config.ARGB_8888)
         bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(atlas.rgba))
         return UploadedFeedEffectsCube(upload(bitmap), atlas.cubeSize)
     }
 
     private fun uploadStubTexture(): Int {
-        val stub = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        val stub = createBitmap(1, 1, Bitmap.Config.ARGB_8888)
         return upload(stub)
     }
 

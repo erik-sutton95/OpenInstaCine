@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -32,6 +33,7 @@ import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -102,7 +104,7 @@ fun LiveZoomChip(
     val haptics = LocalOperatorHaptics.current
     val interaction = remember { MutableInteractionSource() }
     var dialOpen by remember { mutableStateOf(false) }
-    var dialBase by remember { mutableStateOf(factor) }
+    var dialBase by remember { mutableDoubleStateOf(factor) }
     if (dialOpen && !locked && onDial != null) {
         val end by rememberUpdatedState(onDialEnd)
         DisposableEffect(Unit) { onDispose { end() } }
@@ -112,7 +114,7 @@ fun LiveZoomChip(
     }
     val orientation = LocalConfiguration.current.orientation
     LaunchedEffect(locked, orientation) { dialOpen = false }
-    var held by remember { mutableStateOf(factor) }
+    var held by remember { mutableDoubleStateOf(factor) }
     LaunchedEffect(factor, pinching) {
         if (LiveZoomLabelHold.shouldReplace(held, factor, pinching)) {
             held = factor
@@ -122,6 +124,7 @@ fun LiveZoomChip(
     Box(
         modifier
             .fillMaxSize()
+            .testTag("live.zoom")
             .combinedClickable(enabled = !locked, interactionSource = interaction, indication = null,
                 onClick = { haptics.selection(); onCycle() },
                 onDoubleClick = onDigitalCycle?.let { action -> { haptics.selection(); action() } },

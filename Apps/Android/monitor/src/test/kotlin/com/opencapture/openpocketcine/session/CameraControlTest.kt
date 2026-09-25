@@ -1,10 +1,12 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.openpocketcine.ShutterAngle
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.openpocketcine.feed.ExtraMirrorHold
 import com.opencapture.openpocketcine.feed.FeedPresentPolicy
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -39,8 +41,16 @@ class CameraControlTest {
         val model = CameraModel(name = "Osmo Pocket 3")
         val formats = VideoFormat.pickerFormats(emptyList(), model, CameraCommands.SHOOT_VIDEO)
         assertTrue(VideoFormat.resolutions(formats, VideoResolution.P4K, VideoAspect.SIXTEEN_NINE).contains(VideoResolution.P2_7K))
-        assertTrue(VideoFormat.resolutions(formats, null, VideoAspect.NINE_SIXTEEN).contains(VideoResolution.P3K_9X16))
         assertTrue(VideoFormat.resolutions(formats, null, VideoAspect.ONE_ONE).contains(VideoResolution.P3K_1X1))
+        assertTrue(formats.none { it.resolution.aspect == VideoAspect.NINE_SIXTEEN })
+        assertTrue(
+            !VideoFormat.allowsOperatorSet(
+                VideoFormat(VideoResolution.P3K_9X16, VideoFrameRate.FPS25),
+                emptyList(),
+                model,
+                CameraCommands.SHOOT_VIDEO,
+            ),
+        )
         assertTrue(!VideoFormat.aspects(formats, null).contains(VideoAspect.FOUR_THREE))
         val reported = listOf(VideoFormat(VideoResolution.P4K, VideoFrameRate.FPS25))
         assertEquals(reported, VideoFormat.pickerFormats(reported, model, 1))
@@ -347,6 +357,83 @@ class CameraControlTest {
             listOf(1.0, 2.0),
             pocket3.activeZoomStops(CameraCommands.RES_4K, CameraCommands.SHOOT_VIDEO),
         )
+        // Measured on a Pocket 3: the body clamps an over-ask to its own max,
+        // so these are the stops it actually reaches, not the ones we hoped for.
+        assertEquals(
+            listOf(1.0, 2.0, 3.0),
+            pocket3.activeZoomStops(0x2D, CameraCommands.SHOOT_VIDEO),
+        )
+        assertEquals(
+            listOf(1.0, 2.0, 4.0),
+            pocket3.activeZoomStops(0x69, CameraCommands.SHOOT_VIDEO),
+        )
+        assertEquals(
+            listOf(1.0, 2.0, 3.0),
+            pocket3.activeZoomStops(0x6A, CameraCommands.SHOOT_VIDEO),
+        )
+        assertEquals(
+            listOf(1.0, 2.0),
+            pocket3.activeZoomStops(0x6B, CameraCommands.SHOOT_VIDEO),
+        )
+        // Unmeasured bytes inherit their measured sibling's size class.
+        assertEquals(
+            listOf(1.0, 2.0, 4.0),
+            pocket3.activeZoomStops(0x42, CameraCommands.SHOOT_VIDEO),
+        )
+        assertEquals(
+            listOf(1.0, 2.0, 3.0),
+            pocket3.activeZoomStops(0x5F, CameraCommands.SHOOT_VIDEO),
+        )
+        assertEquals(
+            listOf(1.0, 2.0),
+            pocket3.activeZoomStops(0x7D, CameraCommands.SHOOT_VIDEO),
+        )
+        assertEquals(
+            listOf(1.0, 2.0),
+            pocket3.activeZoomStops(0x6C, CameraCommands.SHOOT_VIDEO),
+        )
+        // No FORMAT yet, or a byte the catalog does not name: full range.
+        assertEquals(listOf(1.0, 2.0, 4.0), pocket3.activeZoomStops(-1, CameraCommands.SHOOT_VIDEO))
+        assertEquals(
+            listOf(1.0, 2.0, 4.0),
+            pocket3.activeZoomStops(0xFE, CameraCommands.SHOOT_VIDEO),
+        )
+        // The chip rides the same pin as every other control, with
+        // CamFov::matches standing in for equality.
+        fun held(ask: Double, live: Double?, ageMs: Long): Double? =
+            CameraValuePin.reconcile(
+                CameraValuePin(ask, CameraValuePin.SETTLE_MS),
+                live,
+                ageMs,
+                CamFov::matches,
+            ).first
+        // Fresh ask: the chip holds the target through the round trip.
+        assertEquals(3.0, held(3.0, 1.0, 0L))
+        assertEquals(3.0, held(3.0, null, 0L))
+        // Body confirmed — the pin has done its job, live takes over.
+        assertNull(held(3.0, 3.0, 0L))
+        assertNull(held(3.0, 2.97, 0L))
+        // Body clamped, or moved the lens on its own (a FORMAT change resets to
+        // 1×). It never reports 3×, so only the deadline can free the chip.
+        assertNull(held(3.0, 1.0, CameraValuePin.SETTLE_MS))
+        assertNull(held(4.0, 2.0, 5_000L))
+        assertNull(held(3.0, null, 5_000L))
+        // A pin that outlived its ask must not win the readout.
+        assertEquals(1.0, CamFov.readout(live = 1.0, preview = null, fallback = 3.0))
+        // The stop the operator last tapped cannot outlive the FORMAT that
+        // allowed it: dropping to 4K has to pull 3× back to the new ceiling.
+        assertEquals(3.0, CamFov.stopWithinCycle(3.0, listOf(1.0, 2.0, 3.0)))
+        assertEquals(2.0, CamFov.stopWithinCycle(3.0, listOf(1.0, 2.0)))
+        assertEquals(CamFov.MIN_FACTOR, CamFov.stopWithinCycle(4.0, emptyList()))
+        // And the operator is told why the chip fell, only when it actually falls.
+        assertEquals("4K caps zoom at 2×", CamFov.ceilingNote("4K", 3.0, listOf(1.0, 2.0)))
+        assertNull(CamFov.ceilingNote("4K", 2.0, listOf(1.0, 2.0)))
+        assertNotNull(CamFov.ceilingNote("2.7K", 4.0, listOf(1.0, 2.0, 3.0)))
+        assertNull(CamFov.ceilingNote("1080", 3.0, listOf(1.0, 2.0, 4.0)))
+        assertNull(CamFov.ceilingNote("4K", 3.0, emptyList()))
+        assertEquals(3.0, VideoResolution.P2_7K.pocket3ZoomMax)
+        assertEquals(2.0, VideoResolution.P4K.pocket3ZoomMax)
+        assertNull(VideoResolution(0xFE).pocket3ZoomMax)
         assertEquals(
             listOf(1.0, 2.0, 4.0),
             pocket4.activeZoomStops(CameraCommands.RES_4K, CameraCommands.SHOOT_VIDEO),
@@ -884,8 +971,10 @@ class CameraControlTest {
         expo[7] = CameraCommands.EXPO_AUTO.toByte()
         expo[16] = 0x90.toByte()
         expo[17] = 0x01
+        expo[20] = 0xC8.toByte()
+        expo[21] = 0x80.toByte()
         val next = StatusExtras.applyExpo(expo, CameraStatus())
-        assertEquals(50, next.shutterDenom)
+        assertEquals(200, next.shutterDenom)
         assertEquals(0x05, next.isoIndex)
         assertEquals(CameraCommands.EXPO_AUTO, next.expoMode)
         assertEquals(0x10, next.evComp)
@@ -894,6 +983,7 @@ class CameraControlTest {
         manual[7] = CameraCommands.EXPO_MANUAL.toByte()
         manual[6] = 0x0F
         val fromManual = StatusExtras.applyExpo(manual, CameraStatus())
+        assertEquals(50, fromManual.shutterDenom)
         assertEquals(CameraCommands.EXPO_MANUAL, fromManual.expoMode)
         assertEquals(0x0F, fromManual.evComp)
     }
@@ -937,6 +1027,20 @@ class CameraControlTest {
         assertEquals(p60, wheel)
         assertTrue(!wheel.contains(48))
         assertTrue(!wheel.contains(13))
+    }
+
+    @Test
+    fun emptyShutterCapUsesDocumentedVideoLadder() {
+        val wheel = CameraCommands.shutterWheelDenoms(emptyList(), 60)
+        assertTrue(wheel.contains(60))
+        assertTrue(wheel.contains(50))
+        assertTrue(wheel.contains(48))
+        assertTrue(wheel.contains(8000))
+        assertEquals(8000, wheel.first())
+        assertEquals(48, ShutterAngle.denom(180.0, 24, wheel))
+        val withOdd = CameraCommands.shutterWheelDenoms(emptyList(), 80)
+        assertTrue(withOdd.contains(80))
+        assertTrue(withOdd.contains(100))
     }
 
     @Test
@@ -1193,6 +1297,20 @@ class CameraControlTest {
         assertEquals(false, parsed.supportsTapFocus)
         assertEquals(false, parsed.supportsFocusMode)
         assertEquals(false, parsed.needsFirstPictureFormatPoke)
+    }
+
+    @Test
+    fun cameraModelJsonReadsPortableBodyCapabilities() {
+        val pro = CameraModel.fromJson("""{"name":"Osmo Pocket 4 Pro","hasGimbal":true,"supportsZoom":true}""")
+        assertEquals(true, pro.hasGimbal)
+        assertEquals(true, pro.supportsZoom)
+        val nano = CameraModel.fromJson("""{"name":"Osmo Nano","family":"nano","hasGimbal":false,"supportsZoom":false}""")
+        assertEquals(false, nano.hasGimbal)
+        assertEquals(false, nano.supportsZoom)
+        // Missing keys fail closed rather than re-deriving from family.
+        val legacy = CameraModel.fromJson("""{"name":"Osmo Pocket 4","family":"pocket"}""")
+        assertEquals(false, legacy.hasGimbal)
+        assertEquals(false, legacy.supportsZoom)
     }
 
     @Test

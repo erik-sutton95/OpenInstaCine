@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.WindowManager
@@ -37,7 +38,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import android.os.Build
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -74,9 +77,10 @@ import com.opencapture.openpocketcine.pairing.startupBackdrop
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.delay
 
-class MainActivity : ComponentActivity() {
+open class MainActivity : ComponentActivity() {
     private val composeFirstFrameDrawn = AtomicBoolean(false)
-    private lateinit var model: AppModel
+    internal lateinit var model: AppModel
+        private set
     var hideSystemNavigation = false
     var playbackHidesSystemNavigation = false
 
@@ -194,14 +198,37 @@ private fun OpenPocketCineApp(model: AppModel) {
     }
 
     val showLive = phase == ConnectionPhase.LIVE || model.session.holdsMonitor
-    val hideNavigation = showLive && model.liveOperatorPanel == null
+    LaunchedEffect(model.hdrDisplay, model.screenCaptured, activity) {
+        HdrDisplay.apply(activity, enabled = model.hdrDisplayActive)
+    }
+    DisposableEffect(activity) {
+        val windowManager = activity?.windowManager
+        if (activity == null || windowManager == null || Build.VERSION.SDK_INT < 35) {
+            return@DisposableEffect onDispose { }
+        }
+        val callback = java.util.function.Consumer<Int> { state ->
+            model.screenCaptured = state == WindowManager.SCREEN_RECORDING_STATE_VISIBLE
+        }
+        // Knowing about screen recording only dims the HDR boost. A ROM that
+        // refuses the callback must cost the boost, never the whole app.
+        try {
+            windowManager.addScreenRecordingCallback(activity.mainExecutor, callback)
+        } catch (denied: SecurityException) {
+            Log.w("OpcHdr", "screen-recording callback denied; the boost stays on while recording", denied)
+            return@DisposableEffect onDispose { }
+        }
+        onDispose { runCatching { windowManager.removeScreenRecordingCallback(callback) } }
+    }
+    val hideNavigation = (showLive && model.liveOperatorPanel == null) || model.showsMultiview
     LaunchedEffect(activity, hideNavigation) {
         (activity as? MainActivity)?.hideSystemNavigation = hideNavigation
         (activity as? MainActivity)?.updateSystemBars()
     }
 
     Box(Modifier.fillMaxSize().startupBackdrop()) {
-        if (showLive) {
+        if (model.showsMultiview && !showLive) {
+            com.opencapture.openpocketcine.multiview.MultiviewScreen(model, onClose = model::closeMultiview)
+        } else if (showLive) {
             LiveViewScreen(model)
         } else {
             LinkExperience(
@@ -211,14 +238,19 @@ private fun OpenPocketCineApp(model: AppModel) {
                 onEnableBluetooth = { requestBluetoothOn() },
             )
         }
+        MonitorConfiguration.identity.sourceLabel?.let { label ->
+            if (showLive) Text(label, color = BrandColors.accent, style = LiveType.mono(10f), modifier = Modifier.align(Alignment.TopCenter).background(BrandColors.background).padding(horizontal = 8.dp, vertical = 3.dp))
+        }
         LaunchSplashOverlay(visible = launchSplashVisible)
-        if (model.homePanel != null && !showLive) {
+        if (model.homePanel != null && !showLive && !model.showsMultiview) {
             AppPanelHost(model)
         }
         var showAutomaticPrompt by remember {
             mutableStateOf(ReliabilityReportingConsent.shouldOfferAutomaticPrompt())
         }
-        if (!launchSplashVisible && !showLive && showAutomaticPrompt && model.homePanel != AppPanel.PRIVACY) {
+        if (!launchSplashVisible && !showLive && !model.showsMultiview && showAutomaticPrompt &&
+            model.homePanel != AppPanel.PRIVACY
+        ) {
             AutomaticReportsPrompt(
                 onPrivacy = { model.homePanel = AppPanel.PRIVACY },
                 onEnable = {
@@ -304,7 +336,7 @@ private fun LaunchSplashOverlay(visible: Boolean) {
             fun OpcMark() {
                 Image(
                     painter = painterResource(R.drawable.opc_app_logo),
-                    contentDescription = "OpenPocketCine",
+                    contentDescription = MonitorConfiguration.identity.appName,
                     modifier = Modifier
                         .size(logoSize)
                         .clip(RoundedCornerShape(logoCorner)),
@@ -319,7 +351,7 @@ private fun LaunchSplashOverlay(visible: Boolean) {
                 ) {
                     OpcMark()
                     Text(
-                        "OpenPocketCine",
+                        MonitorConfiguration.identity.appName,
                         color = BrandColors.ink,
                         style = LiveType.display(wordmarkSp.value, FontWeight.Bold),
                     )
@@ -332,7 +364,7 @@ private fun LaunchSplashOverlay(visible: Boolean) {
                 ) {
                     OpcMark()
                     Text(
-                        "OpenPocketCine",
+                        MonitorConfiguration.identity.appName,
                         color = BrandColors.ink,
                         style = LiveType.display(wordmarkSp.value, FontWeight.Bold),
                     )

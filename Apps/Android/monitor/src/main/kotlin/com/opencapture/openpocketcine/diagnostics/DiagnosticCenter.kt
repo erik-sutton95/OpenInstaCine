@@ -2,6 +2,7 @@ package com.opencapture.openpocketcine.diagnostics
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import com.opencapture.openpocketcine.MonitorConfiguration
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -10,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import com.opencapture.openpocketcine.BuildConfig
 import com.opencapture.openpocketcine.media.MediaShare
 import com.opencapture.openpocketcine.session.LocalVPNFilter
@@ -194,7 +196,7 @@ object DiagnosticCenter {
                 android.widget.Toast.LENGTH_LONG).show()
             return
         }
-        val clip = ClipData.newRawUri("OpenPocketCine diagnostics", uris[0])
+        val clip = ClipData.newRawUri("OpenInstaCine diagnostics", uris[0])
         for (i in 1 until uris.size) clip.addItem(ClipData.Item(uris[i]))
         val intent =
             if (uris.size == 1) {
@@ -215,9 +217,9 @@ object DiagnosticCenter {
                 }
             }
         if (emailSupport) {
-            intent.selector = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
+            intent.selector = Intent(Intent.ACTION_SENDTO, "mailto:".toUri())
             intent.putExtra(Intent.EXTRA_EMAIL, arrayOf("support@openpocketcine.app"))
-            intent.putExtra(Intent.EXTRA_SUBJECT, "OpenPocketCine — report a problem")
+            intent.putExtra(Intent.EXTRA_SUBJECT, "OpenInstaCine — report a problem")
             intent.putExtra(Intent.EXTRA_TEXT,
                 "What happened?\n\n\nTechnical details are attached to help us investigate. Please do not include private footage or passwords.")
         }
@@ -239,7 +241,7 @@ object DiagnosticCenter {
         val text = compactSummary(environment(session), journalLines())
         lastCompact = text
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("OpenPocketCine diagnostics", text))
+        clipboard.setPrimaryClip(ClipData.newPlainText("${MonitorConfiguration.identity.appName} diagnostics", text))
         log("notice", "diagnostics", "feedback-paste", "copied compact diagnostics")
         onCopiedForFeedback?.invoke()
     }
@@ -266,7 +268,7 @@ object DiagnosticCenter {
     private fun compactSummary(env: Env, recent: List<String>): String {
         val lines =
             mutableListOf(
-                "OpenPocketCine diagnostics (no name, no location)",
+                "${MonitorConfiguration.identity.appName} diagnostics (no name, no location)",
                 "app ${env.appVersion} (${env.appBuild}) source=${env.sourceRevision} ${env.osName} ${env.osVersion} ${env.deviceModel}",
                 "camera ${env.cameraModel} family=${env.cameraFamily} phase=${env.phase} vpn=${if (env.vpnActive) "on" else "off"}",
             )
@@ -287,7 +289,7 @@ object DiagnosticCenter {
         val sections = mutableListOf<String>()
         sections +=
             """
-            OpenPocketCine diagnostic report
+            ${MonitorConfiguration.identity.appName} diagnostic report
             Privacy: no personal name, email, location, device name, or Wi-Fi password.
             Generated for a tester to paste or share. Not uploaded.
 

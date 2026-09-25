@@ -9,21 +9,40 @@ import androidx.compose.runtime.setValue
 
 /**
  * Latest scope tap published off the GLES thread (main-thread). Compose
- * observes [bundle]; WAVE / PARADE / HISTO / VECTOR / LIGHTS read it.
+ * observes [bundle]; WAVE / PARADE / HISTO / VECTOR / LIGHTS / ND read it.
  */
 object LiveScopeSampleBus {
+    /** A replaced source cannot publish a queued sample or clear its successor. */
+    internal class Source
+    private var source: Source? = null
     var bundle by mutableStateOf(ScopeAssistBundle.EMPTY)
         private set
 
     var generation by mutableIntStateOf(0)
         private set
 
-    fun publish(next: ScopeAssistBundle) {
-        bundle = next
-        generation += 1
+    @Synchronized internal fun openSource(): Source = Source().also {
+        source = it
+        reset()
     }
 
-    fun reset() {
+    @Synchronized internal fun isCurrent(candidate: Source?): Boolean =
+        candidate != null && candidate === source
+
+    @Synchronized internal fun publish(candidate: Source?, next: ScopeAssistBundle): Boolean {
+        if (!isCurrent(candidate)) return false
+        bundle = next
+        generation += 1
+        return true
+    }
+
+    @Synchronized internal fun closeSource(candidate: Source?) {
+        if (!isCurrent(candidate)) return
+        source = null
+        reset()
+    }
+
+    private fun reset() {
         bundle = ScopeAssistBundle.EMPTY
         generation = 0
         ScopeTapHzLog.reset()
@@ -91,6 +110,19 @@ internal data class ScopeTapPolicy(
         val existing = PocketScopeSampler.minIntervalNs(activeScopeCount, thermalMultiplier)
         return if (inspectorOnly) maxOf(existing, (200_000_000L * thermalMultiplier.coerceAtLeast(1.0)).toLong()) else existing
     }
+
+    /**
+     * Raw tap cadence for both schedulers. An inspector-only scope never drives it past
+     * 5 Hz; visible backdrop chrome may still ask for the faster 213×120 tap.
+     */
+    fun tapIntervalNs(thermalMultiplier: Double, backdropDemand: Boolean): Long =
+        PocketScopeSampler.chromeSampleIntervalNs(
+            if (inspectorOnly) 0 else activeScopeCount, thermalMultiplier, backdropDemand)
+
+    /** Scope accumulation admission, independent of a faster backdrop-driven raw tap. */
+    fun scopeWorkDue(nowNs: Long, lastScopeWorkNs: Long, thermalMultiplier: Double): Boolean =
+        activeScopeCount > 0 &&
+            (lastScopeWorkNs == 0L || nowNs - lastScopeWorkNs >= minIntervalNs(thermalMultiplier))
 
     companion object {
         val IDLE = ScopeTapPolicy()

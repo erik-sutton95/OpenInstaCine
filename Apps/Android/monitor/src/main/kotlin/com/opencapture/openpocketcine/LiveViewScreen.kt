@@ -88,6 +88,7 @@ import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.graphics.createBitmap
 import com.opencapture.openpocketcine.assists.AssistLongPress
 import com.opencapture.openpocketcine.assists.AssistOptionsPopup
 import com.opencapture.openpocketcine.assists.LiveAssistBar
@@ -114,6 +115,7 @@ import com.opencapture.openpocketcine.session.CameraStatus
 import com.opencapture.openpocketcine.session.ControlHud
 import com.opencapture.openpocketcine.session.FocusOverlay
 import com.opencapture.openpocketcine.session.TrackingBox
+import com.opencapture.openpocketcine.session.VideoResolution
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -121,7 +123,18 @@ import kotlinx.coroutines.isActive
 
 @Composable
 fun LiveViewScreen(model: AppModel) {
-    val status by model.session.status.collectAsState()
+    val status by model.session.chromeStatus.collectAsState()
+    val cameraGalleryOpen by model.session.cameraGalleryOpen.collectAsState()
+    var followedGallery by remember { mutableStateOf(cameraGalleryOpen) }
+    LaunchedEffect(cameraGalleryOpen) {
+        if (cameraGalleryOpen == followedGallery) return@LaunchedEffect
+        followedGallery = cameraGalleryOpen
+        if (cameraGalleryOpen && model.liveOperatorPanel == null) {
+            model.liveOperatorPanel = LiveOperatorPanel.MEDIA
+        } else if (!cameraGalleryOpen && model.liveOperatorPanel == LiveOperatorPanel.MEDIA) {
+            model.liveOperatorPanel = null
+        }
+    }
     val controlNote by model.session.controlNote.collectAsState()
     val controlBusy by model.session.controlBusy.collectAsState()
     val focusPoint by model.session.focusPoint.collectAsState()
@@ -130,6 +143,7 @@ fun LiveViewScreen(model: AppModel) {
     val zoomPinching by model.session.zoomPinching.collectAsState()
     val trackingHud by model.session.trackingHud.collectAsState()
     val poseViewFlip by model.session.gimbalPoseViewFlip.collectAsState()
+    val poseInvertPan by model.session.gimbalPoseInvertPan.collectAsState()
     val gimbalLimitPulse by model.session.gimbalLimitPulse.collectAsState()
     val operatorHaptics = LocalOperatorHaptics.current
     var tick by remember { mutableIntStateOf(0) }
@@ -173,12 +187,16 @@ fun LiveViewScreen(model: AppModel) {
     LaunchedEffect(
         sheet,
         model.session.connectedCamera?.model?.supportsFocusMode,
+        model.session.connectedCamera?.model?.supportsAperture,
         model.session.connectedCamera?.model?.family,
         model.session.connectedCamera?.model?.name,
     ) {
         if (sheet == LiveSheet.FOCUS &&
             !CaptureLists.supportsFocusModeOrDefault(model.session.connectedCamera?.model)
         ) {
+            sheet = null
+        }
+        if (sheet == LiveSheet.APERTURE && model.session.connectedCamera?.model?.supportsAperture != true) {
             sheet = null
         }
     }
@@ -261,6 +279,11 @@ fun LiveViewScreen(model: AppModel) {
         }
     }
     val useVulkan = vulkanSession != null && !vulkanFailed
+    val scopeSourceIdentity = model.session.connectedCamera ?: model.session
+    val scopeSourceActive = model.liveOperatorPanel != LiveOperatorPanel.MEDIA
+    LaunchedEffect(vulkanSession, useVulkan, scopeSourceIdentity, hasPicture, scopeSourceActive) {
+        vulkanSession?.configureScopeSource(scopeSourceIdentity, hasPicture, scopeSourceActive && useVulkan)
+    }
     LaunchedEffect(model.session, useVulkan, vulkanSession) {
         var lastCount = 0
         var lastAt = 0L
@@ -363,8 +386,8 @@ fun LiveViewScreen(model: AppModel) {
         val safeTrailing = with(density) { cutout.getRight(this, layoutDir).toDp().value }
         val vw = maxWidth.value
         val vh = maxHeight.value
-        val fill =
-            if (verticalPicture) true else model.portraitFeedAspect == PortraitFeedAspect.FILL
+        val desqueezeVisible = assist.isVisible(LiveAssistTool.DESQ)
+        val fill = verticalPicture || (!desqueezeVisible && model.portraitFeedAspect == PortraitFeedAspect.FILL)
         val feedAspectRatio = if (verticalPicture) 9f / 16f else 16f / 9f
         val assistH =
             if (!model.assistClean && !fill && model.chromeSectionMounts(PocketDispSection.TOOL_BAR)) {
@@ -426,7 +449,9 @@ fun LiveViewScreen(model: AppModel) {
         // then clips (center crop). Vertical Pocket fill stays 9:16 pillars.
         val fillCrop = zones != null && fill && !verticalPicture
         val pictureContent =
-            if (fillCrop) portraitFillCropContent(layout.feed) else layout.onFeed
+            if (desqueezeVisible) layout.onFeed.fittedContent(assist.presentedAspect(pictureAspect))
+            else if (fillCrop) portraitFillCropContent(layout.feed) else layout.onFeed
+        var assistPaletteBounds by remember(vw, vh) { mutableStateOf<ChromeRect?>(null) }
         val showGimbalButton =
             model.monitorCapabilities(status).gimbal &&
                 model.chromeSectionMounts(PocketDispSection.GIMBAL_STICK)
@@ -466,6 +491,10 @@ fun LiveViewScreen(model: AppModel) {
                 cameraName = model.session.connectedCamera?.name,
             )
         var vulkanSurfaceView by remember { mutableStateOf<SurfaceView?>(null) }
+        LaunchedEffect(vulkanSurfaceView, model.hdrDisplayActive) {
+            val surface = vulkanSurfaceView ?: return@LaunchedEffect
+            HdrDisplay.apply(surface, enabled = model.hdrDisplayActive)
+        }
         var glesTextureView by remember { mutableStateOf<TextureView?>(null) }
         val wantsFaceDetect by model.session.wantsFaceDetect.collectAsState()
         var canvasOrigin by remember { mutableStateOf(Offset.Zero) }
@@ -485,18 +514,20 @@ fun LiveViewScreen(model: AppModel) {
             effectsPlan,
             canvasOrigin,
             platesGen,
-            layout.onFeed,
+            pictureContent,
+            desqueezeVisible,
             density.density,
             liveViewFlip,
         ) {
             val session = vulkanSession ?: return@LaunchedEffect
             if (!useVulkan) return@LaunchedEffect
-            val picture = layout.onFeed
+            val picture = if (desqueezeVisible) pictureContent else layout.onFeed
             session.setFeedRect(
                 with(density) { picture.x.dp.toPx() },
                 with(density) { picture.y.dp.toPx() },
                 with(density) { picture.width.dp.toPx() },
                 with(density) { picture.height.dp.toPx() },
+                stretchToRect = desqueezeVisible,
             )
             session.setPlates(GpuOverlayBus.plateSnapshot())
             session.syncAssists(
@@ -546,9 +577,11 @@ fun LiveViewScreen(model: AppModel) {
             ) {
                 LiveFeedPresenter(
                     mirrored = liveViewFlip,
+                    stretchToRect = desqueezeVisible,
                     backdrop = backdrop,
                     sourceIdentity = model.session.connectedCamera ?: model.session,
                     sourceReady = hasPicture,
+                    sourceActive = scopeSourceActive,
                     plan = effectsPlan,
                     onDecoderSurface = { model.session.attachSurface(it) },
                     onPresented = { model.session.noteLiveFrame() },
@@ -575,10 +608,11 @@ fun LiveViewScreen(model: AppModel) {
 
             // iOS `LiveZoomPinchWell` sits under chip + scopes so direct drag
             // on WAVE / PARADE / HISTO / VECTOR still reaches MovableAssistPanel.
-            Box(Modifier.liveModuleFrame(layout.onFeed)) {
+            val gestureFrame = if (desqueezeVisible) pictureContent else layout.onFeed
+            Box(Modifier.liveModuleFrame(gestureFrame)) {
                 LiveFeedGestureWell(
                     enabled = !uiLocked && model.liveOperatorPanel == null && chromeInteractive,
-                    feed = ChromeRect(0f, 0f, layout.onFeed.width, layout.onFeed.height),
+                    feed = ChromeRect(0f, 0f, gestureFrame.width, gestureFrame.height),
                     onTap = { point ->
                         val x = if (liveViewFlip) 1f - point.x else point.x
                         model.session.handleFeedTap(x, point.y)
@@ -602,7 +636,10 @@ fun LiveViewScreen(model: AppModel) {
                         model.chromeSectionMounts(PocketDispSection.FOCUS_BOX) &&
                             model.session.supportsTapFocus,
                     locked = uiLocked,
-                    feedFrame = layout.onFeed,
+                    feedFrame = if (desqueezeVisible) pictureContent else layout.onFeed.fittedContent(
+                        VideoResolution.fromRaw(status.resolutionCode)?.ratio ?: pictureAspect),
+                    framingFrame = if (desqueezeVisible) pictureContent.fittedContent(
+                        assist.presentedAspect(VideoResolution.fromRaw(status.resolutionCode)?.ratio ?: pictureAspect)) else null,
                     placementFrame = scopePlacement,
                     audioPlacementFrame = scopePlacement.copy(x = layout.safeLeading,
                         width = maxOf(0f, scopePlacement.maxX - layout.safeLeading)),
@@ -655,6 +692,38 @@ fun LiveViewScreen(model: AppModel) {
                 }
             }
 
+            // EV and LEVEL share the left-edge slot and its View Assist toolbar avoidance.
+            val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR) &&
+                model.liveOperatorPanel == null && assist.configureTool == null
+            val collapsedPalette = if (!showsAssist) null else if (zones != null) {
+                portraitAssistToolbar(zones.assistToolbar.minY, minOf(vw, vh) >= 600f)
+            } else layout.assist
+            val meterAvoid = if (showsAssist) assistPaletteBounds ?: collapsedPalette else null
+            val meterFeed = if (desqueezeVisible) pictureContent else layout.onFeed
+            val evShown = assist.evMeter && model.currentDispMode == PocketDispMode.LIVE
+            if (evShown) {
+                LiveCameraExposureMeter(
+                    raw = status.meteredEv,
+                    available = !recovery.isRecovering && !model.session.isFeedRecovering,
+                    feed = meterFeed,
+                    mode = model.currentDispMode,
+                    avoid = meterAvoid,
+                    modifier = Modifier.zIndex(1f),
+                )
+            }
+
+            if (assist.isVisible(LiveAssistTool.LEVEL)) {
+                LiveLevelOverlay(
+                    reading = model.session.levelReading,
+                    // Picture-relative like the stick: TT180 mirrors the shown picture in both Selfie Flip states.
+                    viewFlip = CameraCommands.liveInvertPan(poseInvertPan, assist.mirror),
+                    feed = meterFeed,
+                    viewport = ChromeRect(0f, 0f, vw, vh),
+                    portrait = portrait,
+                    modifier = Modifier.zIndex(1f),
+                )
+            }
+
             LiveFaceFramePump(
                 surfaceView = vulkanSurfaceView,
                 textureView = glesTextureView,
@@ -694,6 +763,7 @@ fun LiveViewScreen(model: AppModel) {
                     fpsLabel = fpsLabel,
                     bars = bars,
                     sourceIsVertical = verticalPicture,
+                    onAssistBoundsChanged = { assistPaletteBounds = it },
                 )
                 }
             } else {
@@ -723,6 +793,7 @@ fun LiveViewScreen(model: AppModel) {
                     zoomDialReadout = zoomDialReadout,
                     zoomPinching = zoomPinching,
                     onStatusChipFrame = { section, rect -> statusChipFrames[section] = rect },
+                    onAssistBoundsChanged = { assistPaletteBounds = it },
                 )
                 }
             }
@@ -957,7 +1028,7 @@ private fun LiveFaceFramePump(
                 inFlight.set(false)
                 continue
             }
-            val dest = Bitmap.createBitmap(tapW, tapH, Bitmap.Config.ARGB_8888)
+            val dest = createBitmap(tapW, tapH, Bitmap.Config.ARGB_8888)
             try {
                 PixelCopy.request(
                     view,
@@ -1059,9 +1130,11 @@ private fun View.unsplitMotionEvents() {
 @Composable
 private fun LiveFeedPresenter(
     mirrored: Boolean,
+    stretchToRect: Boolean,
     backdrop: MonitorBackdropFeed,
     sourceIdentity: Any,
     sourceReady: Boolean,
+    sourceActive: Boolean,
     plan: FeedEffectsRenderPlan,
     onDecoderSurface: (Surface) -> Unit,
     onPresented: () -> Unit = {},
@@ -1092,8 +1165,11 @@ private fun LiveFeedPresenter(
             textureViewOut.value(null)
         }
     }
-    LaunchedEffect(sourceIdentity, sourceReady) { session.configurePreviewSource(sourceIdentity, sourceReady) }
+    LaunchedEffect(sourceIdentity, sourceReady, sourceActive) {
+        session.configurePreviewSource(sourceIdentity, sourceReady, sourceActive)
+    }
     LaunchedEffect(plan) { session.updatePlan(plan) }
+    LaunchedEffect(stretchToRect) { session.setStretchToRect(stretchToRect) }
 
     Box(modifier.graphicsLayer { scaleX = if (mirrored) -1f else 1f }) {
         key(gpuFailed) {
@@ -1232,6 +1308,7 @@ internal fun LandscapeChrome(
     onTileFrame: (LiveSheet, ChromeRect) -> Unit = { _, _ -> },
     onStatusChipFrame: (PocketDispSection, ChromeRect) -> Unit = { _, _ -> },
     capabilities: com.opencapture.monitorui.MonitorCapabilities = model.monitorCapabilities(status),
+    onAssistBoundsChanged: (ChromeRect?) -> Unit = {},
 ) {
     var stripQuick by remember { mutableStateOf(false) }
     var topQuick by remember { mutableStateOf(false) }
@@ -1242,7 +1319,9 @@ internal fun LandscapeChrome(
     val showsLock = model.chromeSectionMounts(PocketDispSection.LOCK_BUTTON) || uiLocked
     val showsBatteries = model.chromeSectionMounts(PocketDispSection.BATTERIES)
     val showsSettings = !captureOpen && (model.chromeSectionMounts(PocketDispSection.RAIL_SETTINGS) || status.isRecording)
-    val showsMedia = !captureOpen && model.chromeSectionMounts(PocketDispSection.RAIL_MEDIA)
+    // Media browsing is not adapted to shared Wi-Fi; a borrowed Multiview tile hides it.
+    val showsMedia = !captureOpen && model.chromeSectionMounts(PocketDispSection.RAIL_MEDIA) &&
+        !model.session.isMultiviewBorrowed
     val showsRecord = model.chromeSectionMounts(PocketDispSection.RAIL_RECORD) || status.isRecording
     val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR) &&
         model.liveOperatorPanel == null && assist.configureTool == null
@@ -1290,7 +1369,10 @@ internal fun LandscapeChrome(
                 )
             }
         }
-        if (showsLock) {
+        val multiviewExit = model.multiviewExit
+        if (multiviewExit != null) {
+            Box(Modifier.liveModuleFrame(layout.lock)) { MultiviewReturnButton(onClick = multiviewExit) }
+        } else if (showsLock) {
             Box(Modifier.liveModuleFrame(layout.lock).chromeEditStroke(editing != null, true)) {
                 LockButton(uiLocked, onClick = onLock)
             }
@@ -1397,7 +1479,7 @@ internal fun LandscapeChrome(
                     enabled = !captureOpen && !uiLocked && model.liveOperatorPanel == null && hits,
                     onMove = model::updateGimbalStick,
                     onRelease = model::endGimbalStick,
-                    onRecenter = { model.session.recenterGimbal() },
+                    onRecenter = { model.session.performGimbalDoubleTap() },
                     onFlip = { model.session.flipGimbal() },
                 )
             }
@@ -1413,6 +1495,8 @@ internal fun LandscapeChrome(
                 layout = layout,
                 feed = layout.onFeed,
                 joystickBounds = stick,
+                zoomBounds = if (capabilities.zoom && model.chromeSectionMounts(PocketDispSection.ZOOM_CHIP)) zoom
+                    else ChromeRect(0f, 0f, 0f, 0f),
                 uiLocked = uiLocked,
             )
         }
@@ -1427,6 +1511,7 @@ internal fun LandscapeChrome(
                     portrait = false, locked = uiLocked || !hits,
                     isOn = assist::isOn, onToggle = { assist.toggle(it) }, onLongPress = onAssistLongPress,
                     showsAudio = CaptureShutterPolicy.showsAudioControls(status.shootingMode),
+                    onBoundsChanged = onAssistBoundsChanged,
                 )
             }
         }
@@ -1442,6 +1527,7 @@ internal fun LandscapeChrome(
                     },
                     quickBottomClearanceDp = layout.safeBottom,
                     showFocus = capabilities.focus,
+                    showAperture = capabilities.iris,
                     facePriority = model.facePriorityExposureEnabled, shutterUsesAngle = model.shutterUsesAngle,
                     onOpen = {
                         val next = CaptureShutterPolicy.opening(it, status.shootingMode)

@@ -98,9 +98,9 @@ fun LegalDocumentScreen(
 
 private val PRIVACY_BODY =
     """
-OpenPocketCine talks to your Osmo Pocket over Bluetooth and the camera's own Wi-Fi. The app has no account. Automatic error reports are optional and off by default.
+OpenInstaCine talks to your Insta360 Luna over Bluetooth and the camera's own Wi-Fi. The app has no account. Automatic error reports are optional and off by default.
 
-OpenCapture is the data controller. Privacy or deletion requests: support@openpocketcine.app.
+OpenCapture is the data controller. Privacy or deletion requests: support@openinstacine.app.
 
 Optional reliability reports
 With your consent, configured builds send crash, hang and feed diagnostics, app/OS/device versions and session health counts through Sentry. Automatic reports exclude all images. No footage, screenshots, raw camera packets or GPS location are included. Sentry receives the connection IP; stored event IP and derived geography are removed. Event storage uses Germany. Some provider processing may occur internationally.
@@ -115,25 +115,25 @@ What stays on this phone
 • Imported .cube files you choose to open.
 
 What never leaves the phone
-• Live HEVC, DUML telemetry, and pairing traffic stay on the local link. We do not operate a cloud.
+• Live HEVC, camera telemetry, and pairing traffic stay on the local link. We do not operate a cloud.
 
 Third parties
 • Apple (or Google) may process permission prompts and OS diagnostics under their own policies. TestFlight or Play betas may send crash reports to the developer under Apple or Google terms.
 • Frame.io is optional. If this build is configured and you sign in, clips you pick upload device → Adobe. The token stays in the on-device Keystore.
 • Saving a clip or using the share sheet is something you start. Apple or the app you pick then handles that file.
 • AF-C face boxes are computed on this phone from the live preview. Face geometry is not uploaded.
-• The source is at github.com/erik-sutton95/OpenPocketCine.
+• The source is at github.com/erik-sutton95/OpenInstaCine.
 
-Android may ask for location so the app can join the camera Wi-Fi or scan BLE. OpenPocketCine does not use that permission for maps, ads, or a location history.
+Android may ask for location so the app can join the camera Wi-Fi or scan BLE. OpenInstaCine does not use that permission for maps, ads, or a location history.
 
-The full privacy policy is https://openpocketcine.app/privacy/
+The full privacy policy is https://openinstacine.app/privacy/
     """.trimIndent()
 
 private val TERMS_BODY =
     """
-OpenPocketCine is free software under the Apache License 2.0. You may use, modify, and share it under that license.
+OpenInstaCine is free software under the Apache License 2.0. You may use, modify, and share it under that license.
 
-This is an unofficial field monitor. It is not affiliated with, endorsed by, or supported by DJI. "DJI", "Osmo", and "Osmo Pocket" are trademarks of SZ DJI Technology Co., Ltd., used only to identify the cameras the app can talk to.
+This is an unofficial field monitor. It is not affiliated with, endorsed by, or supported by Arashi Vision Inc. (Insta360). "Insta360" and "Luna" are trademarks of Arashi Vision Inc., used only to identify the camera the app can talk to.
 
 Reverse-engineered protocol behavior can be incomplete or wrong. Do not rely on this app as the only way to start or stop a take — record from the camera body until those commands are proven.
 
@@ -144,8 +144,8 @@ By using the app you agree to follow the Code of Conduct when participating in t
 
 private val LICENSES_BODY =
     """
-OpenPocketCine
-Copyright 2026 Erik Sutton and OpenPocketCine contributors
+OpenInstaCine
+Copyright 2026 Erik Sutton and OpenInstaCine contributors
 
 Licensed under the Apache License, Version 2.0. You may obtain a copy of the License at:
 
@@ -155,25 +155,25 @@ The portable .cube parser (CubeLUT) is adapted from OpenZCine, also Apache 2.0.
 
 HUD icons are Lucide (ISC; some glyphs also MIT from Feather). See THIRD-PARTY-NOTICES.
 
-I learned the BLE pairing and camera Wi-Fi connection path with the help of Osmosis by Konrad Iturbe, and I'm grateful. OpenPocketCine is its own implementation. The field-monitor architecture follows OpenZCine.
+The app shell is adapted from OpenPocketCine (Apache 2.0), whose camera pairing work credits Osmosis by Konrad Iturbe, and I'm grateful. The Luna connection path is OpenInstaCine's own implementation. The field-monitor architecture follows OpenZCine.
 
-No DJI SDK is included or required.
+No Insta360 SDK is included or required.
 
 Full license text: LICENSE in the repository. Attribution: NOTICE.
     """.trimIndent()
 
 private val NOTICE_BODY =
     """
-OpenPocketCine
-Copyright 2026 Erik Sutton and OpenPocketCine contributors
+OpenInstaCine
+Copyright 2026 Erik Sutton and OpenInstaCine contributors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 The portable .cube parser (`CubeLUT`) is adapted from OpenZCine (Apache 2.0).
 HUD icons are Lucide (ISC; Feather-derived glyphs also MIT).
 
-This project is not affiliated with or endorsed by SZ DJI Technology Co., Ltd.
-"DJI", "Osmo", "Osmo Pocket", and "Mimo" are trademarks of SZ DJI Technology Co., Ltd.,
-used for identification only.
-No DJI SDK or proprietary DJI documentation is included in, distributed with, or required
+This project is not affiliated with, endorsed by, or supported by Arashi Vision Inc. (Insta360).
+"Insta360" and "Luna" are trademarks of Arashi Vision Inc.,
+used only to identify the camera.
+No Insta360 SDK or proprietary Insta360 documentation is included in, distributed with, or required
 by this project.
     """.trimIndent()

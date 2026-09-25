@@ -268,10 +268,14 @@ class CaptureSheetTest {
     }
 
     @Test
-    fun emptyCapListShowsOnlyCurrent() {
+    fun emptyCapListUsesDocumentedVideoLadder() {
         val status = CameraStatus(shutterDenom = 80)
-        assertEquals(listOf(80), CaptureLists.shutterDenoms(status))
-        assertEquals(listOf("1/80"), CaptureLists.shutterLabels(status))
+        val denoms = CaptureLists.shutterDenoms(status)
+        assertTrue(denoms.contains(80))
+        assertTrue(denoms.contains(50))
+        assertTrue(denoms.contains(8000))
+        assertTrue(CaptureLists.shutterLabels(status).contains("1/80"))
+        assertTrue(CaptureLists.shutterLabels(status).contains("1/50"))
     }
 
     @Test
@@ -843,7 +847,7 @@ class CaptureSheetTest {
         assertEquals("Exposure", LiveSheet.EXPO.subtitle)
         assertEquals("Shooting mode", LiveSheet.MODE.subtitle)
         assertEquals(
-            setOf("ISO", "SHUTTER", "WB", "FOCUS", "EXPO", "AUDIO", "COLOR", "FORMAT", "MODE"),
+            setOf("ISO", "SHUTTER", "WB", "FOCUS", "APERTURE", "EXPO", "AUDIO", "COLOR", "FORMAT", "MODE"),
             LiveSheet.entries.map { it.name }.toSet(),
         )
     }

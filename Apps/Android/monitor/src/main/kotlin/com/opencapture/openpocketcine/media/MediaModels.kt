@@ -410,7 +410,7 @@ object MediaLibraryQuery {
     /** Filename `YYYYMMDD` as UTC calendar year-month-day. Not an instant. */
     fun dateKeyFromMillis(millis: Long): String {
         val date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate()
-        return "%04d%02d%02d".format(date.year, date.monthValue, date.dayOfMonth)
+        return String.format(Locale.US, "%04d%02d%02d", date.year, date.monthValue, date.dayOfMonth)
     }
 
     fun millisFromDateKey(key: String): Long? {
@@ -526,6 +526,7 @@ object MediaOperatorCopy {
     const val LISTING = "Listing camera clips…"
     const val NOT_CONNECTED = "Connect the camera to list clips."
     const val PLAYBACK_FAILED = "Camera did not enter playback."
+    const val BROWSING_ON_CAMERA = "Playback is open on the camera. Close to return to live view."
     const val NO_CLIPS = "No clips on the camera."
     const val LIST_FAILED = "Could not list camera clips."
     const val NOT_DELETABLE = "That clip cannot be deleted from here."
