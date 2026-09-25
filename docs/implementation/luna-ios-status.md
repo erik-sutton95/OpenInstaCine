@@ -169,14 +169,48 @@ device, so nothing below is hardware-verified on Android.
   gimbal rate stick (iOS shaping, 20 Hz), recenter, flip, zoom 1..15 (chips 1, 2, 4, 8, 15),
   tap focus (0.15 x 0.27 ROI) and Deep Track open/cancel. Request bytes are ports of
   `Adapters/Insta360Protocol` and are pinned to the Swift fixtures in `LunaControlTest`.
+- Status and settings (2026-09-25, second pass): `LunaBackend` polls capture status every 1 s and
+  device status every 5 s, reads photography options for the active function mode, and follows
+  notifications 8208 (capture), 8293/8334 (settings changed) and 8275/8198/8195 (re-read status),
+  like iOS `LunaCameraBackend`. It publishes a neutral `core-api` `CameraReadout`; the Luna session
+  maps that onto the shared `CameraStatus` in `session/LunaShellMapping.kt` (port of iOS
+  `LunaShellMapping`): ISO (with the Luna 160 stop), shutter, exposure mode, EV, WB (5 s settle
+  pin), color (Standard, I-Log, Dolby Vision), format and the fw 1.1.15 format table, battery,
+  charging, storage, shooting mode, REC state and timer, zoom, gimbal mode and speed. Optimistic
+  pins, the 120 ms exposure coalescer and the 400 ms settings re-read match iOS.
+- Controls (same shared sheets as upstream, Luna underneath): record start/stop (cmd 4/5), photo
+  (cmd 3) in Photo mode, ISO / shutter / auto-manual (one exposure message, program chosen as on
+  iOS, no ISO top-limit sentinel for manual with ISO), EV, WB auto / kelvin, color profile, format
+  (cmd 9 types 31, 63), shooting mode (cmd 7 options 40/41; Luna names TimeShift, PureVideo,
+  Slow Motion, Timelapse), gimbal mode and follow speed (option 91), gamepad actions. Zoom and tap
+  focus now write the active function mode instead of always 7.
+- Camera media: `MediaLibraryController` lists through cmd 13 + 38 (proxies hidden), renders
+  thumbnails from cmd 11 type 2 NV12 (BT.709 limited range to JPEG), deletes by URI with cmd 12
+  (the camera removes the LRV too), and downloads / plays over HTTP at the file's own path on
+  `192.168.42.1`. Live video is paused while the album is open and restarted after; the backend
+  binds the process to the camera network so the shared OkHttp client reaches the camera.
+  Favorites stay local, as in the official app.
+- Emulator, local replay with a fixed debug readout (no camera): the live chrome shows 41 GB,
+  4K · 25p, I-Log, Video, 66 %, ISO 400, 1/50, M and 5600K; the format sheet lists the readout's
+  table and the ISO wheel carries 160. Operator Setup shows the OPENINSTACINE header. Shots in
+  `.local/android-shots/` (`live-replay-readouts-landscape.png`, `format-sheet-replay-landscape.png`,
+  `iso-sheet-replay-landscape.png`, `settings-header-landscape.png`).
+- Kotlin tests pin the new encoders and decoders to the same captured byte vectors as the Swift
+  tests (`LunaControlTest`, `LunaStatusTest`) and check the shell mapping round trips
+  (`LunaShellMappingTest`).
+- Upstream-derived shell files touched for Luna vocabulary (mirroring the iOS core additions):
+  `session/CameraCommands.kt` (I-Log / Dolby Vision color ids and labels, ISO 160, mode label
+  overrides), `session/Models.kt` (Luna color wheel), `session/VideoFormat.kt` (Luna resolution
+  bytes 0xD0 to 0xD6), `media/MediaModels.kt` (direct-path media host, Insta360 file timestamps),
+  `media/MediaLibraryController.kt` (Luna list/thumbnail/delete branch).
 - Gating matches iOS: no AF mode, no aperture, no multiview (button hidden), no programmed moves,
   no audio controls. The Android shell has no Wi-Fi/Hotspot setup choice or head tracking to hide.
 - I-Log to Rec.709 sits in the camera LUT tab (`MonitorTransfer.ILOG`, camera looks in the DJI
   category so upstream tab logic and tests hold). DJI LUT assets are not bundled.
 - Brand copy: legal bodies, pairing steps, wordmarks, links (`openinstacine.app`, GitHub repo)
   mirror the iOS text. Launcher and splash logo are the yellow monitor mark.
-- `./gradlew :app:assembleDebug testDebugUnitTest lintDebug` passes: 989 monitor, 121
-  monitor-ui and 13 luna-adapter JVM tests. Test edits vs upstream: the source-contract test reads
+- `./gradlew :app:assembleDebug testDebugUnitTest lintDebug` passes: 995 monitor, 121
+  monitor-ui and 26 luna-adapter JVM tests. Test edits vs upstream: the source-contract test reads
   `monitor/` instead of `app/`, and legal/link assertions name OpenInstaCine and Insta360.
 - Emulator (`OpenInstaCine_API35`, landscape): pairing, live chrome in local replay (zoom chip,
   Deep Track button, gimbal stick, lock, DISP, LUT/assist rail) and Operator Setup render with the
@@ -184,15 +218,16 @@ device, so nothing below is hardware-verified on Android.
 
 ### Remains
 
-- Status mapping: iOS fills ISO, shutter, WB, EV, storage, battery and REC from Luna settings and
-  device status; Android shows dashes. The Kotlin adapter does not read photography options or
-  device status yet, and the zoom/focus requests always use function mode 7 (normal video).
-- Capture and exposure controls (record, shutter, ISO, shutter speed, EV, WB, color profile,
-  format), gimbal mode/speed, camera media and delivery: iOS has them, Android shows
-  "not available on the Luna Ultra yet".
+- Everything above is emulator and unit-test verified only: no status read, control, capture or
+  media call has run against a real Luna from Android. Real Luna over Android BLE, Wi-Fi and TCP,
+  reconnect/background recovery and all controls: untested on hardware.
+- Not ported from iOS yet: gimbal limit pulses (8302 / option 92), Deep Track lock state from
+  8315 (the box stays until cancelled), the capture-stopped error note (8201), face priority,
+  re-listing media after a capture while the album is open, a decoder flush on album exit, and
+  Auto LUT picking the I-Log cube (the shared resolver keeps Auto off for the generic family).
+- Shared chrome still shows DJI-only affordances the Luna cannot use: the AUDIO readout (a dash)
+  and the "Auto Native ISO" D-Log toggle in the ISO sheet.
 - Live decode on the emulator: the goldfish HEVC decoder returned a solid frame for the Luna replay
   in this run (the 2026-09-11 review got a moving picture); needs a real device.
-- Real Luna over Android BLE, Wi-Fi and TCP, reconnect/background recovery and all controls:
-  untested on hardware.
 - There is no Android equivalent of `scripts/sync-openpocketcine.sh`; the resync was manual
   (upstream `app/src` into `monitor/src`, then the brand, I-Log and session seams re-applied).
