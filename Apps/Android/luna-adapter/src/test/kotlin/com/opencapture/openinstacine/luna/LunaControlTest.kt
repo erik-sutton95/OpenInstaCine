@@ -37,4 +37,110 @@ class LunaControlTest {
         assertEquals("089ff3fbcf8a3415823c053f2590a7043e2da709683e", hex(track.body))
         assertEquals(0, LunaControl.cancelTracking.body.size)
     }
+
+    private fun h(value: String) = LunaWire.hex(value.filterNot(Char::isWhitespace))
+
+    /** Swift `testPhotographySetsMatchOfficialBytes`. */
+    @Test fun photographySetsMatchOfficialBytes() {
+        val cases = listOf(
+            LunaControl.gimbalFollowSpeed(3) to "0a015b1211a20100aa0100f80101c00501da050210031807",
+            LunaControl.gimbalMode(1) to "0a015b1211a20100aa0100f80101c00501da050220011807",
+            LunaControl.gimbalMode(2) to "0a015b1211a20100aa0100f80101c00501da050220021807",
+            LunaControl.gimbalMode(3) to "0a015b1211a20100aa0100f80101c00501da050220031807",
+            LunaControl.gimbalMode(4) to "0a015b1211a20100aa0100f80101c00501da050220041807",
+            LunaControl.videoExposure(1, iso = 160) to "0a0215641214a20100aa0105080110a001f80101c00501a006021807",
+            LunaControl.videoExposure(0) to "0a021564120fa20100aa0100f80101c00501a006021807",
+            LunaControl.videoExposure(2, shutterSeconds = 0.02) to "0a031518641221a20100aa010b0802197b14ae47e17a943fc00180e7ffff0ff80101c00501a006021807",
+            LunaControl.videoExposure(2, shutterSeconds = 1.0 / 5000) to "0a031518641221a20100aa010b0802192d431cebe2362a3fc00180e7ffff0ff80101c00501a006021807",
+            LunaControl.videoExposure(3, shutterSeconds = 0.02) to "0a031518641221a20100aa010b0803197b14ae47e17a943fc00180e7ffff0ff80101c00501a006021807",
+            LunaControl.exposureBias(0.3) to "0a0107120e3806a20100aa0100f80101c005011807",
+            LunaControl.colorMode(1) to "0a0123120fa20100aa0100f80101980201c005011807",
+            LunaControl.colorMode(2) to "0a0123120fa20100aa0100f80101980202c005011807",
+            LunaControl.colorMode(5) to "0a0123120fa20100aa0100f80101980205c005011807",
+            LunaControl.zoom(3.0) to "0a01351216a20100aa0100f80101a9030000000000000840c005011807",
+            LunaControl.recordResolution(52) to "0a021f3f120ca20100aa0100f80134c005011807",
+            LunaControl.recordResolution(48) to "0a021f3f120ca20100aa0100f80130c005011807",
+            LunaControl.recordResolution(24) to "0a021f3f120ca20100aa0100f80118c005011807",
+            LunaControl.recordResolution(454) to "0a021f3f120da20100aa0100f801c603c005011807",
+            LunaControl.recordResolution(211) to "0a021f3f120da20100aa0100f801d301c005011807",
+            LunaControl.whiteBalanceKelvin(2000) to "0a01271210a20100aa0100f80101b802d00fc005011807",
+            LunaControl.whiteBalanceKelvin(2400) to "0a01271210a20100aa0100f80101b802e012c005011807",
+            LunaControl.whiteBalanceAuto() to "0a0127120ca20100aa0100f80101c005011807",
+            LunaControl.photographyValue(6, 2) to "0a0106120e3002a20100aa0100f80101c005011807",
+            // Source-backed shapes and fw 1.1.15 fixes.
+            LunaControl.photographyValue(18, 17) to "0a0112120f900111a20100aa0100f80101c005011807",
+            LunaControl.photographyValue(33, 0) to "0a0121120fa20100aa0100f80101880200c005011807",
+            LunaControl.videoExposure(3, iso = 400, shutterSeconds = 0.02) to "0a021564121da20100aa010e0803109003197b14ae47e17a943ff80101c00501a006021807",
+        )
+        for ((request, expected) in cases) {
+            assertEquals(LunaControl.SET_PHOTOGRAPHY_OPTIONS, request.code)
+            assertEquals(expected, hex(request.body))
+        }
+        // The bank follows the shooting mode: field 3 is the function mode.
+        assertTrue(hex(LunaControl.colorMode(2, functionMode = 21).body).endsWith("1815"))
+        assertFailsWith<IllegalArgumentException> { LunaControl.exposureBias(5.0) }
+        assertFailsWith<IllegalArgumentException> { LunaControl.videoExposure(2, shutterSeconds = 0.0) }
+        assertFailsWith<IllegalArgumentException> { LunaControl.whiteBalanceKelvin(1500) }
+        assertFailsWith<IllegalArgumentException> { LunaControl.tapFocus(1.5, 0.0) }
+    }
+
+    /** Negative EV is zigzag sint32, read back through the reply parser. */
+    @Test fun exposureRoundTripsThroughTheReplyParser() {
+        fun nested(request: LunaControl.Request) = LunaPhotographySettings.parse(LunaWire.blob(2, LunaWire.bytes(request.body, 2)))
+        assertEquals(-10, nested(LunaControl.exposureBias(-1.0)).exposureBiasTenths)
+        assertEquals(-3, nested(LunaControl.exposureBias(-0.3)).exposureBiasTenths)
+        assertEquals(3, nested(LunaControl.exposureBias(1 / 3.0)).exposureBiasTenths)
+        val manual = nested(LunaControl.videoExposure(3, iso = 400, shutterSeconds = 0.01))
+        assertEquals(LunaExposure(3, 400, 0.01), manual.videoExposure)
+        assertNull(manual.isoTopLimit)
+        assertEquals(15.0, nested(LunaControl.zoom(15.0)).zoom)
+        assertEquals(listOf(0, 1, 2, 3), listOf(null to null, 400L to null, null to 0.02, 400L to 0.02).map { (i, s) -> LunaControl.exposureProgram(i, s) })
+    }
+
+    /** Swift `testShootingModesMatchOfficialDeviceSets`. */
+    @Test fun shootingModesMatchOfficialDeviceSets() {
+        val cases = mapOf(
+            LunaShootingMode.VIDEO to "0a0129120c08012880f702d00201900503",
+            LunaShootingMode.TIMELAPSE to "0a0129120f08012880f702c80202d00201900503",
+            LunaShootingMode.TIME_SHIFT to "0a0129120f08012880f702c80204d00201900503",
+            LunaShootingMode.SLOW_MOTION to "0a0129120f08012880f702c80209d00201900503",
+            LunaShootingMode.PURE_VIDEO to "0a0129120f08012880f702c8020bd00201900503",
+            LunaShootingMode.PHOTO to "0a0128120c08012880f702d00201900503",
+            LunaShootingMode.PANO to "0a0128120f08012880f702c00208d00201900503",
+        )
+        for ((mode, expected) in cases) {
+            assertEquals(LunaControl.SET_OPTIONS, mode.request().code)
+            assertEquals(expected, hex(mode.request().body), mode.name)
+        }
+        assertEquals(12, LunaShootingMode.TIME_SHIFT.functionMode)
+        assertEquals(67, LunaShootingMode.PANO.functionMode)
+        assertEquals(LunaShootingMode.SLOW_MOTION, LunaShootingMode.from(100, 9))
+        assertEquals(LunaShootingMode.PHOTO, LunaShootingMode.from(0, 100))
+        assertNull(LunaShootingMode.from(100, 7))
+    }
+
+    /** Swift `testGimbalTrackingCaptureAndMediaRequests` and `testOfficialStatusPollsArePacked`. */
+    @Test fun captureMediaAndStatusRequests() {
+        assertEquals("0805", hex(LunaControl.takePicture(5).body))
+        assertEquals("", hex(LunaControl.takePicture().body))
+        assertEquals(3, LunaControl.takePicture().code)
+        assertEquals("0801", hex(LunaControl.startCapture.body))
+        assertEquals(5, LunaControl.stopCapture.code)
+        assertEquals("", hex(LunaControl.stopLive.body))
+        val jpg = "/storage_internal/DCIM/Camera01/IMG_20260916_133503_003.jpg"
+        assertEquals("0a3b2f73746f726167655f696e7465726e616c2f4443494d2f43616d65726130312f494d475f32303236303931365f3133333530335f3030332e6a7067", hex(LunaControl.deleteFiles(jpg).body))
+        assertEquals(12, LunaControl.deleteFiles(jpg).code)
+        assertEquals(hex(LunaWire.blob(1, jpg.toByteArray())) + "1002", hex(LunaControl.fileExtra(jpg, extraType = 2).body))
+        assertEquals("080218ffffffff072002", hex(LunaControl.fileList().body))
+        assertEquals("080218ffffffff072003", hex(LunaControl.fileList(location = 3).body))
+        assertEquals("080618ffffffff072002", hex(LunaControl.fileList(mediaType = 6).body))
+        assertEquals("0802", hex(LunaControl.fileInfoList(2).body))
+        assertEquals(38, LunaControl.fileInfoList().code)
+        assertEquals("", hex(LunaControl.fileInfoList().body))
+        assertEquals("0a050b1455b401", hex(LunaControl.statusRequest.body))
+        assertEquals("0a0d2928417c8401528701a901ad01", hex(LunaControl.shootingModeRequest.body))
+        val fullGet = "0a381f15070d271848531217212b221c262a12122e474735361d373a253b3f3e06493d4b4c464e4f51565758595a5b6a6d23645b5c5d65030468100c"
+        val types = LunaWire.schemes(h(fullGet).copyOfRange(0, h(fullGet).size - 2)).map { it.toInt() }
+        assertEquals(fullGet, hex(LunaControl.getPhotographyOptions(types, functionMode = 12, packed = true).body))
+    }
 }

@@ -21,9 +21,9 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.UUID
 
-/** Luna transport only. No Compose, camera-setting writes, packet logs, or saved passwords. */
+/** Luna transport, status and controls. No Compose, packet logs, or saved passwords. */
 @SuppressLint("MissingPermission")
-class LunaBackend(context: Context) : CameraBackend, CameraControls {
+class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMediaStore {
     private val context = context.applicationContext
     private val bluetooth = context.getSystemService(BluetoothManager::class.java)
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
@@ -32,7 +32,8 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls {
     private val clientIdentity: String = preferences.getString("authorization-id", null) ?: UUID.randomUUID().toString().uppercase().also { preferences.edit().putString("authorization-id", it).apply() }
     override val capabilities = setOf(
         CameraCapability.LIVE_VIDEO, CameraCapability.GIMBAL, CameraCapability.ZOOM,
-        CameraCapability.FOCUS, CameraCapability.TRACKING,
+        CameraCapability.FOCUS, CameraCapability.TRACKING, CameraCapability.CAMERA_SETTINGS,
+        CameraCapability.RECORD, CameraCapability.CAMERA_MEDIA,
     )
     private val _phase = MutableStateFlow(ConnectionPhase.IDLE)
     override val phase = _phase.asStateFlow()
@@ -57,6 +58,19 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls {
     private var gatt: LunaGatt? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var wasInactive = false
+    private var boundNetwork = false
+    // Status, merged across partial reads like the iOS session. Main thread only.
+    private var settings: LunaPhotographySettings? = null
+    private var device: LunaDeviceStatus? = null
+    private var capture: LunaCaptureStatus? = null
+    /** Settings bank the active shooting mode reads (7 normal video until a mode says otherwise). */
+    private var functionMode = LunaControl.FUNCTION_MODE_VIDEO
+    private var settingsRefresh: Job? = null
+    private val _readout = MutableStateFlow(CameraReadout())
+    override val readout = _readout.asStateFlow()
+    private val lastVideoAt = java.util.concurrent.atomic.AtomicLong()
+    /** Live video is stopped on purpose while the album is open; the watchdog must not fire. */
+    @Volatile private var livePaused = false
     private val scanner = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val record = result.scanRecord ?: return
@@ -143,12 +157,18 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls {
         _phase.value = ConnectionPhase.JOINING_WIFI
         val network = joinNetwork(ssid, password)
         _joinedSSID.value = ssid
+        // Media HTTP (192.168.42.1:80) goes through the shared OkHttp client, as upstream binds for DJI.
+        boundNetwork = connectivity.bindProcessToNetwork(network)
         _phase.value = ConnectionPhase.OPENING_DATALINK
         val cameraSocket = withContext(Dispatchers.IO) {
             network.socketFactory.createSocket().also { socket = it; it.tcpNoDelay = true; it.soTimeout = 10_000; it.connect(InetSocketAddress("192.168.42.1", 6666), 8_000) }
         }
-        val lastVideoAt = java.util.concurrent.atomic.AtomicLong(android.os.SystemClock.elapsedRealtime())
-        val channel = LunaChannel(send = { bytes -> withContext(Dispatchers.IO) { cameraSocket.getOutputStream().write(bytes); cameraSocket.getOutputStream().flush() } }, video = { bytes, tick -> lastVideoAt.set(android.os.SystemClock.elapsedRealtime()); video.tryEmit(EncodedVideoFrame(bytes, tick)) })
+        lastVideoAt.set(android.os.SystemClock.elapsedRealtime())
+        val channel = LunaChannel(
+            send = { bytes -> withContext(Dispatchers.IO) { cameraSocket.getOutputStream().write(bytes); cameraSocket.getOutputStream().flush() } },
+            video = { bytes, tick -> lastVideoAt.set(android.os.SystemClock.elapsedRealtime()); video.tryEmit(EncodedVideoFrame(bytes, tick)) },
+            notify = { message -> val note = LunaNotification.parse(message.code, message.body); scope.launch { handle(note) } },
+        )
         tcp = channel
         val receiver = launch(Dispatchers.IO) {
             try {
@@ -162,6 +182,7 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls {
         }
         var heartbeat: Job? = null
         var watchdog: Job? = null
+        var poll: Job? = null
         try {
             channel.raw(LunaWire.prefix)
             withTimeout(8_000) { channel.greeting.await() }
@@ -175,11 +196,24 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls {
             delay(350)
             channel.request(1, LunaWire.liveBody)
             lastVideoAt.set(android.os.SystemClock.elapsedRealtime())
-            watchdog = launch { while (isActive) { delay(2_000); if (android.os.SystemClock.elapsedRealtime() - lastVideoAt.get() > 10_000) { channel.fail(IllegalStateException("No live video received")); break } } }
+            watchdog = launch { while (isActive) { delay(2_000); if (!livePaused && android.os.SystemClock.elapsedRealtime() - lastVideoAt.get() > 10_000) { channel.fail(IllegalStateException("No live video received")); break } } }
+            // Same cadence as iOS: capture state every second (REC timer), battery and storage every 5 s.
+            poll = launch {
+                refreshStatus()
+                var tick = 0
+                while (isActive) {
+                    delay(1_000)
+                    tick += 1
+                    call(LunaControl.captureStatus)?.let { runCatching { LunaCaptureStatus.fromResponse(it) }.getOrNull() }?.let(::applyCapture)
+                    if (tick % 5 == 0) refreshDevice(LunaControl.statusRequest)
+                }
+            }
             throw channel.failure.await()
         } finally {
             withContext(NonCancellable) { withTimeoutOrNull(1_500) { runCatching { channel.request(2) } } }
-            watchdog?.cancel(); heartbeat?.cancel(); cameraSocket.close(); receiver.cancel(); channel.close(); tcp = null
+            poll?.cancel(); watchdog?.cancel(); heartbeat?.cancel(); cameraSocket.close(); receiver.cancel(); channel.close(); tcp = null
+            settingsRefresh?.cancel(); livePaused = false
+            settings = null; device = null; capture = null; functionMode = LunaControl.FUNCTION_MODE_VIDEO; publish()
         }
     }
     private suspend fun joinNetwork(ssid: String, password: String): Network {
@@ -198,6 +232,7 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls {
     private fun cleanup() {
         gatt?.close(); gatt = null
         runCatching { socket?.close() }; socket = null
+        if (boundNetwork) { connectivity.bindProcessToNetwork(null); boundNetwork = false }
         networkCallback?.let { runCatching { connectivity.unregisterNetworkCallback(it) } }; networkCallback = null
         _joinedSSID.value = null
     }
@@ -209,19 +244,119 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls {
         wasInactive = false
     }
 
+    // Status. Same reads as iOS `LunaCameraBackend.refreshStatus` and its notification handling.
+    private suspend fun call(request: LunaControl.Request): ByteArray? {
+        val channel = tcp ?: return null
+        return runCatching { channel.request(request.code, request.body) }.getOrNull()
+    }
+    private fun publish() { _readout.value = LunaReadout.readout(settings, device, capture) }
+    private fun applyDevice(status: LunaDeviceStatus) {
+        device = device?.merge(status) ?: status
+        status.shootingMode?.let { functionMode = it.functionMode }
+        publish()
+    }
+    private fun applySettings(update: LunaPhotographySettings) {
+        // A reply for another bank (a mode change in flight) is not this mode's settings.
+        if (update.functionMode != null && update.functionMode != functionMode) return
+        settings = settings?.merge(update) ?: update
+        publish()
+    }
+    private fun applyCapture(status: LunaCaptureStatus) { capture = status; publish() }
+    private suspend fun refreshDevice(request: LunaControl.Request) {
+        call(request)?.let { runCatching { LunaDeviceStatus.parse(it) }.getOrNull() }?.let(::applyDevice)
+    }
+    private suspend fun refreshSettings() {
+        call(LunaControl.getPhotographyOptions(LunaControl.settingTypes, functionMode))
+            ?.let { runCatching { LunaPhotographySettings.parse(it) }.getOrNull() }?.let(::applySettings)
+    }
+    /** One full read: device status, the active mode (so the right settings bank), settings, capture state. */
+    private suspend fun refreshStatus() {
+        refreshDevice(LunaControl.statusRequest)
+        refreshDevice(LunaControl.shootingModeRequest)
+        refreshSettings()
+        call(LunaControl.captureStatus)?.let { runCatching { LunaCaptureStatus.fromResponse(it) }.getOrNull() }?.let(::applyCapture)
+    }
+    private suspend fun handle(note: LunaNotification) {
+        when (note) {
+            is LunaNotification.Capture -> applyCapture(note.status)
+            is LunaNotification.PhotographyChanged -> applySettings(note.settings)
+            // The notice carries a partial view; re-read the whole status.
+            is LunaNotification.SubMode, is LunaNotification.Storage, is LunaNotification.Battery -> {
+                refreshDevice(LunaControl.statusRequest)
+                refreshDevice(LunaControl.shootingModeRequest)
+                refreshSettings()
+            }
+            else -> Unit
+        }
+    }
+    override fun requestSettingsRefresh() {
+        settingsRefresh?.cancel()
+        settingsRefresh = scope.launch { delay(400); refreshSettings() }
+    }
+
     // Controls. Same requests as the iOS session; each needs the live TCP control channel.
     override val zoomRange: ClosedFloatingPointRange<Double> = 1.0..LunaControl.MAXIMUM_ZOOM
-    private suspend fun send(request: LunaControl.Request): Boolean {
+    private suspend fun send(build: () -> LunaControl.Request): Boolean {
         val channel = tcp ?: return false
         if (_phase.value != ConnectionPhase.LIVE) return false
+        val request = runCatching(build).getOrElse { return false }
         return runCatching { channel.request(request.code, request.body) }.isSuccess
     }
-    override suspend fun setZoom(factor: Double) = send(LunaControl.zoom(factor.coerceIn(zoomRange)))
-    override suspend fun gimbalStick(pan: Double, tilt: Double) = send(LunaControl.gimbalStick(pan, tilt))
-    override suspend fun gimbalRecenter() = send(LunaControl.gimbal(2))
-    override suspend fun gimbalFlip() = send(LunaControl.gimbal(3))
-    override suspend fun tapFocus(x: Double, y: Double) = send(LunaControl.tapFocus(x.coerceIn(0.0, 0.85), y.coerceIn(0.0, 0.73)))
+    override suspend fun setZoom(factor: Double) = send { LunaControl.zoom(factor.coerceIn(zoomRange), functionMode) }
+    override suspend fun gimbalStick(pan: Double, tilt: Double) = send { LunaControl.gimbalStick(pan, tilt) }
+    override suspend fun gimbalRecenter() = send { LunaControl.gimbal(2) }
+    override suspend fun gimbalFlip() = send { LunaControl.gimbal(3) }
+    override suspend fun tapFocus(x: Double, y: Double) = send { LunaControl.tapFocus(x.coerceIn(0.0, 0.85), y.coerceIn(0.0, 0.73), functionMode = functionMode) }
     override suspend fun startTracking(x: Double, y: Double, width: Double, height: Double) =
-        send(LunaControl.openTracking(x.coerceIn(0.0, 1.0), y.coerceIn(0.0, 1.0), width.coerceIn(0.0, 1.0), height.coerceIn(0.0, 1.0)))
-    override suspend fun stopTracking() = send(LunaControl.cancelTracking)
+        send { LunaControl.openTracking(x.coerceIn(0.0, 1.0), y.coerceIn(0.0, 1.0), width.coerceIn(0.0, 1.0), height.coerceIn(0.0, 1.0)) }
+    override suspend fun stopTracking() = send { LunaControl.cancelTracking }
+    override suspend fun startRecording() = send { LunaControl.startCapture }
+    override suspend fun stopRecording() = send { LunaControl.stopCapture }
+    override suspend fun takePhoto() = send { LunaControl.takePicture() }
+    override suspend fun setExposure(iso: Int?, shutterSeconds: Double?) = send {
+        val isoValue = iso?.toLong()
+        LunaControl.videoExposure(LunaControl.exposureProgram(isoValue, shutterSeconds), isoValue, shutterSeconds, functionMode)
+    }
+    override suspend fun setExposureBias(thirds: Int) = send { LunaControl.exposureBias(thirds / 3.0, functionMode) }
+    override suspend fun setWhiteBalance(kelvin: Int?) =
+        send { kelvin?.let { LunaControl.whiteBalanceKelvin(it.toLong(), functionMode) } ?: LunaControl.whiteBalanceAuto(functionMode) }
+    override suspend fun setColorProfile(profile: CameraColorProfile) = with(LunaReadout) { send { LunaControl.colorMode(colors.key(profile), functionMode) } }
+    override suspend fun setRecordFormat(id: Long) = send { LunaControl.recordResolution(id, functionMode) }
+    override suspend fun setShootingMode(mode: CameraShootingMode): Boolean {
+        val luna = with(LunaReadout) { shootingModes.key(mode) }
+        functionMode = luna.functionMode
+        val ok = send { luna.request() }
+        if (ok) scope.launch { refreshStatus() }
+        return ok
+    }
+    override suspend fun setGimbalMode(mode: CameraGimbalMode) = with(LunaReadout) { send { LunaControl.gimbalMode(gimbalModes.key(mode), functionMode) } }
+    override suspend fun setGimbalSpeed(speed: CameraGimbalSpeed) = with(LunaReadout) { send { LunaControl.gimbalFollowSpeed(gimbalSpeeds.key(speed), functionMode) } }
+
+    // Media: cmd 13/38 list, cmd 11 thumbnail, cmd 12 delete; files over HTTP on 192.168.42.1.
+    private suspend fun media(request: LunaControl.Request): ByteArray {
+        val channel = checkNotNull(tcp) { "Connect the camera to browse clips." }
+        check(_phase.value == ConnectionPhase.LIVE) { "Connect the camera to browse clips." }
+        return channel.request(request.code, request.body)
+    }
+    override suspend fun listMedia(): List<CameraMediaItem> {
+        runCatching { media(LunaControl.accessCameraFileState(1)) }
+        val uris = LunaMediaFile.list(media(LunaControl.fileList())).first
+        val infos = runCatching { LunaMediaFile.infoList(media(LunaControl.fileInfoList())) }.getOrDefault(emptyList()).associateBy { it.uri }
+        return uris.map { infos[it] ?: LunaMediaFile(it) }.filterNot { it.isProxy }.map(LunaReadout::mediaItem)
+    }
+    override suspend fun thumbnailJpeg(path: String): ByteArray {
+        val thumbnail = LunaThumbnail.parse(media(LunaControl.fileExtra(path, extraType = 2)))
+        return withContext(Dispatchers.Default) {
+            val bitmap = android.graphics.Bitmap.createBitmap(thumbnail.argb(), thumbnail.width, thumbnail.height, android.graphics.Bitmap.Config.ARGB_8888)
+            java.io.ByteArrayOutputStream().also { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, it); bitmap.recycle() }.toByteArray()
+        }
+    }
+    override suspend fun deleteMedia(path: String) { media(LunaControl.deleteFiles(path)) }
+    override suspend fun pauseLive() { livePaused = true; runCatching { media(LunaControl.stopLive) } }
+    override suspend fun resumeLive() {
+        runCatching { media(LunaControl.stopLive) }
+        lastVideoAt.set(android.os.SystemClock.elapsedRealtime())
+        livePaused = false
+        runCatching { media(LunaControl.startLive) }
+    }
 }

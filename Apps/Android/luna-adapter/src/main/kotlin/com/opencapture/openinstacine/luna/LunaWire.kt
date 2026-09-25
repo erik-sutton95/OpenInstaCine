@@ -60,7 +60,8 @@ internal object LunaWire {
                 cipher.updateAAD(raw.copyOfRange(0, 12))
                 cipher.doFinal(payload + raw.copyOfRange(27, 43))
             }
-            require(bytes.size >= 9 && bytes[2].toInt() == 2)
+            // Content type 2 is protobuf; 1 is raw bytes (cmd 11 NV12 thumbnail reply).
+            require(bytes.size >= 9 && bytes[2].toInt() in 1..2)
             return Message((bytes[0].toInt() and 255) or ((bytes[1].toInt() and 255) shl 8), intAt(bytes, 3) and 0x3fffffff, bytes.copyOfRange(9, bytes.size), encrypted)
         }
     }

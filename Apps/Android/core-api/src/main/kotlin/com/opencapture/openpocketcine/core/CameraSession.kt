@@ -45,6 +45,86 @@ public interface CameraControls {
  public suspend fun tapFocus(x: Double, y: Double): Boolean
  public suspend fun startTracking(x: Double, y: Double, width: Double, height: Double): Boolean
  public suspend fun stopTracking(): Boolean
+
+ // Capture, exposure and settings. Defaults mean "not supported"; readout stays empty.
+ public val readout: StateFlow<CameraReadout> get() = CameraReadout.NONE
+ public suspend fun startRecording(): Boolean = false
+ public suspend fun stopRecording(): Boolean = false
+ public suspend fun takePhoto(): Boolean = false
+ /** Null ISO / shutter means the camera chooses that value; the backend picks its program. */
+ public suspend fun setExposure(iso: Int?, shutterSeconds: Double?): Boolean = false
+ public suspend fun setExposureBias(thirds: Int): Boolean = false
+ /** Null kelvin is auto white balance. */
+ public suspend fun setWhiteBalance(kelvin: Int?): Boolean = false
+ public suspend fun setColorProfile(profile: CameraColorProfile): Boolean = false
+ /** [id] is a [CameraRecordFormat.id] from the readout. */
+ public suspend fun setRecordFormat(id: Long): Boolean = false
+ public suspend fun setShootingMode(mode: CameraShootingMode): Boolean = false
+ public suspend fun setGimbalMode(mode: CameraGimbalMode): Boolean = false
+ public suspend fun setGimbalSpeed(speed: CameraGimbalSpeed): Boolean = false
+ /** Re-read settings shortly after a burst of writes. */
+ public fun requestSettingsRefresh() {}
+}
+
+public enum class CameraShootingMode { VIDEO, TIMELAPSE, TIMESHIFT, SLOW_MOTION, PURE_VIDEO, PHOTO, PANO }
+public enum class CameraColorProfile { STANDARD, LOG, VIVID, HDR, DOLBY_VISION }
+public enum class CameraGimbalMode { FPV, ROLL_LOCK, ROLL_TILT_LOCK, FPV_VERTICAL, LOCK, STABILIZED_VERTICAL }
+public enum class CameraGimbalSpeed { SLOW, MEDIUM, FAST, SENSITIVE }
+
+/** [program]: 0 auto, 1 ISO priority, 2 shutter priority, 3 manual, 4 adaptive, 5 full auto. ISO 0 / shutter 0 = camera chooses. */
+public data class CameraExposure(public val program: Int, public val iso: Int, public val shutterSeconds: Double)
+/** One recordable frame size and rate; [id] is the backend's own value for it. */
+public data class CameraRecordFormat(public val id: Long, public val width: Int, public val height: Int, public val fps: Double)
+/** [location] 2 camera inner storage, 3 SD card. */
+public data class CameraStorage(public val location: Int, public val usable: Boolean, public val freeBytes: Long, public val totalBytes: Long)
+
+/** What the camera last reported. Null fields have not been reported yet. */
+public data class CameraReadout(
+ public val batteryPercent: Int? = null,
+ public val charging: Boolean = false,
+ public val storages: List<CameraStorage> = emptyList(),
+ public val shootingMode: CameraShootingMode? = null,
+ public val recording: Boolean = false,
+ public val captureSeconds: Int = 0,
+ public val videoExposure: CameraExposure? = null,
+ public val stillExposure: CameraExposure? = null,
+ public val exposureBiasTenths: Int? = null,
+ /** 0 is auto. */
+ public val whiteBalanceKelvin: Int? = null,
+ public val color: CameraColorProfile? = null,
+ public val recordFormat: CameraRecordFormat? = null,
+ /** Formats the operator may pick. Empty until settings are read. */
+ public val recordFormats: List<CameraRecordFormat> = emptyList(),
+ public val zoom: Double? = null,
+ public val gimbalMode: CameraGimbalMode? = null,
+ public val gimbalSpeed: CameraGimbalSpeed? = null,
+ /** 1 single AF, otherwise continuous. */
+ public val afMode: Int? = null,
+) {
+ public companion object { public val NONE: StateFlow<CameraReadout> = kotlinx.coroutines.flow.MutableStateFlow(CameraReadout()) }
+}
+
+/** One camera file. [path] addresses it for thumbnail, delete and HTTP. */
+public data class CameraMediaItem(
+ public val path: String,
+ public val proxyPath: String? = null,
+ public val sizeBytes: Long = 0,
+ public val durationSeconds: Int = 0,
+ public val width: Int? = null,
+ public val height: Int? = null,
+ public val fps: Int? = null,
+ /** Camera's gamma name, e.g. "standard" or "log". */
+ public val gamma: String? = null,
+)
+
+/** Optional camera media over the control link. Every call throws when it fails. */
+public interface CameraMediaStore {
+ public suspend fun listMedia(): List<CameraMediaItem>
+ public suspend fun thumbnailJpeg(path: String): ByteArray
+ public suspend fun deleteMedia(path: String)
+ /** Stop live video while the album is open so HTTP has the link. */
+ public suspend fun pauseLive()
+ public suspend fun resumeLive()
 }
 
 /** Compatibility surface for inherited shell code during the shared engine extraction. */

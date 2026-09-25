@@ -9,7 +9,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Request correlation is independent of BLE fragmentation and TCP read boundaries. */
-internal class LunaChannel(private val send: suspend (ByteArray) -> Unit, private val video: (ByteArray, Long) -> Unit = { _, _ -> }) {
+internal class LunaChannel(
+    private val send: suspend (ByteArray) -> Unit,
+    private val video: (ByteArray, Long) -> Unit = { _, _ -> },
+    private val notify: (LunaWire.Message) -> Unit = {},
+) {
     private val parser = LunaWire.Parser()
     private val sequence = AtomicInteger()
     private val identifier = AtomicInteger()
@@ -40,6 +44,9 @@ internal class LunaChannel(private val send: suspend (ByteArray) -> Unit, privat
                             waiter.first.complete(message)
                         } else if (message.code in listOf(8209, 8228)) {
                             check(approvals.trySend(message).isSuccess) { "Approval queue overflow" }
+                        } else if (message.code >= 8192) {
+                            // A notification the backend cannot decode is dropped, not a link failure.
+                            runCatching { notify(message) }
                         }
                     }
                 }
