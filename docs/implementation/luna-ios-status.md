@@ -105,13 +105,20 @@ setting changed was restored.
 | Link loss and recovery card | Pass | Mac Wi-Fi off: "Reconnecting" pill, then "Connection keeps dropping" card at ~45 s; Retry connection restores live |
 | Landscape | Pass | Live, ISO sheet, format sheet, gimbal sheet, settings |
 
+### Physical iPhone (07:40)
+
+iPhone 16 Pro Max, iOS 27.0, Luna fw 1.1.15: BLE consent (already approved) → camera Wi-Fi → TCP
+6666 → live at 25 fps, battery 95 %. ISO 800 → Auto, zoom 4× → 1×, gimbal stick and recenter,
+Standard ↔ I-Log, record start/stop with the timer, media list, delete of the test clip: all pass
+and read back from the camera.
+
 ## Known issues
 
-1. **Physical iPhone: `NEHotspotConfiguration` apply fails with internal error
-   8** for this app even while the camera AP is up (the camera SSID is also
-   saved by the Insta360 app). Workaround: join the camera Wi-Fi in Settings;
-   the app detects the 192.168.42.x subnet and continues. To test the cause:
-   forget "Luna Ultra XBQFN7.OSC" in Settings > Wi-Fi, then retry in the app.
+1. **Physical iPhone hotspot join (transient).** Overnight, `NEHotspotConfiguration` apply returned
+   internal error 8 on every attempt while the camera AP was up. At 07:39 the same build joined on the
+   first attempt and the phone went live (see below), so it was environmental. The app retries for
+   up to 120 s, drops the stale config between attempts, and after the third attempt tells the
+   operator to join the camera network in Settings, then continues on its own once the subnet appears.
 2. **XCUITest on the phone** needs Face ID or the passcode to re-enable
    automation mode, so official-app capture on fw 1.1.15 is still pending
    (`just luna-official-xc`).
@@ -127,7 +134,7 @@ setting changed was restored.
 
 ## Next steps
 
-- Resolve the hotspot error 8 (test with the Insta360-saved network forgotten).
+- Watch for a repeat of the transient hotspot error 8 and capture `nehelper` logs if it returns.
 - Capture official-app traffic on fw 1.1.15 once automation is re-enabled.
 - Repeat the Simulator walkthrough on the phone (hotspot join, thermal, real-light picture, Deep Track lock).
 - Port or drop the Osmo-assumption unit tests listed above.
