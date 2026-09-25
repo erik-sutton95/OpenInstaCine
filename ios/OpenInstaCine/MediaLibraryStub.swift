@@ -220,7 +220,10 @@ enum MediaClipPresentation {
         guard let resolution, !resolution.isEmpty else { return nil }
         let width = resolution.split(separator: "x").first.flatMap { Int($0) }
         if let width {
+            if width >= 7680 { return "8K" }
+            if width >= 5120 { return "6K" }
             if width >= 3840 { return "4K" }
+            if width >= 2880 { return "3K" }
             if width >= 2560 { return "2.7K" }
             if width >= 1920 { return "1080p" }
             if width >= 1280 { return "720p" }
