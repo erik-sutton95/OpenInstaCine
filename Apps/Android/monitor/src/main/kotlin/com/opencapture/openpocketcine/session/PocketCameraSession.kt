@@ -411,15 +411,21 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
         mapping: CameraCommands.VirtualJoystickMapping = CameraCommands.VirtualJoystickMapping.DEFAULT,
     ) {
         if (!hasGimbal) return
-        val pan = (if (assistMirror) -x else x).toDouble().coerceIn(-1.0, 1.0)
-        stick = pan to (-y).toDouble().coerceIn(-1.0, 1.0)
+        // Same shaping as the iOS Luna session: deadzone, ease-in curve, sensitivity scale.
+        val dead = if (linear) CameraCommands.GIMBAL_STICK_DEADZONE else mapping.deadzone
+        val still = hypot(x.toDouble(), y.toDouble()) < dead
+        val scale = minOf(1.0, sensitivity.toDouble() / CameraCommands.GIMBAL_STICK_DEFAULT_SENSITIVITY)
+        fun shaped(v: Double) = (if (linear) v else v * abs(v)) * scale
+        val pan = if (still) 0.0 else if (assistMirror) -x.toDouble() else x.toDouble()
+        val tilt = if (still) 0.0 else y.toDouble()
+        stick = shaped(pan) to shaped(tilt)
         if (stickJob?.isActive == true) return
-        // ponytail: fixed 10 Hz rate stream, same cadence as the iOS LunaStickStream.
+        // ponytail: fixed 20 Hz rate stream, same cadence as the iOS LunaStickStream.
         stickJob = scope.launch {
             while (isActive) {
                 val (p, t) = stick
                 controls?.gimbalStick(p, t)
-                delay(100)
+                delay(50)
             }
         }
     }
@@ -447,7 +453,10 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun tapFocus(x: Float, y: Float) {
         if (!supportsTapFocus) return
         _focusPoint.value = x to y
-        scope.launch { if (controls?.tapFocus(x.toDouble(), y.toDouble()) != true) presentControlNote("Focus did not reach the camera.") }
+        // The camera takes a top-left ROI; same 0.15 x 0.27 box as iOS.
+        val left = (x - 0.075).coerceIn(0.0, 0.85)
+        val top = (y - 0.135).coerceIn(0.0, 0.73)
+        scope.launch { if (controls?.tapFocus(left, top) != true) presentControlNote("Focus did not reach the camera.") }
     }
     fun startTracking(x: Float, y: Float, width: Float = 0.2f, height: Float = 0.2f) =
         startTracking(TrackingBox((x - width / 2).toDouble(), (y - height / 2).toDouble(), width.toDouble(), height.toDouble()))
@@ -455,7 +464,9 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
         if (!can(CameraCapability.TRACKING)) return unavailable("Deep Track")
         _trackingHud.value = TrackingHud(isTracking = true, draft = box)
         scope.launch {
-            val ok = controls?.startTracking(box.x.toDouble(), box.y.toDouble(), box.width.toDouble(), box.height.toDouble()) == true
+            val left = box.x.coerceIn(0.0, 1.0)
+            val top = box.y.coerceIn(0.0, 1.0)
+            val ok = controls?.startTracking(left, top, minOf(box.width, 1 - left), minOf(box.height, 1 - top)) == true
             if (!ok) { _trackingHud.value = TrackingHud(); presentControlNote("Deep Track did not start.") }
         }
     }

@@ -23,14 +23,17 @@ import java.util.UUID
 
 /** Luna transport only. No Compose, camera-setting writes, packet logs, or saved passwords. */
 @SuppressLint("MissingPermission")
-class LunaBackend(context: Context) : CameraBackend {
+class LunaBackend(context: Context) : CameraBackend, CameraControls {
     private val context = context.applicationContext
     private val bluetooth = context.getSystemService(BluetoothManager::class.java)
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val preferences = context.getSharedPreferences("openinstacine.client-identity", Context.MODE_PRIVATE)
     private val clientIdentity: String = preferences.getString("authorization-id", null) ?: UUID.randomUUID().toString().uppercase().also { preferences.edit().putString("authorization-id", it).apply() }
-    override val capabilities = setOf(CameraCapability.LIVE_VIDEO)
+    override val capabilities = setOf(
+        CameraCapability.LIVE_VIDEO, CameraCapability.GIMBAL, CameraCapability.ZOOM,
+        CameraCapability.FOCUS, CameraCapability.TRACKING,
+    )
     private val _phase = MutableStateFlow(ConnectionPhase.IDLE)
     override val phase = _phase.asStateFlow()
     private val _found = MutableStateFlow<List<CameraIdentity>>(emptyList())
@@ -205,4 +208,20 @@ class LunaBackend(context: Context) : CameraBackend {
         if (wasInactive && _phase.value == ConnectionPhase.FAILED) _connected.value?.let { connect(it.id) }
         wasInactive = false
     }
+
+    // Controls. Same requests as the iOS session; each needs the live TCP control channel.
+    override val zoomRange: ClosedFloatingPointRange<Double> = 1.0..LunaControl.MAXIMUM_ZOOM
+    private suspend fun send(request: LunaControl.Request): Boolean {
+        val channel = tcp ?: return false
+        if (_phase.value != ConnectionPhase.LIVE) return false
+        return runCatching { channel.request(request.code, request.body) }.isSuccess
+    }
+    override suspend fun setZoom(factor: Double) = send(LunaControl.zoom(factor.coerceIn(zoomRange)))
+    override suspend fun gimbalStick(pan: Double, tilt: Double) = send(LunaControl.gimbalStick(pan, tilt))
+    override suspend fun gimbalRecenter() = send(LunaControl.gimbal(2))
+    override suspend fun gimbalFlip() = send(LunaControl.gimbal(3))
+    override suspend fun tapFocus(x: Double, y: Double) = send(LunaControl.tapFocus(x.coerceIn(0.0, 0.85), y.coerceIn(0.0, 0.73)))
+    override suspend fun startTracking(x: Double, y: Double, width: Double, height: Double) =
+        send(LunaControl.openTracking(x.coerceIn(0.0, 1.0), y.coerceIn(0.0, 1.0), width.coerceIn(0.0, 1.0), height.coerceIn(0.0, 1.0)))
+    override suspend fun stopTracking() = send(LunaControl.cancelTracking)
 }

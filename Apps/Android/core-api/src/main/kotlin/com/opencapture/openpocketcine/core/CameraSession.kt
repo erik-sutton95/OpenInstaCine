@@ -41,6 +41,7 @@ public interface CameraControls {
  public suspend fun gimbalStick(pan: Double, tilt: Double): Boolean
  public suspend fun gimbalRecenter(): Boolean
  public suspend fun gimbalFlip(): Boolean
+ /** [x], [y]: top-left of the backend's fixed focus region. */
  public suspend fun tapFocus(x: Double, y: Double): Boolean
  public suspend fun startTracking(x: Double, y: Double, width: Double, height: Double): Boolean
  public suspend fun stopTracking(): Boolean
