@@ -52,13 +52,27 @@ class LunaShellMappingTest {
         }
         assertEquals(CameraCommands.COLOR_NORMAL, m.colorMode(CameraColorProfile.VIVID))
         for (mode in GimbalMode.entries) assertEquals(mode, m.gimbalMode(m.cameraGimbalMode(mode)))
-        assertEquals(GimbalMode.FPV, m.gimbalMode(CameraGimbalMode.FPV_VERTICAL))
+        assertEquals(GimbalMode.DIRECTION_LOCK, m.gimbalMode(CameraGimbalMode.FPV_VERTICAL))
         assertNull(m.gimbalMode(CameraGimbalMode.STABILIZED_VERTICAL))
         for (speed in GimbalSpeed.entries) assertEquals(speed, m.gimbalSpeed(m.cameraGimbalSpeed(speed)))
         assertEquals(GimbalSpeed.FAST, m.gimbalSpeed(CameraGimbalSpeed.SENSITIVE))
         // The I-Log color id is the monitor's I-Log transfer, so scopes and LUTs read log.
         assertEquals(MonitorTransfer.ILOG, MonitorTransfer.fromColorMode(m.colorMode(CameraColorProfile.LOG)))
         assertEquals(MonitorTransfer.REC709, MonitorTransfer.fromColorMode(CameraCommands.COLOR_DOLBY_VISION))
+    }
+
+    /** Swift `testFirmware1115GimbalModesAndSquareFormats`. */
+    @Test fun firmware1115GimbalModesAndSquareFormats() {
+        for (mode in GimbalMode.pickerOrder) assertEquals(mode, m.gimbalMode(m.cameraGimbalMode(mode)))
+        assertEquals(CameraGimbalMode.FPV_VERTICAL, m.cameraGimbalMode(GimbalMode.DIRECTION_LOCK))
+        assertNull(m.gimbalMode(CameraGimbalMode.LOCK))
+        val table = m.formatTable(listOf(120L, 443L).map { CameraRecordFormat(it, if (it == 120L) 3072 else 1520, if (it == 120L) 3072 else 2688, if (it == 120L) 25.0 else 30.0) })
+        val square = table.entries.first { it.value == 120L }.key
+        assertEquals(VideoResolution.P3K_1X1, square.resolution)
+        assertEquals("3K 1:1 · 25p", square.chipLabel)
+        assertTrue(443L in table.values)
+        assertEquals("FPV-V", m.gimbalModeLabels[GimbalMode.DIRECTION_LOCK])
+        assertEquals(listOf(1.0, 2.0, 3.0, 6.0, 15.0), PocketCameraSession.LUNA_ZOOM_CHIPS)
     }
 
     @Test fun formatTableRoundTripsAndFirstValueWins() {

@@ -72,7 +72,7 @@ class LunaStatusTest {
             val r = assertNotNull(LunaVideoResolution.of(raw))
             assertEquals(listOf(r.width, r.height, r.framesPerSecond.toInt(), r.aspectLabel), e, "$raw")
         }
-        assertEquals(476, LunaVideoResolution.index.size)
+        assertEquals(478, LunaVideoResolution.index.size) // pinned schema + 443/444 from fw 1.1.15
         assertNull(LunaVideoResolution.of(503))
         assertEquals(48L, LunaVideoResolution.rawValue(3840, 2160, 25.0))
         assertEquals(454L, LunaVideoResolution.rawValue(1728, 3072, 25.0))

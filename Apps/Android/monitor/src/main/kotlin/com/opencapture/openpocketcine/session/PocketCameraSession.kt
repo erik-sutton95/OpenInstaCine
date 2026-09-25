@@ -278,6 +278,7 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     init {
         // Luna vocabulary for the shared screens: mode names, and media served at its own path on the camera AP.
         CameraCommands.shootingModeLabelOverrides = LunaShellMapping.shootingModeLabels
+        GimbalMode.labelOverrides = LunaShellMapping.gimbalModeLabels
         com.opencapture.openpocketcine.media.MediaHTTP.host = "192.168.42.1"
         com.opencapture.openpocketcine.media.MediaHTTP.directPath = true
         scope.launch {
@@ -654,10 +655,8 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun tapFocus(x: Float, y: Float) {
         if (!supportsTapFocus) return
         _focusPoint.value = x to y
-        // The camera takes a top-left ROI; same 0.15 x 0.27 box as iOS.
-        val left = (x - 0.075).coerceIn(0.0, 0.85)
-        val top = (y - 0.135).coerceIn(0.0, 0.73)
-        scope.launch { if (controls?.tapFocus(left, top) != true) presentControlNote("Focus did not reach the camera.") }
+        // The backend centres its official ROI on the tap (iOS: 0.0869 x 0.1545, 0.1159 wide in photo).
+        scope.launch { if (controls?.tapFocus(x.toDouble(), y.toDouble()) != true) presentControlNote("Focus did not reach the camera.") }
     }
     fun startTracking(x: Float, y: Float, width: Float = 0.2f, height: Float = 0.2f) =
         startTracking(TrackingBox((x - width / 2).toDouble(), (y - height / 2).toDouble(), width.toDouble(), height.toDouble()))
@@ -794,8 +793,8 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun refreshAudio() = Unit
 
     companion object {
-        /** Same chips as iOS `LunaShellMapping.zoomChips`; the ceiling is appended when larger. */
-        val LUNA_ZOOM_CHIPS = listOf(1.0, 2.0, 4.0, 8.0, 15.0)
+        /** fw 1.1.15 official presets, same as iOS `LunaShellMapping.zoomChips`; the ceiling is appended when larger. */
+        val LUNA_ZOOM_CHIPS = listOf(1.0, 2.0, 3.0, 6.0, 15.0)
     }
 }
 

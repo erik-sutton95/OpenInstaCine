@@ -20,6 +20,7 @@ internal object LunaControl {
     const val CANCEL_TRACKING = 238
     const val MAXIMUM_ZOOM = 15.0
     const val FUNCTION_MODE_VIDEO = 7
+    const val FUNCTION_MODE_PHOTO = 6
     /** Observed official shutter-SET ISO top limit: UInt32 wrap of -3200, not an ISO. */
     const val OFFICIAL_ISO_TOP_LIMIT = 4_294_964_096L
 
@@ -56,7 +57,11 @@ internal object LunaControl {
     fun exposureBias(stops: Double, functionMode: Int = FUNCTION_MODE_VIDEO): Request {
         require(stops.isFinite() && abs(stops) <= 4)
         val tenths = (stops * 10).roundToInt()
-        return photographySet(listOf(7), if (tenths == 0) emptyMap() else mapOf(7 to sint32(7, tenths)), functionMode)
+        val fields = if (tenths == 0) mutableMapOf() else mutableMapOf(7 to sint32(7, tenths))
+        // fw 1.1.15 official app: photo EV writes types [7, 77] with 77 = 1.
+        if (functionMode != FUNCTION_MODE_PHOTO) return photographySet(listOf(7), fields, functionMode)
+        fields[77] = LunaWire.integer(77, 1)
+        return photographySet(listOf(7, 77), fields, functionMode)
     }
 
     /** Observed: 1 Standard, 2 I-Log, 5 Dolby Vision. */
@@ -76,10 +81,12 @@ internal object LunaControl {
         return photographySet(listOf(53), mapOf(53 to double(53, factor)), functionMode)
     }
 
-    /** Observed types [31, 63] (resolution + HDR switch). */
+    /** Observed types [31, 63] (resolution + HDR switch). 1080p 240 (27) is Standard-only: the official app writes colour 35 = 1 with it. */
     fun recordResolution(raw: Long, functionMode: Int = FUNCTION_MODE_VIDEO): Request {
         require(raw > 0)
-        return photographySet(listOf(31, 63), mapOf(31 to LunaWire.integer(31, raw)), functionMode)
+        val fields = mapOf(31 to LunaWire.integer(31, raw))
+        if (raw != 27L) return photographySet(listOf(31, 63), fields, functionMode)
+        return photographySet(listOf(31, 63, 35), fields + (35 to LunaWire.integer(35, 1)), functionMode)
     }
 
     /** The shell's independent ISO / shutter drums map onto Luna's four programs. */
@@ -103,7 +110,14 @@ internal object LunaControl {
         val fields = mutableMapOf(21 to LunaWire.blob(21, exposure), 100 to LunaWire.integer(100, 2))
         val autoIso = program == 2 || (program == 3 && (iso ?: 0L) == 0L)
         if (autoIso) fields[24] = LunaWire.integer(24, OFFICIAL_ISO_TOP_LIMIT)
-        return photographySet(if (autoIso) listOf(21, 24, 100) else listOf(21, 100), fields, functionMode)
+        var types = if (autoIso) listOf(21, 24, 100) else listOf(21, 100)
+        // fw 1.1.15 official app: photo mode writes the still (20) and video (21) exposure together;
+        // 21 alone leaves the still exposure unchanged.
+        if (functionMode == FUNCTION_MODE_PHOTO) {
+            types = listOf(20) + types
+            fields[20] = LunaWire.blob(20, exposure)
+        }
+        return photographySet(types, fields, functionMode)
     }
 
     /** Option 91 field 2: 1 slow, 2 medium, 3 fast, 4 sensitive. */
@@ -120,7 +134,12 @@ internal object LunaControl {
             .fold(ByteArray(0)) { acc, (offset, value) -> acc + float(firstField + offset, value.toFloat()) }
     }
 
-    fun tapFocus(x: Double, y: Double, width: Double = 0.15, height: Double = 0.27, functionMode: Int = FUNCTION_MODE_VIDEO): Request {
+    /** fw 1.1.15 official ROI: square on the sensor, so 0.0869 x 0.1545 of a 16:9 preview and 0.1159 wide in 4:3 photo. */
+    const val FOCUS_WIDTH = 0.0869
+    const val FOCUS_WIDTH_PHOTO = 0.1159
+    const val FOCUS_HEIGHT = 0.1545
+
+    fun tapFocus(x: Double, y: Double, width: Double = FOCUS_WIDTH, height: Double = FOCUS_HEIGHT, functionMode: Int = FUNCTION_MODE_VIDEO): Request {
         val params = LunaWire.integer(1, 1) + roi(listOf(x, y, width, height), 2)
         return photographySet(listOf(94), mapOf(94 to LunaWire.blob(94, params)), functionMode)
     }
@@ -131,18 +150,23 @@ internal object LunaControl {
     val cancelTracking = Request(CANCEL_TRACKING, ByteArray(0))
 
     /** Action 1 move, 2 recenter, 3 flip. Axes -99..99; a move with both axes zero releases the stick. */
-    fun gimbal(action: Int, upDown: Int = 0, leftRight: Int = 0): Request {
+    fun gimbal(action: Int, upDown: Int = 0, leftRight: Int = 0, field4: Long? = null): Request {
         require(upDown in -99..99 && leftRight in -99..99)
         var remote = ByteArray(0)
         if (upDown != 0) remote += sint32(1, upDown)
         if (leftRight != 0) remote += sint32(2, leftRight)
-        return Request(GIMBAL_CONTROL, LunaWire.integer(1, action.toLong()) + LunaWire.blob(2, remote))
+        val body = LunaWire.integer(1, action.toLong()) + LunaWire.blob(2, remote)
+        return Request(GIMBAL_CONTROL, if (field4 == null) body else body + LunaWire.integer(4, field4))
     }
+
+    /** fw 1.1.15 official app sends field 4 = 4 on every stick move and release, whatever the gimbal mode. */
+    const val STICK_FIELD4 = 4L
 
     fun gimbalStick(pan: Double, tilt: Double): Request = gimbal(
         1,
         upDown = Math.round(tilt.coerceIn(-1.0, 1.0) * 99).toInt(),
         leftRight = Math.round(pan.coerceIn(-1.0, 1.0) * 99).toInt(),
+        field4 = STICK_FIELD4,
     )
 
     // Official cmd 7 shape: cached device Options (1 = 1, 5 = 48000, 42 = 1, 82 = 3) around one field.
@@ -163,9 +187,25 @@ internal object LunaControl {
     val stopLive = Request(2, ByteArray(0))
     /** Mode 0 (normal) is omitted; 5 is 360 gimbal pano. */
     fun takePicture(mode: Long = 0) = Request(3, if (mode == 0L) ByteArray(0) else LunaWire.integer(1, mode))
-    /** Field 1 = 1 `Capture_MODE_NORMAL`. */
-    val startCapture = Request(4, byteArrayOf(8, 1))
-    val stopCapture = Request(5, ByteArray(0))
+    /**
+     * fw 1.1.15 official app: the capture mode rides in cmd 4 field 1 and cmd 5 field 2 (1 Video,
+     * 4 TimeShift, 9 Slow Motion); Timelapse uses cmd 22 / 23. PureVideo was not captured and records as video.
+     */
+    private fun captureMode(mode: LunaShootingMode): Long = when (mode) {
+        LunaShootingMode.TIME_SHIFT -> 4
+        LunaShootingMode.SLOW_MOTION -> 9
+        else -> 1
+    }
+
+    /** ExtraMetadata stub the official app sends on every stop: `{13:{6:1}, 19:{}, 21:{}, 23:{}, 26:{}, 44:{}, 71:{}, 160:{}}`. */
+    private val captureStopMetadata = LunaWire.hex("6a0230019a0100aa0100ba0100d20100e20200ba0400820a00")
+
+    fun startCapture(mode: LunaShootingMode): Request =
+        if (mode == LunaShootingMode.TIMELAPSE) Request(22, byteArrayOf(8, 1)) else Request(4, LunaWire.integer(1, captureMode(mode)))
+
+    fun stopCapture(mode: LunaShootingMode): Request =
+        if (mode == LunaShootingMode.TIMELAPSE) Request(23, LunaWire.integer(1, 1) + LunaWire.blob(2, captureStopMetadata))
+        else Request(5, LunaWire.blob(1, captureStopMetadata) + LunaWire.integer(2, captureMode(mode)))
     val captureStatus = Request(15, ByteArray(0))
 
     /** Official shape: media type 2 (video and photo), limit INT32_MAX, card location. */

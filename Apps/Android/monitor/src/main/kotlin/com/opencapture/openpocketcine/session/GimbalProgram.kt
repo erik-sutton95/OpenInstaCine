@@ -53,15 +53,19 @@ enum class GimbalWaypointSlot(val letter: String) {
     C("C"),
 }
 
-enum class GimbalMode(val label: String) {
+enum class GimbalMode(private val defaultLabel: String) {
     FOLLOW("Follow"),
     TILT_LOCKED("Tilt locked"),
     FPV("FPV"),
     DIRECTION_LOCK("Direction Lock"),
     ;
 
+    val label: String get() = labelOverrides[this] ?: defaultLabel
+
     companion object {
         val pickerOrder = listOf(FOLLOW, TILT_LOCKED, FPV, DIRECTION_LOCK)
+        /** Brand storefronts may rename modes (Insta360 Roll Lock / FPV-V). Set once at launch. */
+        @Volatile var labelOverrides: Map<GimbalMode, String> = emptyMap()
     }
 }
 

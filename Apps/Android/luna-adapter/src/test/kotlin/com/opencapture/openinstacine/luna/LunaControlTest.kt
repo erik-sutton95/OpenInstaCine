@@ -16,8 +16,12 @@ class LunaControlTest {
     }
 
     @Test fun gimbalMatchesSwiftEncoder() {
-        assertEquals("0801120310c601", hex(LunaControl.gimbalStick(1.0, 0.0).body))
-        assertEquals("0801120308c601", hex(LunaControl.gimbalStick(0.0, 1.0).body))
+        // fw 1.1.15: stick moves and the release carry field 4 = 4.
+        assertEquals("0801120310c6012004", hex(LunaControl.gimbalStick(1.0, 0.0).body))
+        assertEquals("0801120308c6012004", hex(LunaControl.gimbalStick(0.0, 1.0).body))
+        assertEquals("0801120308c5012004", hex(LunaControl.gimbalStick(0.0, -1.0).body))
+        assertEquals("080112002004", hex(LunaControl.gimbalStick(0.0, 0.0).body))
+        assertEquals("0801120308c6012004", hex(LunaControl.gimbal(1, upDown = 99, field4 = 4).body))
         assertEquals("0801120308c501", hex(LunaControl.gimbal(1, upDown = -99).body))
         assertEquals("08021200", hex(LunaControl.gimbal(2).body))
         assertEquals(LunaControl.GIMBAL_CONTROL, LunaControl.gimbal(3).code)
@@ -119,13 +123,49 @@ class LunaControlTest {
         assertNull(LunaShootingMode.from(100, 7))
     }
 
+    /** Swift `testFirmware1115CaptureBodiesPerMode`. */
+    @Test fun firmware1115CaptureBodiesPerMode() {
+        val stop = "0a196a0230019a0100aa0100ba0100d20100e20200ba0400820a00"
+        assertEquals("0801", hex(LunaControl.startCapture(LunaShootingMode.VIDEO).body))
+        assertEquals(4, LunaControl.startCapture(LunaShootingMode.VIDEO).code)
+        assertEquals("0801", hex(LunaControl.startCapture(LunaShootingMode.PURE_VIDEO).body))
+        assertEquals("0804", hex(LunaControl.startCapture(LunaShootingMode.TIME_SHIFT).body))
+        assertEquals("0809", hex(LunaControl.startCapture(LunaShootingMode.SLOW_MOTION).body))
+        assertEquals(stop + "1001", hex(LunaControl.stopCapture(LunaShootingMode.VIDEO).body))
+        assertEquals(stop + "1009", hex(LunaControl.stopCapture(LunaShootingMode.SLOW_MOTION).body))
+        assertEquals(5, LunaControl.stopCapture(LunaShootingMode.VIDEO).code)
+        val lapseStart = LunaControl.startCapture(LunaShootingMode.TIMELAPSE)
+        assertEquals(22, lapseStart.code)
+        assertEquals("0801", hex(lapseStart.body))
+        val lapseStop = LunaControl.stopCapture(LunaShootingMode.TIMELAPSE)
+        assertEquals(23, lapseStop.code)
+        assertEquals("080112196a0230019a0100aa0100ba0100d20100e20200ba0400820a00", hex(lapseStop.body))
+    }
+
+    /** Swift `testFirmware1115PhotoModeWrites`. */
+    @Test fun firmware1115PhotoModeWrites() {
+        val photo = LunaControl.FUNCTION_MODE_PHOTO
+        fun types(request: LunaControl.Request) = hex(LunaWire.bytes(request.body, 1))
+        val still = LunaControl.videoExposure(2, shutterSeconds = 1.0 / 8000, functionMode = photo)
+        assertEquals("14151864", types(still))
+        assertEquals("151864", types(LunaControl.videoExposure(2, shutterSeconds = 1.0 / 8000)))
+        // Field 20 carries the same exposure message as 21.
+        val nested = LunaWire.bytes(still.body, 2)
+        assertContentEquals(LunaWire.bytes(nested, 21), LunaWire.bytes(nested, 20))
+        assertEquals("074d", types(LunaControl.exposureBias(1.0, functionMode = photo)))
+        assertEquals(1L, LunaWire.number(LunaWire.bytes(LunaControl.exposureBias(1.0, functionMode = photo).body, 2), 77))
+        assertEquals("1f3f23", types(LunaControl.recordResolution(27)))
+        assertEquals(1L, LunaWire.number(LunaWire.bytes(LunaControl.recordResolution(27).body, 2), 35))
+        assertEquals(30.0, LunaVideoResolution.of(443)?.framesPerSecond)
+        assertEquals(2688, LunaVideoResolution.of(444)?.height)
+        assertTrue(listOf(443L, 444L, 119L, 120L, 121L, 446L, 447L, 448L).all { it in LunaReadout.videoFormatValues })
+    }
+
     /** Swift `testGimbalTrackingCaptureAndMediaRequests` and `testOfficialStatusPollsArePacked`. */
     @Test fun captureMediaAndStatusRequests() {
         assertEquals("0805", hex(LunaControl.takePicture(5).body))
         assertEquals("", hex(LunaControl.takePicture().body))
         assertEquals(3, LunaControl.takePicture().code)
-        assertEquals("0801", hex(LunaControl.startCapture.body))
-        assertEquals(5, LunaControl.stopCapture.code)
         assertEquals("", hex(LunaControl.stopLive.body))
         val jpg = "/storage_internal/DCIM/Camera01/IMG_20260916_133503_003.jpg"
         assertEquals("0a3b2f73746f726167655f696e7465726e616c2f4443494d2f43616d65726130312f494d475f32303236303931365f3133333530335f3030332e6a7067", hex(LunaControl.deleteFiles(jpg).body))

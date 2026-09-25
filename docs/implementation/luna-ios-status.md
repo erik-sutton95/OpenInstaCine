@@ -191,8 +191,8 @@ device, so nothing below is hardware-verified on Android.
   with the same public surface over `core-api` `CameraBackend`. The upstream top-level helpers in
   that file are kept verbatim so tests and callers still compile.
 - Controls through a new optional `core-api` `CameraControls`, implemented by `LunaBackend`:
-  gimbal rate stick (iOS shaping, 20 Hz), recenter, flip, zoom 1..15 (chips 1, 2, 4, 8, 15),
-  tap focus (0.15 x 0.27 ROI) and Deep Track open/cancel. Request bytes are ports of
+  gimbal rate stick (iOS shaping, 20 Hz), recenter, flip, zoom 1..15 (chips 1, 2, 3, 6, 15),
+  tap focus and Deep Track open/cancel. Request bytes are ports of
   `Adapters/Insta360Protocol` and are pinned to the Swift fixtures in `LunaControlTest`.
 - Status and settings (2026-09-25, second pass): `LunaBackend` polls capture status every 1 s and
   device status every 5 s, reads photography options for the active function mode, and follows
@@ -203,12 +203,24 @@ device, so nothing below is hardware-verified on Android.
   pin), color (Standard, I-Log, Dolby Vision), format and the fw 1.1.15 format table, battery,
   charging, storage, shooting mode, REC state and timer, zoom, gimbal mode and speed. Optimistic
   pins, the 120 ms exposure coalescer and the 400 ms settings re-read match iOS.
-- Controls (same shared sheets as upstream, Luna underneath): record start/stop (cmd 4/5), photo
+- Controls (same shared sheets as upstream, Luna underneath): record start/stop (per mode, below), photo
   (cmd 3) in Photo mode, ISO / shutter / auto-manual (one exposure message, program chosen as on
   iOS, no ISO top-limit sentinel for manual with ISO), EV, WB auto / kelvin, color profile, format
   (cmd 9 types 31, 63), shooting mode (cmd 7 options 40/41; Luna names TimeShift, PureVideo,
   Slow Motion, Timelapse), gimbal mode and follow speed (option 91), gamepad actions. Zoom and tap
   focus now write the active function mode instead of always 7.
+- Official-app parity from the fw 1.1.15 capture (port of commit `4d28629`, unit-tested only on
+  Android): record start/stop carry the shooting mode (cmd 4 field 1 / cmd 5 field 2: 1 Video and
+  PureVideo, 4 TimeShift, 9 Slow Motion; Timelapse cmd 22 `0801` / cmd 23 `{1:1, 2:metadata}`; stop
+  bodies carry the official metadata stub), picked by `LunaBackend` from the active mode. Stick
+  moves and the release carry field 4 = 4. Photo mode (function mode 6) exposure writes still (20)
+  and video (21) exposure together; photo EV adds type 77 = 1; 1080p 240 (27) also writes colour
+  35 = 1 (Standard). The format list gains 9:16 2.7K 30/25 (443/444, added to the schema table)
+  and 1:1 3K (119/120/121/446/447/448, shown as the shared 3K 1:1 chip). Gimbal: the shell's
+  fourth slot is FPV-V (option 91 field 4 = 4), Luna Lock (5) maps to nothing, and the picker
+  reads Roll Lock / Roll & Tilt / FPV / FPV-V through a new `GimbalMode.labelOverrides`. Tap focus
+  is the official box 0.0869 x 0.1545 (0.1159 wide in photo), centred on the tap by the backend
+  (`CameraControls.tapFocus` now takes the tapped point).
 - Camera media: `MediaLibraryController` lists through cmd 13 + 38 (proxies hidden), renders
   thumbnails from cmd 11 type 2 NV12 (BT.709 limited range to JPEG), deletes by URI with cmd 12
   (the camera removes the LRV too), and downloads / plays over HTTP at the file's own path on
@@ -234,8 +246,8 @@ device, so nothing below is hardware-verified on Android.
   category so upstream tab logic and tests hold). DJI LUT assets are not bundled.
 - Brand copy: legal bodies, pairing steps, wordmarks, links (`openinstacine.app`, GitHub repo)
   mirror the iOS text. Launcher and splash logo are the yellow monitor mark.
-- `./gradlew :app:assembleDebug testDebugUnitTest lintDebug` passes: 995 monitor, 121
-  monitor-ui and 26 luna-adapter JVM tests. Test edits vs upstream: the source-contract test reads
+- `./gradlew :app:assembleDebug testDebugUnitTest lintDebug` passes: 996 monitor, 121
+  monitor-ui and 28 luna-adapter JVM tests. Test edits vs upstream: the source-contract test reads
   `monitor/` instead of `app/`, and legal/link assertions name OpenInstaCine and Insta360.
 - Emulator (`OpenInstaCine_API35`, landscape): pairing, live chrome in local replay (zoom chip,
   Deep Track button, gimbal stick, lock, DISP, LUT/assist rail) and Operator Setup render with the

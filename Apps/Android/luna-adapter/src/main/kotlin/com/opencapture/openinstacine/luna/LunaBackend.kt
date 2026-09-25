@@ -63,8 +63,9 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
     private var settings: LunaPhotographySettings? = null
     private var device: LunaDeviceStatus? = null
     private var capture: LunaCaptureStatus? = null
-    /** Settings bank the active shooting mode reads (7 normal video until a mode says otherwise). */
-    private var functionMode = LunaControl.FUNCTION_MODE_VIDEO
+    /** Active shooting mode (video until the camera says otherwise); its settings bank is [functionMode]. */
+    private var mode = LunaShootingMode.VIDEO
+    private val functionMode get() = mode.functionMode
     private var settingsRefresh: Job? = null
     private val _readout = MutableStateFlow(CameraReadout())
     override val readout = _readout.asStateFlow()
@@ -213,7 +214,7 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
             withContext(NonCancellable) { withTimeoutOrNull(1_500) { runCatching { channel.request(2) } } }
             poll?.cancel(); watchdog?.cancel(); heartbeat?.cancel(); cameraSocket.close(); receiver.cancel(); channel.close(); tcp = null
             settingsRefresh?.cancel(); livePaused = false
-            settings = null; device = null; capture = null; functionMode = LunaControl.FUNCTION_MODE_VIDEO; publish()
+            settings = null; device = null; capture = null; mode = LunaShootingMode.VIDEO; publish()
         }
     }
     private suspend fun joinNetwork(ssid: String, password: String): Network {
@@ -252,7 +253,7 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
     private fun publish() { _readout.value = LunaReadout.readout(settings, device, capture) }
     private fun applyDevice(status: LunaDeviceStatus) {
         device = device?.merge(status) ?: status
-        status.shootingMode?.let { functionMode = it.functionMode }
+        status.shootingMode?.let { mode = it }
         publish()
     }
     private fun applySettings(update: LunaPhotographySettings) {
@@ -306,12 +307,17 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
     override suspend fun gimbalStick(pan: Double, tilt: Double) = send { LunaControl.gimbalStick(pan, tilt) }
     override suspend fun gimbalRecenter() = send { LunaControl.gimbal(2) }
     override suspend fun gimbalFlip() = send { LunaControl.gimbal(3) }
-    override suspend fun tapFocus(x: Double, y: Double) = send { LunaControl.tapFocus(x.coerceIn(0.0, 0.85), y.coerceIn(0.0, 0.73), functionMode = functionMode) }
+    /** Official ROI centred on the tap, kept inside the frame. */
+    override suspend fun tapFocus(x: Double, y: Double) = send {
+        val w = if (mode.isPhoto) LunaControl.FOCUS_WIDTH_PHOTO else LunaControl.FOCUS_WIDTH
+        val h = LunaControl.FOCUS_HEIGHT
+        LunaControl.tapFocus((x - w / 2).coerceIn(0.0, 1 - w), (y - h / 2).coerceIn(0.0, 1 - h), w, h, functionMode)
+    }
     override suspend fun startTracking(x: Double, y: Double, width: Double, height: Double) =
         send { LunaControl.openTracking(x.coerceIn(0.0, 1.0), y.coerceIn(0.0, 1.0), width.coerceIn(0.0, 1.0), height.coerceIn(0.0, 1.0)) }
     override suspend fun stopTracking() = send { LunaControl.cancelTracking }
-    override suspend fun startRecording() = send { LunaControl.startCapture }
-    override suspend fun stopRecording() = send { LunaControl.stopCapture }
+    override suspend fun startRecording() = send { LunaControl.startCapture(mode) }
+    override suspend fun stopRecording() = send { LunaControl.stopCapture(mode) }
     override suspend fun takePhoto() = send { LunaControl.takePicture() }
     override suspend fun setExposure(iso: Int?, shutterSeconds: Double?) = send {
         val isoValue = iso?.toLong()
@@ -324,7 +330,7 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
     override suspend fun setRecordFormat(id: Long) = send { LunaControl.recordResolution(id, functionMode) }
     override suspend fun setShootingMode(mode: CameraShootingMode): Boolean {
         val luna = with(LunaReadout) { shootingModes.key(mode) }
-        functionMode = luna.functionMode
+        this.mode = luna
         val ok = send { luna.request() }
         if (ok) scope.launch { refreshStatus() }
         return ok

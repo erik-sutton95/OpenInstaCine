@@ -104,16 +104,22 @@ internal object LunaShellMapping {
     fun gimbalMode(mode: CameraGimbalMode): GimbalMode? = when (mode) {
         CameraGimbalMode.ROLL_LOCK -> GimbalMode.FOLLOW
         CameraGimbalMode.ROLL_TILT_LOCK -> GimbalMode.TILT_LOCKED
-        CameraGimbalMode.FPV, CameraGimbalMode.FPV_VERTICAL -> GimbalMode.FPV
-        CameraGimbalMode.LOCK -> GimbalMode.DIRECTION_LOCK
-        CameraGimbalMode.STABILIZED_VERTICAL -> null
+        CameraGimbalMode.FPV -> GimbalMode.FPV
+        // The shell's fourth slot carries FPV-V; the official app offers no lock mode.
+        CameraGimbalMode.FPV_VERTICAL -> GimbalMode.DIRECTION_LOCK
+        CameraGimbalMode.LOCK, CameraGimbalMode.STABILIZED_VERTICAL -> null
     }
+
+    /** Official Luna app names for the four modes it offers. */
+    val gimbalModeLabels = mapOf(
+        GimbalMode.FOLLOW to "Roll Lock", GimbalMode.TILT_LOCKED to "Roll & Tilt", GimbalMode.FPV to "FPV", GimbalMode.DIRECTION_LOCK to "FPV-V",
+    )
 
     fun cameraGimbalMode(mode: GimbalMode): CameraGimbalMode = when (mode) {
         GimbalMode.FOLLOW -> CameraGimbalMode.ROLL_LOCK
         GimbalMode.TILT_LOCKED -> CameraGimbalMode.ROLL_TILT_LOCK
         GimbalMode.FPV -> CameraGimbalMode.FPV
-        GimbalMode.DIRECTION_LOCK -> CameraGimbalMode.LOCK
+        GimbalMode.DIRECTION_LOCK -> CameraGimbalMode.FPV_VERTICAL
     }
 
     fun gimbalSpeed(speed: CameraGimbalSpeed): GimbalSpeed = when (speed) {
@@ -133,6 +139,7 @@ internal object LunaShellMapping {
         val long = maxOf(width, height)
         val portrait = height > width
         return when {
+            width == height -> if (long == 3072) VideoResolution.P3K_1X1 else unknownResolution
             long == 1920 && !portrait -> VideoResolution.P1080
             long == 1920 -> VideoResolution.P1080_9X16
             long in 2688..2720 && !portrait -> VideoResolution.P2_7K
