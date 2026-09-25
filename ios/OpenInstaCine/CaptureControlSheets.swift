@@ -641,7 +641,8 @@ struct CapturePickerPanel: View {
     private var connectedBody: CameraModel? { model.session.connectedCamera?.model }
 
     private var isoAutoDrumLabels: [String] {
-        guard model.session.supportsIsoLimit else { return [] }
+        // No settable auto ceiling: a single read-only "Auto" stop, like the WB drum.
+        guard model.session.supportsIsoLimit else { return ["Auto"] }
         return CaptureLists.isoAutoLabels(from: model.session.status, model: connectedBody)
     }
 
@@ -950,7 +951,9 @@ struct CapturePickerPanel: View {
 
     private func reseatIsoAutoDrum() {
         let labels = isoAutoDrumLabels
-        let live = CaptureLists.isoAutoLabel(from: model.session.status, model: connectedBody)
+        let live =
+            model.session.supportsIsoLimit
+            ? CaptureLists.isoAutoLabel(from: model.session.status, model: connectedBody) : "Auto"
         let next = labels.contains(live) ? live : ""
         lastApplied = next
         drumSelection = next

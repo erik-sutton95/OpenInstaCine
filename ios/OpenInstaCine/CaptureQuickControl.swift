@@ -87,11 +87,13 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
     }
 
     @MainActor static func primary(_ sheet: CaptureSheet, model: AppModel) -> Self? {
-        if sheet == .iso, !model.session.supportsIsoLimit, model.session.status.isoIndex == .auto {
-            return nil
+        var status = model.session.status
+        if sheet == .iso, !model.session.supportsIsoLimit, status.isoIndex == .auto {
+            // No auto ISO ceiling on this camera: the hold drum offers manual ISO instead.
+            status.isoIndex = nil
         }
         return primary(
-            sheet, status: model.session.status, cameraModel: model.session.connectedCamera?.model,
+            sheet, status: status, cameraModel: model.session.connectedCamera?.model,
             supportsFocusMode: model.session.supportsFocusMode,
             facePriorityExposureEnabled: model.facePriorityExposureEnabled,
             shutterUsesAngle: OperatorPrefs.shutterUsesAngle,

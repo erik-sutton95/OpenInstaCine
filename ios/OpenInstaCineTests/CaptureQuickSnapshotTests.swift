@@ -205,7 +205,7 @@ final class CaptureQuickSnapshotTests: XCTestCase {
         XCTAssertFalse(mode.options.contains(ShootingMode.livePhoto.label))
         XCTAssertEqual(mode.selection, "Video")
         XCTAssertNil(mode.changedValue(translation: 0, current: mode))
-        XCTAssertEqual(mode.changedValue(translation: -56, current: mode), "TimeLapse")
+        XCTAssertEqual(mode.changedValue(translation: -56, current: mode), ShootingMode.timeLapse.label)
 
         status.shootingMode = Int(ShootingMode.photo.rawValue)
         let photo = CaptureQuickSnapshot.primary(.mode, status: status)
