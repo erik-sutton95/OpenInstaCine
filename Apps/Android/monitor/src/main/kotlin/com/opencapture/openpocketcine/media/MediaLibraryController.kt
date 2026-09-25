@@ -7,7 +7,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.opencapture.openpocketcine.core.CameraMediaStore
 import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.lut.ClipColorProfile
 import com.opencapture.openpocketcine.session.DumlFrame
 import com.opencapture.openpocketcine.session.PocketCameraSession
@@ -51,6 +53,9 @@ class MediaLibraryController(
     private val downloadInFlight = HashSet<String>()
     private var browsing = false
     private var playbackHeld = false
+    /** Luna: media over the control link (list, thumbnail, delete) and HTTP by path; no DUML playback. */
+    private val store = session.media
+    private val lunaGamma = HashMap<String, String>()
 
     var files by mutableStateOf<List<MediaFile>>(emptyList())
         private set
@@ -84,6 +89,15 @@ class MediaLibraryController(
             note = if (files.isEmpty()) MediaOperatorCopy.NOT_CONNECTED else null
             return
         }
+        if (store != null) {
+            fetchInProgress = true
+            listedCount = files.size
+            note = MediaOperatorCopy.LISTING
+            val id = nextBrowseId()
+            // The official app stops the preview while its album is open; HTTP then has the Wi-Fi link to itself.
+            browseJob = scope.launch { store.pauseLive(); listStore(store, id) }
+            return
+        }
         if (session.cameraGalleryOpen.value) {
             // The camera owns playback (#273). DJI Mimo sends no enter or listing;
             // ours put "Playback in progress" on the body. Show the cached catalog.
@@ -112,6 +126,10 @@ class MediaLibraryController(
         unhookFrames?.invoke()
         unhookFrames = null
         if (!isLive) return
+        if (store != null) {
+            resumeJob = resumeScope.launch { store.resumeLive() }
+            return
+        }
         val token = nextResumeId()
         resumeJob =
             resumeScope.launch {
@@ -140,7 +158,7 @@ class MediaLibraryController(
         fetchInProgress = true
         note = MediaOperatorCopy.LISTING
         val id = nextBrowseId()
-        browseJob = scope.launch { listAllPages(id, includeOlderPages = playbackHeld) }
+        browseJob = scope.launch { if (store != null) listStore(store, id) else listAllPages(id, includeOlderPages = playbackHeld) }
     }
 
     fun isDownloaded(file: MediaFile): Boolean = cache.isDownloaded(file, cameraId)
@@ -164,6 +182,17 @@ class MediaLibraryController(
         }
         val cached = cache.shotColor(file.path, cameraId, appContext)
         if (cached >= 0) return cached
+        // Luna: the camera's clip metadata names the gamma (I-Log / Standard / Dolby).
+        lunaGamma[file.path]?.lowercase()?.let { gamma ->
+            val mode = when {
+                "log" in gamma -> CameraCommands.COLOR_ILOG
+                "dolby" in gamma || "hdr" in gamma -> CameraCommands.COLOR_DOLBY_VISION
+                "standard" in gamma || "vivid" in gamma -> CameraCommands.COLOR_NORMAL
+                else -> -1
+            }
+            if (mode >= 0) cache.rememberShotColor(file.path, mode, cameraId)
+            return mode
+        }
         if (!isLive) return -1
         return try {
             val range = ClipColorProfile.httpRange(file.sizeBytes)
@@ -218,6 +247,13 @@ class MediaLibraryController(
             note = MediaOperatorCopy.NOT_CONNECTED
             return
         }
+        store?.let { luna ->
+            // Deleting a clip also removes its LRV proxy on the camera.
+            runCatching { luna.deleteMedia(file.path) }
+                .onSuccess { dropFile(file.path) }
+                .onFailure { note = MediaOperatorCopy.DELETE_FAILED }
+            return
+        }
         val counter = nextActionCounter()
         link.sendDuml(
             MediaCommands.SET_GENERAL,
@@ -235,7 +271,7 @@ class MediaLibraryController(
         try {
             val storage = resolvedStorage(file)
             val data =
-                withContext(Dispatchers.IO) {
+                store?.thumbnailJpeg(file.path) ?: withContext(Dispatchers.IO) {
                     MediaTransfer.fetchBytes(storage, MediaHTTP.thumbnailPath(file)).first
                 }
             if (data.isEmpty()) throw MediaTransferError.BadResponse
@@ -340,6 +376,31 @@ class MediaLibraryController(
         } catch (_: Exception) {
             clearProgress(file.path)
             null
+        }
+    }
+
+    private suspend fun listStore(store: CameraMediaStore, id: Int) {
+        try {
+            val items = store.listMedia()
+            if (id != browseGeneration) return
+            items.forEach { item -> item.gamma?.let { lunaGamma[item.path] = it } }
+            val mapped = items.map { item ->
+                MediaFile(
+                    path = item.path, thumbPath = item.path,
+                    // Non-zero handle: Luna deletes by path, so every listed file is deletable.
+                    handle = 1, sizeBytes = item.sizeBytes, durationSeconds = item.durationSeconds,
+                    resolution = if (item.width != null && item.height != null) "${item.width}x${item.height}" else null,
+                    fps = item.fps, proxyPath = item.proxyPath,
+                )
+            }.map(::applyFavoriteOverlay).sortedByDescending { it.filenameTimestamp.orEmpty() }
+            publish(mapped)
+            note = if (mapped.isEmpty()) MediaOperatorCopy.NO_CLIPS else null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            if (id == browseGeneration) note = MediaOperatorCopy.LIST_FAILED
+        } finally {
+            if (id == browseGeneration) fetchInProgress = false
         }
     }
 
