@@ -87,7 +87,10 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
     }
 
     @MainActor static func primary(_ sheet: CaptureSheet, model: AppModel) -> Self? {
-        primary(
+        if sheet == .iso, !model.session.supportsIsoLimit, model.session.status.isoIndex == .auto {
+            return nil
+        }
+        return primary(
             sheet, status: model.session.status, cameraModel: model.session.connectedCamera?.model,
             supportsFocusMode: model.session.supportsFocusMode,
             facePriorityExposureEnabled: model.facePriorityExposureEnabled,

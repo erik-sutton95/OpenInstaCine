@@ -229,7 +229,7 @@ struct CapturePickerPanel: View {
                                     category, isPhoto: isPhoto))
                         }
                     }
-                    if sheet == .iso { nativeIsoHopToggle }
+                    if sheet == .iso, model.session.supportsIsoLimit { nativeIsoHopToggle }
                     if isEvSheet { facePriorityToggle }
                 }
             }
@@ -641,7 +641,8 @@ struct CapturePickerPanel: View {
     private var connectedBody: CameraModel? { model.session.connectedCamera?.model }
 
     private var isoAutoDrumLabels: [String] {
-        CaptureLists.isoAutoLabels(from: model.session.status, model: connectedBody)
+        guard model.session.supportsIsoLimit else { return [] }
+        return CaptureLists.isoAutoLabels(from: model.session.status, model: connectedBody)
     }
 
     private var evLabels: [String] {

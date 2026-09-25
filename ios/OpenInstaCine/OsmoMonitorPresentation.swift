@@ -28,8 +28,8 @@ enum OsmoMonitorPresentation {
         // (so no head tracking) or timecode. Favorites are kept on the phone.
         return MonitorCapabilities(
             gimbal: session.hasGimbal, zoom: session.supportsZoom,
-            focus: session.supportsFocusMode, iris: session.supportsAperture, audio: false,
+            focus: session.supportsFocusMode, iris: session.supportsAperture, audio: session.supportsAudio,
             headTracking: false, clipDelete: true, clipStar: true,
-            requiresInternetHop: true, timecode: false)
+            requiresInternetHop: true, timecode: session.supportsTimecode)
     }
 }

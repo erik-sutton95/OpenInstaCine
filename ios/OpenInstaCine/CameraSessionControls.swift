@@ -35,6 +35,12 @@ extension CameraSession {
     /// Luna video AF is continuous-only in the official app; no AF-S/AF-C chip.
     var supportsFocusMode: Bool { false }
     var supportsAperture: Bool { false }
+    /// Luna phone protocol exposes no audio channel setting or meters.
+    var supportsAudio: Bool { false }
+    /// Luna reports no timecode; the REC timer carries elapsed time.
+    var supportsTimecode: Bool { false }
+    /// Auto ISO ceiling and native-ISO hop are Osmo camcap features; Luna has neither.
+    var supportsIsoLimit: Bool { false }
     /// Luna media browse runs over HTTP next to the live socket.
     var hasControlLink: Bool { backend.isControlReady }
     var bodyFamily: CameraBodyFamily { .other }

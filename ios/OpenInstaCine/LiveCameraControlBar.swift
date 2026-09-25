@@ -44,7 +44,7 @@ struct LiveCameraControlBar: View {
         interfaceLocked || model.session.isLocked
     }
 
-    private var showsAudio: Bool { !model.session.status.isPhoto }
+    private var showsAudio: Bool { model.session.supportsAudio && !model.session.status.isPhoto }
 
     private var visibleTileCount: Int {
         4 + (model.session.supportsFocusMode ? 1 : 0) + (model.session.supportsAperture ? 1 : 0)

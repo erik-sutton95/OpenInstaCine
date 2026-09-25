@@ -76,7 +76,7 @@ struct LiveAssistBar: View {
                     )
                 }
             }
-            if showsAudio {
+            if showsAudio, model.session.supportsAudio {
                 if !groups.isEmpty { assistDivider }
                 AssistBarButton(
                     tool: .audioMeters, assist: assist, isLocked: locked, onPresent: presentOptions)

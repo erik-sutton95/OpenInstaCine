@@ -797,11 +797,13 @@ struct SettingsRootView: View {
             help: "Standby / recording chip on the status bar.",
             isOn: chrome.wrappedValue.recReadout
         ) { chrome.wrappedValue.recReadout.toggle() }
-        SettingsSwitchInlineRow(
-            title: "Timecode",
-            help: "Running timecode on the status bar.",
-            isOn: chrome.wrappedValue.timecode
-        ) { chrome.wrappedValue.timecode.toggle() }
+        if model.session.supportsTimecode {
+            SettingsSwitchInlineRow(
+                title: "Timecode",
+                help: "Running timecode on the status bar.",
+                isOn: chrome.wrappedValue.timecode
+            ) { chrome.wrappedValue.timecode.toggle() }
+        }
         SettingsSwitchInlineRow(
             title: "Format",
             help: "Recording resolution and frame rate.",
