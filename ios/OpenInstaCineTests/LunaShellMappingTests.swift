@@ -64,6 +64,10 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertNil(session.subjectBox)
         XCTAssertEqual(try XCTUnwrap(session.searchBox).x, 0.42, accuracy: 0.001)
         XCTAssertTrue(session.isTrackingActive, "lost keeps tracking on so cancel stays available")
+        XCTAssertEqual(
+            FocusOverlayPolicy.resolve(
+                tracking: session.isTracking, search: session.searchBox, subject: session.subjectBox),
+            .search(try XCTUnwrap(session.searchBox)), "lost draws the white search box")
         session.applyTrackFrame(try frame(state: 2, x: 0.3))
         XCTAssertNotNil(session.subjectBox)
         session.applyTrackFrame(try frame(state: 5, x: 0.3))

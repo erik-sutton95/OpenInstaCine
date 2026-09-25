@@ -181,7 +181,6 @@ final class CameraSession {
     @ObservationIgnored var trackingSawLock = false
     @ObservationIgnored var lastSubjectPushAt: Date?
     @ObservationIgnored var lastTapFocusAt: Date?
-    @ObservationIgnored var trackingTimeout: Task<Void, Never>?
     @ObservationIgnored var tapFocusTask: Task<Void, Never>?
     @ObservationIgnored private let faceDetector = LiveFaceDetector()
     @ObservationIgnored private var faceTracks: [FaceTrack] = []

@@ -684,8 +684,7 @@ extension CameraSession {
             "Track",
             { try LunaProtocol.openTracking(x: left, y: top, width: width, height: height) },
             refresh: false,
-            onFail: { [weak self] in self?.clearLocalTracking() },
-            onSuccess: { [weak self] _ in self?.armTrackingTimeout() })
+            onFail: { [weak self] in self?.clearLocalTracking() })
     }
 
     /// Stream-borne Deep Track state (media 0x85, every frame): tracking moves the
@@ -696,7 +695,6 @@ extension CameraSession {
         let box = TrackingBox(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
         switch frame.state {
         case .tracking:
-            trackingTimeout?.cancel()
             isTracking = true
             trackingSawLock = true
             lastSubjectPushAt = Date()
@@ -705,6 +703,8 @@ extension CameraSession {
             subjectBox = box
         case .lost:
             guard trackingSawLock else { return }
+            // Not `isTracking`: FocusOverlayPolicy would draw the search box as a green subject.
+            isTracking = false
             subjectBox = nil
             searchBox = box
         case .idle:
@@ -731,22 +731,6 @@ extension CameraSession {
         }
     }
 
-    private func armTrackingTimeout() {
-        trackingTimeout?.cancel()
-        trackingTimeout = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(4))
-            guard let self, !Task.isCancelled, self.searchBox != nil, !self.trackingSawLock else {
-                return
-            }
-            // No lock report: keep a subject box so the operator sees Deep Track is on.
-            if let search = self.searchBox {
-                self.subjectBox = TrackingBox.subject(from: search)
-                self.searchBox = nil
-                self.isTracking = true
-            }
-        }
-    }
-
     func cancelSubjectTracking() {
         let had = isTrackingActive
         clearLocalTracking()
@@ -755,8 +739,6 @@ extension CameraSession {
     }
 
     func clearLocalTracking() {
-        trackingTimeout?.cancel()
-        trackingTimeout = nil
         searchBox = nil
         subjectBox = nil
         isTracking = false
