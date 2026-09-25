@@ -268,6 +268,8 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     val zoomDialReadout: StateFlow<Double> = _zoomReadout.asStateFlow()
     private val _zoomPinching = MutableStateFlow(false)
     val zoomPinching: StateFlow<Boolean> = _zoomPinching.asStateFlow()
+    private var trackBoxes = LunaTrackBoxes()
+    private fun showTrack(next: LunaTrackBoxes) { trackBoxes = next; _trackingHud.value = next.hud }
     private val _trackingHud = MutableStateFlow(TrackingHud())
     val trackingHud: StateFlow<TrackingHud> = _trackingHud.asStateFlow()
     val isReconnecting: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
@@ -288,6 +290,7 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
         }
         controls?.let { link ->
             scope.launch { link.readout.collect(::applyReadout) }
+            scope.launch { link.trackFrames.collect { frame -> trackBoxes.apply(frame)?.let(::showTrack) } }
             // Re-apply every second: the REC timer ticks and settled pins fall back to the camera's value.
             scope.launch { while (isActive) { delay(1_000); applyReadout(lastReadout) } }
         }
@@ -360,7 +363,7 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
         backend.disconnect(); decoder.reset()
         holdsMonitor = false; hasVideoFormat = false
         _connectionTargetId.value = null
-        _trackingHud.value = TrackingHud()
+        showTrack(LunaTrackBoxes())
     }
     fun close() { backend.close(); decoder.reset(); scope.cancel() }
     fun noteSceneBecameInactive() = backend.sceneActive(false)
@@ -662,18 +665,18 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
         startTracking(TrackingBox((x - width / 2).toDouble(), (y - height / 2).toDouble(), width.toDouble(), height.toDouble()))
     fun startTracking(box: TrackingBox) {
         if (!can(CameraCapability.TRACKING)) return unavailable("Deep Track")
-        _trackingHud.value = TrackingHud(isTracking = true, draft = box)
+        showTrack(LunaTrackBoxes(search = box))
         scope.launch {
             val left = box.x.coerceIn(0.0, 1.0)
             val top = box.y.coerceIn(0.0, 1.0)
             val ok = controls?.startTracking(left, top, minOf(box.width, 1 - left), minOf(box.height, 1 - top)) == true
-            if (!ok) { _trackingHud.value = TrackingHud(); presentControlNote("Deep Track did not start.") }
+            if (!ok) { showTrack(LunaTrackBoxes()); presentControlNote("Deep Track did not start.") }
         }
     }
     fun cancelSubjectTracking() = cancelTracking()
     fun cancelTracking() {
-        if (!_trackingHud.value.isTracking) return
-        _trackingHud.value = TrackingHud()
+        if (!trackBoxes.active) return
+        showTrack(LunaTrackBoxes())
         scope.launch { controls?.stopTracking() }
     }
     fun handleGamepadAction(action: GamepadOperatorAction) {

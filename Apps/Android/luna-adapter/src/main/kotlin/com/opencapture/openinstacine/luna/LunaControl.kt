@@ -225,6 +225,12 @@ internal object LunaControl {
     }
 
     fun accessCameraFileState(state: Long) = Request(118, LunaWire.integer(1, state))
+    /**
+     * Official app: 5 on entering the shooting view, 1 on leaving it for the album. 5 also wakes
+     * the gimbal, which sleeps pointing down when no app holds the shooting view (fw 1.1.15).
+     */
+    const val SHOOTING_VIEW_ACCESS_STATE = 5L
+    const val ALBUM_ACCESS_STATE = 1L
 
     private fun optionTypes(numbers: List<Int>, packed: Boolean): ByteArray {
         require(numbers.isNotEmpty() && numbers.size <= 256 && numbers.all { it > 0 && it < (1 shl 29) })

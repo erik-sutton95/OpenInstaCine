@@ -1,5 +1,7 @@
 package com.opencapture.openinstacine.luna
 
+import com.opencapture.openpocketcine.core.CameraTrackFrame
+import com.opencapture.openpocketcine.core.CameraTrackState
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
@@ -20,6 +22,10 @@ internal class LunaProto(data: ByteArray) {
     fun double(n: Int): Double? = last(n)?.let {
         require(it.wire == 1 && it.bytes.size == 8) { "Invalid field $n" }
         ByteBuffer.wrap(it.bytes).order(ByteOrder.LITTLE_ENDIAN).double
+    }
+    fun float(n: Int): Double? = last(n)?.let {
+        require(it.wire == 5 && it.bytes.size == 4) { "Invalid field $n" }
+        ByteBuffer.wrap(it.bytes).order(ByteOrder.LITTLE_ENDIAN).float.toDouble()
     }
     fun all(n: Int) = fields.filter { it.number == n }.map { require(it.wire == 2) { "Invalid field $n" }; it.bytes }
     /** Packed or unpacked repeated varints. */
@@ -251,6 +257,29 @@ internal data class LunaCaptureStatus(val state: Long, val captureSeconds: Long,
 
         /** Notification 8208 body: `CaptureStatus` (different field numbers). */
         fun fromNotification(data: ByteArray) = LunaProto(data).let { LunaCaptureStatus(it.u(1, 0), it.u(2, 0), it.u(7, 0), it.u(17, 0), it.u(18, 0)) }
+    }
+}
+
+/**
+ * Deep Track result, media subtype 0x85 with every video frame (fw 1.1.15 official-app capture):
+ * `{1: ms, 2: state, 3: 0, 4: {1 x, 2 y, 3 w, 4 h}}` float32, top-left preview fractions.
+ * State 2 tracking, 3 lost, 5 idle. Swift `LunaTrackFrame`.
+ */
+internal data class LunaTrackFrame(val state: Long, val x: Double, val y: Double, val width: Double, val height: Double) {
+    val shared: CameraTrackFrame? get() = when (state) {
+        2L -> CameraTrackState.TRACKING
+        3L -> CameraTrackState.LOST
+        5L -> CameraTrackState.IDLE
+        else -> null
+    }?.let { CameraTrackFrame(it, x, y, width, height) }
+
+    companion object {
+        fun parse(data: ByteArray): LunaTrackFrame {
+            val message = LunaProto(data)
+            val box = LunaProto(message.bytes(4) ?: ByteArray(0))
+            // Proto3 omits zero floats.
+            return LunaTrackFrame(message.u(2, 0), box.float(1) ?: 0.0, box.float(2) ?: 0.0, box.float(3) ?: 0.0, box.float(4) ?: 0.0)
+        }
     }
 }
 

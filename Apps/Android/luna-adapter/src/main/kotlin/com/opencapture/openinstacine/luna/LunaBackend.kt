@@ -51,6 +51,10 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
     override val joinedSSID = _joinedSSID.asStateFlow()
     private val video = MutableSharedFlow<EncodedVideoFrame>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     override val frames: Flow<EncodedVideoFrame> = video.asSharedFlow()
+    private val trackFlow = MutableSharedFlow<CameraTrackFrame>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    override val trackFrames: Flow<CameraTrackFrame> = trackFlow.asSharedFlow()
+    /** Receive thread only. The camera repeats the frame with every video frame; only changes go out. */
+    private var lastTrack: LunaTrackFrame? = null
     private var connectJob: Job? = null
     private var scanActive = false
     @Volatile private var socket: Socket? = null
@@ -169,7 +173,9 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
             send = { bytes -> withContext(Dispatchers.IO) { cameraSocket.getOutputStream().write(bytes); cameraSocket.getOutputStream().flush() } },
             video = { bytes, tick -> lastVideoAt.set(android.os.SystemClock.elapsedRealtime()); video.tryEmit(EncodedVideoFrame(bytes, tick)) },
             notify = { message -> val note = LunaNotification.parse(message.code, message.body); scope.launch { handle(note) } },
+            track = { frame -> if (frame != lastTrack) { lastTrack = frame; frame.shared?.let(trackFlow::tryEmit) } },
         )
+        lastTrack = null
         tcp = channel
         val receiver = launch(Dispatchers.IO) {
             try {
@@ -195,6 +201,9 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
             _phase.value = ConnectionPhase.LIVE
             // Mount the inherited decoder/render host before asking for the first keyframe.
             delay(350)
+            // Shooting view first: without it the gimbal stays asleep pointing down.
+            val wake = LunaControl.accessCameraFileState(LunaControl.SHOOTING_VIEW_ACCESS_STATE)
+            runCatching { channel.request(wake.code, wake.body) }
             channel.request(1, LunaWire.liveBody)
             lastVideoAt.set(android.os.SystemClock.elapsedRealtime())
             watchdog = launch { while (isActive) { delay(2_000); if (!livePaused && android.os.SystemClock.elapsedRealtime() - lastVideoAt.get() > 10_000) { channel.fail(IllegalStateException("No live video received")); break } } }
@@ -345,7 +354,7 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
         return channel.request(request.code, request.body)
     }
     override suspend fun listMedia(): List<CameraMediaItem> {
-        runCatching { media(LunaControl.accessCameraFileState(1)) }
+        runCatching { media(LunaControl.accessCameraFileState(LunaControl.ALBUM_ACCESS_STATE)) }
         val uris = LunaMediaFile.list(media(LunaControl.fileList())).first
         val infos = runCatching { LunaMediaFile.infoList(media(LunaControl.fileInfoList())) }.getOrDefault(emptyList()).associateBy { it.uri }
         return uris.map { infos[it] ?: LunaMediaFile(it) }.filterNot { it.isProxy }.map(LunaReadout::mediaItem)
@@ -363,6 +372,7 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
         runCatching { media(LunaControl.stopLive) }
         lastVideoAt.set(android.os.SystemClock.elapsedRealtime())
         livePaused = false
+        runCatching { media(LunaControl.accessCameraFileState(LunaControl.SHOOTING_VIEW_ACCESS_STATE)) }
         runCatching { media(LunaControl.startLive) }
     }
 }

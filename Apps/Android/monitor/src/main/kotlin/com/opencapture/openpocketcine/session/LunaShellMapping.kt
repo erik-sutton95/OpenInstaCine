@@ -7,6 +7,8 @@ import com.opencapture.openpocketcine.core.CameraGimbalSpeed
 import com.opencapture.openpocketcine.core.CameraReadout
 import com.opencapture.openpocketcine.core.CameraRecordFormat
 import com.opencapture.openpocketcine.core.CameraShootingMode
+import com.opencapture.openpocketcine.core.CameraTrackFrame
+import com.opencapture.openpocketcine.core.CameraTrackState
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.reflect.KMutableProperty0
@@ -252,5 +254,32 @@ internal object LunaShellMapping {
             zoomFactor = readout.zoom ?: next.zoomFactor,
         )
         return next to table
+    }
+}
+
+/**
+ * Deep Track boxes (iOS `CameraSession.applyTrackFrame`), shown the upstream ActiveTrack way:
+ * white search box until the camera locks, then the green subject box. [locked] is the camera's
+ * lock; tracking stays active while any box is up so cancel stays available.
+ */
+data class LunaTrackBoxes(
+    val search: TrackingBox? = null,
+    val subject: TrackingBox? = null,
+    val locked: Boolean = false,
+    val sawLock: Boolean = false,
+) {
+    val active: Boolean get() = locked || search != null || subject != null
+    val hud: TrackingHud get() = TrackingHud(overlay = FocusOverlayPolicy.resolve(locked, search, subject), isTracking = active)
+
+    /** Next state for one stream frame, or null when it changes nothing. */
+    fun apply(frame: CameraTrackFrame): LunaTrackBoxes? {
+        val box = TrackingBox(frame.x, frame.y, frame.width, frame.height)
+        return when (frame.state) {
+            CameraTrackState.TRACKING -> LunaTrackBoxes(subject = box, locked = true, sawLock = true)
+            // Lost: the last box as the search box until the camera reacquires (maybe a new subject) or the operator cancels.
+            CameraTrackState.LOST -> if (sawLock) LunaTrackBoxes(search = box, sawLock = true) else null
+            // Idle also arrives between the track request and the lock; only a lock ending counts.
+            CameraTrackState.IDLE -> if (sawLock) LunaTrackBoxes() else null
+        }
     }
 }

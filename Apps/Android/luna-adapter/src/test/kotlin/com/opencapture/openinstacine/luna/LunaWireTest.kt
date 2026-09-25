@@ -1,5 +1,6 @@
 package com.opencapture.openinstacine.luna
 
+import com.opencapture.openpocketcine.core.CameraTrackState
 import kotlin.test.*
 import org.junit.Test
 import kotlinx.coroutines.runBlocking
@@ -76,5 +77,25 @@ class LunaWireTest {
         channel.key = key.clone()
         assertContentEquals(LunaWire.hex("12020801"), channel.request(8, encrypted = true))
         channel.close()
+    }
+    @Test fun deepTrackStreamFrames() {
+        // Captured 0x85 media payloads (fw 1.1.15), same vectors as Swift testDeepTrackStreamFrames.
+        val frames = ArrayList<LunaTrackFrame>()
+        val channel = LunaChannel(send = {}, track = { frames += it })
+        for (payload in listOf(
+            "85f83881020000000008c0919ac69c011005180022140d8988e03e1519357c3e1defee1e3e25dc14a33e", // idle before tracking
+            "852a4c83020000000008908886879d011002180022140d2222b23e15316af83e1dabaa1a3e25b6608b3e", // locked
+            "40ea4a830200000000277576f01b78843f", // not a track frame
+        )) channel.receive(LunaWire.encode(0, LunaWire.hex(payload), type = 1))
+        assertFalse(channel.failure.isCompleted)
+        assertEquals(2, frames.size)
+        assertEquals(CameraTrackState.IDLE, frames[0].shared?.state)
+        val locked = assertNotNull(frames[1].shared)
+        assertEquals(CameraTrackState.TRACKING, locked.state)
+        assertEquals(0.348, locked.x, 0.001)
+        assertEquals(0.485, locked.y, 0.001)
+        assertEquals(0.151, locked.width, 0.001)
+        assertEquals(0.272, locked.height, 0.001)
+        assertEquals("0805", LunaControl.accessCameraFileState(LunaControl.SHOOTING_VIEW_ACCESS_STATE).body.joinToString("") { "%02x".format(it) })
     }
 }

@@ -64,7 +64,13 @@ public interface CameraControls {
  public suspend fun setGimbalSpeed(speed: CameraGimbalSpeed): Boolean = false
  /** Re-read settings shortly after a burst of writes. */
  public fun requestSettingsRefresh() {}
+ /** The camera's own subject tracking, from the live stream; only changes are delivered. */
+ public val trackFrames: Flow<CameraTrackFrame> get() = kotlinx.coroutines.flow.emptyFlow()
 }
+
+public enum class CameraTrackState { TRACKING, LOST, IDLE }
+/** Tracking state and the camera's box, top-left fractions of the preview. */
+public data class CameraTrackFrame(public val state: CameraTrackState, public val x: Double, public val y: Double, public val width: Double, public val height: Double)
 
 public enum class CameraShootingMode { VIDEO, TIMELAPSE, TIMESHIFT, SLOW_MOTION, PURE_VIDEO, PHOTO, PANO }
 public enum class CameraColorProfile { STANDARD, LOG, VIVID, HDR, DOLBY_VISION }

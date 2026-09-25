@@ -234,8 +234,18 @@ device, so nothing below is hardware-verified on Android.
   and 1:1 3K (119/120/121/446/447/448, shown as the shared 3K 1:1 chip). Gimbal: the shell's
   fourth slot is FPV-V (option 91 field 4 = 4), Luna Lock (5) maps to nothing, and the picker
   reads Roll Lock / Roll & Tilt / FPV / FPV-V through a new `GimbalMode.labelOverrides`. Tap focus
-  is the official box 0.0869 x 0.1545 (0.1159 wide in photo), centred on the tap by the backend
+  is the official upright box 0.1545 x 0.2727, centred on the tap by the backend
   (`CameraControls.tapFocus` now takes the tapped point).
+- Deep Track and gimbal wake (port of commit `ae15ce7`, unit-tested only on Android): `LunaChannel`
+  decodes media subtype 0x85 (`LunaTrackFrame`: state 2 tracking, 3 lost, 5 idle plus the camera's
+  box) and `LunaBackend` publishes changes only on the new `CameraControls.trackFrames`. The session
+  keeps the boxes in `LunaTrackBoxes` (`session/LunaShellMapping.kt`) and presents them the upstream
+  ActiveTrack way: the requested box is the white search box until the lock, tracking shows the
+  camera's box as the green subject box, lost (after a lock) shows the last box white as the search
+  box with tracking still active, idle after a lock clears tracking, idle before a lock is ignored.
+  cmd 118 `{1:5}` goes before every live start (connect and resume after media), `{1:1}` when
+  listing media. The Wi-Fi join fix does not apply: Android joins through `requestNetwork` with a
+  `WifiNetworkSpecifier`, and a timed-out request is released, so there is no late join to adopt.
 - Camera media: `MediaLibraryController` lists through cmd 13 + 38 (proxies hidden), renders
   thumbnails from cmd 11 type 2 NV12 (BT.709 limited range to JPEG), deletes by URI with cmd 12
   (the camera removes the LRV too), and downloads / plays over HTTP at the file's own path on
@@ -261,8 +271,8 @@ device, so nothing below is hardware-verified on Android.
   category so upstream tab logic and tests hold). DJI LUT assets are not bundled.
 - Brand copy: legal bodies, pairing steps, wordmarks, links (`openinstacine.app`, GitHub repo)
   mirror the iOS text. Launcher and splash logo are the yellow monitor mark.
-- `./gradlew :app:assembleDebug testDebugUnitTest lintDebug` passes: 996 monitor, 121
-  monitor-ui and 28 luna-adapter JVM tests. Test edits vs upstream: the source-contract test reads
+- `./gradlew :app:assembleDebug testDebugUnitTest lintDebug` passes: 997 monitor, 121
+  monitor-ui and 29 luna-adapter JVM tests. Test edits vs upstream: the source-contract test reads
   `monitor/` instead of `app/`, and legal/link assertions name OpenInstaCine and Insta360.
 - Emulator (`OpenInstaCine_API35`, landscape): pairing, live chrome in local replay (zoom chip,
   Deep Track button, gimbal stick, lock, DISP, LUT/assist rail) and Operator Setup render with the
@@ -273,8 +283,9 @@ device, so nothing below is hardware-verified on Android.
 - Everything above is emulator and unit-test verified only: no status read, control, capture or
   media call has run against a real Luna from Android. Real Luna over Android BLE, Wi-Fi and TCP,
   reconnect/background recovery and all controls: untested on hardware.
-- Not ported from iOS yet: gimbal limit pulses (8302 / option 92), Deep Track lock state from
-  8315 (the box stays until cancelled), the capture-stopped error note (8201), face priority,
+- Not ported from iOS yet: gimbal limit pulses (8302 / option 92), the Deep Track cancel
+  notification 8315 and the no-lock timeout (the 0x85 idle frame clears a lock), the
+  capture-stopped error note (8201), face priority,
   re-listing media after a capture while the album is open, a decoder flush on album exit, and
   Auto LUT picking the I-Log cube (the shared resolver keeps Auto off for the generic family).
 - Shared chrome still shows DJI-only affordances the Luna cannot use: the AUDIO readout (a dash)

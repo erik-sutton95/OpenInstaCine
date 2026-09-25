@@ -8,6 +8,8 @@ import com.opencapture.openpocketcine.core.CameraReadout
 import com.opencapture.openpocketcine.core.CameraRecordFormat
 import com.opencapture.openpocketcine.core.CameraShootingMode
 import com.opencapture.openpocketcine.core.CameraStorage
+import com.opencapture.openpocketcine.core.CameraTrackFrame
+import com.opencapture.openpocketcine.core.CameraTrackState
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.media.MediaFile
 import com.opencapture.openpocketcine.media.MediaHTTP
@@ -185,5 +187,26 @@ class LunaShellMappingTest {
         assertEquals("20260916124229", MediaFile("/DCIM/Camera01/VID_20260916_124229_002.mp4", "").filenameTimestamp)
         assertEquals("20260814125250", MediaFile("DJI_20260814125250_0034_D.MP4", "").filenameTimestamp)
         assertEquals("00:01:05:00", m.clock(65))
+    }
+
+    @Test fun deepTrackStreamStatesDriveTheBoxes() {
+        fun frame(state: CameraTrackState, x: Double) = CameraTrackFrame(state, x, 0.3, 0.15, 0.27)
+        var boxes = LunaTrackBoxes()
+        assertNull(boxes.apply(frame(CameraTrackState.IDLE, 0.4)), "idle before any lock is ignored")
+        assertNull(boxes.apply(frame(CameraTrackState.LOST, 0.4)), "lost before any lock is ignored")
+        boxes = LunaTrackBoxes(search = TrackingBox(0.35, 0.3, 0.2, 0.2))
+        assertIs<FocusOverlay.Search>(boxes.hud.overlay, "requested box shows white until the lock")
+        assertTrue(boxes.hud.isTracking)
+        boxes = assertNotNull(boxes.apply(frame(CameraTrackState.TRACKING, 0.4)))
+        assertEquals(0.4, assertIs<FocusOverlay.Subject>(boxes.hud.overlay).box.x, 0.001)
+        boxes = assertNotNull(boxes.apply(frame(CameraTrackState.LOST, 0.42)))
+        assertNull(boxes.subject)
+        assertEquals(0.42, assertIs<FocusOverlay.Search>(boxes.hud.overlay).box.x, 0.001)
+        assertTrue(boxes.hud.isTracking, "lost keeps tracking on so cancel stays available")
+        boxes = assertNotNull(boxes.apply(frame(CameraTrackState.TRACKING, 0.3)))
+        assertIs<FocusOverlay.Subject>(boxes.hud.overlay)
+        boxes = assertNotNull(boxes.apply(frame(CameraTrackState.IDLE, 0.3)))
+        assertFalse(boxes.hud.isTracking, "idle after a lock ends tracking")
+        assertEquals(FocusOverlay.Focus, boxes.hud.overlay)
     }
 }
