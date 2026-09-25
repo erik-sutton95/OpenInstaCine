@@ -10,6 +10,14 @@ public struct LunaStoredWiFi: Codable, Sendable {
 enum LunaSecureStore {
     private static let service = "org.opencine.openinstacine.camera"
     static func identity() throws -> UUID {
+        #if targetEnvironment(simulator)
+            // Lab only: reuse the Mac client's already-approved identity (no BLE in Simulator).
+            if let raw = ProcessInfo.processInfo.environment["LUNA_IDENTITY"],
+                let value = UUID(uuidString: raw)
+            {
+                return value
+            }
+        #endif
         if let data = read("authorization-identity"), let raw = String(data: data, encoding: .utf8),
             let value = UUID(uuidString: raw)
         {

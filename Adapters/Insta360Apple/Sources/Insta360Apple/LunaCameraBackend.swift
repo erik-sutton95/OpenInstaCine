@@ -128,8 +128,10 @@ public final class LunaCameraBackend: CameraBackend {
         do {
             let stored = LunaSecureStore.credentials(cameraID: camera.id)
             if !existingNetwork {
-                if let stored, await quickJoin(stored, token: token) {
-                    // Saved Wi-Fi answered: skip BLE entirely (fast reconnect).
+                // Bluetooth first whenever the camera advertises: it is quick once
+                // approved, and it wakes the camera Wi-Fi, which Luna turns off when idle.
+                // Saved Wi-Fi is the fallback for a camera that is not advertising.
+                if !bluetooth.hasSeen(camera.id), let stored, await quickJoin(stored, token: token) {
                     credentials = stored
                 } else {
                     expectedSerial = try await bootstrapOverBluetooth(
@@ -155,13 +157,62 @@ public final class LunaCameraBackend: CameraBackend {
     private func quickJoin(_ stored: LunaStoredWiFi, token: Int) async -> Bool {
         eventHandler?(.phase(.joiningWiFi))
         do {
-            try await LunaWiFi.join(stored)
+            try await joinRetrying(stored, token: token, budget: .seconds(20))
             try validate(token)
             eventHandler?(.joinedWiFi(ssid: stored.ssid))
             return true
         } catch {
             onLog?("luna: saved Wi-Fi join failed, falling back to Bluetooth: \(error.localizedDescription)")
             return false
+        }
+    }
+
+    /// The camera AP needs a few seconds (sometimes most of a minute) after the BLE
+    /// handoff wakes it; iOS fails a join to an AP that is not up yet (nehelper 37).
+    private func joinRetrying(
+        _ wifi: LunaStoredWiFi, token: Int, budget: Duration = .seconds(60)
+    ) async throws {
+        let deadline = ContinuousClock.now.advanced(by: budget)
+        var attempt = 0
+        while true {
+            attempt += 1
+            // Already on the camera subnet (auto-join, or the operator joined in Settings).
+            if LunaWiFi.localAddress != nil { return }
+            if attempt == 3 {
+                eventHandler?(
+                    .note(
+                        "If this takes long, open Settings › Wi-Fi and join “\(wifi.ssid)”. OpenInstaCine continues automatically."
+                    ))
+            }
+            do {
+                // Alternate persistent and join-once configs: iOS can refuse one kind
+                // (internal error 8) while a user-saved network of the same name exists.
+                let once = attempt % 2 == 0
+                try await withJoinTimeout { try await LunaWiFi.join(wifi, joinOnce: once) }
+                return
+            } catch {
+                try validate(token)
+                onLog?("luna: Wi-Fi join attempt \(attempt) failed: \(error.localizedDescription)")
+                guard ContinuousClock.now < deadline else { throw error }
+                // The AP may not beacon yet: drop the config so the next apply
+                // associates fresh instead of reusing a stale one (upstream WiFiJoiner).
+                LunaWiFi.leave(ssid: wifi.ssid)
+                try await Task.sleep(for: .seconds(3))
+            }
+        }
+    }
+
+    /// iOS can sit on a hotspot join (camera AP asleep, system prompt). Never hang the UI.
+    private func withJoinTimeout(_ work: @escaping @MainActor () async throws -> Void) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await work() }
+            group.addTask {
+                try await Task.sleep(for: .seconds(35))
+                throw CameraBackendError.unavailable(
+                    "The camera Wi-Fi did not come up. Check that the camera is on and nearby, then try again.")
+            }
+            try await group.next()
+            group.cancelAll()
         }
     }
 
@@ -237,7 +288,7 @@ public final class LunaCameraBackend: CameraBackend {
         receivedNonces.removeAll()
         try validate(token)
         eventHandler?(.phase(.joiningWiFi))
-        try await LunaWiFi.join(saved)
+        try await joinRetrying(saved, token: token, budget: .seconds(120))
         eventHandler?(.joinedWiFi(ssid: saved.ssid))
         return serial
     }
@@ -352,12 +403,22 @@ public final class LunaCameraBackend: CameraBackend {
             if let mode = status.shootingMode?.functionMode { functionMode = mode.rawValue }
             onDeviceStatus?(status)
         }
+        await refreshShootingMode()
         await refreshSettings()
         if let body = try? await send(LunaProtocol.captureStatusRequest),
             let capture = try? LunaCaptureStatus(captureStatusResponse: body)
         {
             onCapture?(capture)
         }
+    }
+
+    /// Device options 40/41: which shooting mode (and so which settings bank) is active.
+    public func refreshShootingMode() async {
+        guard isTCP, let body = try? await send(LunaProtocol.shootingModeRequest()),
+            let status = try? LunaDeviceStatus(response: body)
+        else { return }
+        if let mode = status.shootingMode?.functionMode { functionMode = mode.rawValue }
+        onDeviceStatus?(status)
     }
 
     public func refreshSettings() async {
@@ -604,6 +665,7 @@ public final class LunaCameraBackend: CameraBackend {
                     self.functionMode = mode.rawValue
                 }
                 self.onDeviceStatus?(status)
+                await self.refreshShootingMode()
                 await self.refreshSettings()
             }
         default:

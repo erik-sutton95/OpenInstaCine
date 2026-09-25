@@ -38,6 +38,9 @@ final class LunaBluetooth: NSObject, @preconcurrency CBCentralManagerDelegate,
         central.scanForPeripherals(
             withServices: [service], options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
     }
+    /// True when this launch has seen the camera advertise (so BLE can reach it now).
+    func hasSeen(_ id: UUID) -> Bool { peripherals[id] != nil }
+
     func stopScan() {
         guard centralWasCreated else { return }
         central.stopScan()

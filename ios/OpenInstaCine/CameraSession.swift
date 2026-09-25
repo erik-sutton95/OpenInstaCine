@@ -310,11 +310,18 @@ final class CameraSession {
                 self.isReconnecting = false
             }
         }
-        // Saved cameras with Wi-Fi reconnect without waiting for an advertisement.
+        // Give Bluetooth a few seconds (it wakes the camera Wi-Fi); a camera that never
+        // advertises can still come back over its saved Wi-Fi.
         if let id, LunaCameraBackend.storedWiFi(cameraID: id) != nil,
             let saved = SavedCameraStore.load().first(where: { $0.id == id })
         {
-            connect(Self.foundCamera(saved: saved))
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(4))
+                guard let self, token == self.connectGeneration, self.reconnectTarget == id else {
+                    return
+                }
+                self.connect(Self.foundCamera(saved: saved))
+            }
         }
     }
 
@@ -1235,5 +1242,11 @@ final class CameraSession {
 /// values; they must share the single BLE central and TCP socket.
 @MainActor
 enum LunaSessionHub {
-    static let backend = LunaCameraBackend()
+    /// Simulator has no Bluetooth or hotspot API, but shares the Mac's network: with the
+    /// Mac joined to the camera Wi-Fi, the simulator app talks to the real camera.
+    #if targetEnvironment(simulator)
+        static let backend = LunaCameraBackend(useExistingNetwork: true)
+    #else
+        static let backend = LunaCameraBackend()
+    #endif
 }

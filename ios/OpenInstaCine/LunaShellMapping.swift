@@ -213,6 +213,7 @@ enum LunaShellMapping {
             status.sdTotalMb = Int(sd.totalBytes / 1_000_000)
             status.sdFreeMb = Int(sd.freeBytes / 1_000_000)
         }
+        guard !storages.isEmpty else { return }
         let usable = storages.filter(\.isUsable)
         status.storageTotalMb = Int(usable.reduce(0) { $0 + $1.totalBytes } / 1_000_000)
         status.storageFreeMb = Int(usable.reduce(0) { $0 + $1.freeBytes } / 1_000_000)

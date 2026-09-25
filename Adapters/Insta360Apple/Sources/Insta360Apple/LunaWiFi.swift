@@ -55,7 +55,7 @@ enum LunaWiFi {
         guard let name = ips.keys.first, let found = ips[name], !found.isEmpty else { return nil }
         return (found, name, macs[name])
     }
-    static func join(_ credentials: LunaStoredWiFi) async throws {
+    static func join(_ credentials: LunaStoredWiFi, joinOnce: Bool = false) async throws {
         try Task.checkCancellation()
         #if targetEnvironment(macCatalyst) || os(macOS)
             guard localAddress != nil else {
@@ -72,7 +72,7 @@ enum LunaWiFi {
         #else
             let config = NEHotspotConfiguration(
                 ssid: credentials.ssid, passphrase: credentials.password, isWEP: false)
-            config.joinOnce = false
+            config.joinOnce = joinOnce
             try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<Void, Error>) in
                 NEHotspotConfigurationManager.shared.apply(config) { error in
@@ -80,9 +80,10 @@ enum LunaWiFi {
                         !(error.domain == NEHotspotConfigurationErrorDomain
                             && error.code == NEHotspotConfigurationError.alreadyAssociated.rawValue)
                     {
+                        NSLog("OpenInstaCine luna: hotspot apply failed %@ %d %@", error.domain, error.code, error.localizedDescription)
                         continuation.resume(
                             throwing: CameraBackendError.unavailable(
-                                "The camera Wi-Fi could not be joined. Keep the camera powered on and accept the iOS Wi-Fi prompt."
+                                "The camera Wi-Fi could not be joined (\(error.code)). Keep the camera powered on and accept the iOS Wi-Fi prompt."
                             ))
                     } else {
                         continuation.resume()
