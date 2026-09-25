@@ -36,6 +36,10 @@ enum LunaThumbnailImage {
             }
         }
         CVPixelBufferUnlockBaseAddress(buffer, [])
+        // Same BT.709 limited-range decode as LunaProbe's verified converter.
+        CVBufferSetAttachment(
+            buffer, kCVImageBufferYCbCrMatrixKey, kCVImageBufferYCbCrMatrix_ITU_R_709_2,
+            .shouldPropagate)
         let image = CIImage(cvPixelBuffer: buffer)
         return context.jpegRepresentation(
             of: image, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,

@@ -634,6 +634,7 @@ public final class LunaCameraBackend: CameraBackend {
                     finishPendingIfComplete(
                         message.identifier, generation: generation, operation: waiting.operation)
                 } catch {
+                    onLog?("luna: reply \(message.identifier) code=\(message.code) contentType=\(message.contentType) reserved=\(message.reserved) bytes=\(message.body.count) rejected: \(error)")
                     if let entry = takePending(
                         message.identifier, generation: generation, operation: waiting.operation)
                     {

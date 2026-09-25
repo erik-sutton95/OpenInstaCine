@@ -403,6 +403,15 @@ final class LunaStatusDecodeTests: XCTestCase {
         XCTAssertEqual(thumbnail.nv12.count, 1_382_400)
         XCTAssertThrowsError(try LunaThumbnail(response: header + Data(count: 10)))
         XCTAssertThrowsError(try LunaThumbnail(response: metadata))
+
+        // The camera sends this reply with content type 1 (raw), not 2 (protobuf).
+        let reply = try UCD2Message(code: 200, identifier: 24, body: header + Data(count: 1280 * 720 * 3 / 2),
+                                    contentType: 1)
+        let body = try UCD2Message(payload: reply.payload)
+            .successfulResponseBody(for: 24, encrypted: false, requiresEncryption: false)
+        XCTAssertEqual(try LunaThumbnail(response: body), thumbnail)
+        let unknownType = try UCD2Message(code: 200, identifier: 24, body: body, contentType: 7)
+        XCTAssertThrowsError(try unknownType.successfulResponseBody(for: 24, encrypted: false, requiresEncryption: false))
     }
 
     func testSmallReplies() throws {

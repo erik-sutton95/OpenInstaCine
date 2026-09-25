@@ -231,10 +231,11 @@ public struct UCD2Message: Equatable, Sendable {
         return result
     }
 
-    /// Match the outstanding request before interpreting a response's protobuf.
+    /// Match the outstanding request before interpreting its body. Content type 2 is
+    /// protobuf; 1 is raw bytes, observed on the cmd 11 type 2 NV12 thumbnail reply.
     public func successfulResponseBody(for identifier: UInt32, encrypted: Bool,
                                        requiresEncryption: Bool) throws -> Data {
-        guard self.identifier == identifier, contentType == 2, reserved == 0,
+        guard self.identifier == identifier, contentType == 1 || contentType == 2, reserved == 0,
               code == 200 || code == 500 else { throw LunaProtocolError.unexpectedResponse }
         guard encrypted == requiresEncryption else { throw LunaProtocolError.responseEncryptionMismatch }
         guard code == 200 else { throw LunaProtocolError.cameraRejectedRequest }
