@@ -39,7 +39,8 @@ final class CapturePanelRenderComparisonTests: XCTestCase {
             model.session.disconnect()
         }
         let background = try CaptureComparisonPixels(await render(host.view))
-        for sheet in [CaptureSheet.iso, .wb, .focus] {
+        // Luna hides the AF mode panel, so only ISO and WB have a quick dial.
+        for sheet in [CaptureSheet.iso, .wb] {
             model.captureSheet = sheet
             host.rootView = CaptureComparisonCanvas(model: model, held: false, size: size)
             let tapped = await render(host.view)

@@ -122,22 +122,17 @@ and read back from the camera.
 2. **XCUITest on the phone** needs Face ID or the passcode to re-enable
    automation mode, so official-app capture on fw 1.1.15 is still pending
    (`just luna-official-xc`).
-3. **Android** is not synced to the new shell.
+3. **Android** is synced to the new shell but only partly wired (see Android below).
 4. **Color Recovery** (screen protocol) is not exposed in the UI.
 5. **Simulator crash, not reproduced on device**: `HevcDecoder.publishWatchPreview`
    crashed wrapping the VT buffer in a `CIImage` (bad colour attachments). It now
    runs only with a paired watch; the root cause in the Simulator decoder is open.
-6. **Unit tests with Osmo assumptions still fail** (pre-existing):
-   `FormatCeilingNoteTests`, `MediaCacheSchedulingTests` (proxy streaming stubs),
-   `CapturePreviewTrafficTests` (expects peer commands) and the `.focus` case of
-   `CapturePanelRenderComparisonTests`.
 
 ## Next steps
 
 - Watch for a repeat of the transient hotspot error 8 and capture `nehelper` logs if it returns.
 - Capture official-app traffic on fw 1.1.15 once automation is re-enabled.
 - Repeat the Simulator walkthrough on the phone (hotspot join, thermal, real-light picture, Deep Track lock).
-- Port or drop the Osmo-assumption unit tests listed above.
 - Android: map Luna status and photography options into the shared chrome (see Android below).
 - Decide how to expose Color Recovery.
 
@@ -150,9 +145,9 @@ extension), `LunaShellMapping.swift`, `OsmoMonitorPresentation.swift`,
 
 Removed as Osmo-only (listed in `OSMO_ONLY` in `scripts/sync-openpocketcine.sh`): session internals
 (DUML handshake, recovery lifecycle, dial reconciliation), multiview, per-format zoom ceiling notes,
-and DJI dual-storage media retries. Two inherited UI tests still fail by design:
-`CapturePanelRenderComparisonTests` (Luna hides the AF mode panel) and `CapturePreviewTrafficTests`
-(Luna controls only change state while the camera link is live).
+DJI dual-storage media retries, and `CapturePreviewTrafficTests` (counts frames on the DJI datalink
+peer, which the Luna session never uses). `CapturePanelRenderComparisonTests` checks only the ISO and
+WB dials because Luna hides the AF mode panel. The full `OpenInstaCineTests` suite passes.
 
 ## Android
 
