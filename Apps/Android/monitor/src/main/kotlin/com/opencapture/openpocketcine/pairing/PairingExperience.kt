@@ -67,9 +67,9 @@ private val pairingTitles = listOf(
 )
 
 private val pairingBodies = listOf(
-    "Turn the camera on and keep the phone nearby. Pocket and Nano both appear — choose the one you want.",
-    "If the camera shows Approve, tap it on that camera's screen. First-time pairing can wait up to 90 seconds.",
-    "We read the camera's network over Bluetooth, then join its Wi-Fi for you.",
+    "Turn the Luna on and keep this phone nearby. It shows up by the last characters of its serial number.",
+    "If the camera asks to allow this phone, tap Allow on its screen. First-time pairing can wait up to 90 seconds.",
+    "We read the camera's Wi-Fi over Bluetooth, then join it for you.",
     "Exposure, LUTs and scopes go live as soon as the video link is up.",
 )
 

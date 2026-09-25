@@ -236,7 +236,7 @@ fun StartupHeader(
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
-                    "OPENPOCKETCINE",
+                    com.opencapture.openpocketcine.MonitorConfiguration.identity.wordmark,
                     color = StartupColors.muted,
                     style = startupType(10f, FontWeight.SemiBold).copy(letterSpacing = 1.3.sp),
                     maxLines = 1,

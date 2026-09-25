@@ -9,12 +9,24 @@ import java.io.File
 import java.io.RandomAccessFile
 
 /** Debug-only UI/decoder verification. Private captures are never bundled with the app. */
-class LocalReplayBackend(context: Context) : CameraBackend {
+class LocalReplayBackend(context: Context) : CameraBackend, CameraControls {
     private val directory = context.filesDir
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
     private var started = false
-    override val capabilities = setOf(CameraCapability.LIVE_VIDEO)
+    // Same capability set as LunaBackend so the replay shows the Luna chrome; no command reaches a camera.
+    override val capabilities = setOf(
+        CameraCapability.LIVE_VIDEO, CameraCapability.GIMBAL, CameraCapability.ZOOM,
+        CameraCapability.FOCUS, CameraCapability.TRACKING,
+    )
+    override val zoomRange = 1.0..15.0
+    override suspend fun setZoom(factor: Double) = false
+    override suspend fun gimbalStick(pan: Double, tilt: Double) = false
+    override suspend fun gimbalRecenter() = false
+    override suspend fun gimbalFlip() = false
+    override suspend fun tapFocus(x: Double, y: Double) = false
+    override suspend fun startTracking(x: Double, y: Double, width: Double, height: Double) = false
+    override suspend fun stopTracking() = false
     private val camera = CameraIdentity("local-replay", "LOCAL REPLAY — Luna Ultra", "Luna recording · not a live camera")
     override val phase = MutableStateFlow(ConnectionPhase.IDLE)
     override val found = MutableStateFlow(listOf(camera))

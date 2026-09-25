@@ -61,7 +61,7 @@ fun LegalDocumentScreen(
         ) {
             Column(Modifier.padding(start = 45.dp)) {
                 Text(
-                    "OPENPOCKETCINE",
+                    com.opencapture.openpocketcine.MonitorConfiguration.identity.wordmark,
                     style = LiveType.ui(9.5f, FontWeight.Bold).copy(letterSpacing = 0.8.sp),
                     color = LiveDesign.accent,
                 )

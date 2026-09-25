@@ -138,7 +138,7 @@ and read back from the camera.
 - Capture official-app traffic on fw 1.1.15 once automation is re-enabled.
 - Repeat the Simulator walkthrough on the phone (hotspot join, thermal, real-light picture, Deep Track lock).
 - Port or drop the Osmo-assumption unit tests listed above.
-- Sync `Apps/Android` to the new shell.
+- Android: map Luna status and photography options into the shared chrome (see Android below).
 - Decide how to expose Color Recovery.
 
 Sources: `ios/OpenInstaCine/CameraSession*.swift`, `CameraMedia.swift` (Luna
@@ -153,3 +153,51 @@ Removed as Osmo-only (listed in `OSMO_ONLY` in `scripts/sync-openpocketcine.sh`)
 and DJI dual-storage media retries. Two inherited UI tests still fail by design:
 `CapturePanelRenderComparisonTests` (Luna hides the AF mode panel) and `CapturePreviewTrafficTests`
 (Luna controls only change state while the camera link is live).
+
+## Android
+
+Updated 2026-09-25. `Apps/Android` now carries the current OpenPocketCine Android shell
+(upstream `c1e8f94`, the same commit as the iOS sync) with OpenInstaCine identity, the yellow
+`0xFFCF00` accent and the Luna adapter driving it. Emulator only: there is no physical Android
+device, so nothing below is hardware-verified on Android.
+
+### Done
+
+- `:monitor` is upstream `Apps/Android/app/src` as a library; `:monitor-ui` is upstream verbatim
+  except the accent, which is a brand-assigned `MonitorPalette.accent`.
+  `:app` stays the thin launcher (`com.opencapture.openinstacine`) that installs the brand, the
+  I-Log camera look and `LunaBackend` through `MonitorConfiguration`.
+- `session/PocketCameraSession.kt` is replaced (like iOS `CameraSession.swift`) by a Luna session
+  with the same public surface over `core-api` `CameraBackend`. The upstream top-level helpers in
+  that file are kept verbatim so tests and callers still compile.
+- Controls through a new optional `core-api` `CameraControls`, implemented by `LunaBackend`:
+  gimbal rate stick (iOS shaping, 20 Hz), recenter, flip, zoom 1..15 (chips 1, 2, 4, 8, 15),
+  tap focus (0.15 x 0.27 ROI) and Deep Track open/cancel. Request bytes are ports of
+  `Adapters/Insta360Protocol` and are pinned to the Swift fixtures in `LunaControlTest`.
+- Gating matches iOS: no AF mode, no aperture, no multiview (button hidden), no programmed moves,
+  no audio controls. The Android shell has no Wi-Fi/Hotspot setup choice or head tracking to hide.
+- I-Log to Rec.709 sits in the camera LUT tab (`MonitorTransfer.ILOG`, camera looks in the DJI
+  category so upstream tab logic and tests hold). DJI LUT assets are not bundled.
+- Brand copy: legal bodies, pairing steps, wordmarks, links (`openinstacine.app`, GitHub repo)
+  mirror the iOS text. Launcher and splash logo are the yellow monitor mark.
+- `./gradlew :app:assembleDebug testDebugUnitTest lintDebug` passes: 989 monitor, 121
+  monitor-ui and 13 luna-adapter JVM tests. Test edits vs upstream: the source-contract test reads
+  `monitor/` instead of `app/`, and legal/link assertions name OpenInstaCine and Insta360.
+- Emulator (`OpenInstaCine_API35`, landscape): pairing, live chrome in local replay (zoom chip,
+  Deep Track button, gimbal stick, lock, DISP, LUT/assist rail) and Operator Setup render with the
+  yellow accent. Shots in `.local/android-shots/` for comparison with `.local/parity-shots/oic/`.
+
+### Remains
+
+- Status mapping: iOS fills ISO, shutter, WB, EV, storage, battery and REC from Luna settings and
+  device status; Android shows dashes. The Kotlin adapter does not read photography options or
+  device status yet, and the zoom/focus requests always use function mode 7 (normal video).
+- Capture and exposure controls (record, shutter, ISO, shutter speed, EV, WB, color profile,
+  format), gimbal mode/speed, camera media and delivery: iOS has them, Android shows
+  "not available on the Luna Ultra yet".
+- Live decode on the emulator: the goldfish HEVC decoder returned a solid frame for the Luna replay
+  in this run (the 2026-09-11 review got a moving picture); needs a real device.
+- Real Luna over Android BLE, Wi-Fi and TCP, reconnect/background recovery and all controls:
+  untested on hardware.
+- There is no Android equivalent of `scripts/sync-openpocketcine.sh`; the resync was manual
+  (upstream `app/src` into `monitor/src`, then the brand, I-Log and session seams re-applied).

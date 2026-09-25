@@ -10,7 +10,6 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Shadow
@@ -48,8 +47,6 @@ object MonitorPalette {
     val recHousing = MonitorMaterial.Record.tint
     /** Brand launchers assign this once, before any view is built (OpenInstaCine: Luna yellow). */
     var accent = Color(0xFF00A3E0)
-    /** Ink for text or icons drawn on an accent fill. Light accents need dark ink. */
-    val onAccent: Color get() = if (accent.luminance() > 0.6f) Color(0xFF111213) else Color.White
     val text = Color.White
     val secondary = Color(0xFFCFD4D4)
     val muted = Color(0xFF8D9293)

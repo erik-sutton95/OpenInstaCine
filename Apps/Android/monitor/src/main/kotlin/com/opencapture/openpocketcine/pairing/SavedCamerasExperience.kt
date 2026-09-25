@@ -73,7 +73,7 @@ fun SavedCamerasExperience(model: AppModel) {
         ),
     )
     MonitorCameraPage(
-        brand = "OPENPOCKETCINE",
+        brand = com.opencapture.openpocketcine.MonitorConfiguration.identity.wordmark,
         sections = sections,
         key = { it.id },
         emptyMessage = "Pair a new camera to start monitoring.",
