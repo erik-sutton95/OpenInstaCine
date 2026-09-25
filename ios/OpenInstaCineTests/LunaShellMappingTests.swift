@@ -35,6 +35,19 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertEqual(LunaShellMapping.previewColorMode(recording: .normal, recoveryOff: true), .normal)
     }
 
+    func testFirmware1115GimbalModesAndSquareFormats() throws {
+        for mode in GimbalMode.pickerOrder {
+            XCTAssertEqual(LunaShellMapping.gimbalMode(LunaShellMapping.lunaGimbalMode(mode)), mode)
+        }
+        XCTAssertEqual(LunaShellMapping.lunaGimbalMode(.directionLock), .fpvVertical)
+        XCTAssertNil(LunaShellMapping.gimbalMode(.lock))
+        let table = LunaShellMapping.formatTable(values: LunaShellMapping.videoFormatValues)
+        let square = try XCTUnwrap(table.first { $0.value == 120 })
+        XCTAssertEqual(square.key.resolution, .p3K_1x1)
+        XCTAssertEqual(square.key.chipLabel, "3K 1:1 · 25p")
+        XCTAssertTrue(table.values.contains(443))
+    }
+
     func testCameraNaming() {
         XCTAssertEqual(LunaCameraNames.title(advertised: "XBQFN7"), "Luna Ultra XBQFN7")
         XCTAssertEqual(LunaCameraNames.title(advertised: "Luna Ultra XBQFN7"), "Luna Ultra XBQFN7")

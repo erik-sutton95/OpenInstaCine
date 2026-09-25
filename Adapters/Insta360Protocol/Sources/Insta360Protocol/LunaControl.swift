@@ -159,10 +159,14 @@ extension LunaProtocol {
     public static func setExposureBias(_ stops: Double, functionMode: UInt32 = 7) throws -> LunaRequest {
         guard stops.isFinite, abs(stops) <= 4 else { throw LunaProtocolError.malformedProtobuf }
         let tenths = Int32((stops * 10).rounded())
-        return try officialPhotographySet(
-            types: [.exposureBias],
-            fields: tenths == 0 ? [:] : [7: try ProtoMessage.signed32(field: 7, value: tenths)],
-            functionMode: functionMode)
+        var fields: [Int: Data] = tenths == 0 ? [:] : [7: try ProtoMessage.signed32(field: 7, value: tenths)]
+        var types: [LunaPhotographyType] = [.exposureBias]
+        // fw 1.1.15 official app: photo EV writes types [7, 77] with 77 = 1.
+        if functionMode == LunaFunctionMode.normalImage.rawValue {
+            types.append(.photoHDRType)
+            fields[77] = try ProtoMessage.integer(field: 77, value: 1)
+        }
+        return try officialPhotographySet(types: types, fields: fields, functionMode: functionMode)
     }
 
     /// Observed: 1 Standard, 2 I-Log, 5 Dolby Vision.
@@ -194,11 +198,16 @@ extension LunaProtocol {
     }
 
     /// Observed: types [31, 63]; 24, 48, 52, 211, 454. See `LunaVideoResolution`.
+    /// 1080p 240 (27) is Standard-only: the official app writes colour 35 = 1 with it.
     public static func setRecordResolution(_ value: UInt64, functionMode: UInt32 = 7) throws -> LunaRequest {
         guard value > 0 else { throw LunaProtocolError.malformedProtobuf }
-        return try officialPhotographySet(
-            types: [.recordResolution, .hdrSwitch],
-            fields: [31: try ProtoMessage.integer(field: 31, value: value)], functionMode: functionMode)
+        var types: [LunaPhotographyType] = [.recordResolution, .hdrSwitch]
+        var fields = [31: try ProtoMessage.integer(field: 31, value: value)]
+        if value == 27 {
+            types.append(.colorMode)
+            fields[35] = try ProtoMessage.integer(field: 35, value: LunaColorMode.standard.rawValue)
+        }
+        return try officialPhotographySet(types: types, fields: fields, functionMode: functionMode)
     }
 
     /// Official exposure SETs (field 21, IQ_3A_MODE 100 = 2 PRO).
@@ -226,6 +235,12 @@ extension LunaProtocol {
         if autoISO {
             types = [.videoExposure, .videoISOTopLimit, .iq3AMode]
             fields[24] = try ProtoMessage.integer(field: 24, value: officialISOTopLimit)
+        }
+        // fw 1.1.15 official app: photo mode writes the still (20) and video (21)
+        // exposure together; 21 alone leaves the still exposure unchanged.
+        if functionMode == LunaFunctionMode.normalImage.rawValue {
+            types.insert(.stillExposure, at: 0)
+            fields[20] = try ProtoMessage.blob(field: 20, value: exposure)
         }
         return try officialPhotographySet(types: types, fields: fields, functionMode: functionMode)
     }

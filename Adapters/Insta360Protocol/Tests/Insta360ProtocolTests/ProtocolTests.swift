@@ -281,17 +281,17 @@ final class LunaCommandTests: XCTestCase {
     func testGimbalControlMatchesOfficialAppVirtualRC() throws {
         XCTAssertEqual(ProtoMessage.zigzag32(99), 198)
         XCTAssertEqual(ProtoMessage.zigzag32(-99), 197)
-        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 0, leftRight: 99).body, hex("0801120310c601"))
-        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 99, leftRight: 0).body, hex("0801120308c601"))
-        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: -99, leftRight: 0).body, hex("0801120308c501"))
+        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 0, leftRight: 99).body, hex("0801120310c6012004"))
+        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 99, leftRight: 0).body, hex("0801120308c6012004"))
+        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: -99, leftRight: 0).body, hex("0801120308c5012004"))
         XCTAssertEqual(try LunaProtocol.gimbalRecenterRequest().body, hex("08021200"))
         XCTAssertEqual(try LunaProtocol.gimbalFlipRequest().body, hex("08031200"))
-        XCTAssertEqual(try LunaProtocol.gimbalReleaseRequest().body, hex("08011200"))
+        XCTAssertEqual(try LunaProtocol.gimbalReleaseRequest().body, hex("080112002004"))
         XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 0, leftRight: 99).command, .gimbalControl)
         XCTAssertThrowsError(try LunaProtocol.gimbalMove(upDown: 100, leftRight: 0))
         XCTAssertThrowsError(try LunaProtocol.gimbalMove(upDown: 0, leftRight: -100))
-        XCTAssertEqual(try LunaProtocol.gimbalStick(pan: 1, tilt: 0).body, hex("0801120310c601"))
-        XCTAssertEqual(try LunaProtocol.gimbalStick(pan: 0, tilt: 1).body, hex("0801120308c601"))
+        XCTAssertEqual(try LunaProtocol.gimbalStick(pan: 1, tilt: 0).body, hex("0801120310c6012004"))
+        XCTAssertEqual(try LunaProtocol.gimbalStick(pan: 0, tilt: 1).body, hex("0801120308c6012004"))
     }
 
     func testCapturedControlBodies() throws {

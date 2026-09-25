@@ -115,8 +115,40 @@ final class LunaOfficialSetTests: XCTestCase {
         XCTAssertNil(LunaShootingMode(photoSubMode: 100, videoSubMode: 7))
     }
 
+    func testFirmware1115CaptureBodiesPerMode() throws {
+        let stop = "0a196a0230019a0100aa0100ba0100d20100e20200ba0400820a00"
+        XCTAssertEqual(try LunaProtocol.startCaptureRequest(for: .video).body, hex("0801"))
+        XCTAssertEqual(try LunaProtocol.startCaptureRequest(for: .timeShift).body, hex("0804"))
+        XCTAssertEqual(try LunaProtocol.startCaptureRequest(for: .slowMotion).body, hex("0809"))
+        XCTAssertEqual(try LunaProtocol.stopCaptureRequest(for: .video).body, hex(stop + "1001"))
+        XCTAssertEqual(try LunaProtocol.stopCaptureRequest(for: .slowMotion).body, hex(stop + "1009"))
+        XCTAssertEqual(try LunaProtocol.stopCaptureRequest(for: .video).command, .stopCapture)
+        let lapseStart = try LunaProtocol.startCaptureRequest(for: .timelapse)
+        XCTAssertEqual(lapseStart.command, .startTimelapse)
+        XCTAssertEqual(lapseStart.body, hex("0801"))
+        let lapseStop = try LunaProtocol.stopCaptureRequest(for: .timelapse)
+        XCTAssertEqual(lapseStop.command, .stopTimelapse)
+        XCTAssertEqual(lapseStop.body, hex("080112196a0230019a0100aa0100ba0100d20100e20200ba0400820a00"))
+    }
+
+    func testFirmware1115PhotoModeWrites() throws {
+        let photo = LunaFunctionMode.normalImage.rawValue
+        let still = try ProtoMessage(LunaProtocol.setVideoExposure(
+            program: .shutterPriority, shutterSeconds: 1.0 / 8000, functionMode: photo).body)
+        let video = try ProtoMessage(LunaProtocol.setVideoExposure(
+            program: .shutterPriority, shutterSeconds: 1.0 / 8000).body)
+        XCTAssertEqual(try still.bytes(1), hex("141518" + "64"))
+        XCTAssertEqual(try video.bytes(1), hex("151864"))
+        let ev = try ProtoMessage(LunaProtocol.setExposureBias(1, functionMode: photo).body)
+        XCTAssertEqual(try ev.bytes(1), hex("074d"))
+        XCTAssertEqual(
+            try ProtoMessage(LunaProtocol.setRecordResolution(27).body).bytes(1), hex("1f3f23"))
+        XCTAssertEqual(LunaVideoResolution(rawValue: 443)?.framesPerSecond, 30)
+        XCTAssertEqual(LunaVideoResolution(rawValue: 444)?.height, 2688)
+    }
+
     func testGimbalTrackingCaptureAndMediaRequests() throws {
-        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 99, leftRight: 0).body, hex("0801120308c601"))
+        XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 99, leftRight: 0).body, hex("0801120308c6012004"))
         XCTAssertEqual(try LunaProtocol.gimbalControl(action: .move, upDown: 99, field4: 4).body,
                        hex("0801120308c6012004"))
         XCTAssertEqual(try LunaProtocol.gimbalControl(action: .move, field4: 4).body, hex("080112002004"))
@@ -239,7 +271,7 @@ final class LunaStatusDecodeTests: XCTestCase {
             XCTAssertEqual(r?.framesPerSecond, fps, "\(raw)")
             XCTAssertEqual(r?.aspectLabel, label, "\(raw)")
         }
-        XCTAssertEqual(LunaVideoResolution.index.count, 476)
+        XCTAssertEqual(LunaVideoResolution.index.count, 478)  // pinned schema + 443/444 from fw 1.1.15
         XCTAssertNil(LunaVideoResolution(rawValue: 503))
         XCTAssertEqual(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 25), 48)
         XCTAssertEqual(LunaVideoResolution.rawValue(width: 1728, height: 3072, framesPerSecond: 25), 454)

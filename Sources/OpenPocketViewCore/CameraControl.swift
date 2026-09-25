@@ -1490,7 +1490,15 @@ public enum GimbalMode: String, CaseIterable, Sendable, Hashable {
     case fpv
     case directionLock
 
+    /// Brand storefronts may rename modes (Insta360 Roll Lock / FPV-V). Set once at launch.
+    nonisolated(unsafe) public static var labelOverrides: [GimbalMode: String] = [:]
+
     public var label: String {
+        if let override = Self.labelOverrides[self] { return override }
+        return defaultLabel
+    }
+
+    private var defaultLabel: String {
         switch self {
         case .follow: "Follow"
         case .tiltLocked: "Tilt locked"

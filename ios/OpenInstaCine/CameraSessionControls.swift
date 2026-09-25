@@ -121,10 +121,15 @@ extension CameraSession {
             return
         }
         let starting = !status.isRecording
+        let luna = currentShootingMode.flatMap(LunaShellMapping.lunaShootingMode) ?? .video
         pins.recording = CameraValuePin(starting, now: pinNow, settle: 4)
         sendControl(
             starting ? "Record" : "Stop",
-            { starting ? LunaProtocol.startCaptureRequest : LunaProtocol.stopCaptureRequest },
+            {
+                starting
+                    ? try LunaProtocol.startCaptureRequest(for: luna)
+                    : try LunaProtocol.stopCaptureRequest(for: luna)
+            },
             refresh: false,
             onFail: { [weak self] in
                 self?.pins.recording = nil
@@ -645,9 +650,10 @@ extension CameraSession {
         let y = min(max(Double(normalized.y), 0), 1)
         focusPoint = CGPoint(x: x, y: y)
         guard canSendControl else { return }
-        // The official ROI is 0.15 × 0.27 of the preview, centred on the tap.
-        let w = 0.15
-        let h = 0.27
+        // fw 1.1.15 official ROI, centred on the tap: square on the sensor, so
+        // 0.0869 × 0.1545 of a 16:9 preview and 0.1159 × 0.1545 of a 4:3 one.
+        let w = currentShootingMode?.isPhoto == true ? 0.1159 : 0.0869
+        let h = 0.1545
         let left = min(max(x - w / 2, 0), 1 - w)
         let top = min(max(y - h / 2, 0), 1 - h)
         let mode = backend.functionMode

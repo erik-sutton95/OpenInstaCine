@@ -18,6 +18,8 @@ public enum LunaCommand: UInt16, Sendable {
     case getFileList = 13
     case captureStatus = 15
     case getTimelapseOptions = 17
+    case startTimelapse = 22
+    case stopTimelapse = 23
     case getFileInfoList = 38
     case checkAuthorization = 39
     case execCmd = 81
@@ -58,6 +60,7 @@ public enum LunaPhotographyType: UInt32, Sendable, CaseIterable {
     case colorRecovery = 73         // Accepted but not stored on v1.0.288
     case gimbalOptions = 91         // Observed SET
     case gimbalStatus = 92          // GET only
+    case photoHDRType = 77          // Observed riding along photo-mode EV SETs (fw 1.1.15)
     case afMode = 93                // GET only
     case afTrigger = 94             // Observed SET
     case gimbalPanoType = 98        // GET only (pano mode)
@@ -369,8 +372,12 @@ public enum LunaProtocol {
         return LunaRequest(command: .gimbalControl, body: body, requiresEncryption: false)
     }
 
+    /// fw 1.1.15 official app sends field 4 = 4 on every stick move and release,
+    /// whatever the gimbal mode.
+    static let stickField4: UInt64 = 4
+
     public static func gimbalMove(upDown: Int32, leftRight: Int32) throws -> LunaRequest {
-        try gimbalControl(action: .move, upDown: upDown, leftRight: leftRight)
+        try gimbalControl(action: .move, upDown: upDown, leftRight: leftRight, field4: stickField4)
     }
 
     public static func gimbalRecenterRequest() throws -> LunaRequest {
@@ -382,7 +389,7 @@ public enum LunaProtocol {
     }
 
     public static func gimbalReleaseRequest() throws -> LunaRequest {
-        try gimbalControl(action: .move)
+        try gimbalControl(action: .move, field4: stickField4)
     }
 
     public static let takePictureRequest = LunaRequest(
@@ -394,6 +401,48 @@ public enum LunaProtocol {
 
     public static let stopCaptureRequest = LunaRequest(
         command: .stopCapture, body: Data(), requiresEncryption: false)
+
+    /// fw 1.1.15 official app: the capture mode rides in cmd 4 field 1 and in cmd 5
+    /// field 2 (1 Video, 4 TimeShift, 9 Slow Motion); Timelapse uses cmd 22 / 23.
+    /// PureVideo was not captured and records as normal video.
+    static func captureMode(_ mode: LunaShootingMode) -> UInt64 {
+        switch mode {
+        case .timeShift: 4
+        case .slowMotion: 9
+        default: 1
+        }
+    }
+
+    /// The ExtraMetadata stub the official app sends on every stop:
+    /// `{13:{6:1}, 19:{}, 21:{}, 23:{}, 26:{}, 44:{}, 71:{}, 160:{}}` in field 1 or 2.
+    static let captureStopMetadata = Data([
+        0x6a, 0x02, 0x30, 0x01, 0x9a, 0x01, 0x00, 0xaa, 0x01, 0x00, 0xba, 0x01, 0x00,
+        0xd2, 0x01, 0x00, 0xe2, 0x02, 0x00, 0xba, 0x04, 0x00, 0x82, 0x0a, 0x00,
+    ])
+
+    public static func startCaptureRequest(for mode: LunaShootingMode) throws -> LunaRequest {
+        if mode == .timelapse {
+            return LunaRequest(command: .startTimelapse, body: Data([8, 1]), requiresEncryption: false)
+        }
+        return LunaRequest(
+            command: .startCapture, body: try ProtoMessage.integer(field: 1, value: captureMode(mode)),
+            requiresEncryption: false)
+    }
+
+    public static func stopCaptureRequest(for mode: LunaShootingMode) throws -> LunaRequest {
+        if mode == .timelapse {
+            return LunaRequest(
+                command: .stopTimelapse,
+                body: try ProtoMessage.integer(field: 1, value: 1)
+                    + ProtoMessage.blob(field: 2, value: captureStopMetadata),
+                requiresEncryption: false)
+        }
+        return LunaRequest(
+            command: .stopCapture,
+            body: try ProtoMessage.blob(field: 1, value: captureStopMetadata)
+                + ProtoMessage.integer(field: 2, value: captureMode(mode)),
+            requiresEncryption: false)
+    }
 
     public static func setDeviceOptions(types: [UInt32], nested: Data) throws -> LunaRequest {
         guard !types.isEmpty, types.count <= 256, types.allSatisfy({ $0 > 0 && $0 < 1 << 29 }) else {

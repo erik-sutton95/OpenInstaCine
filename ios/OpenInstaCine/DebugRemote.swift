@@ -234,6 +234,8 @@
                 if let tab = OperatorSettingsTab.allCases.first(where: { $0.rawValue == str("value") || "\($0)" == str("value") }) {
                     model.operatorSettingsTab = tab
                 }
+            case "gimbalPanel":
+                model.liveGimbalPanel = str("value") == "close" ? .none : .sheet
             case "sheet":
                 model.captureSheet = str("value").flatMap(CaptureSheet.init(rawValue:))
             case "assist":

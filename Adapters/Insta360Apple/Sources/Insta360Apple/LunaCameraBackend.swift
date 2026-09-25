@@ -202,7 +202,10 @@ public final class LunaCameraBackend: CameraBackend {
         }
     }
 
-    /// iOS can sit on a hotspot join (camera AP asleep, system prompt). Never hang the UI.
+    /// Fails the attempt after 35 s so the retry loop can try again. The task group
+    /// still waits for `apply` to return, which it only withholds while the system
+    /// "Join Wi-Fi Network" alert is up (first join after install): waiting for the
+    /// operator's tap there is the intended behaviour. The UI stays live; Cancel works.
     private func withJoinTimeout(_ work: @escaping @MainActor () async throws -> Void) async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask { try await work() }

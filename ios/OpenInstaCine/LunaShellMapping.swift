@@ -27,7 +27,8 @@ enum LunaShellMapping {
     static let previewFPS: Double = 25
     /// fw 1.1.15 verified: 1.0…15.0 (values outside are ignored, not clamped).
     static let defaultZoomCeiling: Double = 15
-    static let zoomChips: [Double] = [1, 2, 4, 8, 15]
+    /// fw 1.1.15 official presets.
+    static let zoomChips: [Double] = [1, 2, 3, 6, 15]
 
     // MARK: Shooting mode
 
@@ -114,6 +115,7 @@ enum LunaShellMapping {
     static func resolution(width: Int, height: Int) -> VideoResolution {
         let long = max(width, height)
         let portrait = height > width
+        if width == height { return long == 3072 ? .p3K_1x1 : unknownResolution }
         switch (long, portrait) {
         case (1920, false): return .p1080
         case (1920, true): return .p1080_9x16
@@ -148,7 +150,8 @@ enum LunaShellMapping {
         53, 52, 29, 260, 81, 40, 150, 28, 26, 27,  // 1080p 24…240
         126, 125, 124,  // 9:16 4K
         455, 454, 453, 452, 451, 450,  // 9:16 3K
-        445, 468, 442, 441,  // 9:16 2.7K
+        445, 444, 443, 468, 442, 441,  // 9:16 2.7K (443/444 from the fw 1.1.15 official app)
+        119, 120, 121, 448, 447, 446,  // 1:1 3K 3072x3072, fw 1.1.15 official app
         85, 71, 64, 298, 82, 68,  // 9:16 1080
     ]
 
@@ -168,18 +171,24 @@ enum LunaShellMapping {
         switch luna {
         case .rollLock: .follow
         case .rollAndTiltLock: .tiltLocked
-        case .fpv, .fpvVertical: .fpv
-        case .lock: .directionLock
-        case .stabilizedVertical: nil
+        case .fpv: .fpv
+        // The shell's fourth slot carries FPV-V; the official app offers no lock mode.
+        case .fpvVertical: .directionLock
+        case .lock, .stabilizedVertical: nil
         }
     }
+
+    /// Official Luna app names for the four modes it offers.
+    static let gimbalModeLabels: [GimbalMode: String] = [
+        .follow: "Roll Lock", .tiltLocked: "Roll & Tilt", .fpv: "FPV", .directionLock: "FPV-V",
+    ]
 
     static func lunaGimbalMode(_ mode: GimbalMode) -> LunaGimbalMode {
         switch mode {
         case .follow: .rollLock
         case .tiltLocked: .rollAndTiltLock
         case .fpv: .fpv
-        case .directionLock: .lock
+        case .directionLock: .fpvVertical
         }
     }
 

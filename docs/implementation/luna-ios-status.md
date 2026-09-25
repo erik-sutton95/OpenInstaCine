@@ -112,6 +112,32 @@ iPhone 16 Pro Max, iOS 27.0, Luna fw 1.1.15: BLE consent (already approved) → 
 Standard ↔ I-Log, record start/stop with the timer, media list, delete of the test clip: all pass
 and read back from the camera.
 
+### Official-app parity pass (fw 1.1.15, 10:47 on the iPhone)
+
+From [the official app capture](../research/luna-official-fw1115-capture.md). Each item was run on
+the physical iPhone against the camera; test files were deleted, and the camera was restored
+(Video, 4K 25p, I-Log, Roll Lock, 1x, photo bank auto exposure program 5 / 100 = 1).
+
+| Change | Result on the camera |
+| --- | --- |
+| Record per mode: cmd 4 field 1 (1 Video/PureVideo, 4 TimeShift, 9 Slow Motion), Timelapse cmd 22/23, official stop body | All five modes recorded a file and stopped |
+| Photo mode shutter writes still (20) and video (21) exposure | GET read back 1/1000 in both |
+| Photo EV adds type 77 = 1 | +0.7 stored, restored to 0 |
+| Gimbal: shell's fourth mode is FPV-V (91 field 4 = 4); names Roll Lock / Roll & Tilt / FPV / FPV-V | Stored 4, restored Roll Lock |
+| Stick moves and releases carry field 4 = 4 | Sent without error; the camera faced a blank surface, so movement was not visible for either encoding |
+| Zoom presets 1 / 2 / 3 / 6 / 15 | 3x and 6x read back |
+| Tap focus box 0.0869 x 0.1545 (0.1159 wide in photo) | Unit-tested only |
+| Formats: 1:1 3K (119/120/121/446/447/448), 9:16 2.7K 30/25 (443/444); 1080p 240 also writes Standard colour | 3K 1:1 25p, 2.7K 9:16 30p and 1080p 240 (colour went to Standard) stored |
+
+Not done, because the shared shell has no control for them: filters (18), sharpness,
+contrast/saturation/metering/AF via the whole-panel SET, photo size/RAW/Live Photo/self-timer/beauty,
+timelapse interval (cmd 18) and duration (54). The official app does not poll as often (no
+heartbeat, 10 s status) as we do (2 s heartbeat, 1 s capture status); left as is because the
+record timer needs it and nothing showed a cost.
+
+A reinstall resets iOS's approval to join the camera network, so the first connect after an
+install shows the system "Join Wi-Fi Network" alert and waits for the tap.
+
 ## Known issues
 
 1. **Physical iPhone hotspot join (transient).** Overnight, `NEHotspotConfiguration` apply returned
@@ -131,7 +157,6 @@ and read back from the camera.
 ## Next steps
 
 - Watch for a repeat of the transient hotspot error 8 and capture `nehelper` logs if it returns.
-- Capture official-app traffic on fw 1.1.15 once automation is re-enabled.
 - Repeat the Simulator walkthrough on the phone (hotspot join, thermal, real-light picture, Deep Track lock).
 - Android: map Luna status and photography options into the shared chrome (see Android below).
 - Decide how to expose Color Recovery.
