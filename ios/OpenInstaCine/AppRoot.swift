@@ -289,6 +289,7 @@ final class AppModel {
     /// Whether `section` mounts right now: switched on, or force-mounted while that
     /// mode's chrome is being edited. Settings stays reachable if both modes hid it.
     func chromeSectionMounts(_ section: PocketDispChrome.Section) -> Bool {
+        if section == .timecode, !session.supportsTimecode { return false }
         if let mode = chromeEditorMode, mode == currentDispMode,
             PocketDispChrome.isConfigurable(section, in: mode)
         {
@@ -337,8 +338,9 @@ final class AppModel {
         if session.holdsMonitor { return true }
         if case .live = session.phase { return true }
         #if targetEnvironment(simulator)
-            // No Pocket in Simulator — LiveViewScreen plays the D-Log2 Downloads clip.
-            return true
+            // No camera in Simulator: LiveViewScreen plays the D-Log2 clip when one is
+            // configured. Without it the real camera (Mac on its Wi-Fi) drives the phase.
+            return SimulatorLiveFeed.isConfigured
         #else
             return false
         #endif

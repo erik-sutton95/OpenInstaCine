@@ -785,6 +785,8 @@ final class HevcDecoder {
     /// Simulator-only: loop the D-Log2 Downloads clip through `handleDecodedFrame`.
     func startSimulatorSampleIfNeeded() {
         #if targetEnvironment(simulator)
+            // No clip configured: leave the real camera feed alone (live rig over Mac Wi-Fi).
+            guard SimulatorLiveFeed.isConfigured else { return }
             prefersPixelBufferDisplay = true
             incomingTransfer = .dlog2
             assistEngine.updatePolicy(effects: effectsProvider?() ?? effects, transfer: .dlog2)
@@ -954,6 +956,9 @@ final class HevcDecoder {
     }
 
     private func publishWatchPreview(_ result: LiveAssistEngine.Result) {
+        // No paired watch: skip the per-frame CIImage. Wrapping the VT buffer here
+        // crashed in CVImageBufferCreateColorSpaceFromAttachments on the Simulator.
+        guard needsWatchPreview, onWatchPreview != nil else { return }
         let cubeOwnsPicture =
             result.needsGPU && effects.replacesIdentityFeed && !result.overlayOnly
         let preview: CIImage
@@ -1596,6 +1601,10 @@ enum LiveViewPresentTiming {
                 return nil
             }
             return URL(fileURLWithPath: path)
+        }
+
+        static var isConfigured: Bool {
+            clipURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
         }
 
         private let queue = DispatchQueue(label: "opv.sim-live", qos: .userInitiated)

@@ -123,7 +123,9 @@ struct LiveViewScreen: View {
                 }
             )
             #if targetEnvironment(simulator)
-                if !MonitorUIReview.isActive { model.session.status.colorMode = .iLog }
+                if !MonitorUIReview.isActive, SimulatorLiveFeed.isConfigured {
+                    model.session.status.colorMode = .iLog
+                }
             #endif
             model.syncLiveMonitorColor()
             model.session.decoder.startSimulatorSampleIfNeeded()
@@ -1229,7 +1231,7 @@ private struct LiveScopeOverlays: View {
                 chromeClearance: clearance
             )
         }
-        if !model.isWatchingFeed, !model.session.status.isPhoto,
+        if !model.isWatchingFeed, model.session.supportsAudio, !model.session.status.isPhoto,
             model.assist.isVisible(.audioMeters)
         {
             LiveAudioMeterOverlay(bounds: canvas, chromeClearance: clearance)
