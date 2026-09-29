@@ -242,6 +242,11 @@
                 if let tool = LiveAssistTool.allCases.first(where: { $0.rawValue == str("value") || "\($0)" == str("value") }) {
                     model.assist.toggle(tool)
                 }
+            case "falseColorScale":
+                if let scale = FalseColorScaleKind.allCases.first(where: { "\($0)" == str("value") || $0.rawValue == str("value") }) {
+                    model.assist.falseColorScale = scale
+                }
+                if let rec709 = cmd["rec709"] as? Bool { model.assist.falseColorRec709 = rec709 }
             case "clean": model.setDisplayMode(clean: cmd["value"] as? Bool ?? !model.assist.clean)
             case "pairNew": model.isPairingNewCamera = cmd["value"] as? Bool ?? true
             case "mediaBrowse": s.beginMediaBrowse()
