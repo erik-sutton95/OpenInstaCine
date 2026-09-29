@@ -813,7 +813,12 @@ extension CameraSession {
                     var ahead = aim.target
                     ahead.yawDeg += velocity.yaw * Self.headTrackLeadSeconds
                     ahead.pitchDeg += velocity.pitch * Self.headTrackLeadSeconds
-                    var smoothed = Self.smooth(from: glide, toward: ahead, keep: Self.headTrackSmoothing)
+                    // Dead-reckon every tick at the head's velocity, then trim toward the led
+                    // target: the sent angle moves on every 33 ms tick instead of hold-and-jump.
+                    var carried = glide
+                    carried.yawDeg += velocity.yaw * 0.033
+                    carried.pitchDeg += velocity.pitch * 0.033
+                    var smoothed = Self.smooth(from: carried, toward: ahead, keep: Self.headTrackSmoothing)
                     // Never step against a clear head motion: that back-and-forth is the stepping.
                     if abs(velocity.yaw) > 3, (smoothed.yawDeg - glide.yawDeg) * velocity.yaw < 0 {
                         smoothed.yawDeg = glide.yawDeg
