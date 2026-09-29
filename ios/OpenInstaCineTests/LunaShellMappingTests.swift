@@ -110,6 +110,18 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertNil(CaptureLists.focusOption(from: status))
     }
 
+    func testHeadTrackGlideStaysOnTheStraightLine() {
+        var point = GimbalWaypoint(yawDeg: 0, pitchDeg: 0, zoom: 1)
+        let target = GimbalWaypoint(yawDeg: 40, pitchDeg: 20, zoom: 1)
+        for _ in 0..<60 {
+            point = CameraSession.glide(from: point, toward: target)
+            XCTAssertEqual(point.pitchDeg * 2, point.yawDeg, accuracy: 0.001, "both axes in proportion")
+        }
+        XCTAssertEqual(point, target)
+        let first = CameraSession.glide(from: GimbalWaypoint(yawDeg: 0, pitchDeg: 0, zoom: 1), toward: target)
+        XCTAssertEqual((first.yawDeg * first.yawDeg + first.pitchDeg * first.pitchDeg).squareRoot(), 2.5, accuracy: 0.001)
+    }
+
     func testCameraNaming() {
         XCTAssertEqual(LunaCameraNames.title(advertised: "XBQFN7"), "Luna Ultra XBQFN7")
         XCTAssertEqual(LunaCameraNames.title(advertised: "Luna Ultra XBQFN7"), "Luna Ultra XBQFN7")

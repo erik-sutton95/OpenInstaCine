@@ -751,14 +751,20 @@ extension CameraSession {
         gimbalAimTask?.cancel()
         gimbalAimTask = Task { @MainActor [weak self] in
             var sent: GimbalWaypoint?
+            // Tracking glides the sent target along a straight vector: fw 1.1.15 drives
+            // both axes at the same speed toward each SET_ANGLE, so a far target comes out
+            // as a dog-leg (diagonal, then one axis). Short straight steps keep it straight.
+            var glide = self?.freshGimbalWaypoint ?? target
             let started = ProcessInfo.processInfo.systemUptime
             while !Task.isCancelled {
                 guard let self, let aim = self.gimbalAim, aim.token == token,
                     self.canSetGimbalConfiguration, !self.gimbalStick.isHeld
                 else { break }
-                if aim.target != sent {
-                    self.sendGimbalAngle(aim.target)
-                    sent = aim.target
+                let next = settleAndStop ? aim.target : Self.glide(from: glide, toward: aim.target)
+                glide = next
+                if next != sent {
+                    self.sendGimbalAngle(next)
+                    sent = next
                 }
                 if settleAndStop {
                     let now = ProcessInfo.processInfo.systemUptime
@@ -773,6 +779,21 @@ extension CameraSession {
             self?.finishGimbalAim(token: token)
         }
         return token
+    }
+
+    /// One 33 ms tick: close ~half the gap (light smoothing), capped at 2.5° along the
+    /// straight line to the target (~75 °/s, the head's top speed), so both axes stay in
+    /// proportion. Sub-0.05° remainders snap so a still head sends nothing new.
+    static func glide(from current: GimbalWaypoint, toward target: GimbalWaypoint) -> GimbalWaypoint {
+        let dy = target.yawDeg - current.yawDeg
+        let dp = target.pitchDeg - current.pitchDeg
+        let distance = (dy * dy + dp * dp).squareRoot()
+        guard distance > 0.05 else { return target }
+        let step = min(distance * 0.5, 2.5)
+        var next = target
+        next.yawDeg = current.yawDeg + dy / distance * step
+        next.pitchDeg = current.pitchDeg + dp / distance * step
+        return next
     }
 
     private func finishGimbalAim(token: UInt64) {
