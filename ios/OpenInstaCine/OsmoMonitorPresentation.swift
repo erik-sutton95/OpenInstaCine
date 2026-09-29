@@ -15,17 +15,9 @@ enum OsmoMonitorPresentation {
     }
 
     static func capabilities(_ session: CameraSession) -> MonitorCapabilities {
-        #if targetEnvironment(simulator)
-            if MonitorUIReview.isActive {
-                let gimbal = ProcessInfo.processInfo.environment["OPV_UI_REVIEW_BODY"] != "nano"
-                return MonitorCapabilities(
-                    gimbal: gimbal, zoom: gimbal, focus: gimbal, audio: true,
-                    headTracking: gimbal, clipDelete: true, clipStar: true,
-                    requiresInternetHop: true, timecode: true)
-            }
-        #endif
         // Luna phone protocol: no AF-S/AF-C switch, iris, audio meters, gimbal attitude
-        // (so no head tracking) or timecode. Favorites are kept on the phone.
+        // (so no head tracking) or timecode. Favorites are kept on the phone. Simulator
+        // reviews use these same gates so screenshots show what a Luna operator sees.
         return MonitorCapabilities(
             gimbal: session.hasGimbal, zoom: session.supportsZoom,
             focus: session.supportsFocusMode, iris: session.supportsAperture, audio: session.supportsAudio,
