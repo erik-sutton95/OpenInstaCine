@@ -298,6 +298,53 @@ the camera 2 s later and the readout matched; Matrix and Face each stored within
 (93 = 6, 46 = 0) showed after `refreshStatus`, as other settings do (no
 notification arrives for these two options).
 
+## Audio, 2026-09-29
+
+The manual (Operation Tutorials > Audio > Audio Mode, Luna Ultra and Luna Pro) lists three modes
+under Quick Menu > Audio Settings > Sound Effect Settings > Audio Mode: **Original Audio** (high
+fidelity, music), **Wind Reduction** (travel, daily) and **Voice Enhancement** (vlogs). No wind,
+gain, level or external-mic page is linked from it.
+
+**Result: fw 1.1.15 exposes no audio mode control on the phone protocol.** The mode can only be
+changed on the camera (or its detachable screen). The one camera-reported audio value is the mode a
+recorded clip carries in its metadata.
+
+Schema candidates (ours and app 2.34.5):
+
+| Where | Candidate | Camera on fw 1.1.15 |
+| --- | --- | --- |
+| Device option (cmd 7 / 8) 109 `AUDIO_WNR_TYPE` (`Audio_Wnr_Type`: 0 Direction Focus, 1 Wind Noise Reduction, 2 Stereo) | the app's only camera audio setting | Not implemented. GET `086d` replies `1200` with no echoed type (implemented options echo it, e.g. 11 replies `080b12085a06...`). SET `0a016d1203e806VV` for VV = `00`, `01`, `02` and `15` (21) replies empty (accepted) and changes nothing: the next clip still records mode 20 |
+| Device option 108 `AUDIO_RECODER_ENABLE` | recorder on/off | Not implemented (GET not echoed); not SET |
+| Photography options (cmd 9 / 10) | none in the schema (the enum ends at 114, no audio entry) | GET of 1 to 300 in video mode: nothing above 104 carries a value |
+| Device options 1 to 259 | full GET scan | Echoed: 6, 11, 14 to 17, 19, 20, 22, 29, 30, 36, 37, 40, 41, 48, 65, 66, 68 to 70, 76, 80 to 82, 84, 85, 88, 93, 97, 103, 122, 124, 128, 129, 132, 135, 149, 150, 155 to 157, 165, 167, 169, 176, 177, 180, 183. None is audio in the schema |
+| cmd 251 `SET_AUDIO_STREAM` (`AudioStreamCtrl`) | phone live audio on/off, not a mode | Not probed |
+| Notification 8269 `WIND_NOISE_VOL` (`float vol`), 8323 `AUDIO_ACTIVITY_STATUS` | wind level, voice activity | Not seen in this session |
+
+The app 2.34.5 strings confirm it: the only camera audio setting is `audioWnrType`; everything else
+audio is editor / export side (voice enhance, AI denoise filters). This matches the official iOS app
+capture, which has no audio UI for the Luna.
+
+**Readout that does exist:** `ExtraMetadata.audio_mode` (field 61, `AudioModeType`) in the cmd 11
+`extra_type 1` reply for a clip (and in cmd 38 file info). All six clips recorded during the probe (after
+each 109 value, and one with no new SET) carried `e8 03 14` = **20**
+`AUDIO_MODE_AI_WINDREDUCTION_INNER`, while the camera was in Wind Reduction. `audio_concert_scene`
+(220) was 0. Mapping used by `LunaAudioMode` / Android `LunaAudioMode`:
+
+| Manual name | `audio_mode` | Status |
+| --- | ---: | --- |
+| Wind Reduction | 20 `AI_WINDREDUCTION_INNER` | Observed |
+| Voice Enhancement | 21 `SPEECH_ENHANCE_INNER` | Inferred (schema); confirm by recording once in that mode on the camera |
+| Original Audio | 24 `HIFI` | Inferred (schema); same |
+
+Levels: nothing in the phone protocol reports audio levels. The official live start
+(`10 01 20 80 f7 02 ...`) sets `audioSampleRate` 48000 but not `enableAudio` (field 1), so the preview
+carries no audio. Requesting it would be the only path to a live meter; untested.
+
+Hardware effect and cleanup: device option 109 never stored anything, so there was nothing to
+restore; the camera stayed in Wind Reduction throughout. Photography types 120 and 121 were SET to 1
+once while testing SET reply shapes (reply echoes the type, GET stays empty, so not stored). The six
+test clips were deleted; the four pre-existing files are untouched.
+
 ## Open items
 
 - Official-app v1.1.15 traffic (needs a person or UI automation to tap Connect).

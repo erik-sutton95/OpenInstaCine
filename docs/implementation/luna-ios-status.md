@@ -62,7 +62,7 @@ Parity values:
 | Favorites | Luna-adapted | Stored on the phone; Luna has no favorite write |
 | Disconnect / reconnect | Luna-adapted | Reconnect uses the BLE-first path above |
 | Recovery card | Same | Shared bounded session recovery after a drop |
-| Audio (setting, meters) | Hidden-not-supported | `supportsAudio` false: AUDIO tile, live AUDIO assist and meter overlay hidden (playback audio meters stay) |
+| Audio (setting, meters) | Hidden-not-supported | `supportsAudio` false: AUDIO tile, live AUDIO assist and meter overlay hidden (playback audio meters stay). fw 1.1.15 has no phone-protocol audio mode GET or SET and no levels (probed 2026-09-29, verification doc Audio section); Original Audio / Wind Reduction / Voice Enhancement are camera-screen only. `LunaFileMetadata.audioMode` decodes the mode a clip was recorded with (field 61), not yet shown in the UI |
 | Timecode | Hidden-not-supported | `supportsTimecode` false: status-bar timecode and its DISP toggle hidden; the REC chip carries elapsed time |
 | AF mode (AF-S / AF-C / Product Showcase) | Luna-adapted | Shared FOCUS drum and chip list only the three official modes (option 93 = 1 / 3 / 6, overlay `CaptureLists.focusOptions`); readout from GET 93 on connect and refresh with a 3 s pin. Hardware-verified 2026-09-29. Android: follow-up |
 | Metering (Matrix / Face Priority) | Luna-adapted | "Face metering" row in the Exposure sheet (`LunaMeteringToggle`, overlay hook); option 46 bool; camera stores it 3.7 to 4.9 s after the SET, so a 6 s pin holds the readout. Hardware-verified 2026-09-29. Android: follow-up |
