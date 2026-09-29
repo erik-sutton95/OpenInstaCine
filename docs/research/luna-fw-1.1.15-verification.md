@@ -255,6 +255,49 @@ All in `Adapters/Insta360Protocol`, each with a regression test in
 4. `LunaNotification` decodes 8334 as `.photographyChanged`.
 5. Doc comments: GET 13 quirk, `capture_time` is seconds.
 
+## AF mode (93) and metering (46), 2026-09-29
+
+Driven from the phone (DEBUG OpenInstaCine, `raw` cmd 9 / 10 through
+`tools/oic_remote.py`), video mode, function mode 7. Originals before the test:
+46 = 1, 93 = 3; the whole-panel GET (types 31, 63, 21, 24, 100, 7, 39, 72, 18,
+104, 6, 46, 53, 91, 35, 93, 101, 3, 4) after restore matched the one taken
+before, value for value.
+
+**Individual SETs work for both.** No whole-panel SET is needed. Body shape is
+the usual official one with the value explicit (zero included):
+
+| SET | body | result |
+| --- | --- | --- |
+| 93 = v | `0a015d120fa20100aa0100f80101c00501e805<v>1807` | stored at once (GET 0.33 s later) |
+| 46 = v | `0a012e120fa20100aa0100f80101f002<v>c005011807` | stored **3.7 to 4.9 s** later, like WB kelvin |
+
+Option 93 (`AFModeType`). Stored: 0, 1, 2, 3, 4, 5, 6. Ignored: 7
+(`AF_MODE_END`, value unchanged). The official app offers three, named per the
+Luna Ultra manual (Pro mode) and the Android app's `FocusMode` enum:
+
+| value | schema | official name |
+| --- | --- | --- |
+| 1 | AF_MODE_AUTO | AF-S (focus once and lock) |
+| 3 | AF_MODE_CONTINUOUS_VIDEO | AF-C (continuous) |
+| 6 | AF_MODE_SHOW | Product Showcase (AF-PS) |
+
+0 OFF, 2 MACRO, 4 CONTINUOUS_PICTURE and 5 EDOF are stored but never offered;
+their preview behaviour was not examined, and OpenInstaCine leaves the focus
+readout blank for them. AF mode is shared: a SET in function mode 7 reads back
+the same in a GET with function mode 6.
+
+Option 46 (`metering_enable`, bool). 0 = **Matrix**, 1 = **Face Priority**
+(manual: Face Priority is forced when Beauty is on). SET 2 reads back as 1. The
+GET returns 46 = 0 explicitly after a Matrix SET; the parser still treats a
+requested but omitted 46 as Matrix.
+
+App path (DebugRemote `focusMode` / `metering`, same session calls the FOCUS
+drum and Exposure-sheet row make): AF-S, Showcase, AF-C each read 1, 6, 3 on
+the camera 2 s later and the readout matched; Matrix and Face each stored within
+6 s while the optimistic pin held the readout. A raw SET from outside the app
+(93 = 6, 46 = 0) showed after `refreshStatus`, as other settings do (no
+notification arrives for these two options).
+
 ## Open items
 
 - Official-app v1.1.15 traffic (needs a person or UI automation to tap Connect).

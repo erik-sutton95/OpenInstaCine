@@ -64,7 +64,8 @@ Parity values:
 | Recovery card | Same | Shared bounded session recovery after a drop |
 | Audio (setting, meters) | Hidden-not-supported | `supportsAudio` false: AUDIO tile, live AUDIO assist and meter overlay hidden (playback audio meters stay) |
 | Timecode | Hidden-not-supported | `supportsTimecode` false: status-bar timecode and its DISP toggle hidden; the REC chip carries elapsed time |
-| AF mode (AF-S/AF-C) | Hidden-not-supported | `supportsFocusMode` false; Luna video AF is continuous |
+| AF mode (AF-S / AF-C / Product Showcase) | Luna-adapted | Shared FOCUS drum and chip list only the three official modes (option 93 = 1 / 3 / 6, overlay `CaptureLists.focusOptions`); readout from GET 93 on connect and refresh with a 3 s pin. Hardware-verified 2026-09-29. Android: follow-up |
+| Metering (Matrix / Face Priority) | Luna-adapted | "Face metering" row in the Exposure sheet (`LunaMeteringToggle`, overlay hook); option 46 bool; camera stores it 3.7 to 4.9 s after the SET, so a 6 s pin holds the readout. Hardware-verified 2026-09-29. Android: follow-up |
 | Aperture | Hidden-not-supported | `supportsAperture` false; fixed iris |
 | Head tracking | Hidden-not-supported | Needs gimbal attitude; capability false |
 | Multiview | Hidden-not-supported | Entry removed from the camera list (`SavedCamerasView.swift`); stages DJI bodies over RTMP |
@@ -130,7 +131,7 @@ the physical iPhone against the camera; test files were deleted, and the camera 
 | Formats: 1:1 3K (119/120/121/446/447/448), 9:16 2.7K 30/25 (443/444); 1080p 240 also writes Standard colour | 3K 1:1 25p, 2.7K 9:16 30p and 1080p 240 (colour went to Standard) stored |
 
 Not done, because the shared shell has no control for them: filters (18), sharpness,
-contrast/saturation/metering/AF via the whole-panel SET, photo size/RAW/Live Photo/self-timer/beauty,
+contrast/saturation via the whole-panel SET (metering and AF now ship as individual SETs), photo size/RAW/Live Photo/self-timer/beauty,
 timelapse interval (cmd 18) and duration (54). The official app does not poll as often (no
 heartbeat, 10 s status) as we do (2 s heartbeat, 1 s capture status); left as is because the
 record timer needs it and nothing showed a cost.
