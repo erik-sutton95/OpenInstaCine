@@ -506,3 +506,18 @@ final class LunaStatusDecodeTests: XCTestCase {
         XCTAssertEqual(try ProtoMessage(ProtoMessage.float(field: 2, value: 0.5)).float(2), 0.5)
     }
 }
+
+/// ExtraMetadata field 61 from a fw 1.1.15 clip (docs/research/luna-fw-1.1.15-verification.md, Audio).
+final class LunaAudioModeTests: XCTestCase {
+    func testClipAudioMode() throws {
+        // Observed: a clip recorded in Wind Reduction carries 61 = 20 (e8 03 14).
+        XCTAssertEqual(try LunaFileMetadata(hex("e80314")).audioMode, .windReduction)
+        XCTAssertEqual(try LunaFileMetadata(hex("e80315")).audioMode, .voiceEnhancement)
+        XCTAssertEqual(try LunaFileMetadata(hex("e80318")).audioMode, .originalAudio)
+        let other = try LunaFileMetadata(hex("e80302"))
+        XCTAssertEqual(other.audioModeRaw, 2)
+        XCTAssertNil(other.audioMode)
+        XCTAssertNil(try LunaFileMetadata(Data()).audioModeRaw)
+        XCTAssertEqual(LunaAudioMode.allCases.map(\.label), ["Wind Reduction", "Voice Enhancement", "Original Audio"])
+    }
+}

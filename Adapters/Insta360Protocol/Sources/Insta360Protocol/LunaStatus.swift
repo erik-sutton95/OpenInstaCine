@@ -445,6 +445,9 @@ public struct LunaFileMetadata: Equatable, Sendable {
     public var gammaMode: String?             // 22, e.g. "standard"
     public var subMediaType: UInt64?          // 26.1: 0 video, 3 photo, 30 360 pano
     public var codec: UInt64?                 // 132: 2 = H.265
+    /// 61 `AudioModeType` the clip was recorded with, see LunaAudioMode.
+    public var audioModeRaw: UInt64?
+    public var audioMode: LunaAudioMode? { audioModeRaw.flatMap(LunaAudioMode.init(rawValue:)) }
 
     public var creationDate: DateComponents? {
         guard let s = creationStamp, s >= 1_000_000_000_000 else { return nil }
@@ -469,6 +472,25 @@ public struct LunaFileMetadata: Equatable, Sendable {
         gammaMode = try m.optionalBytes(22).flatMap { String(data: $0, encoding: .utf8) }
         subMediaType = try m.optionalBytes(26).map { try ProtoMessage($0).unsigned(1, default: 0) }
         codec = try u(132)
+        audioModeRaw = try u(61)
+    }
+}
+
+/// The camera-screen Audio Mode (Quick Menu > Audio Settings > Sound Effect
+/// Settings), as `ExtraMetadata.audio_mode` (field 61) of a recorded clip. The
+/// phone protocol cannot read or set it on fw 1.1.15 (docs/research/luna-fw-1.1.15-verification.md, Audio).
+public enum LunaAudioMode: UInt64, Sendable, CaseIterable {
+    case windReduction = 20      // AUDIO_MODE_AI_WINDREDUCTION_INNER, Observed on fw 1.1.15
+    case voiceEnhancement = 21   // AUDIO_MODE_SPEECH_ENHANCE_INNER, Inferred from the schema
+    case originalAudio = 24      // AUDIO_MODE_HIFI, Inferred from the schema
+
+    /// Official manual names.
+    public var label: String {
+        switch self {
+        case .windReduction: "Wind Reduction"
+        case .voiceEnhancement: "Voice Enhancement"
+        case .originalAudio: "Original Audio"
+        }
     }
 }
 

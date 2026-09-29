@@ -228,4 +228,17 @@ class LunaStatusTest {
             for ((luna, mode) in shootingModes) assertEquals(luna, shootingModes.key(mode))
         }
     }
+
+    /** ExtraMetadata 61 from a fw 1.1.15 clip; Wind Reduction observed, the others schema-inferred. */
+    @Test
+    fun clipAudioMode() {
+        assertEquals(LunaAudioMode.WIND_REDUCTION, LunaFileMetadata.parse(h("e80314")).audioMode)
+        assertEquals(LunaAudioMode.VOICE_ENHANCEMENT, LunaFileMetadata.parse(h("e80315")).audioMode)
+        assertEquals(LunaAudioMode.ORIGINAL_AUDIO, LunaFileMetadata.parse(h("e80318")).audioMode)
+        val other = LunaFileMetadata.parse(h("e80302"))
+        assertEquals(2L, other.audioModeRaw)
+        assertNull(other.audioMode)
+        assertNull(LunaFileMetadata.parse(ByteArray(0)).audioModeRaw)
+        assertEquals(listOf("Wind Reduction", "Voice Enhancement", "Original Audio"), LunaAudioMode.entries.map { it.label })
+    }
 }

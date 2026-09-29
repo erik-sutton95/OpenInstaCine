@@ -328,17 +328,31 @@ internal data class LunaFileMetadata(
     val gammaMode: String? = null,
     val subMediaType: Long? = null,
     val codec: Long? = null,
+    /** 61 `AudioModeType` the clip was recorded with, see [LunaAudioMode]. */
+    val audioModeRaw: Long? = null,
 ) {
+    val audioMode: LunaAudioMode? get() = LunaAudioMode.entries.firstOrNull { it.raw == audioModeRaw }
+
     companion object {
         fun parse(data: ByteArray): LunaFileMetadata {
             val m = LunaProto(data)
             val size = m.bytes(19)?.let { LunaProto(it) }
             return LunaFileMetadata(
                 m.u(7), m.u(9), m.u(10), m.u(93), size?.u(1, 0)?.toInt(), size?.u(2, 0)?.toInt(), m.u(20),
-                m.text(22), m.bytes(26)?.let { LunaProto(it).u(1, 0) }, m.u(132),
+                m.text(22), m.bytes(26)?.let { LunaProto(it).u(1, 0) }, m.u(132), m.u(61),
             )
         }
     }
+}
+
+/**
+ * Camera-screen Audio Mode as `ExtraMetadata.audio_mode` (61) of a recorded clip. The phone
+ * protocol cannot read or set it on fw 1.1.15 (docs/research/luna-fw-1.1.15-verification.md, Audio).
+ */
+internal enum class LunaAudioMode(val raw: Long, val label: String) {
+    WIND_REDUCTION(20, "Wind Reduction"), // AI_WINDREDUCTION_INNER, observed on fw 1.1.15
+    VOICE_ENHANCEMENT(21, "Voice Enhancement"), // SPEECH_ENHANCE_INNER, inferred from the schema
+    ORIGINAL_AUDIO(24, "Original Audio"), // HIFI, inferred from the schema
 }
 
 /** One camera file; [uri] is the absolute camera path used for cmd 11/12 and HTTP. */
