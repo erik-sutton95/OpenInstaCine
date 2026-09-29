@@ -1,6 +1,8 @@
 import Foundation
 import MonitorPresentation
+import MonitorUI
 import OpenPocketViewCore
+import SwiftUI
 
 /// Capability translation for the Luna adapter (type name kept from the shared shell so
 /// every call site binds unchanged). Monitor modules never identify a camera brand.
@@ -23,5 +25,22 @@ enum OsmoMonitorPresentation {
             focus: session.supportsFocusMode, iris: session.supportsAperture, audio: session.supportsAudio,
             headTracking: true, clipDelete: true, clipStar: true,
             requiresInternetHop: true, timecode: session.supportsTimecode)
+    }
+}
+
+/// Luna Matrix / Face Priority metering row in the shared Exposure sheet (overlay hook).
+/// Hidden until the camera has reported option 46.
+struct LunaMeteringToggle: View {
+    let session: CameraSession
+
+    var body: some View {
+        if session.supportsFaceMetering, let on = session.faceMetering {
+            MonitorCaptureToggle(
+                "Face metering",
+                help: on
+                    ? "Face Priority: the camera meters on faces."
+                    : "Matrix: the camera meters the whole frame.",
+                isOn: Binding(get: { on }, set: { session.setFaceMetering($0) }))
+        }
     }
 }

@@ -123,6 +123,8 @@
                 "ev": st.evComp?.label ?? "?",
                 "wb": st.whiteBalance.map { $0.mode == .auto ? "auto" : "\($0.kelvin)K" } ?? "?",
                 "color": st.colorMode?.label ?? "?",
+                "focusMode": CaptureLists.focusOption(from: st)?.chip ?? "?",
+                "metering": s.faceMetering.map { $0 ? "face" : "matrix" } ?? "?",
                 "format": st.videoFormat?.chipLabel ?? "?",
                 "formats": st.availableVideoFormats.map(\.chipLabel),
                 "zoom": s.zoomReadout,
@@ -241,6 +243,12 @@
                 s.endNativeHeadTrack(token: token)
                 return ["ok": true, "trace": trace]
             case "flip": s.flipGimbal()
+            case "focusMode":
+                guard let option = CaptureLists.focusOptions.first(where: { $0.chip == str("value") }) else {
+                    return ["ok": false, "error": "focus not offered", "options": CaptureLists.focusOptions.map(\.chip)]
+                }
+                s.setFocusOption(option)
+            case "metering": s.setFaceMetering(str("value") == "face")
             case "gimbalMode":
                 if let mode = GimbalMode.allCases.first(where: { "\($0)" == str("value") }) { s.setGimbalMode(mode) }
             case "gimbalSpeed":

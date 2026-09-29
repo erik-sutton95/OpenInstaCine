@@ -204,6 +204,23 @@ def main() -> None:
         'XCTAssertEqual(color.selection, "Standard")',
     )
 
+    # --- Luna AF modes (focus drum lists only what the camera offers) and metering row. ---
+    sheets = APP / "CaptureControlSheets.swift"
+    for name in ("CaptureControlSheets.swift", "CaptureQuickControl.swift"):
+        replace_phrase(APP / name, "FocusOption.allCases", "CaptureLists.focusOptions")
+    replace_once(
+        sheets,
+        "                    if isEvSheet { facePriorityToggle }\n",
+        "                    if isEvSheet { facePriorityToggle }\n"
+        "                    if sheet == .exposure { LunaMeteringToggle(session: model.session) }\n",
+    )
+    replace_phrase(
+        snapshot_tests,
+        'XCTAssertEqual(snapshot.options, ["AF-S", "AF-C", "Showcase", "Lock", "Priority"])',
+        'XCTAssertEqual(snapshot.options, ["AF-S", "AF-C", "Showcase"])',
+    )
+    replace_phrase(snapshot_tests, "for option in FocusOption.allCases {", "for option in CaptureLists.focusOptions {")
+
     # --- Launch wiring + gates that assumed a DJI datalink. ---
     replace_once(
         APP / "OpenInstaCineApp.swift",

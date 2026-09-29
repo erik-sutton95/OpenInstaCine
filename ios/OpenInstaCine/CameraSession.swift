@@ -151,6 +151,8 @@ final class CameraSession {
     /// Camera-reported gimbal mode/speed (Luna option 91). Nil until the first read.
     var gimbalMode: GimbalMode = .follow
     var gimbalSpeed: GimbalSpeed = .defaultSpeed
+    /// Luna metering: true Face Priority, false Matrix, nil before the first read.
+    var faceMetering: Bool?
     var gimbalRamp: GimbalRamp = OperatorPrefs.gimbalRamp
     var gimbalDoubleTap: GimbalDoubleTap = OperatorPrefs.gimbalDoubleTap
     var gimbalProgram = GimbalProgram()
@@ -648,6 +650,11 @@ final class CameraSession {
                     gimbalSpeed = speed
                 }
             }
+        }
+        if let face = lunaSettings.faceMetering {
+            let shown = CameraValuePin.reconcile(
+                &pins.faceMetering, reported: face, now: Date.timeIntervalSinceReferenceDate) ?? face
+            if faceMetering != shown { faceMetering = shown }
         }
         if let limits = settings.gimbalStatus { applyGimbalLimits(limits) }
         status = next

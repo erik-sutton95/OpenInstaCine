@@ -16,6 +16,8 @@ struct LunaControlPins {
     var recording: CameraValuePin<Bool>?
     var gimbalMode: CameraValuePin<GimbalMode>?
     var gimbalSpeed: CameraValuePin<GimbalSpeed>?
+    var focus: CameraValuePin<FocusOption>?
+    var faceMetering: CameraValuePin<Bool>?
     var photoInFlight = false
 }
 
@@ -208,7 +210,30 @@ enum LunaShellMapping {
         }
     }
 
+    // MARK: Focus
+
+    /// The official app's three AF modes (it lists AF-C first; the shell keeps AF-S first).
+    static let focusOptions: [FocusOption] = [.single, .continuousDefault, .productShowcase]
+
+    static func focusOption(_ luna: LunaAFMode) -> FocusOption {
+        switch luna {
+        case .single: .single
+        case .continuous: .continuousDefault
+        case .productShowcase: .productShowcase
+        }
+    }
+
+    static func lunaAFMode(_ option: FocusOption) -> LunaAFMode? {
+        switch option {
+        case .single: .single
+        case .continuousDefault: .continuous
+        case .productShowcase: .productShowcase
+        case .subjectLock, .registeredPriority: nil
+        }
+    }
+
     // MARK: Status
+
 
     static func apply(device: LunaDeviceStatus, to status: inout CameraStatus) {
         if let battery = device.battery {
@@ -291,10 +316,12 @@ enum LunaShellMapping {
         }
         status.availableIsoIndices = isoIndices
         status.availableShutterDenoms = shutterDenoms
+        // AF modes the official app never offers (0, 2, 4, 5) leave the readout blank.
         if let af = settings.afMode {
-            status.focusMode = af == 1 ? .single : .continuous
-        } else if status.focusMode == nil {
-            status.focusMode = .continuous
+            let reported = LunaAFMode(rawValue: af).map(focusOption)
+            let shown = CameraValuePin.reconcile(&pins.focus, reported: reported, now: now) ?? reported
+            status.focusMode = shown?.focusMode
+            status.focusTrack = shown?.track
         }
     }
 
@@ -333,6 +360,7 @@ extension LunaPhotographySettings {
         photoResolution = other.photoResolution ?? photoResolution
         darkEIS = other.darkEIS ?? darkEIS
         flowStateLevel = other.flowStateLevel ?? flowStateLevel
+        faceMetering = other.faceMetering ?? faceMetering
         zoom = other.zoom ?? zoom
         iLog = other.iLog ?? iLog
         colorRecovery = other.colorRecovery ?? colorRecovery
@@ -343,6 +371,11 @@ extension LunaPhotographySettings {
         iq3AMode = other.iq3AMode ?? iq3AMode
         filterStrength = other.filterStrength ?? filterStrength
     }
+}
+
+/// The shared FOCUS drum and chip list only the modes Luna offers.
+extension CaptureLists {
+    static var focusOptions: [FocusOption] { LunaShellMapping.focusOptions }
 }
 
 extension OperatorPrefs {

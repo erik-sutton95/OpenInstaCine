@@ -74,6 +74,42 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertFalse(session.isTrackingActive, "idle after a lock ends tracking")
     }
 
+    /// fw 1.1.15: option 93 values 1, 3, 6 are the official AF-S, AF-C, Product Showcase.
+    func testAutofocusModesMapToFocusDrum() throws {
+        XCTAssertEqual(CaptureLists.focusOptions.map(\.chip), ["AF-S", "AF-C", "Showcase"])
+        for luna in LunaAFMode.allCases {
+            XCTAssertEqual(LunaShellMapping.lunaAFMode(LunaShellMapping.focusOption(luna)), luna)
+        }
+        XCTAssertNil(LunaShellMapping.lunaAFMode(.subjectLock))
+        XCTAssertNil(LunaShellMapping.lunaAFMode(.registeredPriority))
+
+        // Reply types [93, 46] with 93 = 6 (Product Showcase), 46 = 0 (Matrix).
+        let showcase = try LunaPhotographySettings(response: Data([0x08, 0x5D, 0x08, 0x2E, 0x12, 0x06,
+                                                                  0xE8, 0x05, 0x06, 0xF0, 0x02, 0x00]))
+        XCTAssertEqual(showcase.faceMetering, false)
+        var status = CameraStatus()
+        var pins = LunaControlPins()
+        var table: [VideoFormat: UInt64] = [:]
+        LunaShellMapping.apply(settings: showcase, to: &status, pins: &pins, table: &table)
+        XCTAssertEqual(CaptureLists.focusOption(from: status), .productShowcase)
+
+        // An optimistic AF-S pin holds until the camera reports it.
+        pins.focus = CameraValuePin(.single, now: Date.timeIntervalSinceReferenceDate, settle: 3)
+        LunaShellMapping.apply(settings: showcase, to: &status, pins: &pins, table: &table)
+        XCTAssertEqual(CaptureLists.focusOption(from: status), .single)
+        var single = showcase
+        single.afMode = 1
+        LunaShellMapping.apply(settings: single, to: &status, pins: &pins, table: &table)
+        XCTAssertEqual(CaptureLists.focusOption(from: status), .single)
+        XCTAssertNil(pins.focus)
+
+        // Values the official app never offers (2 MACRO) blank the readout rather than guess.
+        var macro = showcase
+        macro.afMode = 2
+        LunaShellMapping.apply(settings: macro, to: &status, pins: &pins, table: &table)
+        XCTAssertNil(CaptureLists.focusOption(from: status))
+    }
+
     func testCameraNaming() {
         XCTAssertEqual(LunaCameraNames.title(advertised: "XBQFN7"), "Luna Ultra XBQFN7")
         XCTAssertEqual(LunaCameraNames.title(advertised: "Luna Ultra XBQFN7"), "Luna Ultra XBQFN7")

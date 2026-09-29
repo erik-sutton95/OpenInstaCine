@@ -208,6 +208,7 @@ struct CapturePickerPanel: View {
                     }
                     if sheet == .iso, model.session.supportsIsoLimit { nativeIsoHopToggle }
                     if isEvSheet { facePriorityToggle }
+                    if sheet == .exposure { LunaMeteringToggle(session: model.session) }
                 }
             }.disabled(!controlsEnabled)
         }
@@ -463,11 +464,11 @@ struct CapturePickerPanel: View {
     private var focusRows: some View {
         let selected =
             preview.map { held in
-                FocusOption.allCases.first { $0.chip == held.selection }
+                CaptureLists.focusOptions.first { $0.chip == held.selection }
             } ?? CaptureLists.focusOption(from: model.session.status)
         return VStack(alignment: .leading, spacing: 8) {
-            choiceDrum(FocusOption.allCases.map(\.chip), selected: selected?.chip) { value in
-                guard let option = FocusOption.allCases.first(where: { $0.chip == value }) else {
+            choiceDrum(CaptureLists.focusOptions.map(\.chip), selected: selected?.chip) { value in
+                guard let option = CaptureLists.focusOptions.first(where: { $0.chip == value }) else {
                     return
                 }
                 model.session.setFocusOption(option)

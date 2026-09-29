@@ -165,7 +165,7 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
         case .focus:
             guard supportsFocusMode else { return nil }
             return Self(
-                kind: .focus, title: "FOCUS", options: FocusOption.allCases.map(\.chip),
+                kind: .focus, title: "FOCUS", options: CaptureLists.focusOptions.map(\.chip),
                 selection: CaptureLists.focusOption(from: status)?.chip ?? "",
                 context: String(describing: status.focusTrack))
         case .aperture:
@@ -304,7 +304,7 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
                     kelvin: kelvin, tint: min(100, max(-100, status.whiteBalanceTint ?? 0)))
             }
         case .focus:
-            if let option = FocusOption.allCases.first(where: { $0.chip == value }) {
+            if let option = CaptureLists.focusOptions.first(where: { $0.chip == value }) {
                 model.session.setFocusOption(option)
             }
         case .aperture:

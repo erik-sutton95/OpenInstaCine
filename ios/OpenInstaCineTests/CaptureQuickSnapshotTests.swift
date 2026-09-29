@@ -126,12 +126,12 @@ final class CaptureQuickSnapshotTests: XCTestCase {
 
     func testHeldFocusIncludesTheSameTrackingChoicesAndNativeSelectionAsTap() throws {
         var status = CameraStatus()
-        for option in FocusOption.allCases {
+        for option in CaptureLists.focusOptions {
             status.focusMode = option.focusMode
             status.focusTrack = option.track
             let snapshot = try XCTUnwrap(
                 CaptureQuickSnapshot.primary(.focus, status: status, supportsFocusMode: true))
-            XCTAssertEqual(snapshot.options, ["AF-S", "AF-C", "Showcase", "Lock", "Priority"])
+            XCTAssertEqual(snapshot.options, ["AF-S", "AF-C", "Showcase"])
             XCTAssertEqual(snapshot.selection, CaptureLists.focusOption(from: status)?.chip)
             XCTAssertEqual(snapshot.options[snapshot.index], option.chip)
         }

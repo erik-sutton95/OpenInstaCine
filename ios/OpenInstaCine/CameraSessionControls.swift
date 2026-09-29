@@ -32,8 +32,10 @@ extension CameraSession {
     var hasGimbal: Bool { true }
     var supportsZoom: Bool { true }
     var supportsTapFocus: Bool { true }
-    /// Luna video AF is continuous-only in the official app; no AF-S/AF-C chip.
-    var supportsFocusMode: Bool { false }
+    /// AF-C, AF-S and Product Showcase (option 93); see `LunaShellMapping.focusOptions`.
+    var supportsFocusMode: Bool { true }
+    /// Matrix / Face Priority metering (option 46), shown in the Exposure sheet.
+    var supportsFaceMetering: Bool { true }
     var supportsAperture: Bool { false }
     /// Luna phone protocol exposes no audio channel setting or meters.
     var supportsAudio: Bool { false }
@@ -374,12 +376,46 @@ extension CameraSession {
         }
     }
 
-    // MARK: - Focus mode, aperture, audio (not exposed by Luna's phone protocol)
+    // MARK: - Focus mode and metering
+
+    func setFocusMode(_ mode: FocusMode) {
+        setFocusOption(mode == .single ? .single : .continuousDefault)
+    }
+
+    func setFocusTrack(_ track: FocusTrackMode) {
+        if let option = FocusOption.resolve(mode: .continuous, track: track) { setFocusOption(option) }
+    }
+
+    func setFocusOption(_ option: FocusOption) {
+        guard canSendControl else { return }
+        guard let af = LunaShellMapping.lunaAFMode(option) else {
+            controlNote = "\(option.label) is not offered by this camera."
+            return
+        }
+        pins.focus = CameraValuePin(option, now: pinNow, settle: 3)
+        status.focusMode = option.focusMode
+        status.focusTrack = option.track
+        let mode = backend.functionMode
+        sendControl(
+            "Focus \(option.chip)", { try LunaProtocol.setAFMode(af, functionMode: mode) },
+            onFail: { [weak self] in self?.pins.focus = nil })
+    }
+
+    /// fw 1.1.15 stores option 46 3.7 to 4.9 s after the SET.
+    func setFaceMetering(_ on: Bool) {
+        guard canSendControl else { return }
+        pins.faceMetering = CameraValuePin(on, now: pinNow, settle: 6)
+        faceMetering = on
+        let mode = backend.functionMode
+        sendControl(
+            on ? "Metering Face" : "Metering Matrix",
+            { try LunaProtocol.setFaceMetering(on, functionMode: mode) },
+            onFail: { [weak self] in self?.pins.faceMetering = nil })
+    }
+
+    // MARK: - Aperture, audio (not exposed by Luna's phone protocol)
 
     func setApertureStrategy(_ strategy: ApertureStrategy) {}
-    func setFocusMode(_ mode: FocusMode) {}
-    func setFocusTrack(_ track: FocusTrackMode) {}
-    func setFocusOption(_ option: FocusOption) {}
     func setAudioChannel(_ channel: AudioChannel) {}
     func setVocalBoost(_ boost: VocalBoost) {}
     func setWindNR(_ value: WindNoiseReduction) {}
