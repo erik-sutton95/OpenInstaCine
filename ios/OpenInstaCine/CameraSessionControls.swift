@@ -755,12 +755,29 @@ extension CameraSession {
             // both axes at the same speed toward each SET_ANGLE, so a far target comes out
             // as a dog-leg (diagonal, then one axis). Short straight steps keep it straight.
             var glide = self?.freshGimbalWaypoint ?? target
+            var lastTarget = target
+            var velocity = (yaw: 0.0, pitch: 0.0)
             let started = ProcessInfo.processInfo.systemUptime
             while !Task.isCancelled {
                 guard let self, let aim = self.gimbalAim, aim.token == token,
                     self.canSetGimbalConfiguration, !self.gimbalStick.isHeld
                 else { break }
-                let next = settleAndStop ? aim.target : Self.glide(from: glide, toward: aim.target)
+                let next: GimbalWaypoint
+                if settleAndStop {
+                    next = aim.target
+                } else {
+                    // Lead the head along its own motion so the camera's stop-at-target
+                    // planner never brakes between updates (that braking is the stepping).
+                    let dt = 0.033  // gimbalSetInterval
+                    let keep = Self.headTrackVelocityKeep
+                    velocity.yaw = velocity.yaw * keep + (aim.target.yawDeg - lastTarget.yawDeg) / dt * (1 - keep)
+                    velocity.pitch = velocity.pitch * keep + (aim.target.pitchDeg - lastTarget.pitchDeg) / dt * (1 - keep)
+                    lastTarget = aim.target
+                    var ahead = aim.target
+                    ahead.yawDeg += velocity.yaw * Self.headTrackLeadSeconds
+                    ahead.pitchDeg += velocity.pitch * Self.headTrackLeadSeconds
+                    next = Self.smooth(from: glide, toward: ahead, keep: Self.headTrackSmoothing)
+                }
                 glide = next
                 if next != sent {
                     self.sendGimbalAngle(next)
@@ -779,6 +796,22 @@ extension CameraSession {
             self?.finishGimbalAim(token: token)
         }
         return token
+    }
+
+    /// Live-tunable head tracking feel (debug remote `headTune`).
+    nonisolated(unsafe) static var headTrackLeadSeconds = 0.15
+    nonisolated(unsafe) static var headTrackSmoothing = 0.3
+    nonisolated(unsafe) static var headTrackVelocityKeep = 0.6
+
+    /// Exponential step toward `target`; `keep` is the share of the old value kept per tick.
+    static func smooth(from current: GimbalWaypoint, toward target: GimbalWaypoint, keep: Double)
+        -> GimbalWaypoint
+    {
+        var next = target
+        next.yawDeg = current.yawDeg * keep + target.yawDeg * (1 - keep)
+        next.pitchDeg = current.pitchDeg * keep + target.pitchDeg * (1 - keep)
+        if abs(next.yawDeg - target.yawDeg) < 0.05, abs(next.pitchDeg - target.pitchDeg) < 0.05 { return target }
+        return next
     }
 
     /// One 33 ms tick: close ~half the gap (light smoothing), capped at 2.5° along the

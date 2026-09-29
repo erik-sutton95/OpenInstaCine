@@ -232,6 +232,13 @@
                 while s.gimbalAim != nil { try? await Task.sleep(for: .milliseconds(20)) }
                 try? await Task.sleep(for: .seconds(1.5))
                 return ["ok": true, "settle": Date().timeIntervalSince(began), "state": state(model)]
+            case "headTune":
+                if let v = num("lead") { CameraSession.headTrackLeadSeconds = v }
+                if let v = num("smoothing") { CameraSession.headTrackSmoothing = v }
+                if let v = num("velocityKeep") { CameraSession.headTrackVelocityKeep = v }
+                return ["ok": true, "lead": CameraSession.headTrackLeadSeconds,
+                        "smoothing": CameraSession.headTrackSmoothing,
+                        "velocityKeep": CameraSession.headTrackVelocityKeep]
             case "sweep":
                 // Smooth moving target: sine (amp, period) or ramp (rate) on yaw or pitch.
                 // mode "raw" streams SET_ANGLE at hz; "track" goes through the head-track API
