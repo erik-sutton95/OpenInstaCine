@@ -89,24 +89,27 @@ struct LiveGimbalSheetHost: View {
                 }
             }
         } footer: {
-            Button {
-                guard canPresentEditor else { return }
-                model.liveGimbalPanel = .editor
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(LiveGimbalCopy.programmedMove).font(
-                            MonitorTheme.font(11, weight: .semibold))
-                        Text("Experimental").font(MonitorTheme.font(9)).foregroundStyle(
-                            MonitorTheme.muted)
+            // Programmed moves need gimbal attitude; hide the entry on bodies without it.
+            if model.session.supportsProgrammedMoves {
+                Button {
+                    guard canPresentEditor else { return }
+                    model.liveGimbalPanel = .editor
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(LiveGimbalCopy.programmedMove).font(
+                                MonitorTheme.font(11, weight: .semibold))
+                            Text("Experimental").font(MonitorTheme.font(9)).foregroundStyle(
+                                MonitorTheme.muted)
+                        }
+                        Spacer(minLength: 2)
+                        MonitorIcon.chevronRight.frame(width: 11, height: 11)
                     }
-                    Spacer(minLength: 2)
-                    MonitorIcon.chevronRight.frame(width: 11, height: 11)
-                }
-                .foregroundStyle(MonitorTheme.secondary).padding(12)
-                .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-            }.buttonStyle(MonitorButtonStyle())
-                .accessibilityIdentifier("motion.openEditor")
+                    .foregroundStyle(MonitorTheme.secondary).padding(12)
+                    .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                }.buttonStyle(MonitorButtonStyle())
+                    .accessibilityIdentifier("motion.openEditor")
+            }
         }
         .onAppear { appeared = true }
         .onDisappear {
