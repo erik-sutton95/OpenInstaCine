@@ -635,6 +635,16 @@ extension CameraSession {
 
     // MARK: - Closed-loop aim (IMU pose + VirtualRC steer)
 
+    /// The IMU arrives in ~100 ms batches: project the pose to now with the head's
+    /// measured rate so the loop does not steer on stale position (plus ~30 ms transport).
+    var controlGimbalWaypoint: GimbalWaypoint? {
+        guard var live = freshGimbalWaypoint, let at = lastIMUAt else { return nil }
+        let age = min(ProcessInfo.processInfo.systemUptime - at, 0.15) + 0.03
+        live.yawDeg += gimbalPose.yawRateDegPerSec * age
+        live.pitchDeg += gimbalPose.pitchRateDegPerSec * age
+        return live
+    }
+
     func ingestIMU(_ samples: [LunaIMUSample]) {
         gimbalPose.ingest(samples, commanding: gimbalStick.isHeld || gimbalAim != nil)
         lastIMUAt = ProcessInfo.processInfo.systemUptime
@@ -643,13 +653,16 @@ extension CameraSession {
     /// Drive the head toward `target` at 20 Hz. `settleAndStop` ends the aim once the
     /// head has held within the deadband for half a second (Level, debug aim).
     @discardableResult
-    func aimGimbal(at target: GimbalWaypoint, settleAndStop: Bool = false) -> UInt64? {
+    func aimGimbal(
+        at target: GimbalWaypoint, settleAndStop: Bool = false, tracking: Bool = false
+    ) -> UInt64? {
         guard canSetGimbalConfiguration, !gimbalStick.isHeld, freshGimbalWaypoint != nil else {
             return nil
         }
         gimbalAimGeneration &+= 1
         let token = gimbalAimGeneration
         gimbalAim = (target, token)
+        gimbalAimRate = (0, 0, ProcessInfo.processInfo.systemUptime)
         gimbalAimTask?.cancel()
         gimbalAimTask = Task { @MainActor [weak self] in
             var settledSince: Date?
@@ -658,11 +671,17 @@ extension CameraSession {
             while !Task.isCancelled {
                 guard let self, let aim = self.gimbalAim, aim.token == token else { return }
                 guard self.canSetGimbalConfiguration, !self.gimbalStick.isHeld,
-                    let live = self.freshGimbalWaypoint
+                    let live = self.controlGimbalWaypoint
                 else { break }
+                // Feedforward the target's own motion while it keeps arriving.
+                let rateAge = ProcessInfo.processInfo.systemUptime - self.gimbalAimRate.at
+                let fresh = rateAge < 0.25
                 let steer = LunaGimbalSteer.toward(
                     yawError: aim.target.yawDeg - live.yawDeg,
-                    pitchError: aim.target.pitchDeg - live.pitchDeg, previous: previous)
+                    pitchError: aim.target.pitchDeg - live.pitchDeg, previous: previous,
+                    feedYaw: fresh ? self.gimbalAimRate.yaw : 0,
+                    feedPitch: fresh ? self.gimbalAimRate.pitch : 0,
+                    gain: tracking ? LunaGimbalSteer.trackingGain : LunaGimbalSteer.gain)
                 previous = steer
                 // Settled on the measured error; the lead can zero the steer mid-motion.
                 let error = max(
@@ -677,7 +696,9 @@ extension CameraSession {
                 if let request = try? LunaProtocol.gimbalMove(
                     upDown: steer.upDown, leftRight: steer.leftRight)
                 {
-                    _ = try? await self.backend.send(request, timeout: .seconds(2))
+                    // Fire and forget: waiting for each ack halves the loop rate.
+                    let backend = self.backend
+                    Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
                 }
                 try? await Task.sleep(for: LunaStickStream.interval)
             }
@@ -742,16 +763,31 @@ extension CameraSession {
     // Head tracking aims the head at the AirPods target through the IMU loop.
     func beginNativeHeadTrack() -> UInt64? {
         guard !isBrowsingMedia, !isLiveVideoStale, let live = freshGimbalWaypoint else { return nil }
-        return aimGimbal(at: live)
+        return aimGimbal(at: live, tracking: true)
     }
 
     func updateNativeHeadTrack(target: GimbalWaypoint, token: UInt64) -> Bool {
-        guard gimbalAim?.token == token, !isBrowsingMedia, !isLiveVideoStale else {
+        guard let aim = gimbalAim, aim.token == token, !isBrowsingMedia, !isLiveVideoStale else {
             endNativeHeadTrack(token: token)
             return false
         }
+        noteGimbalAimMotion(from: aim.target, to: target)
         gimbalAim = (target, token)
         return true
+    }
+
+    /// Target velocity for feedforward, smoothed over a few head samples.
+    func noteGimbalAimMotion(from old: GimbalWaypoint, to new: GimbalWaypoint) {
+        let now = ProcessInfo.processInfo.systemUptime
+        let dt = now - gimbalAimRate.at
+        guard dt > 0.005 else { return }
+        let yaw = dt < 0.25 ? (new.yawDeg - old.yawDeg) / dt : 0
+        let pitch = dt < 0.25 ? (new.pitchDeg - old.pitchDeg) / dt : 0
+        let keep = 0.6
+        gimbalAimRate = (
+            gimbalAimRate.yaw * keep + yaw * (1 - keep),
+            gimbalAimRate.pitch * keep + pitch * (1 - keep), now
+        )
     }
 
     func endNativeHeadTrack(token: UInt64) {

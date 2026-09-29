@@ -218,6 +218,28 @@
                 let deadline = Date().addingTimeInterval(num("seconds") ?? 8)
                 while s.gimbalAim != nil, Date() < deadline { try? await Task.sleep(for: .milliseconds(50)) }
             case "level": s.levelGimbalToWorld()
+            case "sweep":
+                // Moving target through the head-tracking path, like AirPods at 50 Hz.
+                guard let start = s.freshGimbalWaypoint, let token = s.beginNativeHeadTrack() else {
+                    return ["ok": false, "error": "head track refused"]
+                }
+                let rate = num("rate") ?? 30
+                let seconds = num("seconds") ?? 2
+                let began = Date()
+                var trace: [[Double]] = []
+                while Date().timeIntervalSince(began) < seconds + 2 {
+                    let t = min(Date().timeIntervalSince(began), seconds)
+                    let target = GimbalWaypoint(
+                        yawDeg: start.yawDeg + rate * t, pitchDeg: start.pitchDeg, zoom: start.zoom,
+                        nativePitchDeg: start.nativePitchDeg)
+                    _ = s.updateNativeHeadTrack(target: target, token: token)
+                    if let live = s.freshGimbalWaypoint {
+                        trace.append([Date().timeIntervalSince(began), target.yawDeg, live.yawDeg])
+                    }
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+                s.endNativeHeadTrack(token: token)
+                return ["ok": true, "trace": trace]
             case "flip": s.flipGimbal()
             case "gimbalMode":
                 if let mode = GimbalMode.allCases.first(where: { "\($0)" == str("value") }) { s.setGimbalMode(mode) }

@@ -51,6 +51,9 @@ public struct LunaGimbalPoseEstimator: Sendable {
     public private(set) var pitchDeg = 0.0
     public private(set) var gyroBias = SIMD3<Double>(repeating: 0)
     public private(set) var sampleCount = 0
+    /// Measured head rate (deg/s, bias-corrected) over the last ~20 ms of samples.
+    public private(set) var yawRateDegPerSec = 0.0
+    public private(set) var pitchRateDegPerSec = 0.0
     private var lastMilliseconds: UInt64?
     private var stillSeconds = 0.0
     private var stillSum = SIMD3<Double>(repeating: 0)
@@ -89,6 +92,9 @@ public struct LunaGimbalPoseEstimator: Sendable {
             let rate = sample.gyro - gyroBias
             yawDeg += rate.z * dt * 180 / .pi
             pitchDeg += rate.y * dt * 180 / .pi
+            let smoothing = 0.05  // ~20 samples at 1 kHz
+            yawRateDegPerSec += (rate.z * 180 / .pi - yawRateDegPerSec) * smoothing
+            pitchRateDegPerSec += (rate.y * 180 / .pi - pitchRateDegPerSec) * smoothing
             pitchDeg += (gravityPitch - pitchDeg) * Self.gravityWeight
             sampleCount += 1
             learnBias(sample.gyro, dt: dt, commanding: commanding)
@@ -121,9 +127,12 @@ public struct LunaGimbalPoseEstimator: Sendable {
 public struct LunaGimbalSteer: Equatable, Sendable {
     public static let panDegPerSecPerUnit = 0.62
     public static let tiltDegPerSecPerUnit = 0.49
-    /// Proportional gain (1/s). The IMU arrives in ~100 ms batches, so keep the
-    /// loop well under the delay limit to avoid overshoot.
+    /// Proportional gain (1/s) for point-to-point moves. The IMU arrives in ~100 ms
+    /// batches, so keep the loop well under the delay limit to avoid overshoot.
     public static let gain = 3.0
+    /// Following a moving target (head tracking): feedforward carries the motion,
+    /// so the proportional term only trims the remaining error and can be stiffer.
+    public static let trackingGain = 5.0
     public static let deadbandDeg = 0.4
 
     public let leftRight: Int32
@@ -137,7 +146,7 @@ public struct LunaGimbalSteer: Equatable, Sendable {
 
     /// Pose lags the stick by the IMU batch (~100 ms) plus the head's own ramp.
     /// Steering on the pose predicted this far ahead stops the overshoot.
-    public static let leadSeconds = 0.25
+    public static let leadSeconds = 0.12
 
     public var panDegPerSec: Double { Double(leftRight) * Self.panDegPerSecPerUnit }
     public var tiltDegPerSec: Double { Double(upDown) * Self.tiltDegPerSecPerUnit }
@@ -145,15 +154,22 @@ public struct LunaGimbalSteer: Equatable, Sendable {
     /// Error measured now, corrected for the motion the previous command is still
     /// producing (`previous` is the last steer sent).
     public static func toward(
-        yawError: Double, pitchError: Double, previous: LunaGimbalSteer?
+        yawError: Double, pitchError: Double, previous: LunaGimbalSteer?,
+        feedYaw: Double = 0, feedPitch: Double = 0, gain: Double = gain
     ) -> LunaGimbalSteer {
-        let lead = previous.map { ($0.panDegPerSec * leadSeconds, $0.tiltDegPerSec * leadSeconds) } ?? (0, 0)
-        return toward(yawError: yawError - lead.0, pitchError: pitchError - lead.1)
+        // The lead covers motion already commanded; the target keeps moving at feed.
+        let lead = previous.map {
+            (($0.panDegPerSec - feedYaw) * leadSeconds, ($0.tiltDegPerSec - feedPitch) * leadSeconds)
+        } ?? (0, 0)
+        return toward(
+            yawError: yawError - lead.0, pitchError: pitchError - lead.1,
+            feedYaw: feedYaw, feedPitch: feedPitch, gain: gain)
     }
 
     /// `feedYaw` / `feedPitch` are the target's own rates (°/s) for smooth moves.
     public static func toward(
-        yawError: Double, pitchError: Double, feedYaw: Double = 0, feedPitch: Double = 0
+        yawError: Double, pitchError: Double, feedYaw: Double = 0, feedPitch: Double = 0,
+        gain: Double = gain
     ) -> LunaGimbalSteer {
         func units(_ error: Double, feed: Double, perUnit: Double) -> Int32 {
             let rate = (abs(error) < deadbandDeg ? 0 : error * gain) + feed

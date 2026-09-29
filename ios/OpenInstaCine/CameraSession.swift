@@ -168,6 +168,8 @@ final class CameraSession {
     @ObservationIgnored var gimbalAim: (target: GimbalWaypoint, token: UInt64)?
     @ObservationIgnored var gimbalAimTask: Task<Void, Never>?
     @ObservationIgnored var gimbalAimGeneration: UInt64 = 0
+    /// Smoothed target velocity (deg/s) of a moving aim, for feedforward.
+    @ObservationIgnored var gimbalAimRate = (yaw: 0.0, pitch: 0.0, at: 0.0)
     var gimbalYawTenthDeg: Int16? { freshGimbalWaypoint.map { Int16(($0.yawDeg * 10).rounded()) } }
     var gimbalPitchTenthDeg: Int16? { freshGimbalWaypoint.map { Int16(($0.pitchDeg * 10).rounded()) } }
     /// Luna reports no gimbal attitude, so waypoints and world level are unavailable.
