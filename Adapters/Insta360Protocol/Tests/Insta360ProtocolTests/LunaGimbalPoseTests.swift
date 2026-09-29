@@ -57,19 +57,4 @@ final class LunaGimbalPoseTests: XCTestCase {
         pose.ingest(samples(seconds: 5, gyro: .zero, accel: up30, start: 0))
         XCTAssertEqual(pose.pitchDeg, 30, accuracy: 0.5)
     }
-
-    func testSteerIsProportionalClampedAndRestsInDeadband() {
-        let near = LunaGimbalSteer.toward(yawError: 0.2, pitchError: -0.1)
-        XCTAssertTrue(near.isRest)
-        let small = LunaGimbalSteer.toward(yawError: 10, pitchError: -4)
-        XCTAssertEqual(small.leftRight, 48)  // 30 °/s / 0.62
-        XCTAssertEqual(small.upDown, -24)  // −12 °/s / 0.49
-        // Still panning at full speed 5° short: the lead says the head will arrive, so back off.
-        let coasting = LunaGimbalSteer.toward(
-            yawError: 5, pitchError: 0, previous: LunaGimbalSteer(leftRight: 99, upDown: 0))
-        XCTAssertLessThan(coasting.leftRight, 0)
-        let far = LunaGimbalSteer.toward(yawError: 170, pitchError: 90)
-        XCTAssertEqual(far.leftRight, 99)
-        XCTAssertEqual(far.upDown, 99)
-    }
 }

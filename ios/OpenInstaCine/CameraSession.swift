@@ -159,31 +159,44 @@ final class CameraSession {
     var gimbalMoveRunning = false
     var gimbalMovePaused = false
     var gimbalMoveCanPause = false
-    private(set) var gimbalStartCountdown: Int?
+    var gimbalStartCountdown: Int?
     private(set) var gimbalControlSceneActive = true
     private(set) var gimbalPoseViewFlip = false
     private(set) var gimbalPoseInvertPan = false
-    /// Camera-head pointing from the IMU stream (Luna has no attitude readout).
+    /// Camera-head world pitch from the IMU stream (Level) and the fallback pose.
     @ObservationIgnored var gimbalPose = LunaGimbalPoseEstimator()
     @ObservationIgnored var lastIMUAt: TimeInterval?
-    /// Closed-loop aim target (head tracking, Level, debug aim) and its token.
+    /// Handle-relative gimbal angle from cmd 226 GET_ANGLE, polled while live.
+    @ObservationIgnored var gimbalAngle: (angle: LunaGimbalAngle, at: TimeInterval)?
+    @ObservationIgnored var gimbalAnglePoll: Task<Void, Never>?
+    /// Latest SET_ANGLE target (head tracking) and its token; a sender streams it.
     @ObservationIgnored var gimbalAim: (target: GimbalWaypoint, token: UInt64)?
     @ObservationIgnored var gimbalAimTask: Task<Void, Never>?
     @ObservationIgnored var gimbalAimGeneration: UInt64 = 0
-    /// Smoothed target velocity (deg/s) of a moving aim, for feedforward.
-    @ObservationIgnored var gimbalAimRate = (yaw: 0.0, pitch: 0.0, at: 0.0)
+    /// Programmed A/B/C move runner (SET_ANGLE stream).
+    @ObservationIgnored var gimbalMoveTask: Task<Void, Never>?
+    @ObservationIgnored var gimbalMoveClock = 0.0
     var gimbalYawTenthDeg: Int16? { freshGimbalWaypoint.map { Int16(($0.yawDeg * 10).rounded()) } }
     var gimbalPitchTenthDeg: Int16? { freshGimbalWaypoint.map { Int16(($0.pitchDeg * 10).rounded()) } }
-    /// Luna reports no gimbal attitude, so waypoints and world level are unavailable.
+    /// Camera GET_ANGLE when fresh (handle frame, degrees, yaw unwrapped across the
+    /// mechanical stop so moves never interpolate through it); IMU estimate otherwise.
     var liveGimbalWaypoint: GimbalWaypoint? {
+        if let reading = gimbalAngle, ProcessInfo.processInfo.systemUptime - reading.at <= 0.5 {
+            let pitch = Double(reading.angle.pitch)
+            return GimbalWaypoint(
+                yawDeg: GimbalWaypoint.unwrapYaw(Double(reading.angle.yaw)), pitchDeg: pitch, zoom: zoomReadout,
+                nativePitchDeg: -pitch)
+        }
         guard lastIMUAt != nil, gimbalPose.sampleCount > 0 else { return nil }
         return GimbalWaypoint(
             yawDeg: gimbalPose.yawDeg, pitchDeg: gimbalPose.pitchDeg, zoom: zoomReadout,
             nativePitchDeg: -gimbalPose.pitchDeg)
     }
     var freshGimbalWaypoint: GimbalWaypoint? {
-        guard let at = lastIMUAt, ProcessInfo.processInfo.systemUptime - at <= 0.3 else { return nil }
-        return liveGimbalWaypoint
+        let now = ProcessInfo.processInfo.systemUptime
+        let angleFresh = gimbalAngle.map { now - $0.at <= 0.5 } ?? false
+        let imuFresh = lastIMUAt.map { now - $0 <= 0.3 } ?? false
+        return angleFresh || imuFresh ? liveGimbalWaypoint : nil
     }
     var overlayGimbalWaypoint: GimbalWaypoint? { nil }
     @ObservationIgnored var lastGimbalAttitudeHex = ""
@@ -496,6 +509,11 @@ final class CameraSession {
         pendingZoomWrite = nil
         zoomWriteTask?.cancel()
         gimbalStick.reset()
+        gimbalAnglePoll?.cancel()
+        gimbalAnglePoll = nil
+        gimbalAngle = nil
+        cancelProgrammedMove()
+        gimbalProgram = GimbalProgram()
         controlBusy = false
         controlNote = nil
         focusPoint = CGPoint(x: 0.5, y: 0.5)
@@ -571,6 +589,7 @@ final class CameraSession {
                 isReconnecting = false
                 recordFeedBreadcrumb(.sceneActivity, detail: "live")
                 startLinkTicker()
+                startGimbalAnglePoll()
                 applyLinkPresentation()
             }
         case .information(let info):

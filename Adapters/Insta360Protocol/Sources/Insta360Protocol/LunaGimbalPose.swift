@@ -40,8 +40,9 @@ extension LunaMediaPacket {
     public var imuSamples: [LunaIMUSample]? { subtype == 0x30 ? LunaIMUSample.decode(bytes) : nil }
 }
 
-/// Camera-head pointing from the IMU stream. The Luna has no attitude readout and no
-/// go-to-angle command, so gimbal targets close the loop on this estimate.
+/// Camera-head pointing from the IMU stream. Gimbal targets use cmd 226 SET_ANGLE /
+/// GET_ANGLE (handle frame); this world-frame estimate feeds Level and is the pose
+/// fallback when GET_ANGLE is unavailable.
 ///
 /// Yaw is the integrated gyro (right positive) relative to the last `zeroYaw()`,
 /// normally a recenter; it drifts with the residual gyro bias. Pitch is world pitch
@@ -118,67 +119,5 @@ public struct LunaGimbalPoseEstimator: Sendable {
             stillSum = .zero
             stillCount = 0
         }
-    }
-}
-
-/// Stick command that drives the head toward a target pose. Rates are the measured
-/// fw 1.1.15 response: pan ≈ 0.62 °/s and tilt ≈ 0.49 °/s per VirtualRC unit
-/// (linear from 10 to 99, 2026-09-29).
-public struct LunaGimbalSteer: Equatable, Sendable {
-    public static let panDegPerSecPerUnit = 0.62
-    public static let tiltDegPerSecPerUnit = 0.49
-    /// Proportional gain (1/s) for point-to-point moves. The IMU arrives in ~100 ms
-    /// batches, so keep the loop well under the delay limit to avoid overshoot.
-    public static let gain = 3.0
-    /// Following a moving target (head tracking): feedforward carries the motion,
-    /// so the proportional term only trims the remaining error and can be stiffer.
-    public static let trackingGain = 5.0
-    public static let deadbandDeg = 0.4
-
-    public let leftRight: Int32
-    public let upDown: Int32
-    public var isRest: Bool { leftRight == 0 && upDown == 0 }
-
-    public init(leftRight: Int32, upDown: Int32) {
-        self.leftRight = leftRight
-        self.upDown = upDown
-    }
-
-    /// Pose lags the stick by the IMU batch (~100 ms) plus the head's own ramp.
-    /// Steering on the pose predicted this far ahead stops the overshoot.
-    public static let leadSeconds = 0.12
-
-    public var panDegPerSec: Double { Double(leftRight) * Self.panDegPerSecPerUnit }
-    public var tiltDegPerSec: Double { Double(upDown) * Self.tiltDegPerSecPerUnit }
-
-    /// Error measured now, corrected for the motion the previous command is still
-    /// producing (`previous` is the last steer sent).
-    public static func toward(
-        yawError: Double, pitchError: Double, previous: LunaGimbalSteer?,
-        feedYaw: Double = 0, feedPitch: Double = 0, gain: Double = gain
-    ) -> LunaGimbalSteer {
-        // The lead covers motion already commanded; the target keeps moving at feed.
-        let lead = previous.map {
-            (($0.panDegPerSec - feedYaw) * leadSeconds, ($0.tiltDegPerSec - feedPitch) * leadSeconds)
-        } ?? (0, 0)
-        return toward(
-            yawError: yawError - lead.0, pitchError: pitchError - lead.1,
-            feedYaw: feedYaw, feedPitch: feedPitch, gain: gain)
-    }
-
-    /// `feedYaw` / `feedPitch` are the target's own rates (°/s) for smooth moves.
-    public static func toward(
-        yawError: Double, pitchError: Double, feedYaw: Double = 0, feedPitch: Double = 0,
-        gain: Double = gain
-    ) -> LunaGimbalSteer {
-        func units(_ error: Double, feed: Double, perUnit: Double) -> Int32 {
-            let rate = (abs(error) < deadbandDeg ? 0 : error * gain) + feed
-            let value = (rate / perUnit).rounded()
-            guard value.isFinite else { return 0 }
-            return Int32(min(max(value, -99), 99))
-        }
-        return LunaGimbalSteer(
-            leftRight: units(yawError, feed: feedYaw, perUnit: panDegPerSecPerUnit),
-            upDown: units(pitchError, feed: feedPitch, perUnit: tiltDegPerSecPerUnit))
     }
 }

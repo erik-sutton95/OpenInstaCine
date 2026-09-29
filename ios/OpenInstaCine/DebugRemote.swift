@@ -132,6 +132,11 @@
                 "gimbalMode": s.gimbalMode.label,
                 "pose": s.freshGimbalWaypoint.map { ["yaw": ($0.yawDeg * 10).rounded() / 10, "pitch": ($0.pitchDeg * 10).rounded() / 10] } ?? [:],
                 "gimbalSpeed": s.gimbalSpeed.label,
+                "angle": s.gimbalAngle.map { ["yaw": Double($0.angle.yaw), "pitch": Double($0.angle.pitch), "roll": Double($0.angle.roll), "age": ProcessInfo.processInfo.systemUptime - $0.at] } ?? [:],
+                "imuPitch": (s.gimbalPose.pitchDeg * 10).rounded() / 10,
+                "moveRunning": s.gimbalMoveRunning,
+                "movePaused": s.gimbalMovePaused,
+                "program": s.gimbalProgram.summary,
                 "firmware": st.firmware ?? "",
                 "tracking": s.isTracking,
                 "focus": [s.focusPoint.x, s.focusPoint.y],
@@ -210,38 +215,103 @@
                 s.endGimbalStick()
             case "recenter": s.recenterGimbal()
             case "aim":
-                guard let live = s.freshGimbalWaypoint else { return ["ok": false, "error": "no IMU pose"] }
+                guard let live = s.freshGimbalWaypoint else { return ["ok": false, "error": "no pose"] }
                 let target = GimbalWaypoint(
                     yawDeg: num("yaw") ?? live.yawDeg, pitchDeg: num("pitch") ?? live.pitchDeg,
                     zoom: live.zoom, nativePitchDeg: -(num("pitch") ?? live.pitchDeg))
+                let began = Date()
                 guard s.aimGimbal(at: target, settleAndStop: true) != nil else {
                     return ["ok": false, "error": "aim refused"]
                 }
-                let deadline = Date().addingTimeInterval(num("seconds") ?? 8)
-                while s.gimbalAim != nil, Date() < deadline { try? await Task.sleep(for: .milliseconds(50)) }
-            case "level": s.levelGimbalToWorld()
-            case "sweep":
-                // Moving target through the head-tracking path, like AirPods at 50 Hz.
-                guard let start = s.freshGimbalWaypoint, let token = s.beginNativeHeadTrack() else {
-                    return ["ok": false, "error": "head track refused"]
-                }
-                let rate = num("rate") ?? 30
-                let seconds = num("seconds") ?? 2
+                while s.gimbalAim != nil { try? await Task.sleep(for: .milliseconds(20)) }
+                return ["ok": true, "settle": Date().timeIntervalSince(began), "state": state(model)]
+            case "level":
+                s.levelGimbalToWorld()
                 let began = Date()
-                var trace: [[Double]] = []
-                while Date().timeIntervalSince(began) < seconds + 2 {
-                    let t = min(Date().timeIntervalSince(began), seconds)
-                    let target = GimbalWaypoint(
-                        yawDeg: start.yawDeg + rate * t, pitchDeg: start.pitchDeg, zoom: start.zoom,
-                        nativePitchDeg: start.nativePitchDeg)
-                    _ = s.updateNativeHeadTrack(target: target, token: token)
-                    if let live = s.freshGimbalWaypoint {
-                        trace.append([Date().timeIntervalSince(began), target.yawDeg, live.yawDeg])
-                    }
-                    try? await Task.sleep(for: .milliseconds(20))
+                try? await Task.sleep(for: .milliseconds(50))
+                while s.gimbalAim != nil { try? await Task.sleep(for: .milliseconds(20)) }
+                try? await Task.sleep(for: .seconds(1.5))
+                return ["ok": true, "settle": Date().timeIntervalSince(began), "state": state(model)]
+            case "sweep":
+                // Smooth moving target: sine (amp, period) or ramp (rate) on yaw or pitch.
+                // mode "raw" streams SET_ANGLE at hz; "track" goes through the head-track API
+                // at 50 Hz like AirPods. GET_ANGLE is polled at getHz for the trace.
+                guard let reading = await s.readGimbalAngle() else { return ["ok": false, "error": "no angle"] }
+                let startYaw = Double(reading.yaw), startPitch = Double(reading.pitch)
+                let pitchAxis = str("axis") == "pitch"
+                let amp = num("amp") ?? 30, period = num("period") ?? 4, ramp = num("rate")
+                let hz = num("hz") ?? 20, seconds = num("seconds") ?? 8, getHz = num("getHz") ?? 25
+                let track = str("mode") == "track"
+                func offset(_ t: Double) -> Double {
+                    let t = min(t, seconds)
+                    return ramp.map { $0 * t } ?? amp * sin(2 * .pi * t / period)
                 }
-                s.endNativeHeadTrack(token: token)
-                return ["ok": true, "trace": trace]
+                func target(_ t: Double) -> GimbalWaypoint {
+                    GimbalWaypoint(
+                        yawDeg: startYaw + (pitchAxis ? 0 : offset(t)),
+                        pitchDeg: startPitch + (pitchAxis ? offset(t) : 0), zoom: 1)
+                }
+                var token: UInt64?
+                if track {
+                    token = s.beginNativeHeadTrack()
+                    if token == nil { return ["ok": false, "error": "head track refused"] }
+                }
+                let began = ProcessInfo.processInfo.systemUptime
+                var trace: [[Double]] = []
+                let poll = Task { @MainActor in
+                    var rows: [[Double]] = []
+                    while !Task.isCancelled {
+                        if let a = await s.readGimbalAngle() {
+                            let t = ProcessInfo.processInfo.systemUptime - began
+                            let goal = target(t)
+                            rows.append([t, goal.yawDeg, goal.pitchDeg, Double(a.yaw), Double(a.pitch),
+                                         s.gimbalPose.yawDeg, s.gimbalPose.pitchDeg])
+                        }
+                        try? await Task.sleep(for: .milliseconds(Int(1000 / getHz)))
+                    }
+                    return rows
+                }
+                var sends = 0
+                while ProcessInfo.processInfo.systemUptime - began < seconds + 2 {
+                    let goal = target(ProcessInfo.processInfo.systemUptime - began)
+                    if let token {
+                        _ = s.updateNativeHeadTrack(target: goal, token: token)
+                        try? await Task.sleep(for: .milliseconds(20))
+                    } else {
+                        s.sendGimbalAngle(goal)
+                        sends += 1
+                        try? await Task.sleep(for: .milliseconds(Int(1000 / hz)))
+                    }
+                }
+                if let token { s.endNativeHeadTrack(token: token) }
+                poll.cancel()
+                trace = await poll.value
+                return ["ok": true, "sends": sends, "trace": trace]
+            case "program":
+                switch str("op") ?? "" {
+                case "set": s.setGimbalWaypoint(GimbalWaypointSlot(rawValue: str("slot") ?? "a") ?? .a)
+                case "durations": s.setGimbalLegDuration(ab: num("ab"), bc: num("bc"))
+                case "smooth": s.setGimbalSmoothness(num("value") ?? 0)
+                case "loop": s.setGimbalLoop(cmd["value"] as? Bool ?? false)
+                case "clear": s.clearGimbalProgram()
+                case "run": s.runProgrammedMove()
+                case "pause": s.pauseOrResumeProgrammedMove()
+                case "cancel": s.cancelProgrammedMove()
+                case "trace":
+                    // Run and record GET_ANGLE until the move ends.
+                    s.runProgrammedMove()
+                    let began = ProcessInfo.processInfo.systemUptime
+                    var rows: [[Double]] = []
+                    while s.gimbalMoveRunning, ProcessInfo.processInfo.systemUptime - began < 180 {
+                        if let a = await s.readGimbalAngle() {
+                            rows.append([ProcessInfo.processInfo.systemUptime - began, Double(a.yaw), Double(a.pitch),
+                                         s.gimbalMoveClock, s.gimbalStartCountdown.map(Double.init) ?? 0])
+                        }
+                        try? await Task.sleep(for: .milliseconds(40))
+                    }
+                    return ["ok": true, "trace": rows, "state": state(model)]
+                default: return ["ok": false, "error": "unknown op"]
+                }
             case "flip": s.flipGimbal()
             case "focusMode":
                 guard let option = CaptureLists.focusOptions.first(where: { $0.chip == str("value") }) else {

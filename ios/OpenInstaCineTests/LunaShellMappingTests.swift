@@ -122,4 +122,24 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertEqual(file.filenameTimestamp, "20260916123456")
         XCTAssertEqual(MediaHTTP.proxyPaths(file).first?.hasSuffix(".lrv"), true)
     }
+
+    func testProgrammedMovePathInterpolatesLegsAndCurve() throws {
+        let a = GimbalWaypoint(yawDeg: 0, pitchDeg: 0, zoom: 1)
+        let b = GimbalWaypoint(yawDeg: 40, pitchDeg: 10, zoom: 1)
+        let c = GimbalWaypoint(yawDeg: 40, pitchDeg: 30, zoom: 1)
+        var take = GimbalProgram(a: a, b: b, durationAB: 4, durationBC: 2)
+        XCTAssertEqual(CameraSession.programDuration(take), 4)
+        XCTAssertEqual(CameraSession.programPose(take, at: 1)?.yawDeg ?? .nan, 10, accuracy: 1e-9)
+        XCTAssertEqual(CameraSession.programPose(take, at: 9), b)
+        take.c = c
+        take.smoothness = 0
+        XCTAssertEqual(CameraSession.programDuration(take), 6)
+        XCTAssertEqual(CameraSession.programPose(take, at: 5)?.pitchDeg ?? .nan, 20, accuracy: 1e-9)
+        XCTAssertEqual(CameraSession.programPose(take, at: 6), c)
+        // Smoothness rounds the B corner: the path no longer passes through B.
+        take.smoothness = 1
+        let corner = try XCTUnwrap(CameraSession.programPose(take, at: 4))
+        XCTAssertGreaterThan(GimbalMoveEngine.angularDistance(corner, b), 1)
+        XCTAssertEqual(CameraSession.programPose(take, at: 6), c)
+    }
 }

@@ -588,8 +588,11 @@ extension CameraSession {
             endGimbalStick(cancelMove: true)
             return
         }
-        // The operator's stick always wins over a closed-loop aim.
-        if x != 0 || y != 0 { stopGimbalAim() }
+        // The operator's stick always wins over an aim or a programmed move.
+        if x != 0 || y != 0 {
+            stopGimbalAim()
+            if gimbalMoveRunning { cancelProgrammedMove() }
+        }
         let dead = linear ? GimbalStick.deadzone : mapping.deadzone
         let magnitude = hypot(x, y)
         let scale = min(1, Double(sensitivity) / Double(GimbalStick.defaultSensitivity))
@@ -642,15 +645,32 @@ extension CameraSession {
         }
     }
 
-    /// Level tilts the head to the world horizon (IMU gravity pitch 0), keeping yaw.
-    func levelGimbalToWorld() {
-        guard let live = freshGimbalWaypoint else {
+    /// Level tilts the head to the world horizon, keeping yaw. SET_ANGLE is handle
+    /// relative, so the target is the current handle pitch minus the head's IMU
+    /// gravity pitch.
+    func levelGimbalToWorld(refine: Bool = true) {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard let reading = gimbalAngle, now - reading.at <= 0.5,
+            let imuAt = lastIMUAt, now - imuAt <= 0.3, gimbalPose.sampleCount > 0
+        else {
             controlNote = WorldLevelSnap.noLevelData
             return
         }
+        let pitch = Double(reading.angle.pitch) - gimbalPose.pitchDeg
         aimGimbal(
-            at: GimbalWaypoint(yawDeg: live.yawDeg, pitchDeg: 0, zoom: live.zoom, nativePitchDeg: 0),
+            at: GimbalWaypoint(
+                yawDeg: GimbalWaypoint.unwrapYaw(Double(reading.angle.yaw)), pitchDeg: pitch, zoom: zoomReadout,
+                nativePitchDeg: -pitch),
             settleAndStop: true)
+        guard refine else { return }
+        // The IMU pitch filter lags a recent move by ~0.5°: correct once from still.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard let self, self.gimbalAim == nil, !self.gimbalStick.isHeld, !self.gimbalMoveRunning,
+                abs(self.gimbalPose.pitchDeg) > 0.3
+            else { return }
+            self.levelGimbalToWorld(refine: false)
+        }
     }
 
     func recenterGimbal() {
@@ -669,74 +689,86 @@ extension CameraSession {
         controlNote = "Gimbal re-centered"
     }
 
-    // MARK: - Closed-loop aim (IMU pose + VirtualRC steer)
+    // MARK: - Absolute angle (cmd 226 SET_ANGLE / GET_ANGLE)
 
-    /// The IMU arrives in ~100 ms batches: project the pose to now with the head's
-    /// measured rate so the loop does not steer on stale position (plus ~30 ms transport).
-    var controlGimbalWaypoint: GimbalWaypoint? {
-        guard var live = freshGimbalWaypoint, let at = lastIMUAt else { return nil }
-        let age = min(ProcessInfo.processInfo.systemUptime - at, 0.15) + 0.03
-        live.yawDeg += gimbalPose.yawRateDegPerSec * age
-        live.pitchDeg += gimbalPose.pitchRateDegPerSec * age
-        return live
+    /// GET_ANGLE poll while live: one small request per 100 ms is fresh enough for
+    /// waypoints and head-track centring.
+    static let gimbalAnglePollInterval: Duration = .milliseconds(100)
+    /// SET_ANGLE stream period for moving targets (head tracking, programmed moves).
+    /// fw 1.1.15: 30 Hz follows a moving target with ~60 ms lag and is visibly smoother
+    /// than 20 Hz (~70 ms) or 10 Hz (~120 ms, steppy).
+    static let gimbalSetInterval: Duration = .milliseconds(33)
+    /// fw 1.1.15 reach: pitch -57.3...+90; yaw is one arc from about -125 through ±180
+    /// to -58.5 (gap centred near -92, like the shell's `HeadTrack.Reach`), and SET_ANGLE
+    /// takes yaw in -180...180 and routes around the stop itself.
+    static let gimbalPitchRange = -57.0...90.0
+
+    func startGimbalAnglePoll() {
+        gimbalAnglePoll?.cancel()
+        gimbalAnglePoll = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                if case .live = self.phase, self.backend.isControlReady { await self.readGimbalAngle() }
+                try? await Task.sleep(for: Self.gimbalAnglePollInterval)
+            }
+        }
+    }
+
+    @discardableResult
+    func readGimbalAngle() async -> LunaGimbalAngle? {
+        guard let request = try? LunaProtocol.gimbalGetAngleRequest(),
+            let reply = try? await backend.send(request, timeout: .seconds(1)),
+            let angle = try? LunaGimbalAngle(response: reply)
+        else { return nil }
+        gimbalAngle = (angle, ProcessInfo.processInfo.systemUptime)
+        return angle
+    }
+
+    /// Fire and forget: the camera re-targets on every SET_ANGLE (latest wins).
+    func sendGimbalAngle(_ target: GimbalWaypoint) {
+        let yaw = remainder(target.yawDeg, 360)  // unwrapped shell yaw back to ±180
+        let pitch = min(max(target.pitchDeg, Self.gimbalPitchRange.lowerBound), Self.gimbalPitchRange.upperBound)
+        guard let request = try? LunaProtocol.gimbalSetAngle(pitch: Float(pitch), yaw: Float(yaw))
+        else { return }
+        let backend = self.backend
+        Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
     }
 
     func ingestIMU(_ samples: [LunaIMUSample]) {
-        gimbalPose.ingest(samples, commanding: gimbalStick.isHeld || gimbalAim != nil)
+        gimbalPose.ingest(samples, commanding: gimbalStick.isHeld || gimbalAim != nil || gimbalMoveRunning)
         lastIMUAt = ProcessInfo.processInfo.systemUptime
     }
 
-    /// Drive the head toward `target` at 20 Hz. `settleAndStop` ends the aim once the
-    /// head has held within the deadband for half a second (Level, debug aim).
+    /// Point the head at `target` (handle frame) and keep sending the latest target
+    /// whenever it changes. `settleAndStop` ends once GET_ANGLE reads within 0.5°
+    /// (Level, debug aim), or after 8 s.
     @discardableResult
-    func aimGimbal(
-        at target: GimbalWaypoint, settleAndStop: Bool = false, tracking: Bool = false
-    ) -> UInt64? {
-        guard canSetGimbalConfiguration, !gimbalStick.isHeld, freshGimbalWaypoint != nil else {
-            return nil
-        }
+    func aimGimbal(at target: GimbalWaypoint, settleAndStop: Bool = false) -> UInt64? {
+        guard canSetGimbalConfiguration, !gimbalStick.isHeld, !gimbalMoveRunning else { return nil }
         gimbalAimGeneration &+= 1
         let token = gimbalAimGeneration
         gimbalAim = (target, token)
-        gimbalAimRate = (0, 0, ProcessInfo.processInfo.systemUptime)
         gimbalAimTask?.cancel()
         gimbalAimTask = Task { @MainActor [weak self] in
-            var settledSince: Date?
-            var previous: LunaGimbalSteer?
-            let started = Date()
+            var sent: GimbalWaypoint?
+            let started = ProcessInfo.processInfo.systemUptime
             while !Task.isCancelled {
-                guard let self, let aim = self.gimbalAim, aim.token == token else { return }
-                guard self.canSetGimbalConfiguration, !self.gimbalStick.isHeld,
-                    let live = self.controlGimbalWaypoint
+                guard let self, let aim = self.gimbalAim, aim.token == token,
+                    self.canSetGimbalConfiguration, !self.gimbalStick.isHeld
                 else { break }
-                // Feedforward the target's own motion while it keeps arriving.
-                let rateAge = ProcessInfo.processInfo.systemUptime - self.gimbalAimRate.at
-                let fresh = rateAge < 0.25
-                let steer = LunaGimbalSteer.toward(
-                    yawError: aim.target.yawDeg - live.yawDeg,
-                    pitchError: aim.target.pitchDeg - live.pitchDeg, previous: previous,
-                    feedYaw: fresh ? self.gimbalAimRate.yaw : 0,
-                    feedPitch: fresh ? self.gimbalAimRate.pitch : 0,
-                    gain: tracking ? LunaGimbalSteer.trackingGain : LunaGimbalSteer.gain)
-                previous = steer
-                // Settled on the measured error; the lead can zero the steer mid-motion.
-                let error = max(
-                    abs(aim.target.yawDeg - live.yawDeg), abs(aim.target.pitchDeg - live.pitchDeg))
-                if error <= 1.0 {
-                    settledSince = settledSince ?? Date()
-                    if settleAndStop, Date().timeIntervalSince(settledSince!) >= 0.5 { break }
-                } else {
-                    settledSince = nil
+                if aim.target != sent {
+                    self.sendGimbalAngle(aim.target)
+                    sent = aim.target
                 }
-                if settleAndStop, Date().timeIntervalSince(started) > 12 { break }
-                if let request = try? LunaProtocol.gimbalMove(
-                    upDown: steer.upDown, leftRight: steer.leftRight)
-                {
-                    // Fire and forget: waiting for each ack halves the loop rate.
-                    let backend = self.backend
-                    Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
+                if settleAndStop {
+                    let now = ProcessInfo.processInfo.systemUptime
+                    if now - started > 8 { break }
+                    if now - started > 0.3, let reading = self.gimbalAngle, reading.at > started + 0.2,
+                        abs(remainder(Double(reading.angle.yaw) - aim.target.yawDeg, 360)) <= 0.5,
+                        abs(Double(reading.angle.pitch) - aim.target.pitchDeg) <= 0.5
+                    { break }
                 }
-                try? await Task.sleep(for: LunaStickStream.interval)
+                try? await Task.sleep(for: Self.gimbalSetInterval)
             }
             self?.finishGimbalAim(token: token)
         }
@@ -747,8 +779,6 @@ extension CameraSession {
         guard gimbalAim?.token == token else { return }
         gimbalAim = nil
         gimbalAimTask = nil
-        guard backend.isControlReady else { return }
-        Task { _ = try? await backend.send(LunaProtocol.gimbalReleaseRequest()) }
     }
 
     func stopGimbalAim() {
@@ -796,10 +826,10 @@ extension CameraSession {
             })
     }
 
-    // Head tracking aims the head at the AirPods target through the IMU loop.
+    // Head tracking streams the AirPods target as SET_ANGLE (latest wins).
     func beginNativeHeadTrack() -> UInt64? {
         guard !isBrowsingMedia, !isLiveVideoStale, let live = freshGimbalWaypoint else { return nil }
-        return aimGimbal(at: live, tracking: true)
+        return aimGimbal(at: live)
     }
 
     func updateNativeHeadTrack(target: GimbalWaypoint, token: UInt64) -> Bool {
@@ -807,23 +837,8 @@ extension CameraSession {
             endNativeHeadTrack(token: token)
             return false
         }
-        noteGimbalAimMotion(from: aim.target, to: target)
         gimbalAim = (target, token)
         return true
-    }
-
-    /// Target velocity for feedforward, smoothed over a few head samples.
-    func noteGimbalAimMotion(from old: GimbalWaypoint, to new: GimbalWaypoint) {
-        let now = ProcessInfo.processInfo.systemUptime
-        let dt = now - gimbalAimRate.at
-        guard dt > 0.005 else { return }
-        let yaw = dt < 0.25 ? (new.yawDeg - old.yawDeg) / dt : 0
-        let pitch = dt < 0.25 ? (new.pitchDeg - old.pitchDeg) / dt : 0
-        let keep = 0.6
-        gimbalAimRate = (
-            gimbalAimRate.yaw * keep + yaw * (1 - keep),
-            gimbalAimRate.pitch * keep + pitch * (1 - keep), now
-        )
     }
 
     func endNativeHeadTrack(token: UInt64) {
@@ -831,24 +846,186 @@ extension CameraSession {
         stopGimbalAim()
     }
 
-    // Programmed A·B·C moves still need the timed-move engine ported to the IMU loop.
+    // MARK: - Programmed A·B·C moves (SET_ANGLE stream)
+
     func setGimbalWaypoint(_ slot: GimbalWaypointSlot) {
-        controlNote = "Luna does not report gimbal position, so moves cannot be programmed."
+        guard hasGimbal, !isLocked else { return }
+        guard !gimbalMoveRunning, !gimbalStick.isHeld else {
+            controlNote = ControlHud.gimbalHoldStill
+            return
+        }
+        guard let reading = gimbalAngle, ProcessInfo.processInfo.systemUptime - reading.at <= 0.3 else {
+            controlNote = ControlHud.gimbalPoseNotReady
+            return
+        }
+        let pitch = Double(reading.angle.pitch)
+        gimbalProgram.setPoint(
+            slot,
+            GimbalWaypoint(
+                yawDeg: GimbalWaypoint.unwrapYaw(Double(reading.angle.yaw)), pitchDeg: pitch,
+                zoom: zoomReadout, nativePitchDeg: -pitch))
     }
-    func clearGimbalWaypoint(_ slot: GimbalWaypointSlot) { gimbalProgram[slot] = nil }
-    func setGimbalLegDuration(ab: TimeInterval? = nil, bc: TimeInterval? = nil) {}
-    func setGimbalSmoothness(_ value: Double) {}
-    func clearGimbalProgram() { gimbalProgram = GimbalProgram() }
-    func setGimbalLoop(_ enabled: Bool) {}
+
+    func clearGimbalWaypoint(_ slot: GimbalWaypointSlot) {
+        cancelProgrammedMove()
+        gimbalProgram[slot] = nil
+    }
+
+    func setGimbalLegDuration(ab: TimeInterval? = nil, bc: TimeInterval? = nil) {
+        if gimbalMoveRunning { cancelProgrammedMove() }
+        if let ab {
+            let floor = GimbalProgram.minTravelDuration(from: gimbalProgram.a, to: gimbalProgram.b)
+            gimbalProgram.durationAB = GimbalProgram.snapDuration(max(ab, floor))
+        }
+        if let bc {
+            let floor = GimbalProgram.minTravelDuration(from: gimbalProgram.b, to: gimbalProgram.c)
+            gimbalProgram.durationBC = GimbalProgram.snapDuration(max(bc, floor))
+        }
+    }
+
+    func setGimbalSmoothness(_ value: Double) {
+        guard value.isFinite else { return }
+        cancelProgrammedMove()
+        gimbalProgram.smoothness = min(1, max(0, value))
+    }
+
+    func clearGimbalProgram() {
+        cancelProgrammedMove()
+        gimbalProgram = GimbalProgram(
+            durationAB: gimbalProgram.durationAB, durationBC: gimbalProgram.durationBC)
+    }
+
+    func setGimbalLoop(_ enabled: Bool) {
+        cancelProgrammedMove()
+        gimbalProgram.loop = enabled
+    }
+
+    // ponytail: lens zoom is not streamed with the move; add a zoom track when asked.
     var programmedZoomUnavailableReason: String? {
-        "Luna does not report gimbal position, so programmed moves are unavailable."
+        gimbalProgram.changesZoom ? "Luna moves cannot change zoom. Set every point at one zoom." : nil
     }
-    var supportsProgrammedMoves: Bool { false }
-    var canRunProgrammedMove: Bool { false }
-    func runProgrammedMove() {}
-    func restartProgrammedMove() {}
-    func pauseOrResumeProgrammedMove() {}
-    func cancelProgrammedMove() {}
+    var supportsProgrammedMoves: Bool { true }
+    var canRunProgrammedMove: Bool {
+        programmedZoomUnavailableReason == nil && !isFeedWarming && !isLiveVideoStale
+            && gimbalProgram.canRun
+    }
+
+    /// Target pose `time` seconds into a take: the shell's rounded-corner curve for
+    /// A·B·C with smoothness, straight legs otherwise.
+    nonisolated static func programPose(_ take: GimbalProgram, at time: TimeInterval) -> GimbalWaypoint? {
+        guard let a = take.a, let b = take.b else { return nil }
+        if let curve = GimbalProgramCurve(program: take) { return curve.position(at: time) }
+        if time < take.durationAB || take.c == nil {
+            return GimbalMoveEngine.lerp(a, b, u: min(max(time / take.durationAB, 0), 1))
+        }
+        return GimbalMoveEngine.lerp(b, take.c!, u: min((time - take.durationAB) / take.durationBC, 1))
+    }
+
+    nonisolated static func programDuration(_ take: GimbalProgram) -> TimeInterval {
+        take.durationAB + (take.c == nil ? 0 : take.durationBC)
+    }
+
+    /// Countdown while the head goes to A, then stream the path at the SET rate.
+    /// Loop plays the take backwards and forwards until stopped.
+    func runProgrammedMove() {
+        guard gimbalControlSceneActive, hasGimbal, !isLocked else { return }
+        if gimbalMoveRunning {
+            cancelProgrammedMove()
+            return
+        }
+        if let reason = programmedZoomUnavailableReason {
+            controlNote = reason
+            return
+        }
+        guard canRunProgrammedMove, let a = gimbalProgram.a, gimbalAngle != nil else {
+            controlNote = gimbalProgram.canRun ? ControlHud.gimbalPoseNotReady : ControlHud.programmedMoveNeedAB
+            return
+        }
+        let take = gimbalProgram
+        controlNote = nil
+        stopGimbalAim()
+        endGimbalStick(cancelMove: true)
+        gimbalMoveRunning = true
+        gimbalMovePaused = false
+        gimbalMoveCanPause = false
+        gimbalMoveClock = 0
+        gimbalMoveTask?.cancel()
+        gimbalMoveTask = Task { @MainActor [weak self] in
+            self?.sendGimbalAngle(a)
+            for remaining in (1...3).reversed() {
+                guard let self, !Task.isCancelled, self.gimbalMoveRunning else { return }
+                self.gimbalStartCountdown = remaining
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            }
+            guard let self, !Task.isCancelled, self.gimbalMoveRunning else { return }
+            self.gimbalStartCountdown = nil
+            self.gimbalMoveCanPause = true
+            ControlLiveLog.line("gimbal-move: start \(take.summary) duration=\(Self.programDuration(take))")
+            let duration = Self.programDuration(take)
+            var last = ProcessInfo.processInfo.systemUptime
+            var reverse = false
+            var loggedAt = 0.0
+            while !Task.isCancelled, self.gimbalMoveRunning {
+                guard case .live = self.phase, self.gimbalControlSceneActive else {
+                    self.cancelProgrammedMove()
+                    return
+                }
+                let now = ProcessInfo.processInfo.systemUptime
+                if !self.gimbalMovePaused { self.gimbalMoveClock += now - last }
+                last = now
+                if self.gimbalMoveClock >= duration {
+                    guard take.loop else { break }
+                    self.gimbalMoveClock -= duration
+                    reverse.toggle()
+                }
+                if !self.gimbalMovePaused,
+                    let target = Self.programPose(
+                        take, at: reverse ? duration - self.gimbalMoveClock : self.gimbalMoveClock)
+                {
+                    self.sendGimbalAngle(target)
+                    if now - loggedAt >= 0.5, let reading = self.gimbalAngle {
+                        loggedAt = now
+                        ControlLiveLog.line(String(
+                            format: "gimbal-move: t=%.2f target=%.1f,%.1f live=%.1f,%.1f",
+                            self.gimbalMoveClock, target.yawDeg, target.pitchDeg,
+                            reading.angle.yaw, reading.angle.pitch))
+                    }
+                }
+                try? await Task.sleep(for: Self.gimbalSetInterval)
+            }
+            guard !Task.isCancelled, self.gimbalMoveRunning else { return }
+            if let end = Self.programPose(take, at: reverse ? 0 : duration) { self.sendGimbalAngle(end) }
+            ControlLiveLog.line("gimbal-move: done")
+            self.finishProgrammedMove()
+        }
+    }
+
+    func restartProgrammedMove() {
+        guard gimbalControlSceneActive, !isLocked, gimbalMoveRunning, gimbalMovePaused else { return }
+        cancelProgrammedMove()
+        runProgrammedMove()
+    }
+
+    func pauseOrResumeProgrammedMove() {
+        guard gimbalControlSceneActive, !isLocked, gimbalMoveRunning, gimbalMoveCanPause else { return }
+        // The head settles on the last target (one 33 ms tick ahead); re-sending the
+        // GET pose, ~70 ms stale, stepped it back.
+        gimbalMovePaused.toggle()
+        controlNote = nil
+    }
+
+    func cancelProgrammedMove() {
+        gimbalMoveTask?.cancel()
+        finishProgrammedMove()
+    }
+
+    private func finishProgrammedMove() {
+        gimbalMoveTask = nil
+        gimbalStartCountdown = nil
+        gimbalMoveRunning = false
+        gimbalMovePaused = false
+        gimbalMoveCanPause = false
+    }
 
     // MARK: - Focus and tracking
 
