@@ -15,6 +15,19 @@ class LunaControlTest {
         assertFailsWith<IllegalArgumentException> { LunaControl.zoom(15.5) }
     }
 
+    @Test fun gimbalAbsoluteAngleMatchesSwift() {
+        assertEquals("08052a0a15000020411d0000a0c1", hex(LunaControl.gimbalSetAngle(pitch = 10f, yaw = -20f).body))
+        assertEquals("08052a00", hex(LunaControl.gimbalSetAngle(0f, 0f).body))
+        assertEquals("0806", hex(LunaControl.gimbalGetAngle.body))
+        assertEquals(LunaControl.GIMBAL_CONTROL, LunaControl.gimbalGetAngle.code)
+        val reply = LunaControl.gimbalAngle(LunaWire.hex("080015000000001da57100c125738a04c0"))
+        assertEquals(0, reply.grf)
+        assertEquals(0f, reply.roll)
+        assertEquals(-8.03f, reply.pitch, 0.01f)
+        assertEquals(-2.07f, reply.yaw, 0.01f)
+        assertFailsWith<IllegalArgumentException> { LunaControl.gimbalSetAngle(Float.NaN, 0f) }
+    }
+
     @Test fun gimbalMatchesSwiftEncoder() {
         // fw 1.1.15: stick moves and the release carry field 4 = 4.
         assertEquals("0801120310c6012004", hex(LunaControl.gimbalStick(1.0, 0.0).body))

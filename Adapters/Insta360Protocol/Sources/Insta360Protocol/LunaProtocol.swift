@@ -130,6 +130,38 @@ public enum LunaGimbalAction: UInt64, Sendable {
     case move = 1
     case recenter = 2
     case flip = 3
+    /// App 2.34.5 `GIMBAL_ACTION_SET_ANGLE`: field 5 `angle` {roll 1, pitch 2, yaw 3}, float degrees.
+    case setAngle = 5
+    /// App 2.34.5 `GIMBAL_ACTION_GET_ANGLE`: reply is `GimbalControlResp`.
+    case getAngle = 6
+}
+
+/// cmd 226 `GimbalControlResp` {int32 grf = 1; float roll = 2, pitch = 3, yaw = 4}.
+/// Degrees, gimbal frame relative to the handle, yaw right / pitch up positive.
+public struct LunaGimbalAngle: Equatable, Sendable {
+    public var grf: Int32
+    public var roll: Float
+    public var pitch: Float
+    public var yaw: Float
+
+    public init(grf: Int32 = 0, roll: Float = 0, pitch: Float, yaw: Float) {
+        self.grf = grf
+        self.roll = roll
+        self.pitch = pitch
+        self.yaw = yaw
+    }
+
+    /// Proto3: omitted fields are zero.
+    public init(response: Data) throws {
+        let message = try ProtoMessage(response)
+        func float(_ n: Int) throws -> Float {
+            do { return try message.float(n) } catch LunaProtocolError.missingField { return 0 }
+        }
+        grf = Int32(truncatingIfNeeded: try message.unsigned(1, default: 0))
+        roll = try float(2)
+        pitch = try float(3)
+        yaw = try float(4)
+    }
 }
 
 public struct LunaRequest: Equatable, Sendable {
@@ -379,6 +411,26 @@ public enum LunaProtocol {
 
     public static func gimbalMove(upDown: Int32, leftRight: Int32) throws -> LunaRequest {
         try gimbalControl(action: .move, upDown: upDown, leftRight: leftRight, field4: stickField4)
+    }
+
+    /// cmd 226 SET_ANGLE. Proto3 canonical: zero axes are omitted (fw 1.1.15
+    /// reads them as 0, same as explicit zeros).
+    public static func gimbalSetAngle(pitch: Float, yaw: Float, roll: Float = 0) throws -> LunaRequest {
+        guard pitch.isFinite, yaw.isFinite, roll.isFinite else { throw LunaProtocolError.malformedProtobuf }
+        var angle = Data()
+        for (field, value) in [(1, roll), (2, pitch), (3, yaw)] where value != 0 {
+            angle += try ProtoMessage.float(field: field, value: value)
+        }
+        let body = try ProtoMessage.integer(field: 1, value: LunaGimbalAction.setAngle.rawValue)
+            + ProtoMessage.blob(field: 5, value: angle)
+        return LunaRequest(command: .gimbalControl, body: body, requiresEncryption: false)
+    }
+
+    /// cmd 226 GET_ANGLE, body `08 06`; parse the reply with `LunaGimbalAngle(response:)`.
+    public static func gimbalGetAngleRequest() throws -> LunaRequest {
+        LunaRequest(command: .gimbalControl,
+                    body: try ProtoMessage.integer(field: 1, value: LunaGimbalAction.getAngle.rawValue),
+                    requiresEncryption: false)
     }
 
     public static func gimbalRecenterRequest() throws -> LunaRequest {

@@ -181,6 +181,21 @@ final class LunaOfficialSetTests: XCTestCase {
         XCTAssertEqual(LunaVideoResolution(rawValue: 444)?.height, 2688)
     }
 
+    func testGimbalAbsoluteAngle() throws {
+        let set = try LunaProtocol.gimbalSetAngle(pitch: 10, yaw: -20)
+        XCTAssertEqual(set.command, .gimbalControl)
+        XCTAssertEqual(set.body, hex("08052a0a15000020411d0000a0c1"))
+        XCTAssertEqual(try LunaProtocol.gimbalSetAngle(pitch: 0, yaw: 0).body, hex("08052a00"))
+        XCTAssertEqual(try LunaProtocol.gimbalGetAngleRequest().body, hex("0806"))
+        let reply = try LunaGimbalAngle(response: hex("080015000000001da57100c125738a04c0"))
+        XCTAssertEqual(reply.grf, 0)
+        XCTAssertEqual(reply.roll, 0)
+        XCTAssertEqual(reply.pitch, -8.03, accuracy: 0.01)
+        XCTAssertEqual(reply.yaw, -2.07, accuracy: 0.01)
+        XCTAssertEqual(try LunaGimbalAngle(response: Data()), LunaGimbalAngle(pitch: 0, yaw: 0))
+        XCTAssertThrowsError(try LunaProtocol.gimbalSetAngle(pitch: .nan, yaw: 0))
+    }
+
     func testGimbalTrackingCaptureAndMediaRequests() throws {
         XCTAssertEqual(try LunaProtocol.gimbalMove(upDown: 99, leftRight: 0).body, hex("0801120308c6012004"))
         XCTAssertEqual(try LunaProtocol.gimbalControl(action: .move, upDown: 99, field4: 4).body,

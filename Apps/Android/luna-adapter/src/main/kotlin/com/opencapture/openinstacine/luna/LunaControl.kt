@@ -168,6 +168,27 @@ internal object LunaControl {
         field4 = STICK_FIELD4,
     )
 
+    /** App 2.34.5 GIMBAL_ACTION_SET_ANGLE (5): field 5 {roll 1, pitch 2, yaw 3} float degrees, handle frame. Zero axes omitted. */
+    fun gimbalSetAngle(pitch: Float, yaw: Float, roll: Float = 0f): Request {
+        require(pitch.isFinite() && yaw.isFinite() && roll.isFinite())
+        val angle = listOf(1 to roll, 2 to pitch, 3 to yaw).filter { it.second != 0f }
+            .fold(ByteArray(0)) { acc, (field, value) -> acc + float(field, value) }
+        return Request(GIMBAL_CONTROL, LunaWire.integer(1, 5) + LunaWire.blob(5, angle))
+    }
+
+    /** GIMBAL_ACTION_GET_ANGLE (6); parse the reply with [gimbalAngle]. */
+    val gimbalGetAngle = Request(GIMBAL_CONTROL, LunaWire.integer(1, 6))
+
+    data class GimbalAngle(val grf: Int, val roll: Float, val pitch: Float, val yaw: Float)
+
+    /** GimbalControlResp {int32 grf = 1; float roll = 2, pitch = 3, yaw = 4}; omitted fields are zero. */
+    fun gimbalAngle(reply: ByteArray): GimbalAngle {
+        val fields = LunaWire.fields(reply)
+        fun f(n: Int) = fields.lastOrNull { it.number == n && it.wire == 5 }
+            ?.let { ByteBuffer.wrap(it.bytes).order(ByteOrder.LITTLE_ENDIAN).float } ?: 0f
+        return GimbalAngle(LunaWire.number(reply, 1).toInt(), f(2), f(3), f(4))
+    }
+
     // Official cmd 7 shape: cached device Options (1 = 1, 5 = 48000, 42 = 1, 82 = 3) around one field.
 
     fun deviceSet(type: Int, value: Long): Request {
