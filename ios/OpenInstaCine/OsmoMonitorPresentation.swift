@@ -21,7 +21,7 @@ enum OsmoMonitorPresentation {
         return MonitorCapabilities(
             gimbal: session.hasGimbal, zoom: session.supportsZoom,
             focus: session.supportsFocusMode, iris: session.supportsAperture, audio: session.supportsAudio,
-            headTracking: false, clipDelete: true, clipStar: true,
+            headTracking: true, clipDelete: true, clipStar: true,
             requiresInternetHop: true, timecode: session.supportsTimecode)
     }
 }

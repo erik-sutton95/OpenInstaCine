@@ -161,11 +161,26 @@ final class CameraSession {
     private(set) var gimbalControlSceneActive = true
     private(set) var gimbalPoseViewFlip = false
     private(set) var gimbalPoseInvertPan = false
-    var gimbalYawTenthDeg: Int16? { nil }
-    var gimbalPitchTenthDeg: Int16? { nil }
+    /// Camera-head pointing from the IMU stream (Luna has no attitude readout).
+    @ObservationIgnored var gimbalPose = LunaGimbalPoseEstimator()
+    @ObservationIgnored var lastIMUAt: TimeInterval?
+    /// Closed-loop aim target (head tracking, Level, debug aim) and its token.
+    @ObservationIgnored var gimbalAim: (target: GimbalWaypoint, token: UInt64)?
+    @ObservationIgnored var gimbalAimTask: Task<Void, Never>?
+    @ObservationIgnored var gimbalAimGeneration: UInt64 = 0
+    var gimbalYawTenthDeg: Int16? { freshGimbalWaypoint.map { Int16(($0.yawDeg * 10).rounded()) } }
+    var gimbalPitchTenthDeg: Int16? { freshGimbalWaypoint.map { Int16(($0.pitchDeg * 10).rounded()) } }
     /// Luna reports no gimbal attitude, so waypoints and world level are unavailable.
-    var liveGimbalWaypoint: GimbalWaypoint? { nil }
-    var freshGimbalWaypoint: GimbalWaypoint? { nil }
+    var liveGimbalWaypoint: GimbalWaypoint? {
+        guard lastIMUAt != nil, gimbalPose.sampleCount > 0 else { return nil }
+        return GimbalWaypoint(
+            yawDeg: gimbalPose.yawDeg, pitchDeg: gimbalPose.pitchDeg, zoom: zoomReadout,
+            nativePitchDeg: -gimbalPose.pitchDeg)
+    }
+    var freshGimbalWaypoint: GimbalWaypoint? {
+        guard let at = lastIMUAt, ProcessInfo.processInfo.systemUptime - at <= 0.3 else { return nil }
+        return liveGimbalWaypoint
+    }
     var overlayGimbalWaypoint: GimbalWaypoint? { nil }
     @ObservationIgnored var lastGimbalAttitudeHex = ""
     @ObservationIgnored var lastGimbalAttitudeDump = ""
@@ -296,6 +311,7 @@ final class CameraSession {
         backend.onCapture = { [weak self] in self?.applyCapture($0) }
         backend.onNotification = { [weak self] in self?.applyNotification($0) }
         backend.onTrackFrame = { [weak self] in self?.applyTrackFrame($0) }
+        backend.onIMU = { [weak self] in self?.ingestIMU($0) }
         backend.onLog = { ControlLiveLog.line($0) }
     }
 

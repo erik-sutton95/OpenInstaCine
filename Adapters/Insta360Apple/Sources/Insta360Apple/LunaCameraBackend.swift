@@ -24,6 +24,8 @@ public final class LunaCameraBackend: CameraBackend {
     public var onNotification: ((LunaNotification) -> Void)?
     /// Deep Track box and state from the stream; only changes are delivered.
     public var onTrackFrame: ((LunaTrackFrame) -> Void)?
+    /// Camera-head IMU (media 0x30), ~100 samples every 100 ms.
+    public var onIMU: (([LunaIMUSample]) -> Void)?
     private var lastTrackFrame: LunaTrackFrame?
     public var onDeviceInformation: ((LunaDeviceInformation) -> Void)?
     /// Every request/notification summary, for the shell's diagnostics journal.
@@ -603,6 +605,8 @@ public final class LunaCameraBackend: CameraBackend {
                         lastVideoAt = Date()
                         eventHandler?(
                             .videoAccessUnit(video, timestampMilliseconds: media.timestamp))
+                    } else if let imu = media.imuSamples, !imu.isEmpty {
+                        onIMU?(imu)
                     } else if let track = media.trackFrame, track != lastTrackFrame {
                         if track.rawState != lastTrackFrame?.rawState {
                             onLog?("luna: track state \(track.rawState)")

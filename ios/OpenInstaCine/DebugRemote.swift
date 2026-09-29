@@ -128,6 +128,7 @@
                 "zoom": s.zoomReadout,
                 "zoomStops": s.zoomStops,
                 "gimbalMode": s.gimbalMode.label,
+                "pose": s.freshGimbalWaypoint.map { ["yaw": ($0.yawDeg * 10).rounded() / 10, "pitch": ($0.pitchDeg * 10).rounded() / 10] } ?? [:],
                 "gimbalSpeed": s.gimbalSpeed.label,
                 "firmware": st.firmware ?? "",
                 "tracking": s.isTracking,
@@ -206,6 +207,17 @@
                 }
                 s.endGimbalStick()
             case "recenter": s.recenterGimbal()
+            case "aim":
+                guard let live = s.freshGimbalWaypoint else { return ["ok": false, "error": "no IMU pose"] }
+                let target = GimbalWaypoint(
+                    yawDeg: num("yaw") ?? live.yawDeg, pitchDeg: num("pitch") ?? live.pitchDeg,
+                    zoom: live.zoom, nativePitchDeg: -(num("pitch") ?? live.pitchDeg))
+                guard s.aimGimbal(at: target, settleAndStop: true) != nil else {
+                    return ["ok": false, "error": "aim refused"]
+                }
+                let deadline = Date().addingTimeInterval(num("seconds") ?? 8)
+                while s.gimbalAim != nil, Date() < deadline { try? await Task.sleep(for: .milliseconds(50)) }
+            case "level": s.levelGimbalToWorld()
             case "flip": s.flipGimbal()
             case "gimbalMode":
                 if let mode = GimbalMode.allCases.first(where: { "\($0)" == str("value") }) { s.setGimbalMode(mode) }

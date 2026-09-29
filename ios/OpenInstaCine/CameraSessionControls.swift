@@ -552,6 +552,8 @@ extension CameraSession {
             endGimbalStick(cancelMove: true)
             return
         }
+        // The operator's stick always wins over a closed-loop aim.
+        if x != 0 || y != 0 { stopGimbalAim() }
         let dead = linear ? GimbalStick.deadzone : mapping.deadzone
         let magnitude = hypot(x, y)
         let scale = min(1, Double(sensitivity) / Double(GimbalStick.defaultSensitivity))
@@ -604,17 +606,98 @@ extension CameraSession {
         }
     }
 
-    /// Luna reports no gimbal attitude, so Level cannot judge the horizon. Say so
-    /// (same refusal as the shared shell) instead of silently doing something else.
+    /// Level tilts the head to the world horizon (IMU gravity pitch 0), keeping yaw.
     func levelGimbalToWorld() {
-        controlNote = WorldLevelSnap.noLevelData
+        guard let live = freshGimbalWaypoint else {
+            controlNote = WorldLevelSnap.noLevelData
+            return
+        }
+        aimGimbal(
+            at: GimbalWaypoint(yawDeg: live.yawDeg, pitchDeg: 0, zoom: live.zoom, nativePitchDeg: 0),
+            settleAndStop: true)
     }
 
     func recenterGimbal() {
         guard canSetGimbalConfiguration else { return }
         endGimbalStick(cancelMove: true)
-        sendControl("Gimbal recenter", { try LunaProtocol.gimbalRecenterRequest() }, refresh: false)
+        stopGimbalAim()
+        sendControl(
+            "Gimbal recenter", { try LunaProtocol.gimbalRecenterRequest() }, refresh: false,
+            onSuccess: { [weak self] _ in
+                // Recenter points the head at the handle's forward: that is yaw 0.
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(1.5))
+                    self?.gimbalPose.zeroYaw()
+                }
+            })
         controlNote = "Gimbal re-centered"
+    }
+
+    // MARK: - Closed-loop aim (IMU pose + VirtualRC steer)
+
+    func ingestIMU(_ samples: [LunaIMUSample]) {
+        gimbalPose.ingest(samples, commanding: gimbalStick.isHeld || gimbalAim != nil)
+        lastIMUAt = ProcessInfo.processInfo.systemUptime
+    }
+
+    /// Drive the head toward `target` at 20 Hz. `settleAndStop` ends the aim once the
+    /// head has held within the deadband for half a second (Level, debug aim).
+    @discardableResult
+    func aimGimbal(at target: GimbalWaypoint, settleAndStop: Bool = false) -> UInt64? {
+        guard canSetGimbalConfiguration, !gimbalStick.isHeld, freshGimbalWaypoint != nil else {
+            return nil
+        }
+        gimbalAimGeneration &+= 1
+        let token = gimbalAimGeneration
+        gimbalAim = (target, token)
+        gimbalAimTask?.cancel()
+        gimbalAimTask = Task { @MainActor [weak self] in
+            var settledSince: Date?
+            var previous: LunaGimbalSteer?
+            let started = Date()
+            while !Task.isCancelled {
+                guard let self, let aim = self.gimbalAim, aim.token == token else { return }
+                guard self.canSetGimbalConfiguration, !self.gimbalStick.isHeld,
+                    let live = self.freshGimbalWaypoint
+                else { break }
+                let steer = LunaGimbalSteer.toward(
+                    yawError: aim.target.yawDeg - live.yawDeg,
+                    pitchError: aim.target.pitchDeg - live.pitchDeg, previous: previous)
+                previous = steer
+                // Settled on the measured error; the lead can zero the steer mid-motion.
+                let error = max(
+                    abs(aim.target.yawDeg - live.yawDeg), abs(aim.target.pitchDeg - live.pitchDeg))
+                if error <= 1.0 {
+                    settledSince = settledSince ?? Date()
+                    if settleAndStop, Date().timeIntervalSince(settledSince!) >= 0.5 { break }
+                } else {
+                    settledSince = nil
+                }
+                if settleAndStop, Date().timeIntervalSince(started) > 12 { break }
+                if let request = try? LunaProtocol.gimbalMove(
+                    upDown: steer.upDown, leftRight: steer.leftRight)
+                {
+                    _ = try? await self.backend.send(request, timeout: .seconds(2))
+                }
+                try? await Task.sleep(for: LunaStickStream.interval)
+            }
+            self?.finishGimbalAim(token: token)
+        }
+        return token
+    }
+
+    private func finishGimbalAim(token: UInt64) {
+        guard gimbalAim?.token == token else { return }
+        gimbalAim = nil
+        gimbalAimTask = nil
+        guard backend.isControlReady else { return }
+        Task { _ = try? await backend.send(LunaProtocol.gimbalReleaseRequest()) }
+    }
+
+    func stopGimbalAim() {
+        guard let token = gimbalAim?.token else { return }
+        gimbalAimTask?.cancel()
+        finishGimbalAim(token: token)
     }
 
     func flipGimbal() {
@@ -656,11 +739,27 @@ extension CameraSession {
             })
     }
 
-    // Programmed A·B·C moves and head tracking need gimbal attitude, which Luna
-    // does not report. Their UI reads these and shows the reason.
-    func beginNativeHeadTrack() -> UInt64? { nil }
-    func updateNativeHeadTrack(target: GimbalWaypoint, token: UInt64) -> Bool { false }
-    func endNativeHeadTrack(token: UInt64) {}
+    // Head tracking aims the head at the AirPods target through the IMU loop.
+    func beginNativeHeadTrack() -> UInt64? {
+        guard !isBrowsingMedia, !isLiveVideoStale, let live = freshGimbalWaypoint else { return nil }
+        return aimGimbal(at: live)
+    }
+
+    func updateNativeHeadTrack(target: GimbalWaypoint, token: UInt64) -> Bool {
+        guard gimbalAim?.token == token, !isBrowsingMedia, !isLiveVideoStale else {
+            endNativeHeadTrack(token: token)
+            return false
+        }
+        gimbalAim = (target, token)
+        return true
+    }
+
+    func endNativeHeadTrack(token: UInt64) {
+        guard gimbalAim?.token == token else { return }
+        stopGimbalAim()
+    }
+
+    // Programmed A·B·C moves still need the timed-move engine ported to the IMU loop.
     func setGimbalWaypoint(_ slot: GimbalWaypointSlot) {
         controlNote = "Luna does not report gimbal position, so moves cannot be programmed."
     }
