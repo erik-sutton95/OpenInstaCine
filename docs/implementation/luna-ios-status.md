@@ -1,7 +1,7 @@
 # Luna iOS status
 
 State of the iOS app on branch `feat/openpocketcine-parity`: the OpenPocketCine
-shell (commit `c1e8f94`) with a yellow accent and a Luna Ultra backend, camera
+shell (commit `9e306c91`, synced 2026-09-29) with a yellow accent and a Luna Ultra backend, camera
 firmware v1.1.15. Rows are derived from the code; live results are listed
 separately below.
 
@@ -153,6 +153,34 @@ From take 19 of [the official app capture](../research/luna-official-fw1115-capt
 Not implemented: Tracking Framing (cmd 244/245, the 3 x 3 grid of where the gimbal holds
 the subject). The shared shell has no control for it.
 
+### Upstream 9e306c91 sync (iOS and engine, 2026-09-29)
+
+Synced from `c1e8f94` with `scripts/sync-openpocketcine.sh` (three-way; seven conflicts resolved
+by hand). What changed for Luna:
+
+- **False color:** CineStop (scene stops around 18% gray, read through the I-Log curve), Video,
+  IRE and Limits, with the Read LOG / 709 toggle. The 709 read for I-Log uses the grey axis of the
+  bundled Luna I-Log to Rec.709 cube (`LiveColorScience.rec709LookCurve`).
+- **AE / AWB lock:** ported, but never offered on Luna. Upstream pins the applied Auto ISO,
+  shutter and Kelvin; the Luna only reports the values we set, so `AutoExposureLock.capture` and
+  `WhiteBalance.lockingAuto` return nil. A long press falls back to tap focus.
+- **Shutter angle:** `setShutterAngle` writes 1/N for the current fps; a format change keeps the
+  angle (this predates the sync).
+- **Pairing:** the "still looking" hint after 20 s of scanning, Open Settings on Local Network /
+  Bluetooth denials. Copy names the Insta360 app instead of DJI Mimo / Frame Tap (overlay).
+- **Picture aspect:** the session mirrors the decoded raster aspect, so 9:16 and 1:1 formats
+  lay out like upstream's vertical picture handling.
+- **Labels:** Normal reads "Standard" (`ColorMode.labelOverrides`), as in the official app.
+- **ISO stepping:** full stops by value; Luna's third-stop 160 no longer sorts after 25600.
+- **Removed as DJI-only:** `MultiviewControlsTests`, `ShutterAnglePersistenceTests`
+  (both drive the DJI datalink).
+- **Visual parity audit** in the Simulator (149 screen pairs vs upstream): review screens now use
+  Luna capability gates, and the gimbal drawer hides Motion Control when programmed moves are
+  unsupported. Pairing steps 2 to 4 need the camera and were not compared.
+
+Not yet re-verified on the camera after this sync (it was off): live picture, CineStop and the
+709 read over real I-Log, and the pairing hints.
+
 ## Known issues
 
 1. **Physical iPhone hotspot join (transient).** Overnight, `NEHotspotConfiguration` apply returned
@@ -173,7 +201,7 @@ the subject). The shared shell has no control for it.
 
 - Watch for a repeat of the transient hotspot error 8 and capture `nehelper` logs if it returns.
 - Repeat the Simulator walkthrough on the phone (hotspot join, thermal, real-light picture, Deep Track lock).
-- Android: map Luna status and photography options into the shared chrome (see Android below).
+- Re-verify the 9e306c91 sync on the camera (live picture, false color over I-Log, pairing hints).
 - Decide how to expose Color Recovery.
 
 Sources: `ios/OpenInstaCine/CameraSession*.swift`, `CameraMedia.swift` (Luna
