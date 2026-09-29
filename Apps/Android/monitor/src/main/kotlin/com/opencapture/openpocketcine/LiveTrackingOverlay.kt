@@ -20,7 +20,14 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.opencapture.openpocketcine.session.FocusOverlay
 import com.opencapture.openpocketcine.session.LiveTrackingChrome
 import com.opencapture.openpocketcine.session.TrackingBox
@@ -35,10 +42,29 @@ fun LiveFocusTrackingLayer(
     mirrored: Boolean,
     showTapFocusBox: Boolean,
     modifier: Modifier = Modifier,
+    aeLocked: Boolean = false,
+    flippedVertically: Boolean = false,
 ) {
+    val measurer = rememberTextMeasurer()
     Canvas(modifier.fillMaxSize()) {
+        val aeTag =
+            if (aeLocked) {
+                measurer.measure(
+                    "AE-L",
+                    TextStyle(
+                        color = LiveDesign.aeLock,
+                        fontSize = 9.sp,
+                        fontFamily = OpcFonts.sora,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp,
+                        shadow = Shadow(Color.Black.copy(alpha = 0.8f), Offset(0f, 0.5.dp.toPx()), 1.5.dp.toPx()),
+                    ),
+                )
+            } else {
+                null
+            }
         fun feedRect(box: TrackingBox): Rect {
-            val drawn = if (mirrored) box.mirrored() else box
+            val drawn = box.flipped(mirrored, flippedVertically)
             return Rect(
                 (drawn.x * size.width).toFloat(),
                 (drawn.y * size.height).toFloat(),
@@ -52,14 +78,14 @@ fun LiveFocusTrackingLayer(
         when (val overlay = hud.overlay) {
             is FocusOverlay.Search -> {
                 drawBracket(feedRect(overlay.box), LiveDesign.text.copy(alpha = 0.88f), 1.5.dp.toPx())
-                if (showTapFocusBox && focus != null) drawFocusBox(focus, mirrored)
+                if (showTapFocusBox && focus != null) drawFocusBox(focus, mirrored, flippedVertically, aeTag)
             }
             is FocusOverlay.Subject ->
                 drawBracket(feedRect(overlay.box), LiveDesign.good, 2.dp.toPx())
             is FocusOverlay.Face ->
                 drawBracket(feedRect(overlay.box), LiveDesign.text.copy(alpha = 0.92f), 1.6.dp.toPx())
             FocusOverlay.Focus ->
-                if (showTapFocusBox && focus != null) drawFocusBox(focus, mirrored)
+                if (showTapFocusBox && focus != null) drawFocusBox(focus, mirrored, flippedVertically, aeTag)
         }
     }
 }
@@ -70,9 +96,10 @@ fun LiveTrackingCancelButton(
     feedWidth: Float,
     feedHeight: Float,
     mirrored: Boolean,
+    flippedVertically: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val rect = LiveTrackingChrome.cancelRect(box, feedWidth, feedHeight, mirrored)
+    val rect = LiveTrackingChrome.cancelRect(box, feedWidth, feedHeight, mirrored, flippedVertically)
     Box(
         Modifier
             .offset(rect.x.dp, rect.y.dp)
@@ -89,23 +116,7 @@ fun LiveTrackingCancelButton(
                 .background(LiveDesign.good),
             contentAlignment = Alignment.Center,
         ) {
-            Canvas(Modifier.size(11.dp)) {
-                val pad = size.minDimension * 0.22f
-                drawLine(
-                    LiveDesign.background,
-                    Offset(pad, pad),
-                    Offset(size.width - pad, size.height - pad),
-                    2.dp.toPx(),
-                    StrokeCap.Round,
-                )
-                drawLine(
-                    LiveDesign.background,
-                    Offset(size.width - pad, pad),
-                    Offset(pad, size.height - pad),
-                    2.dp.toPx(),
-                    StrokeCap.Round,
-                )
-            }
+            OpcIcon(OpcIcon.X, null, Modifier.size(11.dp), LiveDesign.background)
         }
     }
 }
@@ -113,14 +124,24 @@ fun LiveTrackingCancelButton(
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawFocusBox(
     focus: Pair<Float, Float>,
     mirrored: Boolean,
+    flippedVertically: Boolean,
+    aeTag: TextLayoutResult?,
 ) {
     val nx = if (mirrored) 1f - focus.first else focus.first
-    val ny = focus.second
+    val ny = if (flippedVertically) 1f - focus.second else focus.second
     val side = min(size.width, size.height) * 0.14f
     val cx = nx * size.width
     val cy = ny * size.height
+    if (aeTag != null) {
+        // iOS `FocusBoxView`: right of the box, or left near the right edge.
+        val gap = 3.dp.toPx()
+        val w = aeTag.size.width.toFloat()
+        val right = cx + side / 2f + gap
+        val x = if (right + w > size.width) cx - side / 2f - gap - w else right
+        drawText(aeTag, topLeft = Offset(x, cy - side / 2f + 6.dp.toPx() - aeTag.size.height / 2f))
+    }
     drawRoundRect(
-        LiveDesign.accent,
+        if (aeTag != null) LiveDesign.aeLock else LiveDesign.accent,
         topLeft = Offset(cx - side / 2f, cy - side / 2f),
         size = androidx.compose.ui.geometry.Size(side, side),
         cornerRadius = androidx.compose.ui.geometry.CornerRadius(max(6f, side * 0.12f)),

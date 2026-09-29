@@ -42,6 +42,10 @@ data class TrackingBox(
 
     fun mirrored(): TrackingBox = copy(x = 1.0 - x - width)
 
+    /** Swift `TrackingBox.flipped`: camera box to screen box (and back) through MIRROR. */
+    fun flipped(horizontal: Boolean, vertical: Boolean): TrackingBox =
+        copy(x = if (horizontal) 1.0 - x - width else x, y = if (vertical) 1.0 - y - height else y)
+
     companion object {
         const val MINIMUM_NORMALIZED_SIZE = 0.05
         const val MIMO_MINIMUM_SIDE = 0.09
@@ -384,6 +388,59 @@ object LiveFeedTapPolicy {
         }
 }
 
+/**
+ * Right after an operator ActiveTrack SET the camera can still push its previous
+ * subject (often a face). Drawing that paints the lock on the wrong thing, then
+ * slides it across to the new target. Mirrors Swift `TrackingStartPolicy`.
+ */
+object TrackingStartPolicy {
+    const val SETTLE_SECONDS = 1.5
+    const val PADDING = 0.05
+
+    fun accepts(push: TrackingBox, requested: TrackingBox?, secondsSinceRequest: Double?): Boolean {
+        if (requested == null || secondsSinceRequest == null) return true
+        if (secondsSinceRequest < 0 || secondsSinceRequest >= SETTLE_SECONDS) return true
+        return push.intersectionOverUnion(requested) > 0 ||
+            requested.contains(push.centerX, push.centerY, PADDING)
+    }
+}
+
+/**
+ * Double-tap the same spot, as in Mimo and on the camera: the first tap
+ * focuses as usual, the second starts ActiveTrack on a box centred there.
+ */
+class FeedDoubleTapTrack {
+    private var lastX = 0.0
+    private var lastY = 0.0
+    private var lastAt: Double? = null
+
+    /** The tracking box when this tap completes a double tap, otherwise `null`. */
+    fun register(x: Double, y: Double, at: Double): TrackingBox? {
+        val last = lastAt
+        if (last != null && at >= last && at - last <= WINDOW && hypot(x - lastX, y - lastY) <= RADIUS) {
+            lastAt = null
+            return TrackingBox.fromCenter(x, y, BOX_WIDTH, BOX_HEIGHT)
+        }
+        lastX = x
+        lastY = y
+        lastAt = at
+        return null
+    }
+
+    fun reset() {
+        lastAt = null
+    }
+
+    companion object {
+        const val WINDOW = 0.45
+        /** Feed-normalised distance that still counts as the same spot. */
+        const val RADIUS = 0.06
+        /** Roughly square on a 16:9 picture; the camera's tracker finds the subject. */
+        const val BOX_WIDTH = 0.14
+        const val BOX_HEIGHT = 0.25
+    }
+}
+
 object FaceTrackTap {
     const val HIT_PADDING = 0.03
 
@@ -470,8 +527,9 @@ object LiveTrackingChrome {
         feedWidth: Float,
         feedHeight: Float,
         mirrored: Boolean,
+        flippedVertically: Boolean = false,
     ): CancelRect {
-        val drawn = if (mirrored) box.mirrored() else box
+        val drawn = box.flipped(mirrored, flippedVertically)
         val rectRight = ((drawn.x + drawn.width) * feedWidth).toFloat()
         val rectTop = (drawn.y * feedHeight).toFloat()
         val s = CANCEL_HIT_SIZE
@@ -486,11 +544,13 @@ object LiveTrackingChrome {
 }
 
 object LiveFeedFocusGesture {
-    enum class Kind { TAP, TRACK, DISP_CLEAN, DISP_LIVE }
+    enum class Kind { TAP, TRACK, AE_LOCK, DISP_CLEAN, DISP_LIVE }
 
     const val TRACK_MINIMUM = 24f
     const val TRACK_HOLD_SEC = 0.20
     const val TRACK_HOLD_SLOP = 10f
+    /** A still press this long releases as AE lock instead of tap focus. */
+    const val AE_LOCK_HOLD_SEC = 0.6
 
     fun classify(
         dx: Float,
@@ -498,10 +558,17 @@ object LiveFeedFocusGesture {
         pinched: Boolean = false,
         armed: Boolean = false,
         swipeFloor: Float = 44f,
+        aeLockHeld: Boolean = false,
     ): Kind? {
         if (pinched) return null
         val distance = hypot(dx, dy)
-        if (armed) return if (distance >= TRACK_MINIMUM) Kind.TRACK else Kind.TAP
+        if (armed) {
+            return when {
+                distance >= TRACK_MINIMUM -> Kind.TRACK
+                aeLockHeld -> Kind.AE_LOCK
+                else -> Kind.TAP
+            }
+        }
         if (abs(dy) > abs(dx) + 8f && abs(dy) > swipeFloor) {
             return if (dy > 0f) Kind.DISP_CLEAN else Kind.DISP_LIVE
         }

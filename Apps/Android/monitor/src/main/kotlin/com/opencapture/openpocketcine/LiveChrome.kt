@@ -50,6 +50,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -65,6 +66,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
@@ -889,6 +891,8 @@ data class LiveMonitorLayout(
     val safeTop: Float,
     val safeBottom: Float,
     val usesFieldMonitor: Boolean = false,
+    /** Operator joystick diameter at chrome scale 1 (Small / Medium / Large). */
+    val stickSide: Float = com.opencapture.monitorui.MonitorLayoutPolicy.STICK_SIDE,
 ) {
     val onFeed: ChromeRect
         get() = if (picture.width > 1f) picture else feed
@@ -906,10 +910,10 @@ data class LiveMonitorLayout(
                 }
             val stick =
                 if (portrait) {
-                    com.opencapture.monitorui.MonitorLayoutPolicy.portraitStick(viewportWidth, floor)
+                    com.opencapture.monitorui.MonitorLayoutPolicy.portraitStick(viewportWidth, floor, stickSide)
                 } else {
                     com.opencapture.monitorui.MonitorLayoutPolicy.landscapeStick(
-                        viewportWidth, floor, record.width, safeTrailing,
+                        viewportWidth, floor, record.width, safeTrailing, stickSide,
                     )
                 }
             val zoom = com.opencapture.monitorui.MonitorLayoutPolicy.portraitZoom(stick)
@@ -942,7 +946,7 @@ data class LiveMonitorLayout(
             floorY = floorY,
             canvasMaxY = viewportHeight - max(0f, safeBottom),
             avoid = avoid,
-            stickSize = LiveChromeMetrics.STICK,
+            stickSize = LiveChromeMetrics.STICK * stickSide / LiveDesign.GIMBAL_STICK_DP,
             zoomSize = LiveChromeMetrics.ZOOM,
             gap = gap,
             inset = inset,
@@ -978,6 +982,19 @@ data class LiveMonitorLayout(
                 }
             val baseY = (if (assist.height > 1f) assist.minY else viewportHeight) - 30f
             return ChromeRect(towardFeed - size / 2f, baseY - size / 2f, size, size)
+        }
+
+    /** iOS `aeUnlock`. Portrait without an assist column mirrors Recenter to the well's left edge. */
+    val aeUnlock: ChromeRect
+        get() {
+            val reset = focusReset
+            val portrait = viewportHeight > viewportWidth
+            val leading = if (usesFieldMonitor && assist.width > 1f) assist.maxX else onFeed.minX + 2f
+            val r = com.opencapture.monitorui.MonitorLayoutPolicy.aeUnlock(
+                com.opencapture.monitorui.MonitorRect(reset.x, reset.y, reset.width, reset.height),
+                leading, feed.midX, portrait,
+            )
+            return ChromeRect(r.x, r.y, r.width, r.height)
         }
 
     companion object {
@@ -1098,13 +1115,14 @@ data class LiveMonitorLayout(
             fill: Boolean = false,
             showsValues: Boolean = true,
             topControlInset: Float = 0f,
+            joystick: com.opencapture.monitorui.MonitorJoystickSize = com.opencapture.monitorui.MonitorJoystickSize.MEDIUM,
         ): LiveMonitorLayout {
             LiveChromeMetrics.scale = chromeScale
             val p =
                 com.opencapture.monitorui.MonitorLayoutPolicy.fieldMonitor(
                     viewportWidth, viewportHeight, safeTop, safeLeading, safeBottom, safeTrailing,
                     pictureAspect ?: LiveChromeMetrics.FEED_ASPECT, fill, showsValues,
-                    topControlInset, hasDisplayCutout,
+                    topControlInset, hasDisplayCutout, joystick,
                 )
             fun slot(rect: com.opencapture.monitorui.MonitorRect) =
                 ChromeRect(rect.x, rect.y, rect.width, rect.height)
@@ -1130,6 +1148,7 @@ data class LiveMonitorLayout(
                 safeTop = safeTop,
                 safeBottom = safeBottom,
                 usesFieldMonitor = true,
+                stickSide = joystick.side,
             )
         }
 
@@ -1380,33 +1399,32 @@ internal object LiveSessionBridge {
     }
 }
 
+/** The native Lock tile surface also hosts Multiview's Exit action. */
 @Composable
-fun LockButton(locked: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val tint = if (locked) LiveDesign.accent else LiveDesign.text.copy(alpha = 0.86f)
+internal fun MonitorChromeButton(
+    icon: OpcIcon, label: String, modifier: Modifier = Modifier,
+    enabled: Boolean = true, selected: Boolean = false, buttonRole: Role = Role.Button, onClick: () -> Unit,
+) {
     Box(
-        modifier
-            .size(LiveChromeMetrics.LOCK.dp)
+        modifier.size(LiveChromeMetrics.LOCK.dp).alpha(if (enabled) 1f else 0.4f)
             .monitorGlass(RoundedCornerShape(14.dp))
-            .then(
-                if (locked) Modifier.border(1.5.dp, LiveDesign.accent.copy(alpha = 0.75f), ChromeShape)
-                else Modifier,
-            )
-            .chromeClickable(onClick = onClick)
-            .semantics {
-                contentDescription = if (locked) "Unlock monitor controls" else "Lock monitor controls"
-                role = Role.Switch
-                toggleableState = ToggleableState(locked)
-            },
+            .then(if (selected) Modifier.border(1.5.dp, LiveDesign.accent.copy(alpha = 0.75f), ChromeShape) else Modifier)
+            .chromeClickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = label; role = buttonRole },
         contentAlignment = Alignment.Center,
     ) {
-        OpcIcon(
-            icon = OpcIcon.LOCK,
-            contentDescription = null,
-            tint = tint,
-            // Match the reference's visible glyph height, retaining the full tile/touch area.
-            modifier = Modifier.fillMaxSize(26f / 54f),
-        )
+        OpcIcon(icon, null, Modifier.fillMaxSize(26f / 54f),
+            if (selected) LiveDesign.accent else LiveDesign.text.copy(alpha = 0.86f))
     }
+}
+
+@Composable
+fun LockButton(locked: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    MonitorChromeButton(
+        OpcIcon.LOCK, if (locked) "Unlock monitor controls" else "Lock monitor controls",
+        modifier.semantics { toggleableState = ToggleableState(locked) },
+        selected = locked, buttonRole = Role.Switch, onClick = onClick,
+    )
 }
 
 /** Replaces [LockButton] while Live View borrows a Multiview tile. iOS `multiviewExit`. */
@@ -1473,14 +1491,15 @@ fun DispButton(
 }
 
 @Composable
-fun AuxCircleButton(modifier: Modifier = Modifier, onClick: () -> Unit, glyph: @Composable (Color) -> Unit) {
+fun AuxCircleButton(modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit, glyph: @Composable (Color) -> Unit) {
     val tablet = minOf(LocalConfiguration.current.screenWidthDp, LocalConfiguration.current.screenHeightDp) >= 600
     val side = com.opencapture.monitorui.MonitorLayoutPolicy.systemButtonSize(tablet)
     com.opencapture.monitorui.MonitorAuxCircleButton(
         modifier
             .size(side.dp)
+            .alpha(if (enabled) 1f else 0.4f)
             .monitorGlass(RoundedCornerShape(14.dp))
-            .chromeClickable(onClick = onClick)
+            .chromeClickable(enabled = enabled, onClick = onClick)
             .semantics { role = Role.Button },
         glyph = glyph,
     )
@@ -1620,7 +1639,7 @@ internal const val BATTERY_CELL_W_DP = 26f
 internal const val BATTERY_CELL_H_DP = 15f
 
 @Composable
-private fun BatteryOutlineRow(percent: Int, charging: Boolean, camera: Boolean) {
+internal fun BatteryOutlineRow(percent: Int, charging: Boolean, camera: Boolean) {
     val tint =
         when {
             percent < 0 -> LiveDesign.faint
@@ -1639,10 +1658,7 @@ private fun BatteryOutlineRow(percent: Int, charging: Boolean, camera: Boolean) 
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(10.dp), contentAlignment = Alignment.Center) {
-            if (camera) CameraGlyph(LiveDesign.muted, Modifier.size(12.dp, 10.dp))
-            else PhoneGlyph(LiveDesign.muted, Modifier.size(7.dp, 11.dp))
-        }
+        OpcIcon(if (camera) OpcIcon.CAMERA else OpcIcon.SMARTPHONE, null, Modifier.size(10.dp), LiveDesign.muted)
         Box(Modifier.size(BATTERY_CELL_W_DP.dp, BATTERY_CELL_H_DP.dp), contentAlignment = Alignment.Center) {
             Box(
                 Modifier
@@ -1656,7 +1672,7 @@ private fun BatteryOutlineRow(percent: Int, charging: Boolean, camera: Boolean) 
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(1.dp),
                     ) {
-                        if (charging) BoltGlyph(tint, Modifier.size(5.dp, 7.dp))
+                        if (charging) OpcIcon(OpcIcon.ZAP, null, Modifier.size(7.dp), tint)
                         Text(
                             readout,
                             color = tint,
@@ -1698,25 +1714,6 @@ private fun BatteryOutlineRow(percent: Int, charging: Boolean, camera: Boolean) 
 }
 
 @Composable
-private fun BoltGlyph(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val w = size.width
-        val h = size.height
-        val path =
-            Path().apply {
-                moveTo(w * 0.62f, 0f)
-                lineTo(w * 0.08f, h * 0.55f)
-                lineTo(w * 0.46f, h * 0.55f)
-                lineTo(w * 0.38f, h)
-                lineTo(w * 0.92f, h * 0.42f)
-                lineTo(w * 0.54f, h * 0.42f)
-                close()
-            }
-        drawPath(path, tint)
-    }
-}
-
-@Composable
 fun CameraBatteryReadout(percent: Int, modifier: Modifier = Modifier) {
     Row(
         modifier.clearAndSetSemantics {
@@ -1741,11 +1738,8 @@ fun TimecodeReadout(timecode: String?, modifier: Modifier = Modifier, portrait: 
     val config = LocalConfiguration.current
     val tablet = min(config.screenWidthDp, config.screenHeightDp) >= 600
     val incoming = timecode?.takeIf { it.isNotBlank() }
-    val clock =
-        incoming?.let { value ->
-            val parts = value.split(':')
-            if (parts.size >= 4) parts.take(3).joinToString(":") else value
-        } ?: if (portrait) "00:00:00" else "--:--:--"
+    val clock = com.opencapture.openpocketcine.session.timecodeClock(incoming)
+        ?: if (portrait) "00:00:00" else "--:--:--"
     val raw = clock
     val colon = raw.lastIndexOf(':')
     val head = if (colon >= 0) raw.substring(0, colon + 1) else raw
@@ -2045,8 +2039,10 @@ fun LiveGimbalStick(
     var pressed by remember { mutableStateOf(false) }
     val renderedOffset by animateOffsetAsState(knobOffset,
         if (pressed) snap() else spring(dampingRatio = .8f, stiffness = 300f), label = "stick-return")
+    // Resting ink is difference-blended, so its darkest result over white is
+    // 1 - alpha. Keep it high enough to read dark on bright footage.
     val stickTint by animateColorAsState(
-        if (pressed) LiveDesign.accent.copy(alpha = .8f) else Color.White.copy(alpha = .55f),
+        if (pressed) LiveDesign.accent.copy(alpha = .8f) else Color.White.copy(alpha = .9f),
         tween(120), label = "stick-press")
     val scope = rememberCoroutineScope()
     var recenterJob by remember { mutableStateOf<Job?>(null) }
@@ -2056,10 +2052,11 @@ fun LiveGimbalStick(
             .semantics { contentDescription = "Gimbal stick" }
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
-                val stickPx = min(this.size.width, this.size.height).toFloat()
                 var taps = 0
                 var lastTap = 0L
                 awaitEachGesture {
+                    // Read per gesture: the operator Small / Medium / Large size resizes the frame.
+                    val stickPx = min(this.size.width, this.size.height).toFloat()
                     val down = awaitFirstDown()
                     pressed = true
                     var dragged = false
@@ -2133,15 +2130,20 @@ fun LiveGimbalStick(
             val stickPx = size.minDimension
             val knobPx = stickPx * knobRatio
             val stroke = 2.dp.toPx()
+            // Adapt only the two shapes during native composition: no pixel
+            // samples, readback, blur or separate refresh cadence.
+            val inkBlend = if (pressed) BlendMode.SrcOver else BlendMode.Difference
             drawCircle(
                 color = stickTint,
                 radius = stickPx / 2f - stroke / 2f,
                 style = Stroke(width = stroke),
+                blendMode = inkBlend,
             )
             drawCircle(
                 color = stickTint,
                 radius = knobPx / 2f,
                 center = center + renderedOffset,
+                blendMode = inkBlend,
             )
         }
     }
@@ -2166,8 +2168,9 @@ fun LiveFocusResetButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
             .semantics { contentDescription = "Recenter focus" },
         contentAlignment = Alignment.Center,
     ) {
+        // Settings reset glyph, distinct from the gimbal recenter crosshair.
         OpcIcon(
-            icon = OpcIcon.CROSSHAIR,
+            icon = OpcIcon.ROTATE_CW,
             contentDescription = null,
             tint = LiveDesign.text,
             modifier = Modifier.size(18.dp),
@@ -2175,10 +2178,22 @@ fun LiveFocusResetButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
     }
 }
 
+/** iOS `LiveAutoExposureUnlockButton`: releases the feed AE lock back to Auto. */
 @Composable
-fun PhoneGlyph(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        drawRoundRect(tint, style = Stroke(1.3.dp.toPx()), cornerRadius = CornerRadius(1.6.dp.toPx()))
+fun LiveAutoExposureUnlockButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(
+        modifier
+            .fillMaxSize()
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.55f))
+            .border(1.dp, LiveDesign.hairline, CircleShape)
+            .chromeClickable(onClick = onClick)
+            .semantics { contentDescription = "Unlock exposure" },
+        horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OpcIcon(icon = OpcIcon.SUN, contentDescription = null, tint = LiveDesign.aeLock, modifier = Modifier.size(15.dp))
+        OpcIcon(icon = OpcIcon.LOCK_OPEN, contentDescription = null, tint = LiveDesign.aeLock, modifier = Modifier.size(13.dp))
     }
 }
 

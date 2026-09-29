@@ -39,6 +39,11 @@ import com.opencapture.openpocketcine.BuildConfig
 import android.os.Build
 import java.util.UUID
 import com.opencapture.openpocketcine.pairing.CameraApJoiner
+import com.opencapture.openpocketcine.pairing.CameraConnectionSetup
+import com.opencapture.openpocketcine.multiview.MultiviewNetworkStore
+import com.opencapture.openpocketcine.ShutterAngle
+import com.opencapture.openpocketcine.core.CameraTrackFrame
+import com.opencapture.openpocketcine.core.CameraTrackState
 import com.opencapture.openpocketcine.pairing.CameraWifiCredentialStore
 import com.opencapture.openpocketcine.pairing.CameraWifiResolution
 import com.opencapture.openpocketcine.pairing.WifiLowLatencyLock
@@ -161,7 +166,11 @@ internal suspend fun ensureEndpointCommandCurrent(currentGeneration: Long) {
  * leaves the shared sheets on their unavailable state. Historical class name kept for JNI and
  * source compatibility with the upstream shell.
  */
-class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : CameraSessionSeam {
+class PocketCameraSession(
+    context: Context, borrowing: HevcDecoder? = null,
+    // Multiview is off on Luna ([supportsMultiview]); the lease is accepted for the shared AppModel only.
+    @Suppress("UNUSED_PARAMETER") controlLease: MultiviewControlLease? = null,
+) : CameraSessionSeam {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backend: CameraBackend = MonitorConfiguration.createBackend(appContext)
@@ -239,6 +248,10 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
 
     var connectedCamera: FoundCamera? = null
     var joinedSSID: String? = null
+    /** Luna joins only its own access point: the shared Wi-Fi and Hotspot setups (#406) are DJI station mode. */
+    val connectionSetup: CameraConnectionSetup get() = CameraConnectionSetup.CAMERA_WIFI
+    val setupProgress: StateFlow<String?> = MutableStateFlow<String?>(null).asStateFlow()
+    fun useSetup(setup: CameraConnectionSetup, network: MultiviewNetworkStore.Network?, restoreAccessPoint: Boolean) = Unit
     val supportsFocusMode: Boolean get() = false
     val supportsTapFocus: Boolean get() = can(CameraCapability.FOCUS)
     var videoPackets = 0
@@ -276,6 +289,16 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     val isFeedRecovering: Boolean get() = recoveryState.value.isRecovering
     val isTrackingActive: Boolean get() = _trackingHud.value.isTracking
     val isFocusResetAvailable: Boolean get() = false
+    // AE / AWB lock pin the camera's applied Auto values as Manual (core `AutoExposureLock`). The Luna
+    // reports only its exposure and WB settings, never the applied Auto ISO, shutter or Kelvin, so there
+    // is nothing to pin: the long-press, the AE-L row and the AWB Lock row stay hidden.
+    val aeLock: StateFlow<AutoExposureLock?> = MutableStateFlow<AutoExposureLock?>(null).asStateFlow()
+    val awbLockKelvin: StateFlow<Int?> = MutableStateFlow<Int?>(null).asStateFlow()
+    val canLockAutoExposure: Boolean get() = false
+    fun lockAutoExposure(): Boolean = false
+    fun unlockAutoExposure() = Unit
+    fun autoWhiteBalanceLock(status: CameraStatus = _status.value): Pair<Int, Int>? = null
+    fun lockAutoWhiteBalance() = Unit
 
     init {
         // Luna vocabulary for the shared screens: mode names, and media served at its own path on the camera AP.
@@ -290,7 +313,7 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
         }
         controls?.let { link ->
             scope.launch { link.readout.collect(::applyReadout) }
-            scope.launch { link.trackFrames.collect { frame -> trackBoxes.apply(frame)?.let(::showTrack) } }
+            scope.launch { link.trackFrames.collect { frame -> if (acceptsTrackFrame(frame)) trackBoxes.apply(frame)?.let(::showTrack) } }
             // Re-apply every second: the REC timer ticks and settled pins fall back to the camera's value.
             scope.launch { while (isActive) { delay(1_000); applyReadout(lastReadout) } }
         }
@@ -356,6 +379,7 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     // Multiview needs a second DUML datalink; the Luna shell never offers it.
     fun updateMultiview(camera: FoundCamera?, driver: DatalinkDriver?, status: CameraStatus) = Unit
+    val multiviewPose: GimbalStickMapping get() = GimbalStickMapping()
     fun adoptMultiviewPose(pose: GimbalStickMapping) = Unit
     fun receiveMultiview(frame: DumlFrame) = Unit
     fun releaseMultiview() = Unit
@@ -512,6 +536,15 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
         coalesce("exposure") { sendExposure(iso, 1.0 / denom, "1/$denom") }
     }
 
+    /** Only explicit angle choices write the saved intent; delayed telemetry never does. */
+    fun setShutterAngle(degrees: Double) {
+        if (!canSendControl() || _status.value.isPhoto) return
+        val angle = ShutterAngle.nearestDegrees(degrees)
+        OperatorPrefs.setShutterAngleDegrees(appContext, angle)
+        val current = _status.value
+        setShutterDenom(ShutterAngle.denom(angle, current.fps, current.availableShutterDenoms))
+    }
+
     fun setExpoMode(mode: Int) {
         if (!canSendControl()) return
         val now = SystemClock.elapsedRealtime()
@@ -654,7 +687,31 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun cancelProgrammedMove() = Unit
 
     // Focus and Deep Track.
-    fun handleFeedTap(x: Float, y: Float) = tapFocus(x, y)
+    private val feedDoubleTap = FeedDoubleTapTrack()
+    /** The operator's latest Deep Track box, until the camera reports it (core `TrackingStartPolicy`). */
+    private var trackingRequest: TrackingBox? = null
+    private var trackingRequestAt = 0L
+
+    /** Feed tap focuses; a second tap on the same spot starts Deep Track there (upstream double tap). */
+    fun handleFeedTap(x: Float, y: Float) {
+        val nx = x.coerceIn(0f, 1f).toDouble()
+        val ny = y.coerceIn(0f, 1f).toDouble()
+        if (can(CameraCapability.TRACKING)) {
+            feedDoubleTap.register(nx, ny, SystemClock.elapsedRealtime() / 1000.0)?.let { return startTracking(it) }
+        }
+        tapFocus(x, y)
+    }
+
+    /** Drop the camera's previous subject until it reports a box near the operator's new one. */
+    private fun acceptsTrackFrame(frame: CameraTrackFrame): Boolean {
+        val requested = trackingRequest ?: return true
+        if (frame.state != CameraTrackState.TRACKING) return true
+        val box = TrackingBox(frame.x, frame.y, frame.width, frame.height)
+        val since = (SystemClock.elapsedRealtime() - trackingRequestAt) / 1000.0
+        if (!TrackingStartPolicy.accepts(box, requested, since)) return false
+        trackingRequest = null
+        return true
+    }
     fun tapFocus(x: Float, y: Float) {
         if (!supportsTapFocus) return
         _focusPoint.value = x to y
@@ -666,6 +723,8 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun startTracking(box: TrackingBox) {
         if (!can(CameraCapability.TRACKING)) return unavailable("Deep Track")
         showTrack(LunaTrackBoxes(search = box))
+        trackingRequest = box
+        trackingRequestAt = SystemClock.elapsedRealtime()
         scope.launch {
             val left = box.x.coerceIn(0.0, 1.0)
             val top = box.y.coerceIn(0.0, 1.0)
@@ -676,6 +735,7 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun cancelSubjectTracking() = cancelTracking()
     fun cancelTracking() {
         if (!trackBoxes.active) return
+        trackingRequest = null
         showTrack(LunaTrackBoxes())
         scope.launch { controls?.stopTracking() }
     }
@@ -708,7 +768,8 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     fun handleGamepadTrackToggle() = if (isTrackingActive) cancelTracking() else startTracking(0.5f, 0.5f)
     fun resetFocusPoint() { _focusPoint.value = 0.5f to 0.5f }
     fun applyDetectedFaces(faces: List<TrackingBox>) = Unit
-    fun considerFaceFrame(bitmap: android.graphics.Bitmap) = Unit
+    fun wantsFaceFrame(): Boolean = false
+    fun considerFaceFrame(frame: LiveFaceDetector.Frame) = frame.release()
     fun noteLiveFrame() = Unit
 
     // Camera media: MediaLibraryController drives [media]; these hold the browse state.
@@ -718,6 +779,8 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
         return ++mediaOwner
     }
     fun ownsMediaLiveResume(owner: Long): Boolean = owner == mediaOwner
+    /** DJI suspends its live-only Selfie Flip GET here; the Luna pauses live view through [media] instead. */
+    fun setMediaTransportBrowsing(browsing: Boolean) = Unit
     suspend fun withMediaLiveResumeOwner(owner: Long, work: suspend () -> Unit) { if (ownsMediaLiveResume(owner)) work() }
     fun mediaLiveResumeExhausted(owner: Long) = Unit
     fun setOperatorOverlayHeld(held: Boolean) = Unit
@@ -801,6 +864,8 @@ class PocketCameraSession(context: Context, borrowing: HevcDecoder? = null) : Ca
     }
 }
 
+private fun hexBytes(bytes: ByteArray): String = bytes.joinToString(" ") { "%02x".format(it.toInt() and 0xFF) }
+
 internal fun phaseAllowsReconnect(phase: ConnectionPhase): Boolean =
     when (phase) {
         ConnectionPhase.IDLE,
@@ -821,6 +886,13 @@ internal object LiveViewEnablePolicy {
     const val GOP_GRACE_MS = 8_000L
     /** Endpoint repair and decoder-rebuild picture deadline. Matches iOS 16 s. */
     const val ENDPOINT_PICTURE_GRACE_MS = 16_000L
+    /** Core `enableAnswerWindow`: an unanswered encoder-pause enable escalates after this. */
+    const val ENABLE_ANSWER_MS = 1_500L
+    /** Core `keyframeResendInterval` / `keyframeRequestLimit` for the decoder repair. */
+    const val KEYFRAME_RESEND_MS = 2_000L
+    const val KEYFRAME_REQUEST_LIMIT = 2
+    /** Core `maxHeldRepairCycles`: repair deadlines (~60 s) before BLE recovery may run. */
+    const val MAX_HELD_REPAIR_CYCLES = 3
     const val REBUILD_BACKOFF_MS = 60_000L
     const val COOLDOWN_MS = 15_000L
     const val REBUILD_COOLDOWN_MS = 5_000L
@@ -829,7 +901,6 @@ internal object LiveViewEnablePolicy {
     const val COMMAND_TIMEOUT_REBUILD_COUNT = 2
     const val FIRST_PICTURE_RESEND_MS = 2_000L
     const val FORMAT_POKE_MIN_SETTLE_MS = 800L
-    const val STALLED_FORMAT_RESEND_MS = 5_000L
     const val FORMAT_STALL_MS = 2_000L
     const val HANDSHAKE_RETRY_PAUSE_MS = 500L
     const val HANDSHAKE_OPEN_RETRY_LIMIT = 6
@@ -936,6 +1007,7 @@ internal object LiveViewEnablePolicy {
         val lastPresentedAt: Long? = null,
         val decoderOutputExpected: Boolean = false,
         val referenceRecoveryNeeded: Boolean = false,
+        val lastIrapAt: Long? = null,
         val repairReady: Boolean = true,
     )
 
@@ -1073,6 +1145,55 @@ internal object LiveViewEnablePolicy {
         coreFlag("shouldStartFeedRecovery", "{\"rebuildInFlight\":$rebuildInFlight}") {
             !rebuildInFlight
         }
+
+    enum class DecoderRepairStep { WAIT, RESEND_KEYFRAME, REBUILD_ENDPOINT, DEADLINE }
+
+    /** Core `FeedWatchdog.decoderRepairStep`: resend until answered, then the endpoint. */
+    fun decoderRepairStep(
+        sinceRepairStartMs: Long,
+        sinceEnableMs: Long,
+        sinceIrapMs: Long?,
+        keyframeRequests: Int,
+    ): DecoderRepairStep {
+        val core =
+            coreDecision(
+                "decoderRepairStep",
+                "{\"secondsSinceRepairStart\":${sinceRepairStartMs / 1000.0}," +
+                    "\"secondsSinceLastEnable\":${sinceEnableMs / 1000.0}," +
+                    "\"secondsSinceLastIrap\":${secJson(sinceIrapMs)}," +
+                    "\"keyframeRequests\":$keyframeRequests}",
+            )
+        return when (core) {
+            "wait" -> DecoderRepairStep.WAIT
+            "resendKeyframe" -> DecoderRepairStep.RESEND_KEYFRAME
+            "rebuildEndpoint" -> DecoderRepairStep.REBUILD_ENDPOINT
+            "deadline" -> DecoderRepairStep.DEADLINE
+            else -> {
+                if (sinceRepairStartMs >= ENDPOINT_PICTURE_GRACE_MS) return DecoderRepairStep.DEADLINE
+                val answered = sinceIrapMs != null && sinceIrapMs < sinceEnableMs
+                if (answered || sinceEnableMs < KEYFRAME_RESEND_MS) return DecoderRepairStep.WAIT
+                if (keyframeRequests < KEYFRAME_REQUEST_LIMIT) DecoderRepairStep.RESEND_KEYFRAME
+                else DecoderRepairStep.REBUILD_ENDPOINT
+            }
+        }
+    }
+
+    /**
+     * Core `FeedWatchdog.nextSessionHoldCycles`: no BLE teardown while video arrives,
+     * for at most [MAX_HELD_REPAIR_CYCLES] repair deadlines per episode. 0 releases.
+     */
+    fun nextSessionHoldCycles(videoAgeMs: Long?, previousCycles: Int, pictureSinceLastCycle: Boolean): Int {
+        val core =
+            coreDecision(
+                "nextSessionHoldCycles",
+                "{\"lastVideoPacketAge\":${secJson(videoAgeMs)},\"previousCycles\":$previousCycles," +
+                    "\"pictureSinceLastCycle\":$pictureSinceLastCycle}",
+            )?.toIntOrNull()
+        if (core != null) return core
+        val cycles = (if (pictureSinceLastCycle) 0 else maxOf(0, previousCycles)) + 1
+        val videoLive = videoAgeMs != null && videoAgeMs < STALL_MS
+        return if (videoLive && cycles < MAX_HELD_REPAIR_CYCLES) cycles else 0
+    }
 
     fun shouldRepeatRecoverEnable(
         sinceEnableMs: Long,
@@ -1322,8 +1443,6 @@ internal object LiveViewEnablePolicy {
         return ingestArmed
     }
 
-    fun shouldUseCapturedLiveStartForMediaResume(): Boolean = true
-
     /** Pocket: `0x02/0x68` `08` immediately before `0x09/0xa8`. Not Nano. */
     fun shouldSendLiveViewPrepare(usesNanoLiveViewGate: Boolean): Boolean =
         coreFlag(
@@ -1346,11 +1465,6 @@ internal object LiveViewEnablePolicy {
             "shouldContinueFirstPictureAfterStrayPlayback",
             "{\"hasPicture\":$hasPicture}",
         ) { !hasPicture }
-
-    /**
-     * Mimo 20260828: HEVC at join+17 ms. Do not wait a DUML ACK before arming.
-     */
-    fun shouldWaitForLiveViewAckBeforeArm(): Boolean = false
 
     fun shouldKeepaliveRebuildUDP(
         flowNeedsRebuild: Boolean,
@@ -1470,10 +1584,16 @@ internal object LiveViewEnablePolicy {
             if (decoderNeedsRepair &&
                 (auAge ?: Long.MAX_VALUE) < STALL_MS
             ) {
-                if (state.stage == Stage.FULL_REJOIN || state.stage == Stage.COOLDOWN) {
+                // Twin of FeedWatchdog: cooldown ends, and an IRAP after the last
+                // enable answered it, so a new loss gets its own request.
+                if ((state.stage == Stage.FULL_REJOIN || state.stage == Stage.COOLDOWN) &&
+                    snap.now - state.lastActionAt < COOLDOWN_MS
+                ) {
                     return Action.NONE
                 }
-                if (shouldHoldForGopReset(sinceEnable, videoAge)) return Action.NONE
+                val irapAnsweredEnable =
+                    snap.lastIrapAt != null && snap.lastEnableAt != 0L && snap.lastIrapAt > snap.lastEnableAt
+                if (!irapAnsweredEnable && shouldHoldForGopReset(sinceEnable, videoAge)) return Action.NONE
                 if (shouldHoldForControlGrace(snap, outputAge)) return Action.NONE
                 return fire(state, Action.REBUILD_DECODER, snap.now)
             }
@@ -1508,7 +1628,9 @@ internal object LiveViewEnablePolicy {
         }
 
         if (assemblyStalled || (controlReceiveAlive(snap) && !udpReceiveAlive(snap))) {
-            if (state.stage != Stage.IDLE && snap.now - state.lastActionAt < ESCALATE_MS) {
+            // Twin of FeedWatchdog: an unanswered enable escalates after ENABLE_ANSWER_MS.
+            val rungWait = if (state.stage == Stage.RESEND_ENABLE) ENABLE_ANSWER_MS else ESCALATE_MS
+            if (state.stage != Stage.IDLE && snap.now - state.lastActionAt < rungWait) {
                 return Action.NONE
             }
             if (state.encoderPauseEnables < 1) {
@@ -1570,25 +1692,5 @@ internal object LiveViewEnablePolicy {
             }
         state.lastActionAt = now
         return action
-    }
-
-    /** Legacy gate used by tests: first-picture 2 s, stalled format 5 s — never 1 Hz. */
-    fun shouldResendEnable(
-        videoPackets: Int,
-        nowElapsedRealtime: Long,
-        lastIdrRequest: Long,
-        hasFormat: Boolean,
-        decoderErrors: Int,
-        streamStartedAt: Long?,
-    ): Boolean {
-        if (videoPackets == 0) {
-            return nowElapsedRealtime - lastIdrRequest >= FIRST_PICTURE_RESEND_MS
-        }
-        val started = streamStartedAt ?: nowElapsedRealtime
-        val stalled =
-            (decoderErrors > 0 && !hasFormat) ||
-                (!hasFormat && nowElapsedRealtime - started > FORMAT_STALL_MS)
-        if (!stalled) return false
-        return nowElapsedRealtime - lastIdrRequest >= STALLED_FORMAT_RESEND_MS
     }
 }

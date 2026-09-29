@@ -298,7 +298,7 @@ struct OpcVk {
     float splitOn = 0;
     float splitVertical = 1;
     float zebraHiOn = 0, zebraHi = 1, zebraMidOn = 0, zebraMid = 0.5f, zebraMidHalf = 0.02f;
-    float feedUpscale = 0, mirror = 0;
+    float feedUpscale = 0, mirror = 0, mirrorY = 0;
     float peakingOn = 0, peakingRatio = 2.10f, peakingGate = 0.00174f;
     float peakingColor[3]{1.f, 72.f / 255.f, 64.f / 255.f};
     float zebraHiColor[3]{1, 1, 1};
@@ -1345,6 +1345,13 @@ static bool importAhb(OpcVk* r, AHardwareBuffer* hb) {
 
     AHardwareBuffer_Desc desc{};
     AHardwareBuffer_describe(hb, &desc);
+    // VUID-VkMemoryAllocateInfo-pNext-02390: an imported image AHB must carry a
+    // GPU usage. Refuse instead of letting a vendor driver fault (MediaTek
+    // gralloc_extra_query SIGSEGV, ANDROID-E); the caller falls back.
+    if (!(desc.usage & AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE)) {
+        LOGE("AHB usage 0x%llx lacks GPU_SAMPLED_IMAGE", (unsigned long long)desc.usage);
+        return false;
+    }
 
     VkAndroidHardwareBufferFormatPropertiesANDROID fmt{
         VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_FORMAT_PROPERTIES_ANDROID};
@@ -1638,7 +1645,7 @@ static void noteAhbReleased(OpcVk* r) {
 static bool feedNeedsGrade(const OpcVk* r) {
     // Fast is present of the bake (or of identity RGB), not a reason to cube.
     return r->lutSize >= 2.f || r->limitsOn > 0.5f || r->zebraHiOn > 0.5f || r->zebraMidOn > 0.5f ||
-           r->splitOn > 0.5f || r->mirror > 0.5f || r->peakingOn > 0.5f;
+           r->splitOn > 0.5f || r->mirror > 0.5f || r->mirrorY > 0.5f || r->peakingOn > 0.5f;
 }
 
 static void beginPass(VkCommandBuffer cmd, VkRenderPass pass, VkFramebuffer fb, uint32_t w, uint32_t h,
@@ -1870,7 +1877,7 @@ static bool renderFrame(OpcVk* r) {
         float displaySize[2];
         float lutSize, limitsPaintSize, limitsWeightSize, limitsOn;
         float splitOn, splitVertical, zebraHiOn, zebraHi, zebraMidOn, zebraMid, zebraMidHalf, feedUpscale;
-        float mirror, peakingOn, pad0, pad1;
+        float mirror, peakingOn, mirrorY, pad1;
         float zebraHiColor[4];
         float zebraMidColor[4];
         float peakingColor[4];
@@ -1893,6 +1900,7 @@ static bool renderFrame(OpcVk* r) {
     fpc.zebraMidHalf = r->zebraMidHalf;
     fpc.feedUpscale = r->feedUpscale;
     fpc.mirror = r->mirror;
+    fpc.mirrorY = r->mirrorY;
     fpc.peakingOn = r->peakingOn;
     memcpy(fpc.zebraHiColor, r->zebraHiColor, 12);
     memcpy(fpc.zebraMidColor, r->zebraMidColor, 12);
@@ -2500,7 +2508,7 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_opencapture_openpocketcine_feed_OpcVulkan_nativeSetFeedFlags(
     JNIEnv*, jclass, jlong h, jfloat lutSize, jfloat limitsOn, jfloat splitOn, jfloat splitVertical,
     jfloat zebraHiOn, jfloat zebraHi, jfloat zebraMidOn, jfloat zebraMid, jfloat zebraMidHalf,
-    jfloat upscale, jfloat mirror, jfloat peakingOn, jfloat peakingRatio, jfloat peakingGate,
+    jfloat upscale, jfloat mirror, jfloat mirrorY, jfloat peakingOn, jfloat peakingRatio, jfloat peakingGate,
     jfloat peakingR, jfloat peakingG, jfloat peakingB) {
     auto* r = fromHandle(h);
     if (!r) return;
@@ -2516,6 +2524,7 @@ Java_com_opencapture_openpocketcine_feed_OpcVulkan_nativeSetFeedFlags(
     r->zebraMidHalf = zebraMidHalf;
     r->feedUpscale = upscale;
     r->mirror = mirror;
+    r->mirrorY = mirrorY;
     if ((peakingOn > 0.5f) != (r->peakingOn > 0.5f)) {
         LOGI("peaking %s ratio=%.2f gate=%g", peakingOn > 0.5f ? "on" : "off", peakingRatio,
              peakingGate);
@@ -2570,11 +2579,37 @@ extern "C" JNIEXPORT jboolean JNICALL
 Java_com_opencapture_openpocketcine_feed_OpcVulkan_nativeCopyFace(JNIEnv* env, jclass, jlong h,
                                                                 jbyteArray out) {
     auto* r = fromHandle(h);
-    const jint need = (jint)(kFaceW * kFaceH * 4);
+    constexpr uint32_t kPixels = kFaceW * kFaceH;
+    constexpr uint32_t ow = kFaceW / 2, oh = kFaceH / 2;
     if (!r || !out || !r->faceStaging.mapped) return JNI_FALSE;
     std::lock_guard<std::mutex> g(r->lock);
-    if (env->GetArrayLength(out) < need || !waitFence(r, "face copy")) return JNI_FALSE;
-    env->SetByteArrayRegion(out, 0, need, reinterpret_cast<jbyte*>(r->faceStaging.mapped));
+    if (env->GetArrayLength(out) < (jint)(ow * oh * 3 / 2) || !waitFence(r, "face copy")) return JNI_FALSE;
+    // 320x180 NV21 (BT.601 video range, 2x2 box of the 640x360 readback) for ML Kit.
+    // Its own Bitmap -> NV21 path ran in Java; 320 finds the same faces faster.
+    static thread_local std::vector<uint8_t> rgba(kPixels * 4);
+    std::memcpy(rgba.data(), r->faceStaging.mapped, rgba.size());
+    jbyte* nv = env->GetByteArrayElements(out, nullptr);
+    if (!nv) return JNI_FALSE;
+    auto* y = reinterpret_cast<uint8_t*>(nv);
+    uint8_t* vu = y + ow * oh;
+    auto luma = [&](uint32_t x, uint32_t row) {
+        const uint8_t* p = rgba.data() + (row * kFaceW + x) * 4;
+        return ((66 * p[0] + 129 * p[1] + 25 * p[2] + 128) >> 8) + 16;
+    };
+    for (uint32_t oy = 0; oy < oh; ++oy) {
+        for (uint32_t ox = 0; ox < ow; ++ox) {
+            const uint32_t x = ox * 2, row = oy * 2;
+            y[oy * ow + ox] = (uint8_t)((luma(x, row) + luma(x + 1, row) + luma(x, row + 1) + luma(x + 1, row + 1)) / 4);
+        }
+        if (oy & 1) continue;
+        uint8_t* c = vu + (oy / 2) * ow;
+        for (uint32_t ox = 0; ox < ow; ox += 2, c += 2) {
+            const uint8_t* p = rgba.data() + (oy * 2 * kFaceW + ox * 2) * 4;
+            c[0] = (uint8_t)(((112 * p[0] - 94 * p[1] - 18 * p[2] + 128) >> 8) + 128);
+            c[1] = (uint8_t)(((-38 * p[0] - 74 * p[1] + 112 * p[2] + 128) >> 8) + 128);
+        }
+    }
+    env->ReleaseByteArrayElements(out, nv, 0);
     return JNI_TRUE;
 }
 

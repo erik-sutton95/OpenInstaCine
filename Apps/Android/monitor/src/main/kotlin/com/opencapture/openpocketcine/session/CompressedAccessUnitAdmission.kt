@@ -30,6 +30,16 @@ internal class CompressedAccessUnitAdmission(
     var peakBytes: Int = 0
         private set
 
+    /** Stall forensics: did the camera cut random access at all, and is the gate shut? */
+    var irapSeen: Int = 0
+        private set
+    var parameterSetsSeen: Int = 0
+        private set
+    /** Non-key AUs refused while awaiting an IRAP; [drops] also counts overflow trims and flushes. */
+    var gateDrops: Int = 0
+        private set
+    val isAwaitingRandomAccess: Boolean get() = synchronized(lock) { awaitingRandomAccess }
+
     val pendingCount: Int get() = synchronized(lock) { pending.size }
     val queuedBytes: Int get() = synchronized(lock) { pendingBytes }
 
@@ -51,12 +61,15 @@ internal class CompressedAccessUnitAdmission(
             if (epoch != currentEpoch) return@synchronized false
             val irap = hasRandomAccess(accessUnit)
             val key = carriesKeyframe(accessUnit)
+            if (irap) irapSeen += 1
+            if (key && !irap) parameterSetsSeen += 1
             if (irap) awaitingRandomAccess = false
             if (!awaitingRandomAccess || key) {
                 pending.addLast(accessUnit)
                 pendingBytes += accessUnit.size
             } else {
                 drops += 1
+                gateDrops += 1
             }
             if (pending.size > maxPending || pendingBytes > maxBytes) {
                 trimOverflowLocked()
@@ -93,6 +106,9 @@ internal class CompressedAccessUnitAdmission(
             discontinuity = false
             hopScheduled = false
             drops = 0
+            irapSeen = 0
+            parameterSetsSeen = 0
+            gateDrops = 0
             peakCount = 0
             peakBytes = 0
         }

@@ -40,6 +40,7 @@ class HevcDecoder internal constructor(
         private set
     internal val randomAccess = DecoderRandomAccessHold()
     val awaitingIdr: Boolean get() = randomAccess.awaitingIdr
+    val isConfigured: Boolean get() = configured
     val hasDecodableReferences: Boolean get() = randomAccess.hasDecodableReferences
     val referenceRecoveryNeeded: Boolean get() = synchronized(lock) { randomAccess.referenceRecoveryNeeded }
     var nalTypesSeen = ""
@@ -52,6 +53,14 @@ class HevcDecoder internal constructor(
     /** Native MediaCodec output callback clock, not GLES present. */
     @Volatile var lastDecoderOutputAt: Long? = null
         private set
+    /** Last accepted IRAP. Tells the watchdog an enable was already answered. */
+    @Volatile var lastIrapAt: Long? = null
+        private set
+
+    private fun acceptIrap() {
+        randomAccess.onIrapAccepted()
+        lastIrapAt = SystemClock.elapsedRealtime()
+    }
     @Volatile private var hasSeenNativeOutput = false
     val decoderOutputExpected: Boolean get() = hasSeenNativeOutput
     val isPresentationReady: Boolean
@@ -125,7 +134,7 @@ class HevcDecoder internal constructor(
                 val csd = pendingCsd ?: return
                 if (configure(csd, pendingTypes)) {
                     pendingIdr?.let { au ->
-                        if (queue(au, keyframe = true)) randomAccess.onIrapAccepted()
+                        if (queue(au, keyframe = true)) acceptIrap()
                     }
                 }
             }
@@ -145,7 +154,7 @@ class HevcDecoder internal constructor(
         val csd = pendingCsd ?: return
         if (configure(csd, pendingTypes)) {
             pendingIdr?.let { au ->
-                if (queue(au, keyframe = true)) randomAccess.onIrapAccepted()
+                if (queue(au, keyframe = true)) acceptIrap()
             }
         }
     }
@@ -262,14 +271,14 @@ class HevcDecoder internal constructor(
             val idrAu = pendingIdr ?: if (idr) accessUnit else null
             if (idrAu != null) {
                 val queued = queue(idrAu, keyframe = true)
-                if (queued) randomAccess.onIrapAccepted()
+                if (queued) acceptIrap()
                 return queued
             }
             return true
         }
         if (!randomAccess.shouldAccept(idr)) return false
         val queued = queue(accessUnit, keyframe)
-        if (queued && idr) randomAccess.onIrapAccepted()
+        if (queued && idr) acceptIrap()
         // A dropped frame is a missing reference: later P-frames would smear
         // until the next IRAP, which Pocket only sends when asked.
         if (!queued) randomAccess.noteBrokenReferences()

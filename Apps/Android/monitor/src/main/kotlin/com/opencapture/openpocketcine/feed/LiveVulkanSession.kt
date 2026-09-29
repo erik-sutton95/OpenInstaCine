@@ -1,9 +1,9 @@
 package com.opencapture.openpocketcine.feed
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.ImageFormat
 import android.media.Image
+import android.hardware.HardwareBuffer
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
@@ -11,11 +11,10 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import android.view.Surface
-import androidx.core.graphics.createBitmap
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistTool
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
-import java.nio.ByteBuffer
+import com.opencapture.openpocketcine.session.LiveFaceDetector
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -58,6 +57,8 @@ internal class LiveVulkanSession(
     private val histo = IntArray(1024)
     private var reader: ImageReader? = null
     private var held: Image? = null
+    /** Frames presented from the current [reader]; drives [VulkanCrashGuard]. */
+    @Volatile private var readerFrames = 0
     private val started = AtomicBoolean(false)
     val framesPresented = AtomicInteger(0)
     private val cubeSentinel = Any()
@@ -69,7 +70,7 @@ internal class LiveVulkanSession(
     private val tapBytes = ByteArray(TAP_W * TAP_H * 4)
     private val faceWanted = AtomicBoolean(false)
     private val faceLock = Any()
-    private val faceBytes = ByteArray(FACE_W * FACE_H * 4)
+    private val faceBytes = ByteArray(LiveFaceDetector.TAP_WIDTH * LiveFaceDetector.TAP_HEIGHT * 3 / 2)
     @Volatile private var faceValid = false
     private var lastSampleNs = 0L
     private var lastScopeWorkNs = 0L
@@ -263,7 +264,8 @@ internal class LiveVulkanSession(
         histoRect: GpuRect?,
         vector: GpuRect?,
         uiScale: Float = 1f,
-        pictureMirrored: Boolean = assist.isVisible(LiveAssistTool.MIRROR),
+        pictureMirrored: Boolean = assist.mirrorsHorizontally,
+        pictureFlippedVertically: Boolean = assist.flipsVertically,
     ) {
         val native = handle
         if (native == 0L || presentGate.isReleased) return
@@ -308,6 +310,7 @@ internal class LiveVulkanSession(
                 0f
             },
             if (pictureMirrored) 1f else 0f,
+            if (pictureFlippedVertically) 1f else 0f,
             if (plan.peaking) 1f else 0f,
             plan.peakingRatioThreshold,
             plan.peakingNoiseGate,
@@ -339,12 +342,12 @@ internal class LiveVulkanSession(
         faceWanted.set(true)
     }
 
-    fun takeFaceBitmap(): Bitmap? {
+    /** The newest NV21 readback, once: a taken frame is never handed out again. */
+    fun takeFaceNv21(): ByteArray? {
         synchronized(faceLock) {
             if (!faceValid) return null
-            val bmp = createBitmap(FACE_W, FACE_H, Bitmap.Config.ARGB_8888)
-            bmp.copyPixelsFromBuffer(ByteBuffer.wrap(faceBytes))
-            return bmp
+            faceValid = false
+            return faceBytes.copyOf()
         }
     }
 
@@ -426,8 +429,13 @@ internal class LiveVulkanSession(
         if (reader != null || presentGate.isReleased) return
         val w = sourceW.coerceAtLeast(2)
         val h = sourceH.coerceAtLeast(2)
-        val next = ImageReader.newInstance(w, h, ImageFormat.PRIVATE, 5)
+        // PRIVATE without usage requests usage 0. Vulkan requires GPU_SAMPLED_IMAGE
+        // on an imported AHB; MediaTek gralloc SIGSEGVs without it (ANDROID-E).
+        val next = ImageReader.newInstance(
+            w, h, ImageFormat.PRIVATE, 5, HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE,
+        )
         reader = next
+        readerFrames = 0
         next.setOnImageAvailableListener(
             { rdr ->
                 val image = rdr.acquireLatestImage() ?: return@setOnImageAvailableListener
@@ -511,6 +519,7 @@ internal class LiveVulkanSession(
         val takeFace = faceWanted.compareAndSet(true, false)
         OpcVulkan.nativeSetNeedTap(native, takeTap)
         OpcVulkan.nativeSetNeedFace(native, takeFace)
+        if (readerFrames == 0) VulkanCrashGuard.arm(appContext)
         val ok = OpcVulkan.nativeSubmit(native, hb)
         hb.close()
         held?.close()
@@ -522,6 +531,7 @@ internal class LiveVulkanSession(
             return
         }
         framesPresented.incrementAndGet()
+        if (++readerFrames == VulkanCrashGuard.FRAMES_TO_CLEAR) VulkanCrashGuard.clear(appContext)
         onFramePresented(image.timestamp)
         if (started.compareAndSet(false, true)) main.post(onFirstFrame)
         if (takeFace) {
@@ -639,8 +649,6 @@ internal class LiveVulkanSession(
         private const val TAG = "OpcVulkan"
         const val SOURCE_W = 1280
         const val SOURCE_H = 720
-        const val FACE_W = 640
-        const val FACE_H = 360
         val TAP_W = PocketScopeSampler.tapSize(SOURCE_W, SOURCE_H).first
         val TAP_H = PocketScopeSampler.tapSize(SOURCE_W, SOURCE_H).second
     }

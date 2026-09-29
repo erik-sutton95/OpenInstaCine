@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -52,9 +53,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
+/** [annotation] is spoken after the value; iOS shows [valueIcon] before and [badgeIcon] after it. */
 @Immutable
 data class MonitorValue(val id: String, val label: String, val value: String,
-    val selected: Boolean = false, val annotation: String? = null)
+    val selected: Boolean = false, val annotation: String? = null,
+    val valueIcon: MonitorIcon? = null, val badgeIcon: MonitorIcon? = null)
 
 /** Camera values are ready-to-display data; adapters retain interpretation and writes. */
 @Composable
@@ -81,8 +84,9 @@ fun MonitorCameraValues(values: List<MonitorValue>, enabled: Boolean, portrait: 
         .copy(lineHeight = 10.sp, letterSpacing = MonitorLayoutPolicy.READOUT_LABEL_TRACKING.sp)
     val intrinsic = values.map { item ->
         val valueWidth = measurer.measure(item.value, valueStyle, maxLines = 1).size.width
-        val labelWidth = measurer.measure(item.label + item.annotation?.let { "  $it" }.orEmpty(), labelStyle, maxLines = 1).size.width
-        with(density) { maxOf(valueWidth, labelWidth).toDp().value } + 8f
+        val labelWidth = measurer.measure(item.label, labelStyle, maxLines = 1).size.width
+        val icons = (if (item.valueIcon != null) 20f else 0f) + (if (item.badgeIcon != null) 14f else 0f)
+        with(density) { maxOf(valueWidth.toDp().value + icons, labelWidth.toDp().value) } + 8f
     }
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val rowWidth = maxWidth
@@ -109,13 +113,14 @@ fun MonitorCameraValues(values: List<MonitorValue>, enabled: Boolean, portrait: 
                             .padding(horizontal = 4.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
-                            Text(item.value, color = if (item.selected) MonitorPalette.accent else MonitorPalette.text,
-                                style = valueStyle, maxLines = 1, softWrap = false)
-                            Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Bottom) {
-                                Text(item.label, color = if (item.selected) MonitorPalette.accent else MonitorPalette.muted,
-                                    style = labelStyle, maxLines = 1)
-                                item.annotation?.let { Text(it, style = MonitorTypography.readout(7.5f), color = MonitorPalette.muted, maxLines = 1) }
+                            val valueTint = if (item.selected) MonitorPalette.accent else MonitorPalette.text
+                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+                                item.valueIcon?.let { MonitorIcon(it, null, Modifier.size(17.dp), valueTint) }
+                                Text(item.value, color = valueTint, style = valueStyle, maxLines = 1, softWrap = false)
+                                item.badgeIcon?.let { MonitorIcon(it, null, Modifier.size(11.dp), valueTint) }
                             }
+                            Text(item.label, color = if (item.selected) MonitorPalette.accent else MonitorPalette.muted,
+                                style = labelStyle, maxLines = 1)
                         }
                     }
                     if (grid) repeat(columns - row.size) { Box(Modifier.weight(1f)) }
@@ -137,10 +142,10 @@ fun MonitorAuxCircleButton(modifier: Modifier = Modifier, glyph: @Composable (Co
 
 @Composable
 fun MonitorActionButton(label: String, modifier: Modifier = Modifier, selected: Boolean = false,
-    enabled: Boolean = true, onClick: () -> Unit, glyph: @Composable (Color) -> Unit) {
+    enabled: Boolean = true, side: Dp = 44.dp, onClick: () -> Unit, glyph: @Composable (Color) -> Unit) {
     val shape = RoundedCornerShape(12.dp)
     val tint = if (selected) MonitorPalette.accent else MonitorPalette.text
-    Box(modifier.size(44.dp).clip(shape)
+    Box(modifier.size(side).clip(shape)
         .background(if (selected) MonitorPalette.accent.copy(alpha = .14f) else MonitorPalette.tile)
         .border(1.dp, if (selected) MonitorPalette.accent.copy(alpha = .3f) else Color.Transparent, shape)
         .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
@@ -183,13 +188,18 @@ object MonitorPageLayoutPolicy {
     }
 }
 
+/** Same type scale as the Your cameras header. */
 @Composable
 fun MonitorPageHeading(title: String, kicker: String) {
+    val config = LocalConfiguration.current
+    val tablet = minOf(config.screenWidthDp, config.screenHeightDp) >= 600
     Column(Modifier.fillMaxWidth().heightIn(min = 34.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(kicker, color = MonitorPalette.accent,
-            style = MonitorTypography.text(8f, FontWeight.Bold).copy(letterSpacing = 1.4.sp), maxLines = 1)
+            style = MonitorTypography.text(8.5f, FontWeight.Bold).copy(letterSpacing = 1.7.sp), maxLines = 1)
         Text(title, color = MonitorPalette.text,
-            style = MonitorTypography.text(13f, FontWeight.SemiBold), maxLines = 1)
+            style = MonitorTypography.text(MonitorLayoutPolicy.cameraPageTitleSize(tablet), FontWeight.SemiBold)
+                .copy(letterSpacing = (-0.2).sp),
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -260,7 +270,7 @@ fun MonitorPageScaffold(
 fun <T> MonitorCatalogGrid(items: List<T>, columns: Int, key: (T) -> Any,
     modifier: Modifier = Modifier, state: LazyGridState = rememberLazyGridState(),
     cell: @Composable (T) -> Unit) {
-    LazyVerticalGrid(columns = GridCells.Fixed(columns.coerceAtLeast(1)), modifier = modifier, state = state,
+    LazyVerticalGrid(columns = GridCells.Fixed(columns.coerceAtLeast(1)), modifier = modifier.monitorScrollFade(state), state = state,
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
         items(items, key = key) { cell(it) }

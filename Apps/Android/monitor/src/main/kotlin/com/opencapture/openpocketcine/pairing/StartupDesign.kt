@@ -2,11 +2,9 @@ package com.opencapture.openpocketcine.pairing
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -33,14 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -80,38 +71,6 @@ object StartupColors {
 }
 
 fun Modifier.startupBackdrop(): Modifier = background(StartupColors.backdropBase)
-
-/**
- * Fades out the bottom edge of a scrollable viewport while more content lies
- * below the fold — the "there's more" affordance. Apply before the
- * `verticalScroll` modifier that shares [scrollState].
- */
-@Composable
-fun Modifier.fadeOverflowBottom(scrollState: ScrollState, height: Dp = 28.dp): Modifier {
-    val fade by
-        animateFloatAsState(
-            targetValue = if (scrollState.canScrollForward) 1f else 0f,
-            label = "overflow-edge-fade",
-        )
-    return graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-        .drawWithContent {
-            drawContent()
-            if (fade > 0f) {
-                val bandHeight = height.toPx()
-                drawRect(
-                    brush =
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Black, Color.Black.copy(alpha = 1f - fade)),
-                            startY = size.height - bandHeight,
-                            endY = size.height,
-                        ),
-                    topLeft = Offset(0f, size.height - bandHeight),
-                    size = Size(size.width, bandHeight),
-                    blendMode = BlendMode.DstIn,
-                )
-            }
-        }
-}
 
 fun Modifier.startupCard(): Modifier =
     clip(RoundedCornerShape(13.dp))
@@ -198,14 +157,30 @@ object StartupConnectionCopy {
         }
 
     const val WIZARD_STEP_COUNT = 4
-    const val SHARE_DIAGNOSTICS = "Share Diagnostics"
+
+    // The Insta360 app on any nearby phone holds the Luna (upstream names DJI Frame Tap and Mimo here).
+    const val PAIRING_PRECHECK = "Before pairing, force quit the Insta360 app."
+    const val DJI_APPS_TIP = "Close the Insta360 app on every phone near the camera."
+    const val STILL_LOOKING = "$DJI_APPS_TIP Make sure the camera is on and activated, then move closer."
+
+    /** The camera never answered pairing or the datalink handshake (PocketCameraSession failures). */
+    fun cameraNeverAnswered(raw: String): Boolean {
+        val lower = raw.lowercase()
+        return "pairing timed out" in lower || "never answered the datalink handshake" in lower
+    }
+
+    fun withDjiAppsTip(message: String, raw: String): String =
+        if (cameraNeverAnswered(raw)) "$message $DJI_APPS_TIP" else message
 
     fun friendly(raw: String): String {
         val trimmed = raw.trim()
         if (trimmed.isEmpty()) return trimmed
         val lower = trimmed.lowercase()
+        if (lower.contains("never answered the datalink handshake")) {
+            return withDjiAppsTip("The camera never answered the video link.", trimmed)
+        }
         if (lower.contains("timed out") || lower.contains("timeout")) {
-            return "The camera didn't respond in time. Check Bluetooth and try again."
+            return withDjiAppsTip("The camera didn't respond in time. Check Bluetooth and try again.", trimmed)
         }
         if (lower.contains("disconnected")) {
             return "The camera ended the connection. Try again."

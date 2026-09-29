@@ -45,6 +45,20 @@ data class MonitorFieldLayout(
     val controlsFloor: Float,
 )
 
+/** Operator choice for the on-feed gimbal joystick diameter. */
+enum class MonitorJoystickSize(val raw: String, val side: Float, val label: String) {
+    SMALL("small", 88f, "Small"),
+    MEDIUM("medium", MonitorLayoutPolicy.STICK_SIDE, "Medium"),
+    LARGE("large", 116f, "Large"),
+    ;
+
+    companion object {
+        fun parse(raw: String?): MonitorJoystickSize = entries.firstOrNull { it.raw == raw } ?: MEDIUM
+
+        fun fromLabel(label: String): MonitorJoystickSize = entries.firstOrNull { it.label == label } ?: MEDIUM
+    }
+}
+
 /** UI 2.0 layout decisions shared by brand apps; native shells retain the feed. */
 object MonitorLayoutPolicy {
     fun portrait(
@@ -55,10 +69,11 @@ object MonitorLayoutPolicy {
         val vh = max(0f, height)
         val tablet = min(vw, vh) >= 600f
         val ratio = sourceAspect.takeIf { it.isFinite() && it > 0f } ?: 16f / 9f
-        val top = max(0f, safeTop - 8f)
+        val top = max(0f, safeTop)
         val status = MonitorRect(0f, top, vw, if (tablet) 52f else 44f)
         val systemH = if (tablet) 116f else 100f
-        val systemY = max(0f, vh - max(0f, safeBottom - 20f) - systemH)
+        // Record still clears the navigation handle; the whole portrait stack sits low.
+        val systemY = max(0f, vh - max(0f, safeBottom - 30f) - systemH)
         val system = MonitorRect(0f, systemY, vw, systemH)
         val valuesH = if (!valuesVisible) 0f else if (tablet) 43f else 74f
         val valuesY = max(0f, systemY - 8f - valuesH)
@@ -100,7 +115,7 @@ object MonitorLayoutPolicy {
         viewportHeight: Float, tablet: Boolean, leading: Float = 14f, safeBottom: Float = 0f,
     ): MonitorRect {
         val side = systemButtonSize(tablet)
-        val height = side * 2f + 11f
+        val height = side * 2f + 8f + ASSIST_SPACING
         val bottom = landscapeBottomClearance(safeBottom)
         return MonitorRect(
             leading,
@@ -156,8 +171,11 @@ object MonitorLayoutPolicy {
         MonitorRect(max(0f, width) / 2f - 24f, max(0f, floor - 56f), 48f, 48f)
 
     /** FieldMonitorLayout portrait stick / zoom / gimbal. */
-    fun portraitStick(width: Float, floor: Float): MonitorRect =
-        MonitorRect(max(0f, width) - 104f, floor - 104f, 88f, 88f)
+    /** Default on-feed gimbal joystick diameter. */
+    const val STICK_SIDE = 101f
+
+    fun portraitStick(width: Float, floor: Float, side: Float = STICK_SIDE): MonitorRect =
+        MonitorRect(max(0f, width) - 16f - side, floor - 16f - side, side, side)
 
     fun portraitZoom(stick: MonitorRect): MonitorRect =
         MonitorRect(stick.x, stick.y - 44f, 44f, 36f)
@@ -168,9 +186,11 @@ object MonitorLayoutPolicy {
     fun recordSize(tablet: Boolean): Float = if (tablet) 84f else 70f
 
     /** FieldMonitorLayout landscape stick: leading of the record well, on the values floor. */
-    fun landscapeStick(width: Float, floor: Float, recordSize: Float, safeTrailing: Float): MonitorRect {
-        val x = max(0f, width) - max(16f + recordSize + 12f, max(0f, safeTrailing) + 6f) - 88f
-        return MonitorRect(x, floor - 88f, 88f, 88f)
+    fun landscapeStick(
+        width: Float, floor: Float, recordSize: Float, safeTrailing: Float, side: Float = STICK_SIDE,
+    ): MonitorRect {
+        val x = max(0f, width) - max(16f + recordSize + 12f, max(0f, safeTrailing) + 6f) - side
+        return MonitorRect(x, floor - side, side, side)
     }
 
     fun landscapeZoom(stick: MonitorRect): MonitorRect = portraitZoom(stick)
@@ -190,6 +210,7 @@ object MonitorLayoutPolicy {
         safeTop: Float = 0f, safeLeading: Float = 0f, safeBottom: Float = 0f, safeTrailing: Float = 0f,
         sourceAspect: Float = 16f / 9f, fill: Boolean = false, showsValues: Boolean = true,
         topControlInset: Float = 0f, hasDisplayCutout: Boolean = false,
+        joystick: MonitorJoystickSize = MonitorJoystickSize.MEDIUM,
     ): MonitorFieldLayout {
         val w = max(1f, width)
         val h = max(1f, height)
@@ -208,17 +229,19 @@ object MonitorLayoutPolicy {
             val lock = MonitorRect(edge, cy - button / 2f, button, button)
             val display = MonitorRect(edge + button + 8f, lock.y, button, button)
             val record = MonitorRect((w - rec) / 2f, cy - rec / 2f, rec, rec)
-            val media = MonitorRect(w - edge - button, lock.y, button, button)
-            val settings = MonitorRect(media.x - button - 8f, lock.y, button, button)
+            // Same order as landscape: Media sits next to Record, Settings outside it.
+            val settings = MonitorRect(w - edge - button, lock.y, button, button)
+            val media = MonitorRect(settings.x - button - SETTINGS_MEDIA_GAP, lock.y, button, button)
             val top = max(0f, safeTop - 24f)
             val gaugeTop = (if (tablet) 82f else max(4f, top - 16f)) + controlInset
+            // Three gauge pills: a trailing row on phone, a stacked column on tablet.
             val gauges = MonitorRect(
-                if (tablet) edge else w - edge - 104f, gaugeTop,
-                if (tablet) 49f else 104f, if (tablet) 58f else 28f,
+                if (tablet) edge else w - edge - 186f, gaugeTop,
+                if (tablet) 58f else 186f, if (tablet) 68f else 22f,
             )
             val floor = layout.controlsFloor
             val assists = portraitAssists(floor, tablet)
-            val stick = portraitStick(w, floor)
+            val stick = portraitStick(w, floor, joystick.side)
             val zoom = portraitZoom(stick)
             val gimbal = portraitGimbal(stick, zoom)
             val compass = headTrack(stick, zoom)
@@ -250,15 +273,16 @@ object MonitorLayoutPolicy {
         val cornerClearance = cutoutPhoneCornerInset(h, tablet, hasCutout)
         val cornerTop = (if (tablet) 12f else if (hasCutout) 8f else 52f) + controlInset + max(0f, cornerClearance - 6f)
         val settings = MonitorRect(
-            if (tablet) w - 8f - button * 2f - 8f else record.midX - button / 2f,
+            if (tablet) w - 8f - button * 2f - SETTINGS_MEDIA_GAP else record.midX - button / 2f,
             cornerTop, button, button,
         )
         val media = MonitorRect(
-            if (tablet) settings.maxX + 8f else settings.x,
-            if (tablet) cornerTop else settings.maxY + 8f, button, button,
+            if (tablet) settings.maxX + SETTINGS_MEDIA_GAP else settings.x,
+            if (tablet) cornerTop else settings.maxY + SETTINGS_MEDIA_GAP, button, button,
         )
         val lock = MonitorRect(12f, cornerTop, button, button)
-        val gauges = MonitorRect(18f, lock.maxY + 6f, 49f, 52f)
+        // Gauges share the lock's edge so a 19.5:9 phone's 16:9 picture starts at their trailing edge.
+        val gauges = MonitorRect(lock.x, lock.maxY + 6f, 58f, 68f)
         val statusX = max(77f, picture.x + 12f)
         val status = MonitorRect(
             statusX, (if (tablet) 4f else 0f) + controlInset,
@@ -270,12 +294,12 @@ object MonitorLayoutPolicy {
         val valuesY = h - bottomPad - valuesH
         val values = MonitorRect(side, valuesY + 4f, max(0f, w - side * 2f), valuesH)
         val floor = valuesY - 8f
-        val assistHeight = button * 2f + 11f
+        val assistHeight = button * 2f + 8f + ASSIST_SPACING
         val assists = MonitorRect(
             12f, max(0f, h - max(4f, bottomPad - 4f) - assistHeight),
             button + ASSIST_HORIZONTAL_INSETS, assistHeight,
         )
-        val stick = landscapeStick(w, floor, rec, safeTrailing)
+        val stick = landscapeStick(w, floor, rec, safeTrailing, joystick.side)
         val zoom = landscapeZoom(stick)
         val gimbal = landscapeGimbal(stick, zoom)
         val compass = headTrack(stick, zoom)
@@ -287,6 +311,22 @@ object MonitorLayoutPolicy {
             assists, stick, zoom, gimbal, compass, MonitorRect(0f, 0f, 0f, 0f), focusReset,
             false, tablet, false, floor,
         )
+    }
+
+    /**
+     * iOS `FieldMonitorLayout.aeUnlock`: capsule 1.5x the Recenter key wide. Landscape:
+     * beside Recenter, toward the picture centre. Portrait: mirrored to the left, just
+     * right of the View Assist column on Recenter's baseline, clear of Fit/Fill (centred)
+     * and the joystick cluster at any width or joystick size.
+     */
+    fun aeUnlock(reset: MonitorRect, leadingColumnMaxX: Float, pictureMidX: Float, portrait: Boolean): MonitorRect {
+        val width = reset.height * 1.5f
+        val x = when {
+            portrait -> leadingColumnMaxX + 8f
+            reset.midX < pictureMidX -> reset.maxX + 8f
+            else -> reset.x - 8f - width
+        }
+        return MonitorRect(x, reset.y, width, reset.height)
     }
 
     /** 44 dp compass above the zoom row, trailing-aligned with the stick. */
@@ -307,7 +347,7 @@ object MonitorLayoutPolicy {
     fun cutoutPhoneCornerInset(viewportHeight: Float, tablet: Boolean, hasDisplayCutout: Boolean): Float =
         if (!tablet && hasDisplayCutout) CUTOUT_CORNER_INSET * max(0f, viewportHeight) else 0f
 
-    fun systemButtonSize(tablet: Boolean): Float = if (tablet) 48f else 54f
+    fun systemButtonSize(tablet: Boolean): Float = 48f
 
     fun assistButtonSize(tablet: Boolean): Float = systemButtonSize(tablet)
 
@@ -317,7 +357,9 @@ object MonitorLayoutPolicy {
 
     const val ASSIST_EXPANSION_GLYPH_LANE = 15f
     const val ASSIST_EXPANSION_BUTTON_WIDTH = 27f
-    const val ASSIST_HORIZONTAL_INSETS = 38f
+    /** Gap between View Assist tool cells. */
+    const val ASSIST_SPACING = 6f
+    const val ASSIST_HORIZONTAL_INSETS = 4f * 2f + ASSIST_SPACING + ASSIST_EXPANSION_BUTTON_WIDTH
 
     fun assistAvailableWidth(screenWidth: Float, portrait: Boolean, tablet: Boolean, cornerRadius: Float = 42f): Float {
         val inset = if (portrait) 14f else max(14f, (cornerRadius * 0.42f).roundToInt().toFloat())
@@ -396,6 +438,8 @@ object MonitorLayoutPolicy {
 
     fun cameraPageTitleSize(tablet: Boolean): Float = if (tablet) 24f else 19f
     const val CAMERA_CARD_CORNER = 13f
+    /** Space between the Settings and Media system buttons. */
+    const val SETTINGS_MEDIA_GAP = 12f
     const val SETTINGS_TITLE_CONTENT_GAP = 8f
     const val SETTINGS_TITLE_MIN_HEIGHT = 24f
     const val DISP_SIZE = 12f

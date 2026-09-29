@@ -35,8 +35,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.opencapture.monitorui.MonitorTab
+import com.opencapture.monitorui.monitorTabStrip
 import com.opencapture.monitorui.MonitorQuickPreview
+import com.opencapture.monitorui.monitorScrollFade
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -80,7 +84,6 @@ import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraModel
 import com.opencapture.openpocketcine.settings.SettingsHelpBadge
 import com.opencapture.openpocketcine.session.CameraStatus
-import com.opencapture.openpocketcine.session.FocusTrackMode
 import com.opencapture.openpocketcine.session.VideoAspect
 import com.opencapture.openpocketcine.session.VideoFormat
 import com.opencapture.openpocketcine.session.VideoFrameRate
@@ -134,16 +137,17 @@ fun LiveControlSheet(
     maxHeightDp: Float? = null,
     preview: MonitorQuickPreview? = null,
     portrait: Boolean? = null,
+    showsHeader: Boolean = true,
 ) {
     val availableStatus = CaptureLists.withEffectiveVideoFormats(
         status, model.session.connectedCamera?.model,
     )
     val isPortrait = portrait ?: viewportIsPortrait()
     CompositionLocalProvider(LocalCapturePreview provides preview, LocalViewportPortrait provides isPortrait) {
-        if (sheet.isRecordingSetup && isPortrait) {
+        if (sheet.isRecordingSetup && isPortrait && showsHeader) {
             RecordingSetupPanel(sheet, model, availableStatus, locked, onDismiss, maxHeightDp)
         } else {
-            LiveControlSheetContent(sheet, model, availableStatus, locked, onDismiss, maxHeightDp)
+            LiveControlSheetContent(sheet, model, availableStatus, locked, onDismiss, maxHeightDp, showsHeader = showsHeader)
         }
     }
 }
@@ -196,9 +200,10 @@ private fun RecordingSetupPanel(
     }
     androidx.compose.runtime.key(tab) {
         if (tab == "Mode" || tabNames == listOf("Mode")) {
+            val modeScroll = rememberScrollState()
             Column(Modifier.fillMaxWidth().then(if (maxHeightDp != null) Modifier.heightIn(max = maxHeightDp.dp) else Modifier)
                 .pickerPanelGlass(capturePanelShape(fromTop = true, portrait = viewportIsPortrait()))
-                .verticalScroll(rememberScrollState(), enabled = preview == null).padding(14.dp),
+                .monitorScrollFade(modeScroll).verticalScroll(modeScroll, enabled = preview == null).padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SheetHeader("SHOOTING MODE", "Capture mode", onDismiss)
                 val bodyName = model.session.connectedCamera?.model?.name
@@ -235,6 +240,7 @@ private fun LiveControlSheetContent(
     onDismiss: () -> Unit,
     maxHeightDp: Float?,
     footer: (@Composable () -> Unit)? = null,
+    showsHeader: Boolean = true,
 ) {
     val context = LocalContext.current
     val preview = LocalCapturePreview.current
@@ -277,10 +283,7 @@ private fun LiveControlSheetContent(
     }
 
     fun applySeat(seat: CaptureLists.ShutterSeat) {
-        preferredAngle = seat.preferredAngle
-        effects.run {
-            if (seat.persistAngle) OperatorPrefs.setShutterAngleDegrees(context, seat.preferredAngle)
-        }
+        if (isAngleSheet) preferredAngle = seat.preferredAngle
         lastApplied = seat.selection
         drumSelection = seat.selection
     }
@@ -359,7 +362,7 @@ private fun LiveControlSheetContent(
                 reseatShutterOrEv()
             }
             LiveSheet.WB -> {
-                selectedMode = CaptureLists.wbInitialTab(status)
+                selectedMode = CaptureLists.wbInitialTab(status, model.session.awbLockKelvin.value != null)
                 reseatWb()
             }
             LiveSheet.AUDIO -> selectedMode = CaptureLists.audioInitialTab()
@@ -441,9 +444,10 @@ private fun LiveControlSheetContent(
                     is CaptureLists.ShutterDrumCommand.SetShutter ->
                         commitDrumValue { model.setShutterDenom(cmd.denom) }
                     is CaptureLists.ShutterDrumCommand.SetAngle -> {
-                        preferredAngle = cmd.degrees
-                        OperatorPrefs.setShutterAngleDegrees(context, cmd.degrees)
-                        commitDrumValue { model.setShutterDenom(cmd.denom) }
+                        commitDrumValue {
+                            preferredAngle = cmd.degrees
+                            model.session.setShutterAngle(cmd.degrees)
+                        }
                     }
                     CaptureLists.ShutterDrumCommand.Ignored -> Unit
                 }
@@ -527,15 +531,17 @@ private fun LiveControlSheetContent(
     val compact = preview != null
     val fromTop = sheet.isTopAnchored
     val portrait = viewportIsPortrait()
-    val topPadding = com.opencapture.monitorui.MonitorLayoutPolicy.captureTopPadding(fromTop, portrait, compact)
+    val topPadding = if (showsHeader) com.opencapture.monitorui.MonitorLayoutPolicy.captureTopPadding(fromTop, portrait, compact) else 0f
     // Every drum has the same 86dp viewport; the card hugs its own controls.
+    val sheetScroll = rememberScrollState()
     Column(
         Modifier
             .fillMaxWidth()
             .then(Modifier.wrapContentHeight(align = Alignment.Top))
             .then(if (cap != null) Modifier.heightIn(max = cap) else Modifier)
             .pickerPanelGlass(capturePanelShape(fromTop, portrait))
-            .verticalScroll(rememberScrollState(), enabled = preview == null)
+            .monitorScrollFade(sheetScroll)
+            .verticalScroll(sheetScroll, enabled = preview == null)
             .pointerInput(Unit) { detectTapGestures(onTap = {}) }
             .padding(horizontal = 14.dp)
             .padding(
@@ -549,7 +555,7 @@ private fun LiveControlSheetContent(
             ),
         verticalArrangement = Arrangement.spacedBy(AssistLongPress.PANEL_GAP_DP.dp),
     ) {
-            SheetHeader(
+            if (showsHeader) SheetHeader(
                 title = CaptureLists.headerTitle(sheet, status.expoMode, status.shootingMode),
                 subtitle =
                     if (compact) "drag to set"
@@ -667,19 +673,24 @@ private fun LiveControlSheetContent(
                 }
                 LiveSheet.WB -> {
                     when (selectedMode) {
-                        0 ->
+                        0 -> {
+                            val awbLocked = model.session.awbLockKelvin.collectAsState().value != null
                             CheckedRows(
-                                options = CaptureLists.wbModeRows,
-                                selected = CaptureLists.wbModeRowSelected(status),
+                                options = CaptureLists.wbModeRows(
+                                    awbLocked || model.session.autoWhiteBalanceLock(status) != null),
+                                selected = CaptureLists.wbModeRowSelected(status, awbLocked),
                                 enabled = enabled,
                             ) { label ->
-                                if (CaptureLists.wbSendsAuto(label)) {
+                                if (label == CaptureLists.AWB_LOCK) {
+                                    model.session.lockAutoWhiteBalance()
+                                } else if (CaptureLists.wbSendsAuto(label)) {
                                     model.setWhiteBalanceAuto()
                                 } else {
                                     val custom = CaptureLists.wbCustomFromStatus(status)
                                     model.setWhiteBalance(custom.first, custom.second)
                                 }
                             }
+                        }
                         1 ->
                             Box(Modifier.wrapContentHeight().fillMaxWidth()) {
                                 CaptureDrumWheel(
@@ -726,9 +737,10 @@ private fun LiveControlSheetContent(
                     }
                 }
                 LiveSheet.EXPO -> {
+                    val aeLocked = model.session.aeLock.collectAsState().value != null
                     CheckedRows(
-                        options = CaptureLists.expoLabels,
-                        selected = CaptureLists.expoSelectedLabel(status.expoMode),
+                        options = CaptureLists.expoLabels(aeLocked),
+                        selected = CaptureLists.expoSelectedLabel(status.expoMode, aeLocked),
                         enabled = enabled,
                     ) { label ->
                         CaptureLists.expoModeFromLabel(label)?.let(model::setExpoMode)
@@ -928,21 +940,16 @@ private fun ModeBar(
     uppercase: Boolean = true,
     onSelect: (Int) -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    val haptics = LocalOperatorHaptics.current
+    Row(Modifier.fillMaxWidth().monitorTabStrip()) {
         tabs.forEachIndexed { index, title ->
             val active = index == selected
-            val shape = RoundedCornerShape(9.dp)
-            Box(Modifier.weight(1f).height(44.dp)
-                .chromeClickable(enabled = enabled, onClick = { if (enabled) onSelect(index) }), contentAlignment = Alignment.Center) {
-                Box(Modifier.fillMaxWidth().height(30.dp).clip(shape)
-                    .background(if (active) LiveDesign.accentDim else Color.White.copy(alpha = .05f))
-                    .border(1.dp, if (active) LiveDesign.accent.copy(alpha = .55f) else LiveDesign.hairline, shape),
-                    contentAlignment = Alignment.Center) {
-                    Text(if (uppercase) title.uppercase() else title,
-                        style = LiveType.ui(11f, FontWeight.SemiBold).copy(letterSpacing = .44.sp),
-                        color = if (active) LiveDesign.accent else LiveDesign.muted, maxLines = 1,
-                        textAlign = TextAlign.Center)
-                }
+            MonitorTab(active, { haptics.selection(); onSelect(index) }, Modifier.weight(1f), enabled = enabled,
+                separator = index > 0, accessibilityLabel = title, horizontalPadding = 0.dp) {
+                Text(if (uppercase) title.uppercase() else title,
+                    style = LiveType.ui(11f, FontWeight.SemiBold).copy(letterSpacing = .44.sp),
+                    color = if (active) LiveDesign.accent else LiveDesign.muted, maxLines = 1,
+                    textAlign = TextAlign.Center)
             }
         }
     }
@@ -1083,7 +1090,7 @@ private fun initialSelectedMode(
         LiveSheet.SHUTTER ->
             if (!isEvSheet && model.shutterUsesAngle && !CameraCommands.isPhotoMode(status.shootingMode)) 1
             else 0
-        LiveSheet.WB -> CaptureLists.wbInitialTab(status)
+        LiveSheet.WB -> CaptureLists.wbInitialTab(status, model.session.awbLockKelvin.value != null)
         LiveSheet.FORMAT -> {
             val format = VideoFormat.current(status)
             CaptureLists.formatResolutions(status).indexOf(format.resolution).coerceAtLeast(0)
@@ -1129,6 +1136,12 @@ object ShutterAngle {
     val labels: List<String> = degrees.map { label(it) }
 
     fun effectiveFps(fps: Int): Int = if (fps in 8..240) fps else 24
+
+    fun rematchesFormat(
+        usesAngle: Boolean, manual: Boolean, isPhoto: Boolean,
+        previousFps: Int, nextFps: Int, alreadyPending: Boolean = false,
+    ): Boolean = usesAngle && manual && !isPhoto && previousFps > 0 && nextFps > 0 &&
+        (previousFps != nextFps || alreadyPending)
 
     fun label(value: Double): String {
         val rounded = round(value)
@@ -1338,6 +1351,13 @@ object CaptureLists {
         }
 
     fun expoSelectedLabel(mode: Int): String? = expoLabel(mode).takeIf { it in expoLabels }
+
+    /** iOS `CaptureLists.aeLock`: EXPOSURE tile and drum entry left of Auto while AE-L holds. */
+    const val AE_LOCK = "AE-L"
+
+    fun expoLabels(aeLocked: Boolean): List<String> = if (aeLocked) listOf(AE_LOCK) + expoLabels else expoLabels
+
+    fun expoSelectedLabel(mode: Int, aeLocked: Boolean): String? = if (aeLocked) AE_LOCK else expoSelectedLabel(mode)
 
     fun expoModeFromLabel(label: String): Int? =
         when (label) {
@@ -1561,17 +1581,23 @@ object CaptureLists {
 
     val evLabels: List<String> = EvComp.allCases.map { it.label }
 
+    /** Core `WhiteBalance.kelvinLadder`; AWB lock snaps to it in the core. */
     val kelvinValues: List<Int> = (2_000..10_000 step 100).toList()
     val kelvinLabels: List<String> = kelvinValues.map { "${it}K" }
     val wbTabs: List<String> = listOf("Mode", "Kelvin", "Tint")
     val wbModeRows: List<String> = listOf("Auto", "Custom")
+    /** iOS `CaptureLists.awbLock`: WB Mode drum entry left of Auto. */
+    const val AWB_LOCK = "AWB Lock"
+    /** iOS `CaptureLists.awbLockTile`: WB tile while locked; `AWB Lock` would outgrow `10000K`. */
+    const val AWB_LOCK_TILE = "AWB-L"
+
+    /** iOS `whiteBalanceModeLabels`: AWB Lock left of Auto when offered or held. */
+    fun wbModeRows(offersLock: Boolean): List<String> = if (offersLock) listOf(AWB_LOCK) + wbModeRows else wbModeRows
     const val WB_TAB_MODE = 0
     const val WB_TAB_KELVIN = 1
     const val WB_TAB_TINT = 2
 
     val fpsDrumLabels: List<String> get() = VideoFrameRate.drumLabels
-
-    val resolutionTabTitles: List<String> get() = VideoResolution.tabTitles
 
     /** Family fallback — D-Log2 is 4 Pro only (`colorWheelOrder`). */
     val colorWheelPocket: List<Pair<Int, String>> =
@@ -1711,8 +1737,7 @@ object CaptureLists {
                 return ShutterSeat(preferred, preferredAngle, persistAngle = false)
             }
             val next = ShutterAngle.nearestLabel(liveDenom, fps)
-            val degrees = ShutterAngle.parse(next) ?: ShutterAngle.DEFAULT_DEGREES
-            return ShutterSeat(next, degrees, persistAngle = true)
+            return ShutterSeat(next, preferredAngle, persistAngle = false)
         }
         return ShutterSeat(preferred, preferredAngle, persistAngle = false)
     }
@@ -1853,11 +1878,12 @@ object CaptureLists {
 
     fun kelvinFromLabel(label: String): Int? = label.removeSuffix("K").toIntOrNull()
 
-    fun wbInitialTab(status: CameraStatus): Int =
-        if (status.wbMode == CameraCommands.WB_CUSTOM) WB_TAB_KELVIN else WB_TAB_MODE
+    /** AWB Lock is a Mode choice, not an active Kelvin. */
+    fun wbInitialTab(status: CameraStatus, awbLocked: Boolean = false): Int =
+        if (status.wbMode == CameraCommands.WB_CUSTOM && !awbLocked) WB_TAB_KELVIN else WB_TAB_MODE
 
-    fun wbModeRowSelected(status: CameraStatus): String =
-        if (status.wbMode == CameraCommands.WB_CUSTOM) "Custom" else "Auto"
+    fun wbModeRowSelected(status: CameraStatus, awbLocked: Boolean = false): String =
+        if (awbLocked) AWB_LOCK else if (status.wbMode == CameraCommands.WB_CUSTOM) "Custom" else "Auto"
 
     fun wbSendsAuto(label: String): Boolean = label == "Auto"
 
@@ -1881,15 +1907,11 @@ object CaptureLists {
 
     fun roundedTint(value: Float): Int = value.roundToInt().coerceIn(-100, 100)
 
-    fun nudgeTint(current: Float, delta: Int): Float = (current + delta).coerceIn(-100f, 100f)
-
     fun tintLabel(tint: Int): String {
         val t = tint.coerceIn(-100, 100)
         if (t == 0) return "Neutral"
         return if (t > 0) "+$t" else "$t"
     }
-
-    fun tintApplyLabel(tint: Int): String = "Apply tint ${tint.coerceIn(-100, 100)}"
 
     fun wbCustomFromTint(tint: Float, status: CameraStatus): Pair<Int, Int> =
         currentKelvin(status) to roundedTint(tint)
@@ -1898,8 +1920,6 @@ object CaptureLists {
         status.wbMode != CameraCommands.WB_CUSTOM
 
     fun fpsDrumLabel(status: CameraStatus): String = VideoFormat.current(status).frameRate.drumLabel
-
-    fun fpsIndexFromDrum(label: String): Int? = VideoFrameRate.fromDrumLabel(label)?.rawValue
 
     fun currentFpsIndex(status: CameraStatus): Int = VideoFormat.current(status).frameRate.rawValue
 
@@ -2044,8 +2064,8 @@ object CaptureLists {
             else -> "—"
         }
 
-    fun wbChipValue(status: CameraStatus): String =
-        when (status.wbMode) {
+    fun wbChipValue(status: CameraStatus, awbLocked: Boolean = false): String =
+        if (awbLocked) AWB_LOCK_TILE else when (status.wbMode) {
             CameraCommands.WB_CUSTOM -> if (status.wbKelvin > 0) "${status.wbKelvin}K" else "Custom"
             CameraCommands.WB_AUTO -> "Auto"
             else -> "—"
@@ -2054,8 +2074,6 @@ object CaptureLists {
     /** iOS aperture glyph when mode is not custom (Auto and unknown). */
     fun wbIsAuto(status: CameraStatus): Boolean =
         status.wbMode != CameraCommands.WB_CUSTOM
-
-    fun wbChipWidest(): String = "10000K"
 
     const val FOCUS_TAB_SINGLE = "AF-S"
     const val FOCUS_TAB_CONTINUOUS = "AF-C"
@@ -2092,10 +2110,6 @@ object CaptureLists {
 
     /** Horizontal AF-C chips only while continuous, matching iOS `if continuous`. */
     fun focusShowsTrackChips(status: CameraStatus): Boolean = focusIsContinuous(status)
-
-    /** Unknown track paints Default, matching iOS `focusTrack ?? .default`. */
-    fun selectedFocusTrack(status: CameraStatus): Int =
-        if (status.focusTrack < 0) FocusTrackMode.DEFAULT.raw else status.focusTrack
 
     /** GET `0x8E` pid `0x003B` when FOCUS opens without a track. Nano never GETs. */
     fun shouldRefreshFocusTrack(status: CameraStatus, supportsFocus: Boolean): Boolean =

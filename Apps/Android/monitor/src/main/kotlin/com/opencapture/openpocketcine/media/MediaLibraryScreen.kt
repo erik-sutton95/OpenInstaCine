@@ -1,5 +1,9 @@
 package com.opencapture.openpocketcine.media
 
+import com.opencapture.openpocketcine.LocalOperatorHaptics
+import com.opencapture.monitorui.MonitorTab
+import com.opencapture.monitorui.monitorTabStrip
+import com.opencapture.monitorui.monitorScrollFade
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -57,8 +61,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -267,10 +269,12 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
                         if (compact) {
                             CategoryStrip(category) { category = it }
                         } else {
-                            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),
-                                verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                MediaLibraryTab.entries.forEach { tab ->
-                                    CategoryTab(tab, active = tab == category, fill = true) { category = tab }
+                            val railScroll = rememberScrollState()
+                            Column(Modifier.weight(1f).monitorScrollFade(railScroll).verticalScroll(railScroll)) {
+                                Column(Modifier.fillMaxWidth().monitorTabStrip()) {
+                                    MediaLibraryTab.entries.forEach { tab ->
+                                        CategoryTab(tab, active = tab == category, fill = true) { category = tab }
+                                    }
                                 }
                             }
                             MediaCatalogDisplayControls(
@@ -437,14 +441,8 @@ private fun MediaCatalogDisplayControls(
 
 @Composable
 private fun CategoryStrip(category: MediaLibraryTab, onSelect: (MediaLibraryTab) -> Unit) {
-    Row(
-        Modifier
-            .clip(MediaCornerShape)
-            .panelGlass(MediaCornerShape)
-            .horizontalScroll(rememberScrollState())
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
+    val scroll = rememberScrollState()
+    Row(Modifier.monitorScrollFade(scroll, vertical = false).horizontalScroll(scroll).monitorTabStrip()) {
         MediaLibraryTab.entries.forEach { tab ->
             CategoryTab(tab, active = tab == category) { onSelect(tab) }
         }
@@ -453,43 +451,24 @@ private fun CategoryStrip(category: MediaLibraryTab, onSelect: (MediaLibraryTab)
 
 @Composable
 private fun CategoryTab(tab: MediaLibraryTab, active: Boolean, fill: Boolean = false, onClick: () -> Unit) {
-    val (icon, label) =
+    val haptics = LocalOperatorHaptics.current
+    val label =
         when (tab) {
-            MediaLibraryTab.ALL -> OpcIcon.LAYOUT_GRID to "All"
-            MediaLibraryTab.VIDEOS -> OpcIcon.FILM to "Videos"
-            MediaLibraryTab.PHOTOS -> OpcIcon.IMAGE to "Photos"
-            MediaLibraryTab.FAVORITES -> OpcIcon.STAR to "Favorites"
+            MediaLibraryTab.ALL -> "All"
+            MediaLibraryTab.VIDEOS -> "Videos"
+            MediaLibraryTab.PHOTOS -> "Photos"
+            MediaLibraryTab.FAVORITES -> "Favorites"
         }
-    Row(
-        Modifier
-            .then(if (fill) Modifier.fillMaxWidth() else Modifier)
-            .clip(MediaCornerShape)
-            .background(if (active) LiveDesign.accentDim else Color.Transparent)
-            .chromeClickable(onClick = onClick)
-            .semantics {
-                contentDescription = "Show $label media"
-                role = Role.Tab
-            }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OpcIcon(
-            icon = icon,
-            contentDescription = null,
-            tint = if (active) LiveDesign.accent else LiveDesign.muted,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            label,
-            color = if (active) LiveDesign.accent else LiveDesign.muted,
-            style = LiveType.ui(12f, if (active) FontWeight.SemiBold else FontWeight.Medium),
-        )
+    MonitorTab(active, { haptics.selection(); onClick() }, Modifier.then(if (fill) Modifier.fillMaxWidth() else Modifier),
+        vertical = fill, separator = tab != MediaLibraryTab.entries.first(),
+        accessibilityLabel = "Show $label media") {
+        Row(Modifier.then(if (fill) Modifier.fillMaxWidth() else Modifier),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // iOS category tabs carry no glyph.
+            Text(label, color = if (active) LiveDesign.accent else LiveDesign.muted,
+                style = LiveType.ui(12f, if (active) FontWeight.SemiBold else FontWeight.Medium))
+        }
     }
-}
-
-internal object MediaLibraryHeaderMetrics {
-    fun stacksCountUnderTitle(portrait: Boolean): Boolean = portrait
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -531,7 +510,7 @@ private fun MediaGalleryPane(
                     }
                 layout == MediaBrowserLayout.LIST -> {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().monitorScrollFade(listState),
                         state = listState,
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(bottom = 24.dp),
@@ -621,14 +600,22 @@ private fun SelectionTray(count: Int, cacheEnabled: Boolean, deleteEnabled: Bool
     onAll: () -> Unit, onClear: () -> Unit, onCache: () -> Unit, onStar: () -> Unit,
     onDelete: () -> Unit, onShare: () -> Unit) {
     com.opencapture.monitorui.MonitorSelectionTray(count) {
-        Text("All", color = LiveDesign.accent, style = LiveType.ui(11f, FontWeight.SemiBold),
-            modifier = Modifier.height(34.dp).chromeClickable(onClick = onAll).padding(horizontal = 7.dp, vertical = 10.dp))
-        Text("Clear", color = LiveDesign.muted, style = LiveType.ui(11f, FontWeight.SemiBold),
-            modifier = Modifier.height(34.dp).chromeClickable(onClick = onClear).padding(horizontal = 7.dp, vertical = 10.dp))
+        TrayTextChip(OpcIcon.CIRCLE_CHECK, "All", LiveDesign.accent, onAll)
+        TrayTextChip(OpcIcon.X, "Clear", LiveDesign.muted, onClear)
         MediaCircleIconButton(OpcIcon.DOWNLOAD, "Cache selected clips", onCache, enabled = cacheEnabled, size = 34.dp)
         MediaCircleIconButton(OpcIcon.STAR, "Favorite selected clips", onStar, enabled = count > 0, size = 34.dp)
         MediaCircleIconButton(OpcIcon.TRASH, "Delete selected clips", onDelete, enabled = deleteEnabled, size = 34.dp)
         MediaCircleIconButton(OpcIcon.SHARE, "Share selected clips", onShare, enabled = count > 0, size = 34.dp)
+    }
+}
+
+/** iOS selection chip: 13dp glyph beside its label. */
+@Composable
+private fun TrayTextChip(icon: OpcIcon, label: String, tint: Color, onClick: () -> Unit) {
+    Row(Modifier.height(34.dp).chromeClickable(onClick = onClick).padding(horizontal = 7.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        OpcIcon(icon, null, Modifier.size(13.dp), tint)
+        Text(label, color = tint, style = LiveType.ui(11f, FontWeight.SemiBold))
     }
 }
 
@@ -807,6 +794,7 @@ private fun FilterPopup(
                 .background(Color.Black.copy(alpha = 0.18f))
                 .clickable(onClick = onClose),
         )
+        val filterScroll = rememberScrollState()
         Column(
             Modifier
                 .absoluteOffset { IntOffset((card.x * density.density).roundToInt(), (card.y * density.density).roundToInt()) }
@@ -815,7 +803,8 @@ private fun FilterPopup(
                 .clip(MediaCornerShape)
                 .panelGlass(MediaCornerShape)
                 .padding(16.dp)
-                .verticalScroll(rememberScrollState())
+                .monitorScrollFade(filterScroll)
+                .verticalScroll(filterScroll)
                 .semantics { contentDescription = "Filter popup" },
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

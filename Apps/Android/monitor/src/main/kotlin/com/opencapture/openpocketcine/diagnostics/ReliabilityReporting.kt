@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import com.opencapture.openpocketcine.BuildConfig
@@ -140,9 +141,6 @@ internal object ReliabilityReporting {
         executor.execute { sessionSummaryLoader = loader }
     }
 
-    fun shouldStartSdk(): Boolean =
-        ReliabilityReportingConsent.isOptedIn && ReliabilityReportingDSN.configured() != null
-
     fun isFinalized(bundle: FeedIncidentBundle): Boolean =
         when (bundle.header.outcome) {
             FeedIncidentOutcome.OPEN -> false
@@ -150,6 +148,7 @@ internal object ReliabilityReporting {
             FeedIncidentOutcome.INTERRUPTED,
             FeedIncidentOutcome.EXHAUSTED,
             FeedIncidentOutcome.SUPPRESSED,
+            FeedIncidentOutcome.USER_ENDED,
             -> true
         }
 
@@ -341,6 +340,9 @@ internal object ReliabilityReporting {
                             scope.setTag("sourceRevision", BuildConfig.SOURCE_REVISION)
                             scope.setTag("testSource", FeedIncidentOrigin.currentTestSource().wire)
                             scope.setTag("buildIdentity", FeedIncidentOrigin.currentBuildIdentity())
+                            // Native crashes carry no device context; these name the phone and SoC.
+                            scope.setTag("hardwareClass", Build.MODEL ?: "unknown")
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) scope.setTag("soc", "${Build.SOC_MANUFACTURER} ${Build.SOC_MODEL}")
                         }
                     }
                 }
@@ -529,9 +531,20 @@ internal object ReliabilityReporting {
         }
     }
 
+    /**
+     * Only an incident the recovery ladder gave up on is an error. Recovered and
+     * suppressed ones are the reliability baseline, not failures.
+     */
+    fun level(outcome: String): SentryLevel =
+        when (outcome) {
+            FeedIncidentOutcome.EXHAUSTED.wire -> SentryLevel.ERROR
+            FeedIncidentOutcome.INTERRUPTED.wire, FeedIncidentOutcome.USER_ENDED.wire -> SentryLevel.WARNING
+            else -> SentryLevel.INFO
+        }
+
     private fun makeEvent(envelope: FeedIncidentVendorEnvelope, eventId: io.sentry.protocol.SentryId): SentryEvent {
         val event = SentryEvent()
-        event.level = SentryLevel.ERROR
+        event.level = level(envelope.grouping.outcome)
         event.eventId = eventId
         event.timestamp = Date(envelope.startedAtWallClockMs)
         event.release = "com.opencapture.openpocketcine@${envelope.appVersion}+${envelope.appBuild}"

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -44,6 +45,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -57,6 +60,7 @@ import androidx.compose.ui.window.Popup
 import com.opencapture.monitorui.MonitorQuickGestureOwner
 import com.opencapture.monitorui.monitorReadoutGesture
 import com.opencapture.monitorui.monitorPickerPassthrough
+import com.opencapture.monitorui.monitorScrollFade
 import com.opencapture.openpocketcine.assists.AssistToolGlyph
 import com.opencapture.openpocketcine.assists.LiveAssistBar
 import com.opencapture.openpocketcine.assists.LiveAssistState
@@ -205,6 +209,8 @@ fun LivePortraitChrome(
     onAssistLongPress: (LiveAssistTool) -> Unit,
     chromeInteractive: Boolean,
     controlBusy: Boolean,
+    focusOffCenter: Boolean,
+    onFocusReset: () -> Unit,
     fpsLabel: String = "—",
     bars: Int = 0,
     sourceIsVertical: Boolean = false,
@@ -243,13 +249,15 @@ fun LivePortraitChrome(
     Box(Modifier.fillMaxSize()) {
         if (showsStatus) {
             val gaugeTop = if (tablet) 82f else max(4f, zones.topBar.minY - 16f)
-            Box(Modifier.liveModuleFrame(ChromeRect(if (tablet) 14f else layout.viewportWidth - 118f,
-                gaugeTop, if (tablet) 46f else 104f, if (tablet) 54f else 28f))) {
+            // Phone: a trailing row of gauge pills. Tablet: a stacked column.
+            Box(Modifier.liveModuleFrame(ChromeRect(if (tablet) 14f else layout.viewportWidth - 200f,
+                gaugeTop, if (tablet) 58f else 186f, if (tablet) 68f else 22f)),
+                contentAlignment = if (tablet) Alignment.TopStart else Alignment.TopEnd) {
                 com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
                     model.phoneBatteryPercent, status.batteryPercent, horizontal = !tablet)
             }
             if (model.chromeSectionMounts(PocketDispSection.STORAGE)) {
-                Row(Modifier.liveModuleFrame(ChromeRect(14f, if (tablet) 52f else gaugeTop, 120f, 28f)),
+                Row(Modifier.liveModuleFrame(ChromeRect(14f, if (tablet) 52f else gaugeTop, 120f, 28f)).monitorReadoutShadow(),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     SdCardGlyph(LiveDesign.text)
                     Text(portraitStorageLabel(status).substringBefore(" ·"), style = LiveType.mono(13.5f, FontWeight.SemiBold))
@@ -433,6 +441,12 @@ fun LivePortraitChrome(
                 uiLocked = uiLocked,
             )
         }
+        // Same slot as landscape: leading of the stick, on its bottom edge (iOS `focusReset`).
+        if (!uiLocked && focusOffCenter && chromeInteractive) {
+            Box(Modifier.liveModuleFrame(layout.focusReset)) {
+                LiveFocusResetButton(onClick = onFocusReset)
+            }
+        }
 
         Box(
             Modifier
@@ -531,13 +545,14 @@ fun LivePortraitSystemBar(
                     status.shootingMode, status.isRecording, uiLocked, controlBusy, model.session.phase,
                 ),
                 onClick = model::pressShutter)
+            // Same order as landscape: Media next to Record, Settings outside it.
             Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (showsSettings) AuxCircleButton(Modifier.size(48.dp).monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.SETTINGS }) {
-                    OpcIcon(OpcIcon.SETTINGS, "Settings", Modifier.fillMaxSize(), it)
-                }
+                horizontalArrangement = Arrangement.spacedBy(com.opencapture.monitorui.MonitorLayoutPolicy.SETTINGS_MEDIA_GAP.dp)) {
                 if (showsMedia) AuxCircleButton(Modifier.size(48.dp).monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.MEDIA }) {
                     OpcIcon(OpcIcon.FILM, "Media", Modifier.fillMaxSize(), it)
+                }
+                if (showsSettings) AuxCircleButton(Modifier.size(48.dp).monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.SETTINGS }) {
+                    OpcIcon(OpcIcon.SETTINGS, "Settings", Modifier.fillMaxSize(), it)
                 }
             }
         }
@@ -577,15 +592,16 @@ fun LivePortraitSystemBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Spacer(Modifier.weight(1f))
-                if (showsSettings) {
-                    AuxCircleButton(Modifier.monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.SETTINGS }) {
-                        OpcIcon(OpcIcon.SETTINGS, contentDescription = "Settings", tint = it, modifier = Modifier.fillMaxSize())
-                    }
-                    Spacer(Modifier.weight(1f))
-                }
+                // Same order as landscape: Media next to Record, Settings outside it.
                 if (showsMedia) {
                     AuxCircleButton(Modifier.monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.MEDIA }) {
                         OpcIcon(OpcIcon.FILM, contentDescription = "Media", tint = it, modifier = Modifier.fillMaxSize())
+                    }
+                    Spacer(Modifier.weight(1f))
+                }
+                if (showsSettings) {
+                    AuxCircleButton(Modifier.monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.SETTINGS }) {
+                        OpcIcon(OpcIcon.SETTINGS, contentDescription = "Settings", tint = it, modifier = Modifier.fillMaxSize())
                     }
                     Spacer(Modifier.weight(1f))
                 }
@@ -626,12 +642,7 @@ fun LivePortraitAspectToggle(
             .semantics { contentDescription = if (fill) "Fit feed in frame" else "Fill frame with feed" },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            if (fill) "FILL" else "FIT",
-            color = if (fill) LiveDesign.accent else LiveDesign.text,
-            style = LiveType.ui(9f, FontWeight.Bold),
-            maxLines = 1,
-        )
+        OpcIcon(if (fill) OpcIcon.MINIMIZE else OpcIcon.MAXIMIZE, null, Modifier.size(15.dp), LiveDesign.text)
     }
 }
 
@@ -654,14 +665,18 @@ fun LiveCaptureStrip(
 ) {
     val context = LocalContext.current
     val auto = status.expoMode == CameraCommands.EXPO_AUTO
+    val aeLocked = model?.session?.aeLock?.collectAsState()?.value != null
+    val awbLocked = model?.session?.awbLockKelvin?.collectAsState()?.value != null
     val shutter = captureShutterReadout(
         status,
         shutterUsesAngle,
         OperatorPrefs.shutterAngleDegrees(context),
     )
-    fun value(sheet: LiveSheet, label: String, readout: String, annotation: String? = null) =
+    fun value(sheet: LiveSheet, label: String, readout: String, annotation: String? = null,
+        valueIcon: OpcIcon? = null, badgeIcon: OpcIcon? = null) =
         com.opencapture.openpocketcine.monitor.MonitorValue(
             sheet.name, label, readout, selected = active == sheet, annotation = annotation,
+            valueIcon = valueIcon, badgeIcon = badgeIcon,
         )
     val values = buildList {
         add(value(LiveSheet.ISO, "ISO", CaptureLists.isoChipValue(status)))
@@ -669,9 +684,12 @@ fun LiveCaptureStrip(
             if (auto) MonitorExposureReadout.autoEvCaption(status.shutterDenom)
             else "SHUTTER",
             if (auto) EvComp.fromRaw(status.evComp)?.label ?: "—" else shutter,
-            if (auto && facePriority) "FACE" else null))
-        add(value(LiveSheet.EXPO, "EXPOSURE", if (status.expoMode == CameraCommands.EXPO_MANUAL) "M" else if (auto) "A" else "—"))
-        add(value(LiveSheet.WB, "WB", CaptureLists.wbChipValue(status)))
+            if (auto && facePriority) CaptureLists.FACE_PRIORITY_TITLE else null,
+            badgeIcon = if (auto && facePriority) OpcIcon.SCAN else null))
+        add(value(LiveSheet.EXPO, "EXPOSURE", if (aeLocked) CaptureLists.AE_LOCK
+            else if (status.expoMode == CameraCommands.EXPO_MANUAL) "M" else if (auto) "A" else "—"))
+        add(value(LiveSheet.WB, "WB", CaptureLists.wbChipValue(status, awbLocked),
+            valueIcon = if (CaptureLists.wbIsAuto(status) && !awbLocked) OpcIcon.APERTURE else null))
         if (showFocus) add(value(LiveSheet.FOCUS, "FOCUS", status.focusLabel))
         if (showAperture) add(value(LiveSheet.APERTURE, "APERTURE", ApertureStrategy.tileValue(status)))
         if (CaptureShutterPolicy.showsAudioControls(status.shootingMode)) {
@@ -761,11 +779,13 @@ fun LivePortraitAssistRail(
         ) {
             ChevronLeftGlyph(LiveDesign.accent, Modifier.size(13.dp))
         }
+        val railScroll = rememberScrollState()
         Column(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .monitorScrollFade(railScroll)
+                .verticalScroll(railScroll)
                 .padding(vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -817,17 +837,17 @@ fun LivePortraitRecOptionsButton(
             ) {
                 Column(Modifier.width(220.dp).monitorMaterial(MonitorMaterial.Expanded)) {
                     if (isPhoto) {
-                        RecOptionsRow("Shooting mode") {
+                        LivePopupAction("Shooting mode") {
                             open = false
                             onOpen(LiveSheet.MODE)
                         }
                     } else {
-                        RecOptionsRow("Resolution · Framerate") {
+                        LivePopupAction("Resolution · Framerate") {
                             open = false
                             onOpen(LiveSheet.FORMAT)
                         }
                         Box(Modifier.fillMaxWidth().height(1.dp).background(LiveDesign.hairline))
-                        RecOptionsRow("Color") {
+                        LivePopupAction("Color") {
                             open = false
                             onOpen(LiveSheet.COLOR)
                         }
@@ -838,18 +858,22 @@ fun LivePortraitRecOptionsButton(
     }
 }
 
+/** Shared floating-menu action used by Live View and Multiview camera menus. */
 @Composable
-private fun RecOptionsRow(title: String, onClick: () -> Unit) {
+internal fun LivePopupAction(
+    title: String, enabled: Boolean = true, destructive: Boolean = false,
+    onClick: () -> Unit,
+) {
     Text(
         title,
-        color = LiveDesign.text,
+        color = if (destructive) LiveDesign.rec else LiveDesign.text,
         style = LiveType.ui(14f, FontWeight.Medium),
-        maxLines = 1,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .chromeClickable(onClick = onClick)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+        maxLines = 2,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)
+            .alpha(if (enabled) 1f else 0.4f)
+            .chromeClickable(enabled = enabled, onClick = onClick)
+            .semantics { role = Role.Button }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     )
 }
 

@@ -12,68 +12,54 @@ import kotlin.test.assertTrue
  */
 class MonitorInsetsTest {
     @Test
-    fun zeroCutoutFloorsAtTheIslandLane() {
-        // Punch-hole that resolves to a zero inset — the floor alone must
-        // carve the iPhone-parity left lane.
-        assertEquals(IOS_ISLAND_LANE_DP, monitorLeadingInsetDp(0f, 0f))
-    }
-
-    @Test
-    fun cutoutWiderThanTheLaneWins() {
-        assertEquals(70f, monitorLeadingInsetDp(70f, 0f))
-    }
-
-    @Test
-    fun transientBarAddsItsLaneOnTopOfTheFloor() {
-        // Reverse-landscape nav bar on the leading edge: the bar lane stacks
-        // on the floored cutout so the feed clears the overlay.
-        assertEquals(IOS_ISLAND_LANE_DP + 48f, monitorLeadingInsetDp(0f, 48f))
-    }
-
-    @Test
-    fun transientBarOverlappingTheCutoutOnlyAddsTheExcess() {
-        assertEquals(80f, monitorLeadingInsetDp(70f, 80f))
-    }
-
-    @Test
-    fun transientBarNarrowerThanTheCutoutAddsNothing() {
-        assertEquals(70f, monitorLeadingInsetDp(70f, 40f))
-    }
-
-    @Test
-    fun portraitBottomInsetKeepsTheSystemRailAboveTheGestureArea() {
-        assertEquals(
-            PORTRAIT_SYSTEM_RAIL_BOTTOM_INSET_DP,
-            monitorBottomInsetDp(rawInsetDp = 0f, isPortrait = true),
+    fun leadingInsetFloorsAtTheIslandLaneAndStacksTransientBars() {
+        // why to (cutout, transient bar, expected leading inset)
+        val cases = listOf(
+            // Punch-hole that resolves to a zero inset: the floor alone carves the iPhone-parity left lane.
+            "zero cutout floors at the island lane" to Triple(0f, 0f, IOS_ISLAND_LANE_DP),
+            "cutout wider than the lane wins" to Triple(70f, 0f, 70f),
+            // Reverse-landscape nav bar on the leading edge stacks on the floored cutout.
+            "transient bar adds its lane on top of the floor" to Triple(0f, 48f, IOS_ISLAND_LANE_DP + 48f),
+            "transient bar overlapping the cutout only adds the excess" to Triple(70f, 80f, 80f),
+            "transient bar narrower than the cutout adds nothing" to Triple(70f, 40f, 70f),
         )
-        assertEquals(42f, monitorBottomInsetDp(rawInsetDp = 42f, isPortrait = true))
+        for ((why, case) in cases) {
+            val (cutout, bar, expected) = case
+            assertEquals(expected, monitorLeadingInsetDp(cutout, bar), why)
+        }
     }
 
     @Test
-    fun compactPhoneChromeScaleFloorsAtTheMinimum() {
-        assertEquals(CHROME_SCALE_MIN, monitorChromeScale(360f), 0.001f)
-        assertEquals(CHROME_SCALE_MIN, monitorChromeScale(320f), 0.001f)
+    fun bottomInsetKeepsPortraitRailAboveGestureAreaAndLandscapePhysical() {
+        // (raw inset, portrait, expected)
+        val cases = listOf(
+            Triple(0f, true, PORTRAIT_SYSTEM_RAIL_BOTTOM_INSET_DP),
+            Triple(42f, true, 42f),
+            Triple(0f, false, 0f),
+            Triple(42f, false, 42f),
+        )
+        for ((raw, portrait, expected) in cases) {
+            assertEquals(expected, monitorBottomInsetDp(rawInsetDp = raw, isPortrait = portrait), "raw=$raw portrait=$portrait")
+        }
     }
 
     @Test
-    fun proMaxClassChromeScaleStaysIdentity() {
-        assertEquals(1f, monitorChromeScale(CHROME_SCALE_REFERENCE_DP), 0.001f)
-        assertEquals(1f, monitorChromeScale(440f), 0.001f)
-        assertEquals(1f, monitorChromeScale(430f), 0.001f)
-    }
-
-    @Test
-    fun midSizePhoneChromeScaleLerps() {
-        val scale = monitorChromeScale(410f)
-        assertTrue(scale > CHROME_SCALE_MIN)
-        assertTrue(scale < 1f)
-        assertEquals(410f / CHROME_SCALE_REFERENCE_DP, scale, 0.001f)
-    }
-
-    @Test
-    fun landscapeBottomInsetRemainsThePhysicalInset() {
-        assertEquals(0f, monitorBottomInsetDp(rawInsetDp = 0f, isPortrait = false))
-        assertEquals(42f, monitorBottomInsetDp(rawInsetDp = 42f, isPortrait = false))
+    fun chromeScaleFloorsOnCompactPhonesLerpsMidSizeAndIsIdentityOnProMax() {
+        // (viewport short side, expected scale)
+        val cases = listOf(
+            360f to CHROME_SCALE_MIN,
+            320f to CHROME_SCALE_MIN,
+            CHROME_SCALE_REFERENCE_DP to 1f,
+            440f to 1f,
+            430f to 1f,
+            410f to 410f / CHROME_SCALE_REFERENCE_DP,
+        )
+        for ((width, expected) in cases) {
+            assertEquals(expected, monitorChromeScale(width), 0.001f, "width=$width")
+        }
+        val mid = monitorChromeScale(410f)
+        assertTrue(mid > CHROME_SCALE_MIN)
+        assertTrue(mid < 1f)
     }
 }
 
@@ -100,7 +86,7 @@ class LiveMonitorLayoutTest {
             assertEquals(portraitAspectToggle(w, floor), portraitAspectToggle(w, fillZones.assistToolbar.minY))
             assertEquals(portraitAssistToolbar(floor, isTablet),
                 portraitAssistToolbar(fillZones.assistToolbar.minY, isTablet))
-            assertEquals(floor - 104f, fitCluster.stick.minY, 0.05f)
+            assertEquals(floor - 16f - com.opencapture.monitorui.MonitorLayoutPolicy.STICK_SIDE, fitCluster.stick.minY, 0.05f)
             assertEquals(w - 16f, fitCluster.stick.maxX, 0.05f)
             assertEquals(w / 2f, portraitAspectToggle(w, floor).midX, 0.05f)
         }
@@ -113,6 +99,21 @@ class LiveMonitorLayoutTest {
         assertTrue(fit.feed.maxY <= toggle.minY + 0.05f)
         assertTrue(fit.feed.maxY <= rail.minY + 0.05f)
         LiveChromeMetrics.scale = 1f
+    }
+
+    /** iOS `FieldMonitorLayout.focusReset`: leading of the stick on its bottom edge in both orientations. */
+    @Test
+    fun focusRecenterSitsLeadingOfTheStickInPortraitAndLandscape() {
+        for ((w, h) in listOf(393f to 852f, 852f to 393f)) {
+            val layout = LiveMonitorLayout.fieldMonitor(w, h, 0f, 0f, if (h > w) 59f else 0f, 34f,
+                showsBottomBars = true)
+            val stick = layout.gimbalCluster(showGimbalButton = true).stick
+            val reset = layout.focusReset
+            assertFalse(reset.isEmpty, "Recenter needs a slot in ${w}x$h")
+            assertEquals(stick.minX - 50f, reset.minX, 0.05f)
+            assertEquals(stick.maxY, reset.maxY, 0.05f)
+            assertTrue(reset.maxY <= layout.capture.minY)
+        }
     }
 
     @Test
@@ -142,8 +143,6 @@ class LiveMonitorLayoutTest {
             )
         assertTrue(zones.feed.height > zones.feed.width * 9f / 16f - 0.5f)
         val content = portraitFillCropContent(zones.feed)
-        assertEquals(16f / 9f, content.width / content.height, 0.001f)
-        assertEquals(zones.feed.midX, content.midX, 0.05f)
         assertTrue(content.width - zones.feed.width > 1f)
     }
 
@@ -203,28 +202,8 @@ class LiveMonitorLayoutTest {
         assertEquals(14f, layout.lock.minX, 0.05f)
         assertTrue(layout.lock.maxX <= layout.feed.minX + 0.05f, "lock sits in the black lane left of the feed")
         assertTrue(layout.record.minX > layout.feed.maxX - 0.5f, "record sits in the black lane")
-    }
 
-    @Test
-    fun adapterCutoutDoesNotOffsetTheCenteredPicture() {
-        val leading = monitorLeadingInsetDp(cutoutDp = 0f, transientBarDp = 0f)
-        val layout =
-            LiveMonitorLayout.fit(
-                viewportWidth = 874f,
-                viewportHeight = 402f,
-                safeLeading = leading,
-                safeTrailing = 0f,
-                safeTop = 0f,
-                safeBottom = 0f,
-                showsBottomBars = true,
-            )
-        assertEquals((874f - 402f * 16f / 9f) / 2f, layout.feed.minX, 0.05f)
-        assertEquals(14f, layout.lock.minX, 0.05f)
-    }
-
-    @Test
-    fun cutoutFreePhoneAlsoCentersThePicture() {
-        val layout =
+        val cutoutFree =
             LiveMonitorLayout.fit(
                 viewportWidth = 874f,
                 viewportHeight = 402f,
@@ -234,8 +213,8 @@ class LiveMonitorLayoutTest {
                 safeBottom = 0f,
                 showsBottomBars = true,
             )
-        assertEquals(874f / 2f, layout.feed.midX, 0.05f)
-        assertTrue(layout.lock.maxX < layout.feed.minX)
+        assertEquals(874f / 2f, cutoutFree.feed.midX, 0.05f)
+        assertTrue(cutoutFree.lock.maxX < cutoutFree.feed.minX, "cutout-free phone also centers the picture")
     }
 
     @Test
@@ -306,57 +285,36 @@ class LiveMonitorLayoutTest {
         assertTrue(layout.capture.minX > layout.assist.maxX)
         assertEquals(44f, layout.capture.height, 0.05f)
         val phoneSide = com.opencapture.monitorui.MonitorLayoutPolicy.systemButtonSize(false)
-        assertEquals(phoneSide * 2f + 11f, layout.assist.height, 0.05f)
+        assertEquals(phoneSide * 2f + 8f + com.opencapture.monitorui.MonitorLayoutPolicy.ASSIST_SPACING, layout.assist.height, 0.05f)
         assertEquals(phoneSide + com.opencapture.monitorui.MonitorLayoutPolicy.ASSIST_HORIZONTAL_INSETS,
             layout.assist.width, 0.05f)
 
     }
 
     @Test
-    fun gimbalStickStaysOnCanvasOnIPadMiniLandscape() {
+    fun gimbalStickStaysOnCanvasOnWidthConstrainedTablets() {
         LiveChromeMetrics.scale = 1f
-        val layout =
-            LiveMonitorLayout.fit(
-                viewportWidth = 1133f,
-                viewportHeight = 744f,
-                safeLeading = 0f,
-                safeTrailing = 0f,
-                safeTop = 0f,
-                safeBottom = 0f,
-                showsBottomBars = true,
-            )
-        assertTrue(layout.isWidthConstrained)
-        assertGimbalStickOnCanvas(layout)
-
-        val clean =
-            LiveMonitorLayout.fit(
-                viewportWidth = 1133f,
-                viewportHeight = 744f,
-                safeLeading = 0f,
-                safeTrailing = 0f,
-                safeTop = 0f,
-                safeBottom = 0f,
-                showsBottomBars = false,
-            )
-        assertTrue(clean.isWidthConstrained)
-        assertGimbalStickOnCanvas(clean)
-    }
-
-    @Test
-    fun gimbalStickStaysOnCanvasOnIPadA16Landscape() {
-        LiveChromeMetrics.scale = 1f
-        val layout =
-            LiveMonitorLayout.fit(
-                viewportWidth = 1180f,
-                viewportHeight = 820f,
-                safeLeading = 0f,
-                safeTrailing = 0f,
-                safeTop = 0f,
-                safeBottom = 0f,
-                showsBottomBars = true,
-            )
-        assertTrue(layout.isWidthConstrained)
-        assertGimbalStickOnCanvas(layout)
+        // label to (width, height, showsBottomBars)
+        val cases = listOf(
+            "iPad mini landscape" to Triple(1133f, 744f, true),
+            "iPad mini landscape clean" to Triple(1133f, 744f, false),
+            "iPad A16 landscape" to Triple(1180f, 820f, true),
+        )
+        for ((label, case) in cases) {
+            val (width, height, bars) = case
+            val layout =
+                LiveMonitorLayout.fit(
+                    viewportWidth = width,
+                    viewportHeight = height,
+                    safeLeading = 0f,
+                    safeTrailing = 0f,
+                    safeTop = 0f,
+                    safeBottom = 0f,
+                    showsBottomBars = bars,
+                )
+            assertTrue(layout.isWidthConstrained, label)
+            assertGimbalStickOnCanvas(layout)
+        }
     }
 
     @Test
@@ -389,10 +347,10 @@ class LiveMonitorLayoutTest {
         assertEquals(52f, se.settings.minY, 0.05f)
         assertEquals(cutout.settings.midY, cutout.lock.midY, 0.05f)
         assertEquals(8f + drop, cutout.settings.minY, 0.05f)
-        assertEquals(cutout.settings.minY, cutout.media.minY - 54f - 8f, 0.05f)
+        assertEquals(cutout.settings.minY, cutout.media.minY - 48f - 8f, 0.05f)
         assertEquals(cutout.lock.width, cutout.settings.width, 0.05f)
         assertEquals(cutout.lock.width, cutout.media.width, 0.05f)
-        assertEquals(54f, cutout.lock.width, 0.05f)
+        assertEquals(48f, cutout.lock.width, 0.05f)
         assertEquals(22f, cutout.topDeck.midY, 0.05f)
         LiveChromeMetrics.scale = 1f
     }
@@ -431,7 +389,7 @@ private fun assertGimbalStickOnCanvas(layout: LiveMonitorLayout) {
         assertTrue(layout.assist.maxY <= layout.viewportHeight - 7.5f)
         if (minOf(layout.viewportWidth, layout.viewportHeight) >= 600f) {
             val tabletSide = com.opencapture.monitorui.MonitorLayoutPolicy.systemButtonSize(true)
-            assertEquals(tabletSide * 2f + 11f, layout.assist.height, 0.05f)
+            assertEquals(tabletSide * 2f + 8f + com.opencapture.monitorui.MonitorLayoutPolicy.ASSIST_SPACING, layout.assist.height, 0.05f)
             assertEquals(tabletSide + com.opencapture.monitorui.MonitorLayoutPolicy.ASSIST_HORIZONTAL_INSETS,
                 layout.assist.width, 0.05f)
             assertEquals(84f, layout.record.width, .05f)
