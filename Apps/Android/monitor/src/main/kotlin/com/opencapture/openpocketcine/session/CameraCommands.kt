@@ -828,8 +828,11 @@ object CameraCommands {
 
     fun resolutionLabel(code: Int): String = VideoResolution.fromRaw(code)?.label ?: "—"
 
+    /** Brand storefronts may rename modes (Insta360 calls Normal "Standard"). Set at session start. */
+    @Volatile var colorLabelOverrides: Map<Int, String> = emptyMap()
+
     fun colorLabel(mode: Int, family: String = "pocket"): String =
-        when (mode) {
+        colorLabelOverrides[mode] ?: when (mode) {
             COLOR_NORMAL -> if (family == "nano") "Normal 8-bit" else "Normal"
             COLOR_HDR -> "HDR"
             COLOR_DLOG -> "D-Log"

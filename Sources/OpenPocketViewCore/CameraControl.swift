@@ -535,7 +535,15 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
     /// Insta360 Dolby Vision. Not a DJI SET byte.
     case dolbyVision = 0xE5
 
+    /// Brand storefronts may rename modes (Insta360 calls Normal "Standard"). Set once at launch.
+    nonisolated(unsafe) public static var labelOverrides: [ColorMode: String] = [:]
+
     public var label: String {
+        if let override = Self.labelOverrides[self] { return override }
+        return defaultLabel
+    }
+
+    private var defaultLabel: String {
         switch self {
         case .normal: "Normal"
         case .hdr: "HDR"

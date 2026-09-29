@@ -304,6 +304,7 @@ class PocketCameraSession(
         // Luna vocabulary for the shared screens: mode names, and media served at its own path on the camera AP.
         CameraCommands.shootingModeLabelOverrides = LunaShellMapping.shootingModeLabels
         GimbalMode.labelOverrides = LunaShellMapping.gimbalModeLabels
+        CameraCommands.colorLabelOverrides = mapOf(CameraCommands.COLOR_NORMAL to "Standard")
         com.opencapture.openpocketcine.media.MediaHTTP.host = "192.168.42.1"
         com.opencapture.openpocketcine.media.MediaHTTP.directPath = true
         scope.launch {

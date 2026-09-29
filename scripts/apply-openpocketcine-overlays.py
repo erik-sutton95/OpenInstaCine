@@ -191,6 +191,19 @@ def main() -> None:
     ):
         replace_phrase(pairing_tests, old_phrase, new_phrase)
 
+    # --- Insta360 calls Normal "Standard" (ColorMode.labelOverrides, set at launch). ---
+    snapshot_tests = ROOT / "ios/OpenInstaCineTests/CaptureQuickSnapshotTests.swift"
+    replace_phrase(
+        snapshot_tests,
+        'XCTAssertEqual(color.options, ["Normal", "HDR", "D-Log"])',
+        'XCTAssertEqual(color.options, ["Standard", "HDR", "D-Log"])',
+    )
+    replace_phrase(
+        snapshot_tests,
+        'XCTAssertEqual(color.selection, "Normal")',
+        'XCTAssertEqual(color.selection, "Standard")',
+    )
+
     # --- Launch wiring + gates that assumed a DJI datalink. ---
     replace_once(
         APP / "OpenInstaCineApp.swift",

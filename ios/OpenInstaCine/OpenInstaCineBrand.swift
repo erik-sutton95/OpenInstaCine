@@ -14,6 +14,7 @@ enum OpenInstaCineBrand {
         MediaHTTP.host = "192.168.42.1"
         ShootingMode.labelOverrides = LunaShellMapping.shootingModeLabels
         GimbalMode.labelOverrides = LunaShellMapping.gimbalModeLabels
+        ColorMode.labelOverrides = [.normal: "Standard"]
         CamFov.maxFactor = LunaShellMapping.defaultZoomCeiling
         #if DEBUG
             DebugRemote.start()

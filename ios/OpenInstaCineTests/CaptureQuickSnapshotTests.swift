@@ -219,8 +219,8 @@ final class CaptureQuickSnapshotTests: XCTestCase {
         status.colorMode = .normal
         status.availableColorModes = [.normal, .hdr, .dLog]
         let color = try XCTUnwrap(CaptureQuickSnapshot.primary(.color, status: status))
-        XCTAssertEqual(color.options, ["Normal", "HDR", "D-Log"])
-        XCTAssertEqual(color.selection, "Normal")
+        XCTAssertEqual(color.options, ["Standard", "HDR", "D-Log"])
+        XCTAssertEqual(color.selection, "Standard")
         XCTAssertEqual(color.changedValue(translation: -56, current: color), "HDR")
 
         status.availableColorModes = [.normal]
