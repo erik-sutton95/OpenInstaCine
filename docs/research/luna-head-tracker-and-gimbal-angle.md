@@ -1,6 +1,6 @@
 # Luna Ultra: POV Head Tracker link and absolute gimbal angle
 
-Research date: **2026-09-29**. Source: static analysis of the official Insta360 Android app. No camera, phone or tracker was touched. Every claim below is labelled:
+Research date: **2026-09-29**. Source: static analysis of the official Insta360 Android app, plus a live test on the camera (the Hardware verification section only). Every static claim below is labelled:
 
 | Label | Meaning |
 | --- | --- |
@@ -10,7 +10,7 @@ Research date: **2026-09-29**. Source: static analysis of the official Insta360 
 
 ## Bottom line
 
-1. **The iPhone does not need to emulate the head tracker.** The app's protobuf schema has an absolute-angle gimbal command: `PHONE_COMMAND_GIMBAL_CONTROL` (226) with `gimbal_action = GIMBAL_ACTION_SET_ANGLE (5)` and a new field `angle = 5` holding `{roll = 1, pitch = 2, yaw = 3}` as `float`. `GIMBAL_ACTION_GET_ANGLE (6)` has a matching `GimbalControlResp {int32 grf = 1; float roll = 2; float pitch = 3; float yaw = 4}`. **Proven (app)** at the schema level. The app itself never sends SET_ANGLE or GET_ANGLE, so Luna firmware support, units and reference frame remain **Unknown** until a live test.
+1. **The iPhone does not need to emulate the head tracker.** The app's protobuf schema has an absolute-angle gimbal command: `PHONE_COMMAND_GIMBAL_CONTROL` (226) with `gimbal_action = GIMBAL_ACTION_SET_ANGLE (5)` and a new field `angle = 5` holding `{roll = 1, pitch = 2, yaw = 3}` as `float`. `GIMBAL_ACTION_GET_ANGLE (6)` has a matching `GimbalControlResp {int32 grf = 1; float roll = 2; float pitch = 3; float yaw = 4}`. **Proven (app)** at the schema level. The app itself never sends SET_ANGLE or GET_ANGLE. **Hardware-verified on fw 1.1.15** (see [Hardware verification](#hardware-verification-fw-1115-2026-09-29)): degrees, handle frame, streamable at 30 Hz.
 2. **Emulating the tracker from an iPhone is not practical, and the app cannot show us how to do it.** The POV Head Tracker is `RemoteType.INSTA360_TM2`. It is a Bestechnic BES1502P audio-class SoC (OTA file `best1502p_ibrt_master.bin`), and the app finds it over **BR/EDR Classic** as well as BLE. The protocol between tracker and camera lives only in the camera and tracker firmware. The app never relays attitude data. iOS cannot present itself as a Classic Bluetooth device, and it cannot set an arbitrary BLE name, MAC address or manufacturer data. **Proven (app)** for the SoC, the dual-mode scan and the missing relay. The camera-side protocol is **Unknown**.
 
 ## Provenance
@@ -73,7 +73,7 @@ GET_ANGLE body: `08 06`.
 - `com/arashivision/inskmp/device/plugin/camera/op/SetGimbalControlOpHandler.java` sends `GimbalControl.encode()` as cmd 226 (content type protobuf), and its `parseResponse` **ignores the payload**.
 - A search of all 98k decompiled classes finds `GIMBAL_ACTION_SET_ANGLE`, `GIMBAL_ACTION_GET_ANGLE`, `GimbalControl.Angle` and `GimbalControlResp` **only** in the generated protobuf package. `BaseCameraController` uses only MOVE, BACK_CENTER, FLIP and CALI. The shipping app never positions the gimbal by angle.
 
-### Open questions (all Unknown until a live test)
+### Open questions (answered by the hardware verification below)
 
 | Question | Best guess | Confidence |
 | --- | --- | --- |
@@ -83,12 +83,55 @@ GET_ANGLE body: `08 06`.
 | Does the cmd 226 response carry `GimbalControlResp` for GET_ANGLE? | Likely, given the name and field set. | Medium |
 | `grf` meaning | Possibly a result or reference-frame flag. | Low |
 
-### Suggested live test (for a later session, not run)
+### Suggested live test (done, see Hardware verification)
 
 1. Send GET_ANGLE (`08 06`) while idle, and log the full response body for cmd 226. A decodable `GimbalControlResp` means the firmware knows the action.
 2. Send SET_ANGLE with a small yaw only (for example `08 05 2a 05 1d 00 00 a0 40` for yaw 5.0), with the camera in a follow or lock gimbal mode. Watch the preview and the camera-head IMU loop we already have.
 3. Try both degrees and radians only if 5.0 does nothing visible. Try sign and axis swaps next.
 4. If the firmware rejects it (error status or no motion), keep the existing closed-loop MOVE stick controller. It already uses the camera-head IMU and is the proven fallback.
+
+## Hardware verification (fw 1.1.15, 2026-09-29)
+
+Luna Ultra on fw 1.1.15, iPhone DEBUG build driven over `tools/oic_remote.py`. Streams came from the DebugRemote `sweep` action (`raw` mode sends SET_ANGLE at `hz`; `track` mode goes through the session head-track API at 50 Hz, which the session forwards at 30 Hz). GET_ANGLE was polled at 15 to 25 Hz alongside, and the camera-head IMU was recorded for comparison. Lag is the time shift that best fits the GET_ANGLE trace to the commanded path. RMS error is measured after removing that lag. Handle static on a desk.
+
+### Wire behaviour
+
+| Item | Result |
+| --- | --- |
+| Units, frame, signs | Degrees, gimbal relative to the handle. Yaw right is positive and pitch up is positive, which matches our IMU. Roll always reads 0. |
+| SET reply | `grf = 1` plus the pose before the move when accepted. An empty body (`grf` 0) means rejected: yaw outside -180...180 (for example 181, 200 or 240) is rejected and the head does not move. |
+| GET reply | `grf = 0` once the head is on target. `grf = 1` while the target is out of reach (pitch below the stop, yaw inside the gap) or the head is still travelling. |
+| GET cost | One request per poll. The round trip is about 20 to 40 ms on the camera AP, so polling at 10 Hz is cheap. |
+| Hold | The head holds the SET pose. It had not moved after 5 s in any mode (handle static). Drift while the handle moves is untested. |
+
+### Streaming a moving target (yaw sine, 30° amplitude, 4 s period, Roll Lock)
+
+| SET rate | Lag | RMS after lag | Notes |
+| --- | --- | --- | --- |
+| 10 Hz | 120 ms | 0.44° | Visibly steppy. Acceleration noise about 7 times the ideal. |
+| 20 Hz | 70 ms | 0.23 to 0.27° | Smooth |
+| 30 Hz | 60 ms | 0.25 to 0.37° | Smoothest. In repeated 25° / 3 s runs, acceleration RMS was 122 to 125 deg/s² at 30 Hz against 153 to 168 at 20 Hz (ideal 77.5) |
+
+Each SET retargets smoothly: the firmware blends toward the latest target without stopping or restarting. The session streams at **30 Hz** (`CameraSession.gimbalSetInterval`, 33 ms, latest target wins, fire and forget). The head-track path gave 70 ms lag and 0.28° RMS on yaw (25° / 3 s), 0.31° RMS on pitch (15° / 3 s), and 0.20° RMS on a 20 deg/s ramp.
+
+### Speed
+
+- Slew limit is about 75 to 90 deg/s. The follow speed setting (Fast, Default or Slow) does not change it. A 90° step takes about 1.6 s to settle and a 30° step about 0.6 s. The head starts moving about 100 to 115 ms after the SET, which includes the GET round trip.
+- Targets moving faster than that fall behind. A 30° sine with a 2 s period (94 deg/s peak) gave 4.5° RMS and 0.16 to 0.19 s of lag. A 45° sine with a 1.5 s period (188 deg/s peak) only reached ±31°.
+
+### Reach (Roll Lock)
+
+- Pitch runs from -57.3° to +90°. -60 and -90 stop at -57.3 with GET `grf = 1`. +90 is reached.
+- Yaw is one arc of about 293°: from about -125.4 through ±180 and 0 to -58.5. The gap from -125 to -58 is a hard stop. The firmware routes around it on its own: from -58, a SET of -150 travelled the long way through 0 and 180. SET takes the shortest arc otherwise, for example 170 to -170 crossed ±180 in 0.4 s. The gap is centred near -92°, the same as the shell's `HeadTrack.Reach.gapMidDeg` (-91.5°). The session therefore unwraps GET yaw with `GimbalWaypoint.unwrapYaw` (range -91.5 to 268.5) and wraps it back to ±180 before each SET.
+
+### Gimbal modes
+
+SET_ANGLE and GET_ANGLE work in Roll Lock, Roll & Tilt, FPV and FPV-V. In each mode, SET (10, 30) read back (10.0, 30.0), then SET (-20, -30) read back (-20.0, -30.0). In FPV, one SET of 7 was not applied on the first pass, and 6 retries all succeeded. FPV hits the same -58° yaw stop. Changing the mode returns the head to (0, -2.3), its rest pose on this handle. The mode was restored to Roll Lock and the speed to Default afterwards.
+
+### Level, head tracking and programmed moves on the app
+
+- **Level**: target pitch = GET pitch minus the IMU gravity pitch, keeping yaw. From (25, -40) and (-20, 30), the head settled in 1.8 to 2.0 s at an IMU world pitch within 0.4° of level. A second pass 2.5 s later runs only if the IMU still reads more than 0.3° off level. Without that pass, the first result could be 0.5 to 0.7° off because the IMU pitch filter lags right after a move.
+- **Motion Control** (programmed moves, now on for Luna): with A (-30, 0) and B (30, 10) over 4 s, the head approached A during the 3 s countdown, then tracked the A to B line with a mean error of 0.6° and a maximum of 1.0° (mostly the 70 ms lag at 15 deg/s). It ended on B. An A·B·C move over 3 s + 3 s with smoothness 0.6 rounded the B corner (closest point 6° from B) and ended exactly on C. Loop, pause (holds to within 0.01°), resume (finishes on B) and stop (holds within 0.5° of the pose at stop) all worked.
 
 ## 2. POV Head Tracker (CINSFAVL-01)
 
@@ -174,5 +217,5 @@ The app defines 83 top-level types that our schema lacks. They are listed in `.l
 
 1. Add `GIMBAL_ACTION_SET_ANGLE = 5`, `GIMBAL_ACTION_GET_ANGLE = 6`, the `Angle` sub-message (field 5) and `GimbalControlResp` to `LunaGimbalAction` and `LunaProtocol.gimbalControl(...)` (`Adapters/Insta360Protocol/Sources/Insta360Protocol/LunaProtocol.swift`) and to the Android `LunaControl.kt`.
 2. Probe the firmware with GET_ANGLE, then with a small SET_ANGLE step, as described in section 1. Record the response status and body.
-3. If SET_ANGLE works: drive head tracking (AirPods or phone attitude) as absolute yaw and pitch targets at a modest rate (10 to 20 Hz), and check the result against GET_ANGLE and the camera-head IMU.
-4. If it does not work: keep the current closed-loop MOVE controller. Only then consider capturing a real POV Head Tracker session over the air, together with its firmware, to learn the tracker-to-camera protocol. Emulating it from iOS would still be blocked if that link is Classic Bluetooth.
+3. Done: SET_ANGLE works. Head tracking, Level and Motion Control now use it on iOS (30 Hz stream, GET_ANGLE pose at 10 Hz). The stick-based closed loop was removed.
+4. Android has the encoders and parser only (`LunaControl.gimbalSetAngle`, `gimbalGetAngle`, `gimbalAngle`); the session is not wired yet.

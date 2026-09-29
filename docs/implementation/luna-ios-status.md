@@ -32,8 +32,8 @@ Parity values:
 | Gimbal mode | Luna-adapted | Follow = roll lock, Tilt locked = roll and tilt lock, FPV, Direction lock = lock |
 | Gimbal speed | Luna-adapted | Slow, Default = medium, Fast |
 | Gimbal recenter / flip | Same | Luna recenter and flip requests |
-| Gimbal Level (double tap) | Hidden-not-supported | Refuses with "no level data": Luna reports no gimbal attitude |
-| Programmed moves (A/B/C) | Hidden-not-supported | Motion Control opens with waypoints, loop and Start dimmed and the reason ("Luna does not report gimbal position"); `supportsProgrammedMoves` false |
+| Gimbal Level (double tap) | Luna-adapted | SET_ANGLE to GET pitch minus IMU gravity pitch, yaw kept; one refine pass. Lands within 0.4° of world level. Hardware-verified 2026-09-29 |
+| Programmed moves (A/B/C) | Luna-adapted | Waypoints from GET_ANGLE; the session interpolates legs (shell curve with smoothness) and streams SET_ANGLE at 30 Hz; countdown, loop, pause, stop. Zoom changes between points are refused. Hardware-verified 2026-09-29 |
 | Tap focus | Luna-adapted | ROI 0.15 x 0.27 of the preview centred on the tap (official app geometry) |
 | Deep Track | Luna-adapted | Drag or tap a face box opens Luna tracking (cmd 237) with the drawn rectangle; cancel supported |
 | Record + timer | Luna-adapted | Start/stop and photo; lamp waits for camera capture status. REC timer is elapsed time from capture status (no timecode) |
@@ -67,7 +67,7 @@ Parity values:
 | AF mode (AF-S / AF-C / Product Showcase) | Luna-adapted | Shared FOCUS drum and chip list only the three official modes (option 93 = 1 / 3 / 6, overlay `CaptureLists.focusOptions`); readout from GET 93 on connect and refresh with a 3 s pin. Hardware-verified 2026-09-29. Android: follow-up |
 | Metering (Matrix / Face Priority) | Luna-adapted | "Face metering" row in the Exposure sheet (`LunaMeteringToggle`, overlay hook); option 46 bool; camera stores it 3.7 to 4.9 s after the SET, so a 6 s pin holds the readout. Hardware-verified 2026-09-29. Android: follow-up |
 | Aperture | Hidden-not-supported | `supportsAperture` false; fixed iris |
-| Head tracking | Hidden-not-supported | Needs gimbal attitude; capability false |
+| Head tracking | Luna-adapted | AirPods target streamed as SET_ANGLE at 30 Hz (latest wins), pose from GET_ANGLE (10 Hz poll, IMU fallback). ~70 ms lag, 0.3° RMS. Hardware-verified 2026-09-29 |
 | Multiview | Hidden-not-supported | Entry removed from the camera list (`SavedCamerasView.swift`); stages DJI bodies over RTMP |
 | Wi-Fi / Hotspot setups | Hidden-not-supported | `canAddSetup: false`; Luna only connects over its own AP |
 | Color Recovery | Not yet | Screen protocol code exists (`LunaScreenRecovery.swift`, [luna-color-recovery.md](luna-color-recovery.md)); not exposed in the UI |
@@ -91,7 +91,7 @@ setting changed was restored.
 | Photo mode readouts | Fixed, pass | Was "M" with an empty shutter and a `0xDF` format |
 | Zoom chip + pinch | Pass | 1x to 2x chip, pinch to 6x, back to 1x |
 | Gimbal mode / speed / recenter / flip / stick | Pass (command accepted) | Remote; gimbal sheet tabs Mode, Speed, Ramp, Double-tap by UI |
-| Programmed moves | Fixed, pass | Reason shown; waypoints were live-looking no-ops, now dimmed |
+| Programmed moves | Pass (2026-09-29) | Now enabled on SET_ANGLE; see the absolute-angle section |
 | Tap focus | Pass | UI tap moves the focus box; control accepted |
 | Deep Track | Partial | Drag sends Track (camera "ok"); no lock on a uniform dark scene, box clears as designed |
 | Record with confirmation, REC timer | Pass | UI confirm popover; REC 00:02 with red frame; 5 s clip on the camera |
@@ -153,6 +153,23 @@ From take 19 of [the official app capture](../research/luna-official-fw1115-capt
 
 Not implemented: Tracking Framing (cmd 244/245, the 3 x 3 grid of where the gimbal holds
 the subject). The shared shell has no control for it.
+
+### Absolute gimbal angle (fw 1.1.15, 2026-09-29)
+
+cmd 226 SET_ANGLE (5) and GET_ANGLE (6) replace the IMU and stick closed loop
+(`LunaGimbalSteer` removed). Measurements are in
+[luna-head-tracker-and-gimbal-angle.md](../research/luna-head-tracker-and-gimbal-angle.md#hardware-verification-fw-1115-2026-09-29).
+
+| Check | Result |
+| --- | --- |
+| GET_ANGLE poll (10 Hz while live) | `freshGimbalWaypoint` and `gimbalYawTenthDeg` read the camera. Yaw is unwrapped across the -92° stop gap. The IMU estimate is the fallback |
+| Raw SET stream 10 / 20 / 30 Hz | Lag 120 / 70 / 60 ms; 30 Hz smoothest, now the session rate |
+| Head-track style sweep (50 Hz updates) | 70 ms lag, 0.28° RMS yaw, 0.31° RMS pitch |
+| Level from (25, -40) and (-20, 30) | Within 0.4° of world level (IMU) in about 2 s |
+| Motion Control A to B, 4 s | Mean error 0.6° against the line, ends on B |
+| Motion Control A·B·C, smoothness 0.6 | B corner rounded, ends on C; loop, pause, resume and stop verified |
+| Modes | Works in Roll Lock, Roll & Tilt, FPV and FPV-V; restored Roll Lock and Default speed |
+| Stick | Operator stick cancels an aim, head tracking or a programmed move |
 
 ### Upstream 9e306c91 sync (iOS and engine, 2026-09-29)
 
@@ -355,8 +372,8 @@ Depends on the parallel engine sync (outside `Apps/Android`): the Swift facade m
   overrides), `session/Models.kt` (Luna color wheel), `session/VideoFormat.kt` (Luna resolution
   bytes 0xD0 to 0xD6), `media/MediaModels.kt` (direct-path media host, Insta360 file timestamps),
   `media/MediaLibraryController.kt` (Luna list/thumbnail/delete branch).
-- Gating matches iOS: no AF mode, no aperture, no multiview (button hidden), no programmed moves,
-  no audio controls, no AE / AWB lock, no Wi-Fi / Hotspot setups.
+- Gating (iOS has since added AF mode and programmed moves): no AF mode, no aperture, no multiview
+  (button hidden), no programmed moves, no audio controls, no AE / AWB lock, no Wi-Fi / Hotspot setups.
 - I-Log to Rec.709 sits in the camera LUT tab (`MonitorTransfer.ILOG`, camera looks in the DJI
   category so upstream tab logic and tests hold). DJI LUT assets are not bundled.
 - Brand copy: legal bodies, pairing steps, wordmarks, links (`openinstacine.app`, GitHub repo)
