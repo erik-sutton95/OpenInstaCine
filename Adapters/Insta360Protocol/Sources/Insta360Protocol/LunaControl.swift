@@ -83,6 +83,15 @@ public enum LunaGimbalFollowSpeed: UInt64, Sendable, CaseIterable {
     case sensitive = 4  // Source-backed
 }
 
+/// Option 93 `AFModeType` values the official app offers (fw 1.1.15 verified,
+/// stored immediately). The camera also stores 0, 2, 4, 5 (OFF, MACRO,
+/// CONTINUOUS_PICTURE, EDOF), which the app never offers; 7 is ignored.
+public enum LunaAFMode: UInt64, Sendable, CaseIterable {
+    case single = 1             // AF-S, AF_MODE_AUTO
+    case continuous = 3         // AF-C, AF_MODE_CONTINUOUS_VIDEO
+    case productShowcase = 6    // Product Showcase, AF_MODE_SHOW
+}
+
 /// `GetFileExtra.extra_type`. Observed 1 (ExtraMetadata protobuf) and 2 (NV12 thumbnail).
 public enum LunaFileExtraType: UInt64, Sendable {
     case metadata = 1
@@ -250,6 +259,17 @@ extension LunaProtocol {
                                          functionMode: UInt32 = 7) throws -> LunaRequest {
         try setVideoExposure(program: .manual, iso: iso, shutterSeconds: shutterSeconds,
                              functionMode: functionMode)
+    }
+
+    /// fw 1.1.15 verified: stored at once, shared by video and photo.
+    public static func setAFMode(_ mode: LunaAFMode, functionMode: UInt32 = 7) throws -> LunaRequest {
+        try setPhotographyValue(.afMode, mode.rawValue, functionMode: functionMode)
+    }
+
+    /// Option 46 `metering_enable`: true = Face Priority, false = Matrix. fw 1.1.15
+    /// verified: an individual SET is stored after 3.7 to 4.9 s (any non-zero reads 1).
+    public static func setFaceMetering(_ on: Bool, functionMode: UInt32 = 7) throws -> LunaRequest {
+        try setPhotographyValue(.faceMetering, on ? 1 : 0, functionMode: functionMode)
     }
 
     /// Observed: option 91 field 2 = 3 (Fast).

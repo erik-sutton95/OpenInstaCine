@@ -53,6 +53,7 @@ public enum LunaPhotographyType: UInt32, Sendable, CaseIterable {
     case whiteBalanceKelvin = 39    // Observed SET, 0 = auto
     case photoResolution = 40       // GET only
     case darkEIS = 42               // Source-backed
+    case faceMetering = 46          // Observed in the whole-panel SET; bool, see LunaMetering
     case flowStateLevel = 43        // GET only
     case zoomScale = 53             // Observed SET
     case hdrSwitch = 63             // Observed in resolution SET type list
@@ -61,7 +62,7 @@ public enum LunaPhotographyType: UInt32, Sendable, CaseIterable {
     case gimbalOptions = 91         // Observed SET
     case gimbalStatus = 92          // GET only
     case photoHDRType = 77          // Observed riding along photo-mode EV SETs (fw 1.1.15)
-    case afMode = 93                // GET only
+    case afMode = 93                // See LunaAFMode
     case afTrigger = 94             // Observed SET
     case gimbalPanoType = 98        // GET only (pano mode)
     case remainingTime = 99         // Observed GET, polled

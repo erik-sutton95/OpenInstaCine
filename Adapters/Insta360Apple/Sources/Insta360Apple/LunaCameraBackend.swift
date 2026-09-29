@@ -447,7 +447,7 @@ public final class LunaCameraBackend: CameraBackend {
 
     /// Every photography type the monitor shows.
     public static let settingTypes: [UInt32] = [
-        6, 7, 18, 20, 21, 24, 31, 33, 35, 39, 40, 43, 53, 72, 73, 91, 92, 93, 100, 104,
+        6, 7, 18, 20, 21, 24, 31, 33, 35, 39, 40, 43, 46, 53, 72, 73, 91, 92, 93, 100, 104,
     ]
 
     private func startStatusPoll(token: Int) {

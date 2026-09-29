@@ -66,6 +66,22 @@ final class LunaOfficialSetTests: XCTestCase {
         }
     }
 
+    /// fw 1.1.15 verified on the camera (docs/research/luna-fw-1.1.15-verification.md).
+    func testAutofocusAndMeteringSets() throws {
+        XCTAssertEqual(try LunaProtocol.setAFMode(.single).body, hex("0a015d120fa20100aa0100f80101c00501e805011807"))
+        XCTAssertEqual(try LunaProtocol.setAFMode(.continuous).body, hex("0a015d120fa20100aa0100f80101c00501e805031807"))
+        XCTAssertEqual(try LunaProtocol.setAFMode(.productShowcase, functionMode: 6).body,
+                       hex("0a015d120fa20100aa0100f80101c00501e805061806"))
+        XCTAssertEqual(try LunaProtocol.setFaceMetering(true).body, hex("0a012e120fa20100aa0100f80101f00201c005011807"))
+        // Matrix is an explicit 0; the camera stores it.
+        XCTAssertEqual(try LunaProtocol.setFaceMetering(false).body, hex("0a012e120fa20100aa0100f80101f00200c005011807"))
+        // A requested 46 that proto3 omits reads as Matrix; an unrequested one stays unknown.
+        XCTAssertEqual(try LunaPhotographySettings(response: hex("082e1200")).faceMetering, false)
+        XCTAssertNil(try LunaPhotographySettings(response: hex("085d1200")).faceMetering)
+        XCTAssertEqual(try LunaPhotographySettings(response: hex("082e085d1206f00200e80506")).autofocus,
+                       .productShowcase)
+    }
+
     func testSourceBackedSetsUseSameShape() throws {
         XCTAssertEqual(try LunaProtocol.setPhotographyValue(.gammaMode, 17).body,
                        hex("0a0112120f900111a20100aa0100f80101c005011807"))
@@ -251,6 +267,8 @@ final class LunaStatusDecodeTests: XCTestCase {
         XCTAssertEqual(s.gimbal?.gimbalMode, .rollLock)
         XCTAssertEqual(s.gimbalStatus?.stall, false)
         XCTAssertEqual(s.afMode, 3)
+        XCTAssertEqual(s.autofocus, .continuous)
+        XCTAssertEqual(s.faceMetering, true)
         XCTAssertEqual(s.iq3AMode, 1)
         XCTAssertEqual(s.filterStrength, 3)
         XCTAssertNil(s.functionMode)

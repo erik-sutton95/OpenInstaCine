@@ -72,12 +72,13 @@ public struct LunaPhotographySettings: Equatable, Sendable {
     public var photoResolution: UInt64?         // 40: Observed 29, 31, 34, see LunaPhotoSize
     public var darkEIS: Bool?                   // 42: Source-backed (requested, omitted)
     public var flowStateLevel: UInt64?          // 43: Source-backed (requested, omitted)
+    public var faceMetering: Bool?              // 46: true Face Priority, false Matrix
     public var zoom: Double?                    // 53: Observed 1.0
     public var iLog: Bool?                      // 72: Observed false
     public var colorRecovery: Bool?             // 73: always omitted on v1.0.288
     public var gimbal: LunaGimbalOptions?       // 91: Observed
     public var gimbalStatus: LunaGimbalStatus?  // 92: Observed
-    public var afMode: UInt64?                  // 93: Observed 3 CONTINUOUS_VIDEO
+    public var afMode: UInt64?                  // 93: see LunaAFMode
     public var gimbalPanoType: UInt64?          // 98: Observed 1 (360) in pano mode
     /// 99: Observed (seconds, card location) pairs, e.g. (3001 s, 2 inner), (0, 3 SD).
     public var remainingRecordTime: [LunaRemainingTime] = []
@@ -86,6 +87,7 @@ public struct LunaPhotographySettings: Equatable, Sendable {
 
     public var exposureBiasStops: Double? { exposureBiasTenths.map { Double($0) / 10 } }
     public var color: LunaColorMode? { colorMode.flatMap(LunaColorMode.init(rawValue:)) }
+    public var autofocus: LunaAFMode? { afMode.flatMap(LunaAFMode.init(rawValue:)) }
     public var isAutoWhiteBalance: Bool? { whiteBalanceKelvin.map { $0 == 0 } }
     public var videoResolution: LunaVideoResolution? { recordResolution.flatMap(LunaVideoResolution.init(rawValue:)) }
 
@@ -114,6 +116,8 @@ public struct LunaPhotographySettings: Equatable, Sendable {
         photoResolution = try u(40)
         darkEIS = try b(42)
         flowStateLevel = try u(43)
+        // proto3 may omit false: a requested 46 with no value is Matrix.
+        faceMetering = try b(46) ?? (types.contains(46) ? false : nil)
         zoom = o.fields.contains { $0.number == 53 } ? try o.double(53) : nil
         iLog = try b(72)
         colorRecovery = try b(73)
