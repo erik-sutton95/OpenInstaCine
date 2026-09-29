@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Upstream #429: the local debug build reads as "Dev" in the launcher, and the
+        grayscale launcher foreground in this source set is the same signal at a glance. -->
+    <string name="app_name">OpenInstaCine Dev</string>
+</resources>
