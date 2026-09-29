@@ -50,6 +50,8 @@ OSMO_ONLY=(
   OpenInstaCineTests/FormatCeilingNoteTests.swift
   OpenInstaCineTests/MediaCacheSchedulingTests.swift
   OpenInstaCineTests/CapturePreviewTrafficTests.swift
+  OpenInstaCineTests/MultiviewControlsTests.swift
+  OpenInstaCineTests/ShutterAnglePersistenceTests.swift
   OpenInstaCineTests/SessionRecoveryLifecycleTests.swift
   OpenInstaCineTests/ConnectionLifecycleRegressionTests.swift
   OpenInstaCineTests/EVMeterAssistTests.swift

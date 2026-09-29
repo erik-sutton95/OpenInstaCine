@@ -770,73 +770,21 @@ private struct SettingsRowChromeStyle: ViewModifier {
     }
 }
 
-private struct SettingsScrollFooterMinYKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 struct SettingsTabScrollArea<Content: View>: View {
     let tabID: String
     @ViewBuilder var content: Content
-    @State private var moreBelow = false
 
     var body: some View {
-        GeometryReader { viewport in
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 8) {
-                    content
-                    Color.clear
-                        .frame(height: 1)
-                        .background(
-                            GeometryReader { footer in
-                                Color.clear.preference(
-                                    key: SettingsScrollFooterMinYKey.self,
-                                    value: footer.frame(in: .named("opc.settingsScroll")).maxY
-                                )
-                            }
-                        )
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 22)
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 8) {
+                content
             }
-            .scrollDismissesKeyboard(.interactively)
-            .coordinateSpace(name: "opc.settingsScroll")
-            .onPreferenceChange(SettingsScrollFooterMinYKey.self) { footerMaxY in
-                moreBelow = footerMaxY > viewport.size.height + 6
-            }
-            .overlay(alignment: .bottom) {
-                ScrollMoreCue()
-                    .opacity(moreBelow ? 1 : 0)
-                    .allowsHitTesting(false)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 22)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .monitorScrollFade()
         .id(tabID)
-    }
-}
-
-struct ScrollMoreCue: View {
-    var body: some View {
-        VStack(spacing: 1) {
-            Spacer(minLength: 0)
-            Text("MORE")
-                .font(MonitorTheme.font(9.5, weight: .bold)).monospacedDigit()
-                .kerning(1.2)
-                .foregroundStyle(LiveDesign.muted)
-            OpcIcon.chevronDown
-                .foregroundStyle(LiveDesign.muted)
-                .frame(width: 8, height: 8)
-        }
-        .padding(.bottom, 13)
-        .frame(maxWidth: .infinity)
-        .frame(height: 58)
-        .background(
-            LinearGradient(
-                colors: [LiveDesign.surface.opacity(0), LiveDesign.surface],
-                startPoint: .top, endPoint: .bottom)
-        )
-        .allowsHitTesting(false)
     }
 }
 
@@ -1085,23 +1033,6 @@ enum OperatorPanelMetrics {
         max(safeArea.bottom + 4, 12)
     }
 
-    /// OpenZCine `MediaBrowserView` padding — trailing floor is 20, bottom floor 14.
-    static func mediaTopPadding(safeArea: EdgeInsets) -> CGFloat {
-        max(safeArea.top + 6, 16)
-    }
-
-    static func mediaLeadingPadding(safeArea: EdgeInsets, portrait: Bool) -> CGFloat {
-        max(safeArea.leading + 6, portrait ? 16 : 64)
-    }
-
-    static func mediaTrailingPadding(safeArea: EdgeInsets) -> CGFloat {
-        max(safeArea.trailing + 6, 20)
-    }
-
-    static func mediaBottomPadding(safeArea: EdgeInsets) -> CGFloat {
-        max(safeArea.bottom + 4, 14)
-    }
-
     /// Extra leading inset so a landscape title clears the floating close button.
     static func closeButtonClearance(safeArea: EdgeInsets) -> CGFloat {
         max(0, (closeLeading + closeSize + 8) - leadingPadding(safeArea: safeArea))
@@ -1190,6 +1121,7 @@ struct AppPanelChrome<Content: View>: View {
                     .padding(.horizontal, 20)
                     .padding(.bottom, 28)
             }
+            .monitorScrollFade()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(StartupColors.backdrop.ignoresSafeArea())

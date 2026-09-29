@@ -77,7 +77,7 @@ struct LiveGimbalButton: View {
                     width: LiveChromeMetrics.zoomButtonSize,
                     height: LiveChromeMetrics.zoomButtonSize
                 )
-                .shadow(color: .black.opacity(0.8), radius: 2, y: 1)
+                .monitorReadoutShadow()
         }
         .buttonStyle(.zcTapTarget)
         .opacity(interfaceLocked ? 0.4 : 1)
@@ -785,7 +785,7 @@ struct LiveGimbalWaypointMarks: View {
                                         GimbalWaypointPresentation.normalizedX(
                                             mark.nx,
                                             poseInvertPan: model.session.gimbalPoseInvertPan,
-                                            assistMirror: model.assist.isVisible(.mirror)))
+                                            assistMirror: model.assist.mirrorsHorizontally))
                                         * feed.width,
                                     y: feed.minY + CGFloat(mark.ny) * feed.height)
                                 if connected {
@@ -818,7 +818,7 @@ struct LiveGimbalWaypointMarks: View {
                                     GimbalWaypointPresentation.normalizedX(
                                         mark.nx,
                                         poseInvertPan: model.session.gimbalPoseInvertPan,
-                                        assistMirror: model.assist.isVisible(.mirror)))
+                                        assistMirror: model.assist.mirrorsHorizontally))
                                     * feed.width,
                                 y: feed.minY + CGFloat(mark.ny) * feed.height
                             )

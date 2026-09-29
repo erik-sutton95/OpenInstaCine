@@ -24,6 +24,16 @@ def replace_once(path: Path, old: str, new: str) -> None:
     path.write_text(text.replace(old, new, 1))
 
 
+def replace_phrase(path: Path, old: str, new: str) -> None:
+    """Every occurrence of a copy phrase. Fails if the phrase and its brand version are both gone."""
+    text = path.read_text()
+    if old not in text:
+        if new not in text:
+            sys.exit(f"{path.relative_to(ROOT)}: overlay phrase missing:\n{old[:160]}")
+        return  # already applied
+    path.write_text(text.replace(old, new))
+
+
 def main() -> None:
     # --- Brand accent: one engine token, assigned once at launch. ---
     theme = ROOT / "Sources/MonitorUI/MonitorTheme.swift"
@@ -164,6 +174,22 @@ def main() -> None:
         "    static var accent: Color { LiveHDRDisplay.chromeColor(hex: 0x00A3E0) }\n",
         "    static var accent: Color { LiveHDRDisplay.chromeColor(hex: MonitorTheme.accentRGB) }\n",
     )
+
+    # --- Pairing and connection copy: the Insta360 app, not DJI Mimo / Frame Tap, holds a Luna. ---
+    for old_phrase, new_phrase in (
+        ("DJI Frame Tap or a running DJI Mimo holds", "A running Insta360 app holds"),
+        ("turn off DJI Frame Tap and force quit DJI Mimo", "force quit the Insta360 app"),
+        ("Turn off DJI Frame Tap and force quit DJI Mimo", "Force quit the Insta360 app"),
+        ("Force quit DJI Mimo", "Force quit the Insta360 app"),
+    ):
+        replace_phrase(startup, old_phrase, new_phrase)
+    pairing_tests = ROOT / "ios/OpenInstaCineTests/CameraPagePresentationTests.swift"
+    for old_phrase, new_phrase in (
+        ("turn off DJI Frame Tap and force quit DJI Mimo", "force quit the Insta360 app"),
+        ("Turn off DJI Frame Tap and force quit DJI Mimo", "Force quit the Insta360 app"),
+        ('.contains("DJI Frame Tap")', '.contains("Insta360 app")'),
+    ):
+        replace_phrase(pairing_tests, old_phrase, new_phrase)
 
     # --- Launch wiring + gates that assumed a DJI datalink. ---
     replace_once(

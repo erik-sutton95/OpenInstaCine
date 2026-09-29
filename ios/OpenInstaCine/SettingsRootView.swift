@@ -1,3 +1,4 @@
+import MonitorPresentation
 import MonitorUI
 import OpenPocketViewCore
 import SwiftUI
@@ -34,6 +35,8 @@ enum SettingsHelpCopy {
         "Experimental. The compass above the joystick on the right is Calibrate Head Lock: that AirPods pose and that gimbal pose are shared forward. Head turns set matching pan and tilt angles within the gimbal’s range. Roll is shown only. Needs AirPods with motion (Pro, 3, Max, or later) in your ears. Off by default. The same control becomes STOP and clears the lock. On-screen stick, a game controller, and Motion Control takes priority."
     static let joystickSensitivity =
         "How far a stick throw moves the gimbal — on-screen and a connected game controller. Small throws crawl; full throw is fastest. 4 is the captured feel. 5 reaches full speed sooner; 1 is the slowest."
+    static let virtualJoystickSize =
+        "How large the on-screen stick is. Medium is the default. Large is easier to grab; Small keeps more of the picture clear."
     static let virtualJoystickInvertPan =
         "Reverse left and right on the on-screen stick. Off is the default. A game controller is unchanged."
     static let virtualJoystickInvertTilt =
@@ -119,7 +122,7 @@ struct SettingsRootView: View {
 
     var body: some View {
         MonitorPage(
-            safeArea: safeArea,
+            safeArea: safeArea, navigationWidth: 188,
             heading: MonitorPageHeading(brand: "OpenInstaCine", title: "Operator Setup"),
             backLabel: model.isLive ? "Back to live" : "Your cameras", back: dismiss
         ) { portrait in
@@ -165,15 +168,13 @@ struct SettingsRootView: View {
     private func settingsNavigation(portrait: Bool) -> some View {
         VStack(alignment: .leading, spacing: portrait ? 9 : 8) {
             ScrollView(portrait ? .horizontal : .vertical, showsIndicators: false) {
-                let layout =
-                    portrait
-                    ? AnyLayout(HStackLayout(spacing: 3))
-                    : AnyLayout(VStackLayout(spacing: 3))
-                layout {
+                // Settings tabs breathe a little more; the baseline stays continuous.
+                MonitorTabStrip(vertical: !portrait, spacing: 6) {
                     ForEach(OperatorSettingsTab.allCases) { tab in
                         MonitorNavigationItem(
                             tab.rawValue, subtitle: tabSubtitle(tab),
-                            selected: model.operatorSettingsTab == tab
+                            selected: model.operatorSettingsTab == tab,
+                            separator: tab != OperatorSettingsTab.allCases.first
                         ) {
                             if tab != model.operatorSettingsTab {
                                 OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled)
@@ -185,6 +186,7 @@ struct SettingsRootView: View {
                     }
                 }
             }
+            .monitorScrollFade(portrait ? .horizontal : .vertical)
             .frame(height: portrait ? 44 : nil)
             .accessibilityIdentifier("monitor.settings.tabs")
             sessionControls(portrait: portrait)
@@ -213,10 +215,17 @@ struct SettingsRootView: View {
             .padding(9)
             .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
             if model.isLive {
-                SettingsActionPill(
-                    title: "Disconnect", icon: .link2Off,
-                    tint: LiveDesign.rec, background: LiveDesign.rec.opacity(0.12)
-                ) { model.disconnect() }
+                Button {
+                    model.disconnect()
+                } label: {
+                    HStack(spacing: 7) {
+                        OpcIcon.link2Off.frame(width: 14, height: 14)
+                        Text("Disconnect")
+                    }
+                    // The landscape sidebar button spans the rail; portrait sits inline.
+                    .frame(maxWidth: portrait ? nil : .infinity)
+                }
+                .buttonStyle(CameraPageButtonStyle(destructive: true))
             }
         }
     }
@@ -536,7 +545,8 @@ struct SettingsRootView: View {
         SettingsRowCard(title: "EV Meter") {
             SettingsSwitchInlineRow(
                 title: "Enabled",
-                help: "Show the camera's exposure meter at the picture's left edge in DISP 1. Auto and Manual use the camera reading without changing exposure settings.",
+                help:
+                    "Show the camera's exposure meter at the picture's left edge in DISP 1. Auto and Manual use the camera reading without changing exposure settings.",
                 showTopDivider: false, isOn: model.assist.evMeter
             ) { model.assist.toggle(.evMeter) }
         }
@@ -636,9 +646,22 @@ struct SettingsRootView: View {
                 }
             }
             SettingsRowCard(title: "On-screen joystick") {
+                SettingsInlineRow(
+                    title: "Size", help: SettingsHelpCopy.virtualJoystickSize,
+                    showTopDivider: false, stacked: true
+                ) {
+                    SettingsSegmented(
+                        options: MonitorJoystickSize.allCases.map(\.label),
+                        selected: model.virtualJoystickSize.label,
+                        compact: true
+                    ) { value in
+                        model.virtualJoystickSize = MonitorJoystickSize.fromLabel(value)
+                    }
+                    .accessibilityIdentifier("gimbal.virtual.size")
+                }
                 SettingsSwitchInlineRow(
                     title: "Invert pan", help: SettingsHelpCopy.virtualJoystickInvertPan,
-                    showTopDivider: false, isOn: model.virtualJoystickInvertPan,
+                    isOn: model.virtualJoystickInvertPan,
                     identifier: "gimbal.virtual.invertPan"
                 ) { model.virtualJoystickInvertPan.toggle() }
                 SettingsSwitchInlineRow(

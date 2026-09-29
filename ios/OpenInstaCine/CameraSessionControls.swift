@@ -243,6 +243,7 @@ extension CameraSession {
 
     func setExpoMode(_ mode: ExpoMode) {
         guard canSendControl else { return }
+        autoExposureLock = nil
         pins.expoMode = CameraValuePin(mode, now: pinNow)
         status.expoMode = mode
         if mode == .auto {
@@ -291,14 +292,66 @@ extension CameraSession {
 
     func setFov(_ fov: FovSetting) {}
 
+    /// Angle is operator intent, never a value inferred back from delayed telemetry.
+    func setShutterAngle(_ degrees: Double) {
+        guard canSendControl, currentShootingMode?.isPhoto != true else { return }
+        let angle = ShutterAngle.nearestDegrees(degrees)
+        OperatorPrefs.shutterAngleDegrees = angle
+        setShutterDenom(
+            ShutterAngle.denom(degrees: angle, fps: status.fps, available: status.availableShutterDenoms))
+    }
+
+    // MARK: - AE / AWB lock (no native Luna lock: pin the applied Auto values)
+
+    var canLockAutoExposure: Bool {
+        autoExposureLock == nil && AutoExposureLock.capture(status) != nil
+    }
+
+    /// Pins the applied Auto exposure as Manual. Luna sends it as one exposure message.
+    @discardableResult
+    func lockAutoExposure() -> Bool {
+        guard autoExposureLock == nil, canSendControl, let lock = AutoExposureLock.capture(status)
+        else { return false }
+        setExpoMode(.manual)
+        setISO(lock.isoIndex)
+        setShutterDenom(lock.shutterDenom)
+        autoExposureLock = lock
+        ControlLiveLog.line("ae-lock: ISO \(lock.isoIndex.label) 1/\(lock.shutterDenom)")
+        return true
+    }
+
+    func unlockAutoExposure() {
+        guard autoExposureLock != nil else { return }
+        setExpoMode(.auto)
+    }
+
+    var canLockAutoWhiteBalance: Bool { WhiteBalance.lockingAuto(status) != nil }
+
+    /// Pins the live Auto Kelvin as Custom. The optimistic Custom lands first.
+    func lockAutoWhiteBalance() {
+        guard autoWhiteBalanceLock == nil, let wb = WhiteBalance.lockingAuto(status) else { return }
+        setWhiteBalanceCustom(kelvin: wb.kelvin, tint: wb.tint)
+        if status.whiteBalance == wb {
+            autoWhiteBalanceLock = AutoWhiteBalanceLock(kelvin: wb.kelvin)
+        }
+    }
+
     // MARK: - White balance
 
     func setWhiteBalanceAuto(tint: Int? = nil) {
+        autoWhiteBalanceLock = nil
         fireWhiteBalance(.auto(tint: 0))
     }
 
     func setWhiteBalanceCustom(kelvin: Int, tint: Int) {
-        fireWhiteBalance(.custom(kelvin: min(max(kelvin, 2_000), 10_000), tint: 0))
+        let wb = WhiteBalance.custom(kelvin: min(max(kelvin, 2_000), 10_000), tint: 0)
+        // Custom from AWB Lock keeps the locked value; the camera is already there.
+        if autoWhiteBalanceLock != nil, status.whiteBalance == wb {
+            autoWhiteBalanceLock = nil
+            return
+        }
+        autoWhiteBalanceLock = nil
+        fireWhiteBalance(wb)
     }
 
     private func fireWhiteBalance(_ wb: WhiteBalance) {

@@ -28,6 +28,27 @@ struct FieldMonitorLayoutTests {
         }
     }
 
+    @Test func portraitAEUnlockClearsFitFillRecenterAndJoystick() {
+        func overlaps(_ a: MonitorRect, _ b: MonitorRect) -> Bool {
+            a.x < b.maxX && b.x < a.maxX && a.y < b.maxY && b.y < a.maxY
+        }
+        for (width, height) in [(375.0, 812.0), (393, 852), (440, 956)] {
+            for joystick in MonitorJoystickSize.allCases {
+                let layout = FieldMonitorLayout(
+                    width: width, height: height, safeArea: .init(top: 59, bottom: 34),
+                    joystick: joystick)
+                let unlock = layout.aeUnlock
+                for other in [
+                    layout.aspectToggle, layout.focusReset, layout.stick, layout.zoom,
+                    layout.gimbal, layout.assists,
+                ] {
+                    #expect(!overlaps(unlock, other), "\(width) \(joystick)")
+                }
+                #expect(unlock.maxX < layout.viewport.midX && unlock.maxY <= layout.values.y)
+            }
+        }
+    }
+
     @Test func landscapeCameraValuesClearTheHomeIndicator() {
         let layout = FieldMonitorLayout(
             width: 852, height: 393, safeArea: .init(bottom: 21, trailing: 59))
@@ -55,7 +76,7 @@ struct FieldMonitorLayoutTests {
                 safeArea: .init(bottom: 20))
             #expect(layout.settings.width == 48)
             #expect(layout.settings.y == layout.media.y)
-            #expect(layout.settings.maxX + 8 == layout.media.x)
+            #expect(layout.settings.maxX + FieldMonitorLayout.settingsMediaGap == layout.media.x)
             #expect(layout.status.maxX < layout.settings.x)
             #expect(layout.display.width == 48)
             #expect(layout.stick.maxX < layout.display.x)
@@ -105,7 +126,7 @@ struct FieldMonitorLayoutTests {
                 #expect(layout.lock.height == layout.settings.height)
                 #expect(layout.media.width == layout.settings.width)
                 #expect(layout.media.height == layout.settings.height)
-                #expect(layout.media.y == layout.settings.maxY + 8)
+                #expect(layout.media.y == layout.settings.maxY + FieldMonitorLayout.settingsMediaGap)
                 #expect(layout.gauges.y >= layout.lock.maxY + 6)
                 #expect(layout.status.midY > layout.picture.y)
                 #expect(
@@ -163,21 +184,8 @@ struct FieldMonitorLayoutTests {
         #expect(layout.aspectToggle.midX == layout.viewport.midX)
         #expect(layout.assists.maxY == layout.stick.maxY)
         #expect(layout.zoom.maxY < layout.stick.y)
-        #expect(layout.stick.x == layout.viewport.width - 104)
-        #expect(layout.stick.width == 88 && layout.stick.height == 88)
         #expect(layout.zoom.x == layout.stick.x)
-        #expect(layout.zoom.y == layout.stick.y - 44)
-        #expect(layout.zoom.width == 44 && layout.zoom.height == 36)
-        #expect(layout.gimbal.x == layout.stick.maxX - 36)
         #expect(layout.gimbal.y == layout.zoom.y)
-        #expect(layout.gimbal.width == 36 && layout.gimbal.height == 36)
-        #expect(
-            layout.headTrack == FieldMonitorLayout.headTrack(stick: layout.stick, zoom: layout.zoom)
-        )
-        #expect(layout.headTrack.x == layout.stick.maxX - 44)
-        #expect(layout.headTrack.y == layout.zoom.y - 8 - 44)
-        #expect(layout.headTrack.width == 44 && layout.headTrack.height == 44)
-        #expect(layout.headTrack.maxY + 8 == layout.zoom.y)
     }
 
     @Test func headTrackCompassParksAboveTheClusterInBothOrientations() {
@@ -251,14 +259,21 @@ struct FieldMonitorLayoutTests {
             #expect(layout.picture.height <= height)
             #expect(layout.picture.y >= 0)
             #expect(layout.picture.maxY <= height + 0.001)
-            #expect(abs(layout.picture.midY - height / 2) < 0.001)
+            if aspect < 1 {
+                // A vertical camera stays whole: nothing under the opaque system bar.
+                #expect(layout.picture.maxY <= layout.system.y + 0.001)
+                #expect(layout.picture.y >= layout.status.y - 0.001)
+                #expect(abs(layout.picture.width / layout.picture.height - aspect) < 0.001)
+            } else {
+                #expect(abs(layout.picture.midY - height / 2) < 0.001)
+            }
         }
     }
 
     @Test func portraitStatusRowSitsBelowTheSafeTopAndTheFeedCentersOnTheCanvas() {
         let notched = FieldMonitorLayout(
             width: 393, height: 852, safeArea: .init(top: 59, bottom: 34))
-        #expect(abs(notched.status.y - 51) < 0.05)
+        #expect(abs(notched.status.y - 59) < 0.05)
         #expect(notched.status.height == 44)
         #expect(notched.status.maxY <= notched.picture.y + 0.05)
         #expect(abs(notched.picture.midY - notched.viewport.height / 2) < 0.5)
@@ -266,12 +281,12 @@ struct FieldMonitorLayoutTests {
 
         let classic = FieldMonitorLayout(
             width: 375, height: 667, safeArea: .init(top: 20, bottom: 0))
-        #expect(abs(classic.status.y - 12) < 0.05)
+        #expect(abs(classic.status.y - 20) < 0.05)
         #expect(classic.status.maxY <= classic.picture.y + 0.05)
 
         let maxPhone = FieldMonitorLayout(
             width: 440, height: 956, safeArea: .init(top: 62, bottom: 34))
-        #expect(abs(maxPhone.status.y - 54) < 0.05)
+        #expect(abs(maxPhone.status.y - 62) < 0.05)
         #expect(maxPhone.status.maxY <= maxPhone.picture.y + 0.05)
         #expect(abs(maxPhone.picture.midY - maxPhone.viewport.height / 2) < 0.5)
         #expect(maxPhone.picture.maxY < maxPhone.values.y)

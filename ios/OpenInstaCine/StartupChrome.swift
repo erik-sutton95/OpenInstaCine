@@ -38,6 +38,8 @@ enum LiveDesign {
     static var onAccent: Color { MonitorTheme.onAccent }
     static var amber: Color { LiveHDRDisplay.chromeColor(red: 0.914, green: 0.674, blue: 0.208) }
     static var good: Color { LiveHDRDisplay.chromeColor(red: 0.18, green: 0.78, blue: 0.42) }
+    /// AE lock yellow: the focus box, its `AE-L` tag and the unlock key.
+    static var aeLock: Color { LiveHDRDisplay.chromeColor(hex: 0xF5D052) }
     static var rec: Color { LiveHDRDisplay.chromeColor(hex: 0xD13034) }
     static var info: Color { accent }
     static let cornerRadius = DesignTokens.cornerRadius
@@ -84,15 +86,50 @@ enum StartupConnectionCopy {
         }
     }
 
+    static let openSettings = "Open Settings"
+    static let localNetworkDenied =
+        "OpenInstaCine needs Local Network access to reach the camera. Open Settings, turn on Local Network for OpenInstaCine, then try again."
+    static let bluetoothDenied =
+        "OpenInstaCine needs Bluetooth access to find the camera. Open Settings, turn on Bluetooth for OpenInstaCine, then try again."
+    static let bluetoothOff =
+        "Bluetooth is off. Turn it on in Control Center or Settings, then try again."
+    static let bluetoothNotReady = "Bluetooth is not ready yet. Try again in a moment."
+    static let personalHotspotOn =
+        "Turn off Personal Hotspot, then try again. While it is on, this iPhone cannot join the camera Wi-Fi."
+    /// A running Insta360 app holds the camera and blocks pairing and the
+    /// video link. `preCheck` and `scanEmptyHint` match Android word for word.
+    static let preCheckTitle = "Check first"
+    static let preCheck = "Before pairing, force quit the Insta360 app."
+    static let scanEmptyTitle = "Still looking"
+    static let scanEmptyHint =
+        "Force quit the Insta360 app on every phone near the camera. Make sure the camera is on and activated, then move closer."
+    static let pairingDeferred =
+        "The camera is not ready to pair again yet. Force quit the Insta360 app on every phone near the camera, wait a few seconds, then try again."
+    /// Datalink never answered: another phone holds the camera, or a VPN eats the UDP.
+    static let datalinkSilent =
+        "The camera did not answer over its Wi-Fi. Force quit the Insta360 app on every phone near the camera, pause any VPN or ad blocker, then try again."
+    static let bluetoothTimedOut =
+        "The camera didn't respond in time. Check Bluetooth, force quit the Insta360 app on every phone near the camera, then try again."
+    static let bluetoothEnded =
+        "The camera ended the connection. Force quit the Insta360 app on every phone near the camera, then try again."
+
+    /// Failures the operator can only fix in iOS Settings get an Open Settings action.
+    static func opensSettings(_ raw: String) -> Bool {
+        raw == localNetworkDenied || raw == bluetoothDenied
+    }
+
     static func friendly(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return trimmed }
         let lower = trimmed.lowercased()
-        if lower.contains("timed out") || lower.contains("timeout") {
-            return "The camera didn't respond in time. Check Bluetooth and try again."
+        if lower.contains("datalink handshake") || lower.contains("not ready for the datalink") {
+            return datalinkSilent
         }
-        if lower.contains("disconnected") {
-            return "The camera ended the connection. Try again."
+        if lower.contains("timed out") || lower.contains("timeout") {
+            return bluetoothTimedOut
+        }
+        if lower.contains("disconnected") || lower.contains("camera disappeared") {
+            return bluetoothEnded
         }
         if lower.contains("approve") {
             return trimmed
@@ -609,41 +646,5 @@ struct StartupYourCamerasButton: View {
         .buttonStyle(StartupWizardOutlineButtonStyle())
         .fixedSize()
         .disabled(disabled)
-    }
-}
-
-struct StartupOverflowFade: ViewModifier {
-    var fadeHeight: CGFloat
-    @State private var canScrollFurther = false
-
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content
-                .onScrollGeometryChange(for: Bool.self) { geometry in
-                    geometry.contentSize.height - geometry.containerSize.height
-                        - geometry.contentOffset.y > 2
-                } action: { _, more in
-                    canScrollFurther = more
-                }
-                .mask(
-                    VStack(spacing: 0) {
-                        Color.black
-                        LinearGradient(
-                            colors: [.black, canScrollFurther ? .clear : .black],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                        .frame(height: fadeHeight)
-                    }
-                )
-                .animation(.easeInOut(duration: 0.18), value: canScrollFurther)
-        } else {
-            content
-        }
-    }
-}
-
-extension View {
-    func fadeOverflowBottom(height: CGFloat = 28) -> some View {
-        modifier(StartupOverflowFade(fadeHeight: height))
     }
 }

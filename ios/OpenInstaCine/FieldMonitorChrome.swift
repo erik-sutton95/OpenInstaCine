@@ -27,10 +27,16 @@ struct FieldMonitorStatusChrome: View {
                     HStack {
                         tally
                         Spacer(minLength: 4)
+                        // The format sits on the timecode's line at its size; the colour
+                        // profile hangs smaller underneath without moving that alignment.
                         topReadout(
                             model.session.status.isPhoto ? .mode : .resolution,
-                            value: model.session.status.isPhoto ? "MODE" : "REC SETUP",
-                            fontSize: 12, weight: .semibold, alwaysAccent: false
+                            value: model.session.status.isPhoto ? "MODE" : recSetupFormat,
+                            fontSize: model.session.status.isPhoto
+                                ? 12 : (layout.presentation?.tablet == true ? 25 : 23),
+                            weight: model.session.status.isPhoto ? .semibold : .medium,
+                            alwaysAccent: false,
+                            caption: model.session.status.isPhoto ? nil : recSetupColor
                         )
                         .accessibilityLabel(
                             model.session.status.isPhoto
@@ -81,10 +87,17 @@ struct FieldMonitorStatusChrome: View {
         .frame(height: layout.topDeck.height)
         .monitorReadoutShadow()
         .overlay(alignment: .topLeading) {
-            if portrait, model.chromeSectionMounts(.storage), let p = layout.presentation {
-                storageButton
-                    .monitorReadoutShadow()
-                    .offset(y: (p.tablet ? 52 : p.gauges.y) - p.status.y)
+            if portrait, let p = layout.presentation {
+                HStack(spacing: 10) {
+                    if model.chromeSectionMounts(.storage) {
+                        storageButton.monitorReadoutShadow()
+                    }
+                    // Left of the Dynamic Island; the batteries stay on the right.
+                    if !p.tablet, model.chromeSectionMounts(.batteries) {
+                        FieldMonitorGauges(horizontal: true, showsPower: false)
+                    }
+                }
+                .offset(y: (p.tablet ? 52 : p.gauges.y) - p.status.y)
             }
         }
         .onChange(of: locked) { _, isLocked in
@@ -166,9 +179,20 @@ struct FieldMonitorStatusChrome: View {
         .accessibilityLabel(item == .color ? "Color mode" : "Recording format")
     }
 
+    /// Current format ("4K25p"), not a generic label.
+    private var recSetupFormat: String {
+        model.session.status.videoFormat.map {
+            "\($0.resolution.tabTitle)\($0.frameRate.drumLabel)"
+        } ?? "REC SETUP"
+    }
+
+    private var recSetupColor: String? {
+        model.session.status.colorMode?.label(for: model.session.bodyFamily)
+    }
+
     private func topReadout(
         _ sheet: CaptureSheet, value: String, fontSize: CGFloat, weight: Font.Weight = .medium,
-        alwaysAccent: Bool = false
+        alwaysAccent: Bool = false, caption: String? = nil
     ) -> some View {
         let isActive = model.captureSheet == sheet || model.captureDrum?.sheet == sheet
         let acceptsTouch =
@@ -176,6 +200,15 @@ struct FieldMonitorStatusChrome: View {
         return Text(value)
             .font(MonitorTheme.font(fontSize, weight: weight)).monospacedDigit()
             .lineLimit(1).minimumScaleFactor(0.7)
+            .overlay(alignment: .bottomTrailing) {
+                if let caption {
+                    Text(caption)
+                        .font(MonitorTheme.font(11, weight: .semibold))
+                        .lineLimit(1).fixedSize()
+                        // Hang below the format line (its own line height), not over it.
+                        .offset(y: 18)
+                }
+            }
             .foregroundStyle(
                 alwaysAccent || isActive ? MonitorTheme.accent : .white
             )
@@ -218,13 +251,6 @@ enum MonitorReadoutHitTarget {
             width: size == .zero ? 0 : max(0, (minSize - size.width) / 2),
             height: size == .zero ? 0 : max(0, (minSize - size.height) / 2)
         )
-    }
-
-    static func frame(_ frame: CGRect, minSize: CGFloat = minimumSize) -> CGRect {
-        let width = max(frame.width, minSize)
-        let height = max(frame.height, minSize)
-        return CGRect(
-            x: frame.midX - width / 2, y: frame.midY - height / 2, width: width, height: height)
     }
 }
 
@@ -388,40 +414,58 @@ struct FieldMonitorAssistPalette: View {
 struct FieldMonitorGauges: View {
     @Environment(AppModel.self) private var model
     var horizontal = false
+    /// Portrait phones split the row around the Dynamic Island: the link pill sits
+    /// left of it with storage, the batteries stay on the right.
+    var showsLink = true
+    var showsPower = true
     @State private var phonePercent = -1
-    private var tablet: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    /// One link pill: tap swaps signal bars and feed fps.
+    @State private var showsFPS = false
+    private var tablet: Bool { Self.tablet }
+    private static var tablet: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     var body: some View {
         let axis =
             horizontal
-            ? AnyLayout(HStackLayout(spacing: 10))
-            : AnyLayout(VStackLayout(alignment: .leading, spacing: tablet ? 5 : 3))
+            ? AnyLayout(HStackLayout(spacing: 6))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: tablet ? 5 : 4))
+        let bars = model.session.liveSignalBars
+        // Signal / fps stay in the accent; the bar count carries the health.
+        let linkColor = MonitorTheme.accent
         axis {
-            gauge(
-                icon: .signal, value: nil, bars: model.session.liveSignalBars,
-                color: MonitorTheme.linkHealthColor(.init(bars: model.session.liveSignalBars))
-            )
-            .accessibilityLabel(
-                "Live link \(model.session.liveSignalBars) of 4 bars, \(model.session.liveFPS) frames per second"
-            )
-            .accessibilityIdentifier("monitor.telemetry.signal")
-            gauge(
-                icon: .smartphone, value: phonePercent < 0 ? "—" : String(phonePercent),
-                bars: 0, color: .mint
-            )
-            .accessibilityLabel(
-                "Phone battery \(phonePercent >= 0 ? String(phonePercent) : "unknown") percent")
-            let percent = model.session.status.batteryPercent
-            gauge(
-                icon: .camera, value: (0...100).contains(percent) ? "\(percent)%" : "—", bars: 0,
-                color: percent <= 20
-                    ? MonitorTheme.recording : percent <= 40 ? LiveDesign.amber : LiveDesign.good
-            )
-            .accessibilityLabel(
-                (0...100).contains(percent)
-                    ? "Camera battery \(percent) percent" : "Camera battery unavailable"
-            )
-            .accessibilityIdentifier("monitor.telemetry.camera")
+            if showsLink {
+                Button {
+                    showsFPS.toggle()
+                } label: {
+                    Self.gauge(
+                        icon: showsFPS ? .gauge : .signal, value: showsFPS ? fpsValue : nil,
+                        bars: bars, color: linkColor)
+                }
+                .buttonStyle(.zcTapTarget)
+                .accessibilityLabel(
+                    "Live link \(bars) of 4 bars, feed \(model.session.liveFPS) frames per second"
+                )
+                .accessibilityHint(showsFPS ? "Shows signal strength" : "Shows feed frame rate")
+                .accessibilityIdentifier("monitor.telemetry.signal")
+            }
+            if showsPower {
+                Self.gauge(
+                    icon: .smartphone, value: phonePercent < 0 ? "—" : "\(phonePercent)%",
+                    bars: 0, color: Self.batteryColor(phonePercent)
+                )
+                .accessibilityLabel(
+                    "Phone battery \(phonePercent >= 0 ? String(phonePercent) : "unknown") percent")
+                let percent = model.session.status.batteryPercent
+                Self.gauge(
+                    icon: .camera, value: (0...100).contains(percent) ? "\(percent)%" : "—",
+                    bars: 0, color: Self.batteryColor(percent)
+                )
+                .accessibilityLabel(
+                    (0...100).contains(percent)
+                        ? "Camera battery \(percent) percent" : "Camera battery unavailable"
+                )
+                .accessibilityIdentifier("monitor.telemetry.camera")
+            }
         }
         .onAppear {
             UIDevice.current.isBatteryMonitoringEnabled = true
@@ -432,31 +476,68 @@ struct FieldMonitorGauges: View {
         ) { _ in updatePhone() }
     }
 
+    /// Phone and camera batteries share one scale.
+    static func batteryColor(_ percent: Int) -> Color {
+        guard (0...100).contains(percent) else { return LiveDesign.text }
+        return percent <= 20
+            ? MonitorTheme.recording : percent <= 40 ? LiveDesign.amber : LiveDesign.good
+    }
+
+    /// Whole frames with a unit; RECOV / LINK / — pass through.
+    private var fpsValue: String {
+        let label = model.session.liveFPS
+        return Double(label).map { "\(Int($0.rounded())) fps" } ?? label
+    }
+
     private func updatePhone() {
         let value = UIDevice.current.batteryLevel
         phonePercent = value < 0 ? -1 : Int((value * 100).rounded())
     }
 
-    private func gauge(icon: OpcIcon, value: String?, bars: Int, color: Color) -> some View {
-        let axis =
-            horizontal ? AnyLayout(VStackLayout(spacing: 3)) : AnyLayout(HStackLayout(spacing: 5))
-        return axis {
-            icon.frame(width: tablet ? 11 : 9, height: tablet ? 11 : 9)
-            ZStack {
-                RoundedRectangle(cornerRadius: 2).strokeBorder(color, lineWidth: 1)
-                if let value {
-                    Text(value).font(
-                        MonitorTheme.font(tablet ? 9 : 8, weight: .semibold))
-                } else {
-                    HStack(spacing: 2) {
-                        ForEach(0..<4) { index in
-                            Rectangle().fill(index < bars ? color : color.opacity(0.15))
-                        }
-                    }.padding(3)
+    /// Multiview tiles: the camera battery pill without its glyph.
+    static func cameraBattery(_ percent: Int) -> some View {
+        gauge(
+            icon: nil, value: (0...100).contains(percent) ? "\(percent)%" : "—", bars: 0,
+            color: batteryColor(percent)
+        )
+        .accessibilityLabel(
+            (0...100).contains(percent)
+                ? "Camera battery \(percent) percent" : "Camera battery unavailable")
+    }
+
+    /// One glass pill per gauge: white icon, status color on the value only.
+    private static func gauge(icon: OpcIcon?, value: String?, bars: Int, color: Color)
+        -> some View
+    {
+        let height: CGFloat = tablet ? 22 : 20
+        return HStack(spacing: 4) {
+            if let icon {
+                icon.frame(width: tablet ? 12 : 11, height: tablet ? 12 : 11)
+                    .foregroundStyle(LiveDesign.text)
+            }
+            if let value {
+                Text(value)
+                    .font(MonitorTheme.font(tablet ? 11 : 10, weight: .semibold)).monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .foregroundStyle(color)
+            } else {
+                HStack(spacing: 1.5) {
+                    ForEach(0..<4) { index in
+                        RoundedRectangle(cornerRadius: 0.75)
+                            .fill(index < bars ? color : color.opacity(0.2))
+                            .frame(width: 3.5, height: tablet ? 10 : 9)
+                    }
                 }
-            }.frame(width: tablet ? 33 : 28, height: tablet ? 16 : 14)
+            }
         }
-        .foregroundStyle(color)
+        .padding(.horizontal, 6)
+        // One width for every pill, sized for the widest value ("25 fps", or
+        // "100%" without the glyph) so values never jitter.
+        .frame(
+            width: icon == nil ? (tablet ? 44 : 40) : (tablet ? 64 : 58), height: height,
+            alignment: .leading)
+        // Same glass as the Live View buttons, as a small rounded-rectangle pill.
+        .monitorGlass(in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         .accessibilityElement(children: .ignore)
     }
 }

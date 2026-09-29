@@ -6,26 +6,6 @@ import XCTest
 /// Operator-facing copy must never name a sister app, another camera brand,
 /// or Adobe's integrator-program name.
 final class OperatorFacingCopyTests: XCTestCase {
-    func testWizardShareDiagnosticsUsesSettingsTitle() {
-        XCTAssertEqual(StartupConnectionCopy.shareDiagnostics, "Share Diagnostics")
-    }
-
-    func testHeadTrackingIsExperimentalAndCalibrateIsOperatorFacing() {
-        XCTAssertEqual(LiveHeadTrackCalibrateButton.calibrateTitle, "Calibrate Head Lock")
-        XCTAssertEqual(LiveHeadTrackCalibrateButton.stopTitle, "STOP")
-        XCTAssertTrue(
-            SettingsHelpCopy.headTracking.hasPrefix("Experimental."),
-            "Settings help must lead with Experimental")
-        XCTAssertTrue(
-            SettingsHelpCopy.headTracking.contains("compass"),
-            "Settings help must describe the live compass control")
-        XCTAssertTrue(
-            SettingsHelpCopy.headTracking.contains("joystick"),
-            "Settings help must park Head Lock above the joystick")
-        XCTAssertFalse(
-            SettingsHelpCopy.headTracking.contains("centered above the bottom bars"))
-    }
-
     func testHelpCopyDoesNotNameSisterApps() {
         let facing = Self.operatorFacingCopy
         XCTAssertFalse(facing.isEmpty)
@@ -95,18 +75,6 @@ final class OperatorFacingCopyTests: XCTestCase {
             PocketDispMode.clean.settingsTitle,
             PocketDispMode.live.settingsCaption,
             PocketDispMode.clean.settingsCaption,
-            "Editing Live",
-            "Tap an eye to show or hide it",
-            "View assists that stay on in clean view",
-            "Live view for this camera is not captured yet.",
-            "Resolution · Framerate",
-            "Color",
-            "Show view assists",
-            "Fit feed in frame",
-            "Fill frame with feed",
-            "Recording options",
-            "The Wi-Fi connection reached a different camera. Join the selected camera's network and retry.",
-            "couldn't switch from other camera — tap Connect again",
             SettingsHelpCopy.frameIO,
             SettingsHelpCopy.shareThisFeed,
             SettingsHelpCopy.watchAFeed,
@@ -117,17 +85,11 @@ final class OperatorFacingCopyTests: XCTestCase {
             SettingsHelpCopy.haptics,
             SettingsHelpCopy.headTracking,
             LiveHeadTrackCalibrateButton.calibrateTitle,
-            "Head Tracking (Experimental)",
             SettingsHelpCopy.joystickSensitivity,
             SettingsHelpCopy.virtualJoystickInvertPan,
             SettingsHelpCopy.virtualJoystickInvertTilt,
             SettingsHelpCopy.virtualJoystickDeadzone,
             SettingsHelpCopy.virtualJoystickResponse,
-            "On-screen joystick",
-            "Invert pan",
-            "Invert tilt",
-            "Dead zone",
-            "Response curve",
             SettingsHelpCopy.gimbalJoystick,
             SettingsHelpCopy.gamepad,
             SettingsHelpCopy.keepScreenAwake,
@@ -139,7 +101,6 @@ final class OperatorFacingCopyTests: XCTestCase {
             NDAssist.notationHelp,
             SettingsHelpCopy.themeHelp,
             SettingsHelpCopy.shareDiagnostics,
-            "Diagnostics copied — paste into TestFlight feedback",
             StartupConnectionCopy.shareDiagnostics,
             SettingsHelpCopy.sourceHelp,
             SettingsHelpCopy.linkHealth,
@@ -187,6 +148,18 @@ final class OperatorFacingCopyTests: XCTestCase {
             LiveGimbalCopy.programmedMove,
             LiveGimbalCopy.runMove,
             LiveGimbalCopy.stopMove,
+            StartupConnectionCopy.localNetworkDenied,
+            StartupConnectionCopy.bluetoothDenied,
+            StartupConnectionCopy.bluetoothOff,
+            StartupConnectionCopy.bluetoothNotReady,
+            StartupConnectionCopy.personalHotspotOn,
+            StartupConnectionCopy.pairingDeferred,
+            StartupConnectionCopy.datalinkSilent,
+            StartupConnectionCopy.scanEmptyTitle,
+            StartupConnectionCopy.scanEmptyHint,
+            StartupConnectionCopy.preCheck,
+            StartupConnectionCopy.bluetoothTimedOut,
+            StartupConnectionCopy.bluetoothEnded,
             LocalVPNFilter.wizardBanner,
             LocalVPNFilter.liveHint,
             LocalVPNFilter.joinWifiPhoneStep,

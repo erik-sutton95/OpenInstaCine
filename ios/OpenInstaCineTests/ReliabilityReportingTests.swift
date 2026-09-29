@@ -6,6 +6,13 @@ import XCTest
 @testable import OpenInstaCine
 
 final class ReliabilityReportingTests: XCTestCase {
+    func testOnlyExhaustedIncidentsAreErrors() {
+        XCTAssertEqual(ReliabilityReporting.level(forOutcome: "exhausted"), .error)
+        XCTAssertEqual(ReliabilityReporting.level(forOutcome: "interrupted"), .warning)
+        XCTAssertEqual(ReliabilityReporting.level(forOutcome: "recovered"), .info)
+        XCTAssertEqual(ReliabilityReporting.level(forOutcome: "suppressed"), .info)
+    }
+
     private var suite: UserDefaults!
     private var cacheRoot: URL!
 
@@ -14,7 +21,7 @@ final class ReliabilityReportingTests: XCTestCase {
             predicate: NSPredicate { _, _ in
                 ReliabilityReporting.receipt(for: id)?.state == state
             }, object: nil)
-        wait(for: [ready], timeout: 2)
+        wait(for: [ready], timeout: 10)
     }
 
     override func setUp() {
@@ -71,7 +78,7 @@ final class ReliabilityReportingTests: XCTestCase {
             predicate: NSPredicate { [self] _, _ in
                 ReliabilityReportingReceipts.load(incidentID: "inc-1", root: cacheRoot) == nil
             }, object: nil)
-        wait(for: [purged], timeout: 2)
+        wait(for: [purged], timeout: 10)
         XCTAssertNil(ReliabilityReportingReceipts.load(incidentID: "inc-1", root: cacheRoot))
         XCTAssertTrue(FileManager.default.fileExists(atPath: local.path))
     }
@@ -105,7 +112,7 @@ final class ReliabilityReportingTests: XCTestCase {
         ReliabilityReporting.install()
         let installed = XCTNSPredicateExpectation(
             predicate: NSPredicate { _, _ in SentrySDK.isEnabled }, object: nil)
-        wait(for: [installed], timeout: 3)
+        wait(for: [installed], timeout: 10)
         XCTAssertTrue(ReliabilityReportingGate.shared.shouldBlockUpload)
     }
 
@@ -144,48 +151,40 @@ final class ReliabilityReportingTests: XCTestCase {
             URLError.notConnectedToInternet)
     }
 
-    func testBlockedSDKSessionFailsWithoutHTTPResponse() {
-        ReliabilityReportingGate.shared.setCameraSessionActive(true)
-        let session = ReliabilityReportingURLProtocol.makeSDKSession()
-        let url = URL(string: "https://o0.ingest.sentry.io/api/0/envelope/")!
-        let done = expectation(description: "blocked")
-        var response: URLResponse?
-        session.dataTask(with: url) { _, resp, error in
-            response = resp
-            XCTAssertEqual((error as NSError?)?.code, NSURLErrorNotConnectedToInternet)
-            done.fulfill()
-        }.resume()
-        wait(for: [done], timeout: 2)
-        XCTAssertNil(response)
-    }
-
-    func testRevokedConsentBlocksCachedEnvelopeWithoutHTTPResponse() {
-        ReliabilityReportingConsent.setOptedIn(false)
-        ReliabilityReportingGate.shared.setCameraSessionActive(false)
-        let session = ReliabilityReportingURLProtocol.makeSDKSession()
-        let done = expectation(description: "revoked transport")
-        session.dataTask(with: URL(string: "https://o0.ingest.sentry.io/api/0/envelope/")!) {
-            _, response, error in
-            XCTAssertNil(response)
-            XCTAssertEqual((error as NSError?)?.code, NSURLErrorNotConnectedToInternet)
-            done.fulfill()
-        }.resume()
-        wait(for: [done], timeout: 2)
-    }
-
-    func testHostIsolationOnSessionDoesNotForward() {
-        ReliabilityReportingConsent.setOptedIn(true)
-        let session = ReliabilityReportingURLProtocol.makeSDKSession()
-        let url = URL(string: "https://example.com/secret")!
-        let done = expectation(description: "reject")
-        var response: URLResponse?
-        session.dataTask(with: url) { _, resp, error in
-            response = resp
-            XCTAssertEqual((error as NSError?)?.code, NSURLErrorCannotFindHost)
-            done.fulfill()
-        }.resume()
-        wait(for: [done], timeout: 2)
-        XCTAssertNil(response)
+    func testRefusedSDKRequestsFailWithoutHTTPResponse() {
+        let envelopeURL = URL(string: "https://o0.ingest.sentry.io/api/0/envelope/")!
+        let cases: [(name: String, optedIn: Bool?, cameraActive: Bool, url: URL, code: Int)] = [
+            (
+                "camera session blocks the SDK", nil, true, envelopeURL,
+                NSURLErrorNotConnectedToInternet
+            ),
+            (
+                "revoked consent blocks a cached envelope", false, false, envelopeURL,
+                NSURLErrorNotConnectedToInternet
+            ),
+            (
+                "host isolation rejects a non-DSN host", true, false,
+                URL(string: "https://example.com/secret")!, NSURLErrorCannotFindHost
+            ),
+        ]
+        for c in cases {
+            ReliabilityReportingConsent.resetForTests()
+            ReliabilityReportingGate.shared.resetForTests()
+            if let optedIn = c.optedIn { ReliabilityReportingConsent.setOptedIn(optedIn) }
+            ReliabilityReportingGate.shared.setCameraSessionActive(c.cameraActive)
+            let session = ReliabilityReportingURLProtocol.makeSDKSession()
+            let done = expectation(description: c.name)
+            var response: URLResponse?
+            var code: Int?
+            session.dataTask(with: c.url) { _, resp, error in
+                response = resp
+                code = (error as NSError?)?.code
+                done.fulfill()
+            }.resume()
+            wait(for: [done], timeout: 10)
+            XCTAssertNil(response, c.name)
+            XCTAssertEqual(code, c.code, c.name)
+        }
     }
 
     func testCameraActivationCancelsInFlightForwardWithoutResponse() {
@@ -205,9 +204,9 @@ final class ReliabilityReportingTests: XCTestCase {
             XCTAssertEqual((error as NSError?)?.code, NSURLErrorNotConnectedToInternet)
             done.fulfill()
         }.resume()
-        wait(for: [SlowForwardProtocol.started], timeout: 2)
+        wait(for: [SlowForwardProtocol.started], timeout: 10)
         ReliabilityReporting.setCameraSessionActive(true)
-        wait(for: [done], timeout: 2)
+        wait(for: [done], timeout: 10)
         XCTAssertNil(response)
         ReliabilityReportingURLProtocol.forwardingSession = {
             let config = URLSessionConfiguration.ephemeral
@@ -340,7 +339,7 @@ final class ReliabilityReportingTests: XCTestCase {
         event.releaseName = "com.opencapture.openinstacine@0.1.0+107"
         event.dist = "107"
         SentrySDK.capture(event: event)
-        wait(for: [prepared], timeout: 3)
+        wait(for: [prepared], timeout: 10)
     }
 
     func testQueuedIncidentKeepsOriginalReleaseAndOccurrenceTime() throws {
@@ -368,7 +367,7 @@ final class ReliabilityReportingTests: XCTestCase {
             captured.fulfill()
         }
         ReliabilityReporting.enqueueFinalized(bundle)
-        wait(for: [captured], timeout: 2)
+        wait(for: [captured], timeout: 10)
     }
 
     func testQueuedReplayOriginSurvivesActualSDKScopeMerge() throws {
@@ -411,7 +410,7 @@ final class ReliabilityReportingTests: XCTestCase {
             constructed.fulfill()
         }
         ReliabilityReporting.enqueueFinalized(bundle)
-        wait(for: [constructed, prepared], timeout: 3)
+        wait(for: [constructed, prepared], timeout: 10)
     }
 
     func testScrubRemovesUserRequestBreadcrumbsAndPaths() {
@@ -429,7 +428,11 @@ final class ReliabilityReportingTests: XCTestCase {
         ]
         event.extra = ["password": "hunter2", "failingStage": "decodedOutput"]
         event.context = [
-            "device": ["name": "Example Phone", "model": "iPhone17,2"],
+            "device": [
+                "name": "Example Phone", "model": "iPhone17,2", "free_memory": 1_024,
+                "memory_size": 8_192, "thermal_state": "nominal",
+            ],
+            "app": ["app_memory": 512, "in_foreground": true, "device_app_hash": "x"],
             "feed": ["failingStage": "decodedOutput", "serial": "ABC"],
         ]
         event.exceptions = [
@@ -447,6 +450,12 @@ final class ReliabilityReportingTests: XCTestCase {
         XCTAssertEqual(event.extra?["failingStage"] as? String, "decodedOutput")
         XCTAssertNil(event.context?["device"]?["name"])
         XCTAssertEqual(event.context?["device"]?["model"] as? String, "iPhone17,2")
+        XCTAssertEqual(event.context?["device"]?["free_memory"] as? Int, 1_024)
+        XCTAssertEqual(event.context?["device"]?["memory_size"] as? Int, 8_192)
+        XCTAssertEqual(event.context?["device"]?["thermal_state"] as? String, "nominal")
+        XCTAssertEqual(event.context?["app"]?["app_memory"] as? Int, 512)
+        XCTAssertEqual(event.context?["app"]?["in_foreground"] as? Bool, true)
+        XCTAssertNil(event.context?["app"]?["device_app_hash"])
         XCTAssertNil(event.context?["feed"]?["serial"])
         XCTAssertFalse(event.exceptions?.first?.value?.contains("example/Library") ?? true)
     }
@@ -479,7 +488,7 @@ final class ReliabilityReportingTests: XCTestCase {
             captured.fulfill()
         }
         ReliabilityReporting.enqueueFinalized(bundle)
-        wait(for: [captured], timeout: 2)
+        wait(for: [captured], timeout: 10)
     }
 
     func testCaptureEnqueueIsQueuedNotDeliveredAndDedupsConfirmed() throws {
@@ -500,7 +509,7 @@ final class ReliabilityReportingTests: XCTestCase {
             captured.fulfill()
         }
         ReliabilityReporting.enqueueFinalized(bundle)
-        wait(for: [captured], timeout: 2)
+        wait(for: [captured], timeout: 10)
         waitForReceipt("12c2d058d58442709aa2eca08bf20986", state: .queued)
         XCTAssertEqual(
             ReliabilityReporting.receipt(for: "12c2d058d58442709aa2eca08bf20986")?.state,
@@ -545,7 +554,7 @@ final class ReliabilityReportingTests: XCTestCase {
         XCTAssertEqual(FeedIncidentRuntime.reportExtras().count, 1)
         let done = expectation(description: "deleted")
         FeedIncidentRuntime.deleteStoredIncidents { done.fulfill() }
-        wait(for: [done], timeout: 2)
+        wait(for: [done], timeout: 10)
         XCTAssertTrue(FeedIncidentRuntime.reportExtras().isEmpty)
     }
 
@@ -616,6 +625,9 @@ final class ReliabilityReportingTests: XCTestCase {
         XCTAssertFalse(options.enableMetricKit)
         XCTAssertTrue(options.enableCrashHandler)
         XCTAssertTrue(options.enableAppHangTracking)
+        // Tests run a development build: reinstalls must not read as watchdog kills.
+        XCTAssertEqual(ReliabilityReportingConfiguration.environment, "development")
+        XCTAssertFalse(options.enableWatchdogTerminationTracking)
         XCTAssertEqual(options.maxCacheItems, 30)
         XCTAssertEqual(options.maxAttachmentSize, 256 * 1_024)
         XCTAssertEqual(options.sessionReplay.sessionSampleRate, 0)

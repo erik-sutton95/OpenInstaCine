@@ -81,15 +81,12 @@
         private func navigation(portrait: Bool) -> some View {
             VStack(alignment: .leading, spacing: 9) {
                 ScrollView(portrait ? .horizontal : .vertical, showsIndicators: false) {
-                    let arrangement =
-                        portrait
-                        ? AnyLayout(HStackLayout(spacing: 3))
-                        : AnyLayout(VStackLayout(spacing: 3))
-                    arrangement {
+                    MonitorTabStrip(vertical: !portrait) {
                         ForEach(categories) { item in
                             MonitorNavigationItem(
                                 item.title, count: String(item.count),
-                                selected: item.id == category
+                                selected: item.id == category,
+                                separator: item.id != categories.first?.id
                             ) {
                                 action(.category(item.id))
                             }
@@ -97,6 +94,7 @@
                         }
                     }
                 }
+                .monitorScrollFade(portrait ? .horizontal : .vertical)
                 .frame(height: portrait ? 44 : nil)
                 if !portrait {
                     VStack(alignment: .leading, spacing: 5) {
@@ -192,6 +190,7 @@
             VStack(alignment: .leading, spacing: 8) {
                 headerCaption
                 ScrollView(.horizontal, showsIndicators: false) { toolbar }
+                    .monitorScrollFade(.horizontal)
             }
         }
 
@@ -257,6 +256,7 @@
                 .scrollBounceBehavior(.always)
                 .refreshable { refresh() }
                 .accessibilityIdentifier("monitor.media.gallery")
+                .monitorScrollFade()
             }
         }
 
@@ -374,6 +374,7 @@
                         .disabled(!selectionAllows(.delete, every: true))
                     }
                 }
+                .monitorScrollFade(.horizontal)
                 .fixedSize(horizontal: false, vertical: true)
             }
             .padding(6).monitorCardSurface()

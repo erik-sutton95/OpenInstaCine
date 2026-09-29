@@ -1,3 +1,4 @@
+import MonitorUI
 import OpenPocketViewCore
 import PhotosUI
 import SwiftUI
@@ -223,6 +224,7 @@ struct ReliabilityConsentPrompt: View {
             .font(LiveType.ui(size: 16, weight: .regular)).padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .monitorScrollFade()
         .tint(LiveDesign.accent).preferredColorScheme(.dark)
         .presentationDetents([.medium, .large]).interactiveDismissDisabled()
         .sheet(isPresented: $showPrivacy) {

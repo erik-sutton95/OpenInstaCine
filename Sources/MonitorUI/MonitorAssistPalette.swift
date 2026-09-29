@@ -7,11 +7,23 @@
         public var title: String
         public var enabled: Bool
         public var hasOptions: Bool
-        public init(id: String, title: String, enabled: Bool, hasOptions: Bool) {
+        public var available: Bool
+        public var accessibilityLabel: String?
+        public var accessibilityValue: String?
+        public var accessibilityIdentifier: String?
+        public init(
+            id: String, title: String, enabled: Bool, hasOptions: Bool,
+            available: Bool = true, accessibilityLabel: String? = nil,
+            accessibilityValue: String? = nil, accessibilityIdentifier: String? = nil
+        ) {
             self.id = id
             self.title = title
             self.enabled = enabled
             self.hasOptions = hasOptions
+            self.available = available
+            self.accessibilityLabel = accessibilityLabel
+            self.accessibilityValue = accessibilityValue
+            self.accessibilityIdentifier = accessibilityIdentifier
         }
     }
 
@@ -25,6 +37,8 @@
         private let onOptions: (String) -> Void
         private let onExpansionActivityChange: (Bool) -> Void
         private let icon: (String) -> Icon
+        private let accessibilityName: String
+        private let accessibilityPrefix: String
         @Binding private var expanded: Bool
         @Binding private var usage: MonitorToolUsage
         @State private var progress: Double = 0
@@ -42,6 +56,8 @@
             expanded: Binding<Bool>, onToggle: @escaping (String) -> Void,
             onOptions: @escaping (String) -> Void,
             onExpansionActivityChange: @escaping (Bool) -> Void = { _ in },
+            accessibilityName: String = "View Assist tools",
+            accessibilityPrefix: String = "monitor.assists",
             @ViewBuilder icon: @escaping (String) -> Icon
         ) {
             self.tools = tools
@@ -53,6 +69,8 @@
             self.onOptions = onOptions
             self.onExpansionActivityChange = onExpansionActivityChange
             self.icon = icon
+            self.accessibilityName = accessibilityName
+            self.accessibilityPrefix = accessibilityPrefix
         }
 
         public var body: some View {
@@ -145,34 +163,58 @@
 
         private func toolGrid(full: MonitorAssistPaletteLayout, labels: Double) -> some View {
             let items = displayTools
-            return Group {
-                if full.portrait {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: MonitorAssistPaletteLayout.spacing) {
-                            ForEach(Array(items.enumerated()), id: \.element.id) { index, tool in
-                                toolButton(tool, index: index, full: full, labels: labels)
+            // Collapsed, the edge fade would mask the favorite in its one-cell viewport.
+            // Shallow: a hint that more tools scroll, never dimming the edge buttons.
+            let fade: CGFloat = expanded ? 8 : 0
+            return ScrollViewReader { proxy in
+                Group {
+                    if full.portrait {
+                        ScrollView(.vertical, showsIndicators: false) {
+                            VStack(spacing: MonitorAssistPaletteLayout.spacing) {
+                                ForEach(Array(items.enumerated()), id: \.element.id) {
+                                    index, tool in
+                                    toolButton(tool, index: index, full: full, labels: labels)
+                                }
                             }
                         }
-                    }
-                } else {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: MonitorAssistPaletteLayout.spacing) {
-                            ForEach(0..<full.columns, id: \.self) { column in
-                                VStack(spacing: MonitorAssistPaletteLayout.spacing) {
-                                    ForEach(0..<2, id: \.self) { row in
-                                        let index = MonitorAssistPaletteReveal.landscapeCellIndex(
-                                            column: column, row: row)
-                                        if items.indices.contains(index) {
-                                            toolButton(
-                                                items[index], index: index, full: full,
-                                                labels: labels)
-                                        } else {
-                                            Color.clear.frame(
-                                                width: full.cellWidth, height: full.cellHeight)
+                        // Collapsed, a drag belongs to the expand gesture, not the scroller.
+                        .scrollDisabled(!expanded)
+                        .monitorScrollFade(depth: fade)
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            LazyHStack(spacing: MonitorAssistPaletteLayout.spacing) {
+                                ForEach(0..<full.columns, id: \.self) { column in
+                                    VStack(spacing: MonitorAssistPaletteLayout.spacing) {
+                                        ForEach(0..<2, id: \.self) { row in
+                                            let index =
+                                                MonitorAssistPaletteReveal.landscapeCellIndex(
+                                                    column: column, row: row)
+                                            if items.indices.contains(index) {
+                                                toolButton(
+                                                    items[index], index: index, full: full,
+                                                    labels: labels)
+                                            } else {
+                                                Color.clear.frame(
+                                                    width: full.cellWidth, height: full.cellHeight)
+                                            }
                                         }
                                     }
                                 }
                             }
+                        }
+                        .scrollDisabled(!expanded)
+                        .monitorScrollFade(.horizontal, depth: fade)
+                    }
+                }
+                // An offset scrolled while open survives the collapse and, with
+                // scrolling off, strands the favorites outside the collapsed cells.
+                .onChange(of: expanded) { _, open in
+                    guard !open else { return }
+                    withAnimation(MonitorMotion.drawerSpring(reduceMotion)) {
+                        if full.portrait, let first = items.first?.id {
+                            proxy.scrollTo(first, anchor: .top)
+                        } else if !full.portrait {
+                            proxy.scrollTo(0, anchor: .leading)
                         }
                     }
                 }
@@ -185,7 +227,8 @@
             .frame(maxHeight: full.scrollHeight)
             .scrollBounceBehavior(.basedOnSize)
             .padding(MonitorAssistPaletteLayout.padding)
-            .padding(.top, full.portrait ? 24 + MonitorAssistPaletteLayout.spacing : 0)
+            // The layout reserves 35 pt in portrait: 4 + 24 chevron + 3 + 4.
+            .padding(.top, full.portrait ? 24 + 3 : 0)
             .padding(
                 .trailing,
                 full.portrait
@@ -219,14 +262,14 @@
                         visibleHeight: visibleHeight)
                 )
                 .accessibilityLabel(
-                    open ? "Show all View Assist tools" : "Collapse View Assist tools"
+                    open ? "Show all \(accessibilityName)" : "Collapse \(accessibilityName)"
                 )
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction {
                     expanded.toggle()
                 }
                 .accessibilityIdentifier(
-                    open ? "monitor.assists.expand" : "monitor.assists.collapse")
+                    accessibilityPrefix + (open ? ".expand" : ".collapse"))
         }
 
         private func revealDrag(
@@ -339,7 +382,8 @@
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(tool.title).accessibilityValue(tool.enabled ? "On" : "Off")
+            .accessibilityLabel(tool.accessibilityLabel ?? tool.title)
+            .accessibilityValue(tool.accessibilityValue ?? (tool.enabled ? "On" : "Off"))
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { toggle(tool) }
             .accessibilityActions {
@@ -347,19 +391,21 @@
                     Button("Options") { showOptions(tool) }
                 }
             }
-            .opacity(shown)
+            .disabled(!tool.available)
+            .opacity(shown * (tool.available ? 1 : 0.4))
             .allowsHitTesting(shown > 0.35)
             .accessibilityHidden(shown < 0.35)
-            .accessibilityIdentifier("monitor.assist.\(tool.id)")
+            .accessibilityIdentifier(tool.accessibilityIdentifier ?? "monitor.assist.\(tool.id)")
         }
 
         private func toggle(_ tool: MonitorToolItem) {
+            guard tool.available else { return }
             usage.recordUse(of: tool.id, seed: usageSeed)
             onToggle(tool.id)
         }
 
         private func showOptions(_ tool: MonitorToolItem) {
-            guard tool.hasOptions else { return }
+            guard tool.available, tool.hasOptions else { return }
             usage.recordUse(of: tool.id, seed: usageSeed)
             expanded = false
             onOptions(tool.id)

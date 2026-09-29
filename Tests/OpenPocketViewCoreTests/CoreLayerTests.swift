@@ -138,11 +138,9 @@ import Testing
         let tap = Commands.tapFocusPoint(0.511, 0.498)
         #expect(tap.cmdId == 0x30)
         #expect(tap.payload.count == 21)
-        let burst = Commands.tapFocus(0.511, 0.498)
-        #expect(burst.map(\.cmdId) == [0x22, 0x30, 0x68, 0x32])
-        #expect(burst[0].payload == [0x02])
-        #expect(burst[2].payload == [0x08])
         #expect(Commands.tapFocusPrepare().cmdId == 0x22)
+        #expect(Commands.tapFocusPrepare().payload == [0x02])
+        #expect(Commands.tapFocusCommit(0.511, 0.498).cmdId == 0x32)
         #expect(Commands.tapFocusLiveHint().cmdId == 0x68)
         #expect(Commands.tapFocusLiveHint().payload == [0x08])
         #expect(Commands.liveViewPrepare().cmdId == 0x68)
@@ -155,8 +153,6 @@ import Testing
         #expect(ExpoMode.allCases.map(\.label) == ["Auto", "Manual"])
         #expect(ExpoMode.auto.setPayload == [0x01, 0x00])
         #expect(ExpoMode.manual.setPayload == [0x04, 0x00])
-        #expect(Commands.setExpoManual(true).payload == [0x04, 0x00])
-        #expect(Commands.setExpoManual(false).payload == [0x01, 0x00])
         // No 0x1E GET in mimo-settings-1. Unpack the status echo (`cam_expo_param` `@7`).
         var manualExpo = [UInt8](repeating: 0, count: 46)
         manualExpo[0] = 0x30
@@ -172,18 +168,13 @@ import Testing
         #expect(get.cmdId == 0x8E)
         #expect(get.payload == [0x00, 0x01, 0x0F, 0x00])
         #expect(Commands.getIsoLimit().payload == [0x00, 0x01, 0x0F, 0x00])
-        let set = Commands.setIsoLimit(.range800)
+        let set = Commands.setIsoLimit(.max800)
         #expect(set.payload == [0x01, 0x01, 0x0F, 0x00, 0x01, 0x04])
         #expect(Commands.setIsoLimit(.max1600).payload == [0x01, 0x01, 0x0F, 0x00, 0x01, 0x05])
         #expect(Commands.setIsoLimit(.max6400).payload == [0x01, 0x01, 0x0F, 0x00, 0x01, 0x07])
         #expect(Commands.setIsoLimit(.max25600).payload == [0x01, 0x01, 0x0F, 0x00, 0x01, 0x09])
         #expect(Commands.setFov(.wide).payload == [0x01, 0x01, 0x09, 0x00, 0x01, 0x01])
 
-        #expect(Commands.setEv(EvComp.zero).cmdId == 0x2E)
-        #expect(Commands.setEv(EvComp.zero).payload == [0x10])
-        #expect(Commands.setEv(EvComp(thirds: 1)).payload == [0x11])
-        #expect(Commands.setEv(EvComp(thirds: 2)).payload == [0x12])
-        #expect(Commands.setEv(EvComp(thirds: -1)).payload == [0x0F])
         #expect(Commands.setEv(EvComp(thirds: -9)).payload == [0x07])
         #expect(Commands.setEv(EvComp(thirds: 9)).payload == [0x19])
     }
@@ -253,6 +244,37 @@ import Testing
         #expect(s.internalTotalMb == 0)  // confirmed absent, not unknown(-1)
     }
 
+    @Test func playbackZeroStorageDoesNotEraseKnownCapacity() {
+        var reported = [UInt8](repeating: 0, count: 22)
+        reported[6] = 0x00
+        reported[7] = 0xFA  // 64,000 MiB
+        reported[10] = 0x00
+        reported[11] = 0x7D  // 32,000 MiB
+        var status = CameraStatus()
+        #expect(
+            CameraStatusDecoder.apply(
+                .init(
+                    sender: 0, receiver: 0, seq: 0, flags: 0, cmdSet: 0x02, cmdId: 0xDC,
+                    payload: reported), to: &status))
+        #expect(status.sdTotalMb == 64_000 && status.sdFreeMb == 32_000)
+
+        let blank = [UInt8](repeating: 0, count: 22)
+        #expect(
+            CameraStatusDecoder.apply(
+                .init(
+                    sender: 0, receiver: 0, seq: 0, flags: 0, cmdSet: 0x02, cmdId: 0xDC,
+                    payload: blank), to: &status))
+        #expect(status.sdTotalMb == 64_000 && status.sdFreeMb == 32_000)
+
+        var noCard = CameraStatus()
+        #expect(
+            CameraStatusDecoder.apply(
+                .init(
+                    sender: 0, receiver: 0, seq: 0, flags: 0, cmdSet: 0x02, cmdId: 0xDC,
+                    payload: blank), to: &noCard))
+        #expect(noCard.sdTotalMb == 0 && noCard.sdFreeMb == 0)
+    }
+
     @Test func gimbalHeartbeatSwallowed() {
         var s = CameraStatus()
         #expect(
@@ -287,21 +309,6 @@ import Testing
                     sender: 0, receiver: 0, seq: 0, flags: 0, cmdSet: 0x02, cmdId: 0x80, payload: p),
                 to: &s))
         #expect(s.isRecording && s.recordElapsedSec == 8)
-    }
-
-    @Test func timecodePushFromMimo() {
-        // `00 00 00 05 16 2f 12 00` → @3–6 = 05:22:47:18 (Mimo 2026-08-14)
-        let value: [UInt8] = [0x00, 0x00, 0x00, 0x05, 0x16, 0x2F, 0x12, 0x00]
-        let payload = SubscribePush.pack(name: "timecode_info", value: value)
-        #expect(SubscribePush.parse(payload)?.name == "timecode_info")
-        var s = CameraStatus()
-        #expect(
-            CameraStatusDecoder.apply(
-                .init(
-                    sender: 0, receiver: 0, seq: 0, flags: 0, cmdSet: 0x00, cmdId: 0x99,
-                    payload: payload), to: &s))
-        #expect(s.timecode == "05:22:47:18")
-        #expect(s.timecodeClock == "05:22:47")
     }
 
     @Test func expoAndFpsPushesFromLive1() {

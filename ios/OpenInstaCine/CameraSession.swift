@@ -35,6 +35,10 @@ final class CameraSession {
         set {
             let previous = statusStorage
             statusStorage = newValue
+            if let lock = autoExposureLock, !lock.holds(newValue) { autoExposureLock = nil }
+            if let lock = autoWhiteBalanceLock, !lock.holds(newValue) {
+                autoWhiteBalanceLock = nil
+            }
             guard newValue != previous else { return }
             guard
                 LiveChromeThrottle.shouldNotify(
@@ -48,6 +52,13 @@ final class CameraSession {
         }
     }
     var found: [FoundCamera] = []
+    /// A scan has run 20 s without a camera. The wizard then lists what to check.
+    var scanLooksEmpty = false
+    @ObservationIgnored private var scanHintTask: Task<Void, Never>?
+    /// AE Lock pins the applied Auto exposure as Manual; cleared when status stops holding it.
+    var autoExposureLock: AutoExposureLock?
+    /// WB Mode AWB Lock. Cleared like `autoExposureLock` when status stops holding it.
+    var autoWhiteBalanceLock: AutoWhiteBalanceLock?
     private(set) var connectedCamera: FoundCamera?
     private(set) var joinedSSID: String?
     /// Luna has one setup: its own camera Wi-Fi. Kept for the shared saved-camera record.
@@ -75,6 +86,9 @@ final class CameraSession {
     @ObservationIgnored var lastKeyframeAge = "—"
     @ObservationIgnored var incidentSettingsCovered = false
     var liveFPS = "—"
+    /// Observable mirror of the decoded raster (`HevcDecoder` is not observable).
+    private(set) var pictureAspect: CGFloat = LiveChromeMetrics.feedAspect
+    private(set) var isVerticalPicture = false
     var liveSignalBars = 0
     @ObservationIgnored private var frameRate = FrameRateSampler()
     @ObservationIgnored private var signalBarsFilter = LinkSignalBars()
@@ -122,6 +136,10 @@ final class CameraSession {
     var controlNote: String?
     var isLocked = false
     var isMultiviewBorrowed: Bool { false }
+    /// Luna has no Multiview; kept so the shared shell compiles unchanged.
+    private(set) var isMultiviewControlsOnly = false
+    @ObservationIgnored var multiviewControlAdmission: (() -> Bool)?
+    var multiviewPose: GimbalStickMapping { GimbalStickMapping() }
 
     // Luna settings bookkeeping (see LunaShellMapping).
     @ObservationIgnored var lunaSettings = LunaPhotographySettings.empty
@@ -242,11 +260,24 @@ final class CameraSession {
     @ObservationIgnored let decoder: HevcDecoder
     var videoLayer: AVSampleBufferDisplayLayer { decoder.displayLayer }
 
-    init(borrowing sharedDecoder: HevcDecoder? = nil, cameraMedia: CameraMedia? = nil) {
+    init(
+        borrowing sharedDecoder: HevcDecoder? = nil, cameraMedia: CameraMedia? = nil,
+        controlsOnly: Bool = false
+    ) {
+        isMultiviewControlsOnly = controlsOnly
         self.cameraMedia = cameraMedia ?? CameraMedia()
         self.decoder = sharedDecoder ?? HevcDecoder()
         self.backend = LunaSessionHub.backend
         decoder.onPresentedFrame = { [weak self] in self?.noteLiveFrame() }
+        decoder.onPictureSizeChanged = { [weak self] in
+            guard let self else { return }
+            if self.pictureAspect != self.decoder.pictureAspect {
+                self.pictureAspect = self.decoder.pictureAspect
+            }
+            if self.isVerticalPicture != self.decoder.isVerticalPicture {
+                self.isVerticalPicture = self.decoder.isVerticalPicture
+            }
+        }
         decoder.onSourceFrame = { [weak self] buffer in self?.considerFaceAF(buffer) }
         // A decoder handoff (look/scope toggle) needs an IDR. Luna sends a GOP every
         // ~2 s; ask once for an I-frame so the switch is not a two-second hold.
@@ -290,6 +321,16 @@ final class CameraSession {
         isReconnecting = id != nil
         phase = .scanning
         found = []
+        scanLooksEmpty = false
+        scanHintTask?.cancel()
+        scanHintTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            guard let self, !Task.isCancelled, self.phase == .scanning, self.found.isEmpty else {
+                return
+            }
+            ControlLiveLog.line("ble: no camera after 20 s of scanning")
+            self.scanLooksEmpty = true
+        }
         scanTask?.cancel()
         let token = connectGeneration
         scanTask = Task { [weak self] in
@@ -390,7 +431,7 @@ final class CameraSession {
                 guard generation == self.connectGeneration, !Task.isCancelled else { return }
                 if case .idle = self.phase { return }
                 let why = (error as? LocalizedError)?.errorDescription ?? "\(error)"
-                ControlLiveLog.line("session: connect failed at \(self.phase.label) — \(why)")
+                ControlLiveLog.line("session: connect failed at \(self.phase.label): \(why)")
                 if preserveMonitor { return }
                 self.phase = .failed(why)
                 self.applyLinkPresentation()
@@ -522,7 +563,7 @@ final class CameraSession {
             ingestAccessUnit(data)
         case .disconnected(let reason):
             guard connectedCamera != nil else { return }
-            ControlLiveLog.line("session: camera link dropped — \(reason)")
+            ControlLiveLog.line("session: camera link dropped: \(reason)")
             beginSessionRecovery(reason: reason, trigger: .datalinkLost)
         case .note(let note):
             controlNote = note

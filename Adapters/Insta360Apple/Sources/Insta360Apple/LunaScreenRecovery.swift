@@ -4,7 +4,7 @@ import Insta360Protocol
 import MonitorContracts
 import os
 
-// CKcp (ikcp) — same library as tools/luna_screen_live.py
+// CKcp (ikcp), the same library as tools/luna_screen_live.py
 private typealias LunaKCP = UnsafeMutableRawPointer
 private typealias LunaKCPOutput = @convention(c) (
     UnsafePointer<CChar>?, Int32, UnsafeMutableRawPointer?, UnsafeMutableRawPointer?

@@ -29,7 +29,7 @@ enum OsmoCameraPageAdapter {
                         : saved.id == latest ? "LAST USED" : nearby ? "PAIRED" : "OFFLINE",
                 status: connecting
                     ? progress
-                    : nearby ? "Nearby · ready to connect" : "Not found — power it on to reconnect",
+                    : nearby ? "Nearby · ready to connect" : "Not found. Power it on to reconnect",
                 actionTitle: nearby ? "Connect" : "Reconnect", isPrimary: saved.id == latest,
                 isBusy: connecting, isAvailable: nearby,
                 setups: saved.setups.map {
@@ -106,15 +106,18 @@ enum OsmoCameraPageAdapter {
             message =
                 "The camera could not find this iPhone’s hotspot. Turn on Personal Hotspot and Allow Others to Join, then try again."
         }
+        let settings: [CameraConnectFailure.Action] =
+            StartupConnectionCopy.opensSettings(reason)
+            ? [.init(id: "settings", title: StartupConnectionCopy.openSettings)] : []
         guard setup.movesCamera else {
             return .init(
                 title: "Couldn’t connect over Camera Wi-Fi", message: message,
-                actions: [.init(id: "retry", title: "Try again", primary: true)])
+                actions: settings + [.init(id: "retry", title: "Try again", primary: true)])
         }
         return .init(
             title: "Couldn’t connect over \(saved.ssid(for: setup) ?? setup.title)",
             message: message,
-            actions: [
+            actions: settings + [
                 .init(id: "edit", title: "Edit setup"),
                 .init(id: "retry", title: "Try again", primary: true),
             ],
@@ -145,8 +148,10 @@ enum OsmoCameraPageAdapter {
         let target = model.session.connectedCamera
         let picked = model.session.found.first { $0.id == selected }
         let failure: String?
+        var needsSettings = false
         if case .failed(let reason) = phase {
             failure = StartupConnectionCopy.friendly(reason)
+            needsSettings = StartupConnectionCopy.opensSettings(reason)
         } else {
             failure = nil
         }
@@ -161,7 +166,18 @@ enum OsmoCameraPageAdapter {
             "Exposure, LUTs and scopes go live as soon as the video link is up.",
         ]
         var instructions: [CameraPairingInstruction] = []
-        if step == 1 {
+        if scanning, failure == nil {
+            let stillLooking = model.session.found.isEmpty && model.session.scanLooksEmpty
+            instructions = [
+                stillLooking
+                    ? .init(
+                        title: StartupConnectionCopy.scanEmptyTitle, icon: .camera,
+                        lines: [StartupConnectionCopy.scanEmptyHint])
+                    : .init(
+                        title: StartupConnectionCopy.preCheckTitle, icon: .phone,
+                        lines: [StartupConnectionCopy.preCheck])
+            ]
+        } else if step == 1 {
             instructions = [
                 .init(
                     title: "On the camera", icon: .camera,
@@ -169,7 +185,7 @@ enum OsmoCameraPageAdapter {
                 .init(
                     title: "On iPhone", icon: .phone,
                     lines: [
-                        "Wait here — we keep the Bluetooth link alive", "Don't force-quit the app",
+                        "Wait here, we keep the Bluetooth link alive", "Don't force-quit the app",
                     ]),
             ]
         } else if step == 2 {
@@ -214,7 +230,7 @@ enum OsmoCameraPageAdapter {
             hint =
                 picked.map { "Selected \($0.name)" } ?? "Choose the camera that matches your screen"
         } else if step == 1 {
-            hint = "Nothing to type — approve it on the camera"
+            hint = "Nothing to type. Approve it on the camera"
         } else if step == 2 {
             hint = "iOS asks to join the camera network"
         } else {
@@ -232,7 +248,9 @@ enum OsmoCameraPageAdapter {
             instructions: instructions, checks: checks,
             emptyTitle: scanning && model.session.found.isEmpty
                 ? model.isScanning ? "Looking for cameras" : "No cameras yet" : nil,
-            primaryAction: failure != nil ? "Try again" : scanning ? "Continue" : nil,
+            primaryAction: failure != nil
+                ? needsSettings ? StartupConnectionCopy.openSettings : "Try again"
+                : scanning ? "Continue" : nil,
             primaryActionEnabled: failure != nil || (picked != nil && !model.isBusy),
             backAction: model.isBusy ? "Cancel" : !model.savedCameras.isEmpty ? "Back" : nil)
     }

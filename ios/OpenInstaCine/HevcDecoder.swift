@@ -54,6 +54,8 @@ final class HevcDecoder {
     }
     var nativeOutputExpected: Bool { shouldStartVT || referenceRecoveryNeeded }
     private(set) var referenceRecoveryNeeded = false
+    /// Last accepted IRAP. Tells the watchdog an enable was already answered.
+    private(set) var lastIrapAt: Date?
     var nativeDecodeTotals: (submitted: Int, accepted: Int, output: Int) { pipelineMetrics.totals }
     var canReleaseIDRHold: Bool { hasSubmittedRandomAccess && !nativeSessionFailed }
 
@@ -151,6 +153,9 @@ final class HevcDecoder {
     /// Pocket screen flip / vertical mode restarts the encoder. Request a new GOP
     /// only when this AU did not already carry the IDR.
     var onParameterSetsChanged: (() -> Void)?
+    /// The decoder is not observable; the session republishes the raster so the
+    /// layout re-fits when the camera flips between horizontal and vertical.
+    var onPictureSizeChanged: (() -> Void)?
     /// Set when SPS/PPS change mid-session; consumed after the rest of the AU is parsed.
     private var pendingParameterChangeEnable = false
     /// Last accepted format dimensions. `0` until the first parameter sets land.
@@ -484,6 +489,7 @@ final class HevcDecoder {
             if submitted && hasIDR {
                 hasSubmittedRandomAccess = true
                 referenceRecoveryNeeded = false
+                lastIrapAt = Date()
             }
             return submitted
         } else {
@@ -518,6 +524,7 @@ final class HevcDecoder {
         if hasIDR {
             hasSubmittedRandomAccess = true
             referenceRecoveryNeeded = false
+            lastIrapAt = Date()
         }
         if mirrorHold { return true }
         finishLayerHandoffIfNeeded()
@@ -594,6 +601,7 @@ final class HevcDecoder {
         nalTypesSeen.removeAll()
         pictureSize = .zero
         isVerticalPicture = false
+        onPictureSizeChanged?()
         decoderErrors = 0
         lastDecodeErrorAt = nil
         lastDecodeErrorUptime = nil
@@ -1143,6 +1151,13 @@ final class HevcDecoder {
             pictureSize = next
             isVerticalPicture = EncoderPresentPath.isVertical(
                 width: Int(next.width), height: Int(next.height))
+            if next != previousSize {
+                // Raster changes are rare (format / screen flip); the size decides layout.
+                ControlLiveLog.line(
+                    "decoder: picture \(Int(next.width))x\(Int(next.height)) vertical=\(isVerticalPicture ? 1 : 0)"
+                )
+                onPictureSizeChanged?()
+            }
         }
         let sizeChanged =
             previousSize.width > 1 && previousSize.height > 1 && previousSize != next

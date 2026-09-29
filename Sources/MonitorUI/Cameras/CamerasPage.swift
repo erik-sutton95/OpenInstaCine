@@ -100,6 +100,7 @@
                         }
                         .padding(.bottom, 2)
                     }
+                    .monitorScrollFade()
                     Button {
                         onPair(nil)
                     } label: {
@@ -163,32 +164,28 @@
                 VStack(alignment: .leading, spacing: 2) {
                     Text(brandName.uppercased()).font(MonitorTheme.font(8.5, weight: .bold))
                         .tracking(1.7).foregroundStyle(MonitorTheme.accent).lineLimit(1)
-                    Text("Your cameras").font(
-                        MonitorTheme.font(tablet ? 24 : 19, weight: .semibold)
-                    )
-                    .tracking(-0.2).lineLimit(1).minimumScaleFactor(0.75)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if scanning {
-                    HStack(spacing: 7) {
-                        Circle().fill(MonitorTheme.accent).frame(width: 6, height: 6)
-                            .monitorPulse(period: MonitorMotion.scanPulseDuration)
-                        if fullLabels {
-                            Text("SCANNING").font(MonitorTheme.font(9.5, weight: .bold)).tracking(
-                                1.1)
+                    HStack(spacing: 10) {
+                        Text("Your cameras").font(
+                            MonitorTheme.font(tablet ? 24 : 19, weight: .semibold)
+                        )
+                        .tracking(-0.2).lineLimit(1).minimumScaleFactor(0.75)
+                        // A status beside the title, not a button: no plate or frame.
+                        if scanning {
+                            HStack(spacing: 6) {
+                                Circle().fill(MonitorTheme.accent).frame(width: 6, height: 6)
+                                    .monitorPulse(period: MonitorMotion.scanPulseDuration)
+                                if fullLabels {
+                                    Text("SCANNING").font(MonitorTheme.font(9.5, weight: .bold))
+                                        .tracking(1.1).fixedSize()
+                                }
+                            }
+                            .foregroundStyle(MonitorTheme.accent)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Scanning for cameras")
                         }
                     }
-                    .foregroundStyle(MonitorTheme.accent).padding(.horizontal, fullLabels ? 12 : 10)
-                    .frame(height: tablet ? 48 : 43)
-                    .background(
-                        MonitorTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 12)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12).stroke(
-                            MonitorTheme.accent.opacity(0.24), lineWidth: 1)
-                    )
-                    .accessibilityLabel("Scanning for cameras")
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if let onMultiview {
                     Menu {
                         Button("Open Multiview", action: onMultiview).disabled(busy)
@@ -221,15 +218,19 @@
         private func headerIcon(
             _ icon: CameraPageIcon, title: String? = nil, tablet: Bool, accented: Bool = false
         ) -> some View {
-            HStack(spacing: 8) {
+            // Same footprint as Live View's settings/media buttons.
+            let side = MonitorSystemButtonMetrics.side(tablet: tablet)
+            let glyph = MonitorSystemButtonMetrics.iconSide(tablet: tablet)
+            return HStack(spacing: 8) {
                 CameraPageGlyph(icon: icon)
                     .foregroundStyle(accented ? MonitorTheme.accent : MonitorTheme.secondary)
-                    .frame(width: tablet ? 26 : 23, height: tablet ? 26 : 23)
+                    .frame(width: glyph, height: glyph)
                 if let title {
                     Text(title).font(MonitorTheme.font(12.5, weight: .semibold)).fixedSize()
                 }
             }
-            .padding(.horizontal, 11).frame(height: tablet ? 48 : 43)
+            .padding(.horizontal, title == nil ? 0 : 11)
+            .frame(minWidth: side).frame(height: side)
             .background(
                 accented ? MonitorTheme.accent.opacity(0.12) : MonitorTheme.secondary.opacity(0.1),
                 in: RoundedRectangle(cornerRadius: 12)
@@ -521,6 +522,7 @@
                     }
                 }
             }
+            .monitorScrollFade(.horizontal)
         }
 
         private func failureBanner(_ failure: CameraConnectFailure) -> some View {

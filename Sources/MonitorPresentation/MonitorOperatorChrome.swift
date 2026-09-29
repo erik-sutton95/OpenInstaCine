@@ -2,7 +2,7 @@ import Foundation
 
 /// Shared side length for live system controls and View Assist cells.
 public enum MonitorSystemButtonMetrics: Sendable {
-    public static func side(tablet: Bool) -> Double { tablet ? 48 : 54 }
+    public static func side(tablet: Bool) -> Double { 48 }
     public static func iconSide(tablet: Bool) -> Double { side(tablet: tablet) * 29 / 54 }
 }
 
@@ -32,12 +32,6 @@ public enum MonitorSettingsCardMetrics: Sendable {
         let titleBlock = titleTopPadding + max(titleMinHeight, titleLineHeight)
         return titleBlock + titleContentGap
     }
-
-    public static func titleClearance(titleLineHeight: Double = 17) -> Double {
-        max(
-            0,
-            contentOriginY(titleLineHeight: titleLineHeight) - (titleTopPadding + titleLineHeight))
-    }
 }
 
 /// Compact hold chrome hugs header + 86 pt drum. Category tabs are portrait-only.
@@ -48,9 +42,6 @@ public enum MonitorCapturePopupChrome: Sendable {
     public static let stackSpacing: Double = 8
     public static let dispTracking: Double = 0.48
     public static let dispSize: Double = 12
-    public static let cameraPhoneTitle: Double = 19
-    public static let cameraTabletTitle: Double = 24
-    public static let cameraCardCorner: Double = 13
 
     public static func compactBottomPadding(topPadding: Double) -> Double {
         max(

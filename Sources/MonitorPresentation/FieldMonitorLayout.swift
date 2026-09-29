@@ -33,7 +33,38 @@ public struct MonitorSafeArea: Equatable, Sendable {
 /// Device-independent geometry from the Field Monitor design. Viewport and
 /// real window insets are inputs; camera brands and marketed device names are
 /// deliberately absent. No drawing, observation, timers, or camera I/O.
+/// Operator choice for the on-feed gimbal joystick diameter.
+public enum MonitorJoystickSize: String, CaseIterable, Sendable {
+    case small, medium, large
+
+    public var side: Double {
+        switch self {
+        case .small: 88
+        case .medium: 101
+        case .large: 116
+        }
+    }
+
+    public var label: String {
+        switch self {
+        case .small: "Small"
+        case .medium: "Medium"
+        case .large: "Large"
+        }
+    }
+
+    public static func parse(_ raw: String?) -> Self { raw.flatMap(Self.init(rawValue:)) ?? .medium }
+    public static func fromLabel(_ label: String) -> Self {
+        allCases.first { $0.label == label } ?? .medium
+    }
+}
+
 public struct FieldMonitorLayout: Equatable, Sendable {
+    /// Space between the Settings and Media system buttons.
+    public static let settingsMediaGap = 12.0
+    /// Default on-feed gimbal joystick diameter.
+    public static let stickSide = MonitorJoystickSize.medium.side
+
     public let viewport: MonitorRect
     public let picture: MonitorRect
     public let status: MonitorRect
@@ -65,8 +96,9 @@ public struct FieldMonitorLayout: Equatable, Sendable {
     public init(
         width: Double, height: Double, safeArea: MonitorSafeArea = .init(),
         sourceAspect: Double = 16 / 9, fill: Bool = false, showsValues: Bool = true,
-        topControlInset: Double = 0
+        topControlInset: Double = 0, joystick: MonitorJoystickSize = .medium
     ) {
+        let stickSide = joystick.side
         let w = max(1, width.isFinite ? width : 1)
         let h = max(1, height.isFinite ? height : 1)
         let aspect = sourceAspect.isFinite && sourceAspect > 0 ? sourceAspect : 16 / 9
@@ -82,7 +114,8 @@ public struct FieldMonitorLayout: Equatable, Sendable {
         if portrait {
             let top = max(0, safeArea.top - 24)
             let systemH = tablet ? 116.0 : 100.0
-            let systemY = max(0, h - max(0, safeArea.bottom - 14) - systemH)
+            // Record still clears the home indicator; the whole portrait stack sits low.
+            let systemY = max(0, h - max(0, safeArea.bottom - 24) - systemH)
             system = .init(y: systemY, width: w, height: h - systemY)
             let valuesH = showsValues ? (tablet ? 43.0 : 74.0) : 0
             let valuesY = systemY - 8 - valuesH
@@ -93,13 +126,25 @@ public struct FieldMonitorLayout: Equatable, Sendable {
             // STBY / clock / REC SETUP sit just below the notch, independent of the feed.
             let statusH = tablet ? 52.0 : 44.0
             status = .init(
-                x: edge, y: max(0, safeArea.top - 8) + controlInset, width: w - 28, height: statusH)
+                x: edge, y: max(0, safeArea.top) + controlInset, width: w - 28, height: statusH)
             let ceiling = status.maxY
             let pillarbox = tablet && w / ratio > max(0, floor - ceiling)
             let pictureH = pillarbox ? max(1, floor - ceiling) : w / ratio
             let pictureW = pillarbox ? pictureH * ratio : w
-            let pictureY: Double
-            if pictureH > h || pictureH > floor - ceiling {
+            var pictureY: Double
+            var verticalRect: MonitorRect?
+            if aspect < 1, !pillarbox {
+                // A vertical camera is shown whole: fit it above the opaque system
+                // bar (the status row is a transparent overlay and may sit on it).
+                // Centring the full-width picture on the canvas hid ~5% under the bar.
+                let room = max(1, systemY - status.y)
+                let fittedH = min(w / aspect, room)
+                let fittedW = fittedH * aspect
+                // Rest it on the bar so the free space goes above, not below.
+                pictureY = max(status.y, systemY - fittedH)
+                verticalRect = .init(
+                    x: (w - fittedW) / 2, y: pictureY, width: fittedW, height: fittedH)
+            } else if pictureH > h || pictureH > floor - ceiling {
                 // When chrome cannot fit around the picture, keep the picture
                 // on the canvas midline instead of using an inverted interval.
                 pictureY = (h - pictureH) / 2
@@ -109,25 +154,31 @@ public struct FieldMonitorLayout: Equatable, Sendable {
                 let ideal = (h - pictureH) / 2
                 pictureY = max(ceiling, min(ideal, floor - pictureH))
             }
-            picture = .init(x: (w - pictureW) / 2, y: pictureY, width: pictureW, height: pictureH)
+            picture =
+                verticalRect
+                ?? .init(x: (w - pictureW) / 2, y: pictureY, width: pictureW, height: pictureH)
             let cy = systemY + systemH / 2
             lock = .init(x: edge, y: cy - button / 2, width: button, height: button)
             display = .init(x: edge + button + 8, y: lock.y, width: button, height: button)
             record = .init(x: (w - rec) / 2, y: cy - rec / 2, width: rec, height: rec)
-            media = .init(x: w - edge - button, y: lock.y, width: button, height: button)
-            settings = .init(x: media.x - button - 8, y: lock.y, width: button, height: button)
+            // Same order as landscape: Media sits next to Record, Settings outside it.
+            settings = .init(x: w - edge - button, y: lock.y, width: button, height: button)
+            media = .init(
+                x: settings.x - button - Self.settingsMediaGap, y: lock.y, width: button, height: button)
             let gaugeTop = (tablet ? 82.0 : max(4, top - 16)) + controlInset
+            // Phone: the two battery pills trail the Dynamic Island (the link pill
+            // sits left of it with storage). Tablet: all three stacked.
             gauges = .init(
-                x: tablet ? edge : w - edge - 104, y: gaugeTop,
-                width: tablet ? 49 : 104, height: tablet ? 58 : 28)
+                x: tablet ? edge : w - edge - 122, y: gaugeTop,
+                width: tablet ? 64 : 122, height: tablet ? 76 : 22)
             // Portrait tools belong to the lower control area. Picture crop,
             // aspect and FIT/FILL must not move their touch targets.
             assists = .init(
                 x: edge, y: floor - 16 - (button + 35),
                 width: button + 8, height: button + 35)
             stick = .init(
-                x: w - 104,
-                y: floor - 104, width: 88, height: 88)
+                x: w - 16 - stickSide,
+                y: floor - 16 - stickSide, width: stickSide, height: stickSide)
             zoom = .init(x: stick.x, y: stick.y - 44, width: 44, height: 36)
             gimbal = .init(x: stick.maxX - 36, y: zoom.y, width: 36, height: 36)
             headTrack = Self.headTrack(stick: stick, zoom: zoom)
@@ -161,14 +212,16 @@ public struct FieldMonitorLayout: Equatable, Sendable {
             let cornerTop =
                 (tablet ? 12.0 : (hasCutout ? 8.0 : 52.0)) + controlInset + cornerClearance
             settings = .init(
-                x: tablet ? w - 14 - button * 2 - 8 : record.midX - button / 2,
+                x: tablet ? w - 14 - button * 2 - Self.settingsMediaGap : record.midX - button / 2,
                 y: cornerTop, width: button, height: button)
             media = .init(
-                x: tablet ? settings.maxX + 8 : settings.x,
-                y: tablet ? cornerTop : settings.maxY + 8, width: button, height: button)
+                x: tablet ? settings.maxX + Self.settingsMediaGap : settings.x,
+                y: tablet ? cornerTop : settings.maxY + Self.settingsMediaGap, width: button,
+                height: button)
             lock = .init(
                 x: 18, y: cornerTop, width: button, height: button)
-            gauges = .init(x: 18, y: lock.maxY + 6, width: 49, height: 52)
+            gauges = .init(
+                x: 18, y: lock.maxY + 6, width: tablet ? 64 : 58, height: tablet ? 76 : 68)
             // Keep the full 44pt touch target inside the screen. A 35pt band
             // centred at 21.5pt put its accessibility bounds above the window,
             // causing automatic hit-point selection to miss the top buttons.
@@ -183,13 +236,15 @@ public struct FieldMonitorLayout: Equatable, Sendable {
                 x: side, y: valuesY + 4,
                 width: w - side * 2, height: valuesH)
             floor = valuesY - 8
-            let assistHeight = button * 2 + 11
+            let assistHeight =
+                button * 2 + MonitorAssistPaletteLayout.padding * 2
+                + MonitorAssistPaletteLayout.spacing
             assists = .init(
                 x: 18, y: h - bottomPad - assistHeight,
                 width: button + MonitorAssistPaletteLayout.horizontalInsets, height: assistHeight)
             stick = .init(
-                x: w - max(16 + rec + 12, safeArea.trailing + 6) - 88,
-                y: floor - 88, width: 88, height: 88)
+                x: w - max(16 + rec + 12, safeArea.trailing + 6) - stickSide,
+                y: floor - stickSide, width: stickSide, height: stickSide)
             zoom = .init(x: stick.x, y: stick.y - 44, width: 44, height: 36)
             gimbal = .init(x: stick.maxX - 36, y: zoom.y, width: 36, height: 36)
             headTrack = Self.headTrack(stick: stick, zoom: zoom)
@@ -203,6 +258,28 @@ public struct FieldMonitorLayout: Equatable, Sendable {
     /// Landscape camera values sit above the home indicator instead of overlapping it.
     public static func landscapeBottomClearance(safeBottom: Double) -> Double {
         safeBottom > 0 ? max(safeBottom, 14) + 10 : 8
+    }
+
+    /// AE unlock capsule, 1.5× the Recenter key wide. Landscape: beside Recenter,
+    /// toward the picture centre. Portrait: mirrored to the left, just right of
+    /// the View Assist column on Recenter's baseline, so it clears Fit/Fill (centred)
+    /// and the joystick cluster at any width or joystick size.
+    public static func aeUnlock(
+        focusReset reset: MonitorRect, leadingColumnMaxX: Double, pictureMidX: Double,
+        portrait: Bool
+    ) -> MonitorRect {
+        let width = reset.height * 1.5
+        let x =
+            portrait
+            ? leadingColumnMaxX + 8
+            : reset.midX < pictureMidX ? reset.maxX + 8 : reset.x - 8 - width
+        return MonitorRect(x: x, y: reset.y, width: width, height: reset.height)
+    }
+
+    public var aeUnlock: MonitorRect {
+        Self.aeUnlock(
+            focusReset: focusReset, leadingColumnMaxX: assists.maxX, pictureMidX: picture.midX,
+            portrait: portrait)
     }
 
     /// 44 pt compass above the zoom row, trailing-aligned with the stick.

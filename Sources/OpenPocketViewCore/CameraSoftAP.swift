@@ -11,13 +11,6 @@ public enum CameraSoftAP: Sendable {
     /// Camera listen port. The phone binds an **ephemeral** local port — local
     /// `:9004` kept `0x01` and dropped every pktType `0x02`.
     public static let remotePort: UInt16 = 9004
-    public static let ephemeralLocalPort: UInt16 = 0
-    public static func isEphemeralLocalPort(_ port: UInt16) -> Bool {
-        port == ephemeralLocalPort
-    }
-    public static func shouldBindLocalListenPort(_ port: UInt16) -> Bool {
-        port != remotePort
-    }
     public static let invalidVTSessionStatus: Int32 = -12903  // kVTInvalidSessionErr
 
     /// Phone address on the camera AP. `.1` is the camera; `.0` / `.255` are not hosts.
@@ -61,12 +54,6 @@ public enum CameraSoftAPSwitch {
 
     public static func shouldRetryJoin(secondsLeft: TimeInterval) -> Bool {
         secondsLeft > joinRetryPauseSeconds
-    }
-
-    /// Do not abort because the phone still has a camera DHCP address.
-    public static func shouldAbortBecausePathStillReady(_ pathReady: Bool) -> Bool {
-        _ = pathReady
-        return false
     }
 
     /// Unknown SSID after `apply` is treated as success (iOS often hides it).
@@ -117,10 +104,17 @@ extension CameraSoftAP {
         cameraAddresses(in: addrs).map(\.name)
     }
 
-    /// First path interface that owns `192.168.2.2…254`. `en0` is not enough.
-    public static func preferredInterfaceName(cameraNames: [String], available: [String]) -> String?
-    {
-        available.first { cameraNames.contains($0) }
+    /// `en0:192.168.1.20,bridge100:172.20.10.1` for the journal. Local addresses only
+    /// survive `PrivacyRedactor`; a public one becomes `<ip>`.
+    public static func describe(_ addrs: [InterfaceAddress]) -> String {
+        addrs.filter { $0.name != "lo0" }.map { "\($0.name):\($0.ipv4)" }
+            .joined(separator: ",")
+    }
+
+    /// iOS Personal Hotspot is hosting: a `bridge` interface, or the hotspot host
+    /// `172.20.10.1`. While it is on, iOS will not take a DHCP address from the camera AP.
+    public static func isPersonalHotspotHosting(_ addrs: [InterfaceAddress]) -> Bool {
+        addrs.contains { $0.name.hasPrefix("bridge") || $0.ipv4 == "172.20.10.1" }
     }
 
     /// UDP channel-flow health. `writeRejected` is iOS
@@ -542,10 +536,6 @@ extension CameraSoftAP {
         case keepSocket
         case rebindUDP
         case fail
-    }
-
-    public static func isHandshakeAck(_ datagram: [UInt8]) -> Bool {
-        DumlTransport.isHandshake(datagram)
     }
 
     /// After a bind's send loop misses. SoftAP still `192.168.2.x` → new UDP

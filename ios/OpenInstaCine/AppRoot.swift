@@ -10,7 +10,10 @@ import UIKit
 @MainActor
 @Observable
 final class AppModel {
-    var session = CameraSession()
+    var session: CameraSession
+    init(session: CameraSession? = nil) {
+        self.session = session ?? CameraSession()
+    }
     @ObservationIgnored let watchRelay = WatchRelay()
     @ObservationIgnored private var watchRelayActivated = false
     var multiviewExit: (() -> Void)?
@@ -18,7 +21,7 @@ final class AppModel {
     var livePictureViewFlip: Bool {
         GimbalStick.liveViewFlip(
             poseViewFlip: session.gimbalPoseViewFlip,
-            assistMirror: assist.isVisible(.mirror))
+            assistMirror: assist.mirrorsHorizontally)
     }
     var savedCameras: [SavedCamera] = SavedCameraStore.load()
     /// Operator tapped “Pair new camera” from the saved list.
@@ -157,6 +160,9 @@ final class AppModel {
         OperatorPrefs.virtualJoystickResponseCurve
     {
         didSet { OperatorPrefs.virtualJoystickResponseCurve = virtualJoystickResponseCurve }
+    }
+    var virtualJoystickSize: MonitorJoystickSize = OperatorPrefs.virtualJoystickSize {
+        didSet { OperatorPrefs.virtualJoystickSize = virtualJoystickSize }
     }
     var virtualJoystickMapping: GimbalStick.Mapping {
         GimbalStick.Mapping(
@@ -704,6 +710,7 @@ final class AppModel {
             self.watchRelay.ingestPreview(
                 image, source: source, unmanaged: unmanaged,
                 mirrored: self.session.decoder.presentedPictureFlip ?? false,
+                flippedVertically: self.assist.flipsVertically,
                 timecode: self.session.status.timecodeClock,
                 isRecording: self.session.status.isRecording)
         }
@@ -822,7 +829,8 @@ struct AppRoot: View {
         .environment(\.font, LiveType.text(16))
         .environment(
             \.monitorHDRChromeGain,
-            model.hdrDisplayActive ? CGFloat(LiveHDRDisplay.presentGain) : 1)
+            model.hdrDisplayActive ? CGFloat(LiveHDRDisplay.presentGain) : 1
+        )
         .background {
             HDRChromeHost(enabled: model.hdrDisplayActive).allowsHitTesting(false)
         }

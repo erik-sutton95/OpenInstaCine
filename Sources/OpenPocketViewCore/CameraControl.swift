@@ -235,8 +235,6 @@ public enum IsoLimit: UInt8, CaseIterable, Sendable {
     case max12800 = 0x08
     case max25600 = 0x09
 
-    /// Osmosis `range800` name — same SET byte `04`.
-    public static let range800 = IsoLimit.max800
     /// Osmosis `range1600` name — same SET byte `05`.
     public static let range1600 = IsoLimit.max1600
 
@@ -492,7 +490,9 @@ public enum IsoIndex: UInt8, CaseIterable, Sendable {
     public static func stepped(
         from current: IsoIndex, stops: Int, available: [IsoIndex]
     ) -> IsoIndex? {
-        let list = available.filter { $0 != .auto }
+        // Full stops by value. Luna's third-stop 160 (declared after 25600) is only a start point.
+        let list = available.filter { $0 != .auto && ($0 != .iso160 || current == .iso160) }
+            .sorted { ($0.isoValue ?? 0) < ($1.isoValue ?? 0) }
         guard current != .auto, let index = list.firstIndex(of: current) else { return nil }
         let next = index + stops
         guard list.indices.contains(next), next != index else { return nil }
@@ -809,11 +809,16 @@ public enum CamLensState {
 /// When the camera's AF point should replace the painted one.
 public enum CameraFocusPolicy {
     public static let changeThreshold = 0.012
+    /// Status pushes sent before the camera applied a tap still carry the old
+    /// point. Adopting one snaps the reticle back, then forward again.
+    public static let tapHold: TimeInterval = 1.5
 
     public static func shouldAdopt(
-        currentX: Double, currentY: Double, cameraX: Double, cameraY: Double
+        currentX: Double, currentY: Double, cameraX: Double, cameraY: Double,
+        secondsSinceTap: TimeInterval? = nil
     ) -> Bool {
-        abs(currentX - cameraX) >= changeThreshold
+        if let secondsSinceTap, secondsSinceTap >= 0, secondsSinceTap < tapHold { return false }
+        return abs(currentX - cameraX) >= changeThreshold
             || abs(currentY - cameraY) >= changeThreshold
     }
 }
@@ -979,6 +984,15 @@ public struct WhiteBalance: Equatable, Sendable {
         }
         let hundreds = Int(UInt16(value[5]) | (UInt16(value[6]) << 8))
         return WhiteBalance.custom(kelvin: hundreds * 100, tint: tint)
+    }
+
+    /// Auto's live measurement: `@5` alone as K/100. Action 6 T06 46094 reported
+    /// `23 04` while its UI read 3500K, so `@6` is not part of the Kelvin there.
+    /// nil outside the Custom range (2000...10000).
+    public static func autoKelvin(_ value: [UInt8]) -> Int? {
+        guard value.count >= 9, value[4] == WhiteBalanceMode.auto.rawValue else { return nil }
+        let kelvin = Int(value[5]) * 100
+        return (2_000...10_000).contains(kelvin) ? kelvin : nil
     }
 }
 
@@ -1616,6 +1630,62 @@ public enum GimbalControl {
     }
 }
 
+/// Head tracking and Motion Control drive the gimbal on Fast with tilt unlocked.
+/// Remember the operator's speed and mode from before the first prep and hand
+/// them back once nothing has driven the gimbal for `idleDelay`, so the stick
+/// does not stay on Fast for the rest of the session. The delay absorbs head
+/// tracking's brief stop/start cycles without flapping the speed.
+public struct GimbalPrepRestore: Equatable, Sendable {
+    public static let idleDelay: TimeInterval = 1
+
+    public struct Restore: Equatable, Sendable {
+        public var speed: GimbalSpeed?
+        public var mode: GimbalMode?
+        public var frames: [Duml.Frame]
+    }
+
+    /// Operator values to put back. The shell clears one when the operator
+    /// picks a new value mid-hold, so the restore cannot undo that choice.
+    public var speed: GimbalSpeed?
+    public var mode: GimbalMode?
+    private var idleSince: TimeInterval?
+
+    public init() {}
+
+    public var isHolding: Bool { speed != nil || mode != nil }
+
+    /// Fast + tilt unlocked. Values already held are kept: after the first
+    /// prep the session reads back Fast, which is not the operator's choice.
+    public mutating func prep(speed current: GimbalSpeed, mode currentMode: GimbalMode) -> [Duml.Frame] {
+        if speed == nil { speed = current }
+        if mode == nil { mode = currentMode }
+        idleSince = nil
+        return [Commands.setGimbalTiltLock(.unlocked), Commands.setGimbalSpeed(.fast)]
+    }
+
+    /// Call on each attitude report. `busy` is head tracking or a Motion Control run.
+    public mutating func restore(busy: Bool, now: TimeInterval) -> Restore? {
+        guard isHolding, !busy, now.isFinite else {
+            idleSince = nil
+            return nil
+        }
+        let since = idleSince ?? now
+        idleSince = since
+        return now - since >= Self.idleDelay ? restoreNow() : nil
+    }
+
+    /// Immediate restore, for a disconnect while the link can still send.
+    public mutating func restoreNow() -> Restore? {
+        guard isHolding else { return nil }
+        var frames: [Duml.Frame] = []
+        if let speed, speed != .fast { frames.append(Commands.setGimbalSpeed(speed)) }
+        if mode == .tiltLocked { frames.append(Commands.setGimbalTiltLock(.locked)) }
+        let restore = Restore(speed: speed, mode: mode, frames: frames)
+        self = GimbalPrepRestore()
+        return restore
+    }
+}
+
 /// `0x04/0x50` param `04`. `00` unlocked (Follow), `01` locked. FPV may leave a leftover `01`.
 public enum GimbalTiltLock: UInt8, CaseIterable, Sendable {
     case unlocked = 0x00
@@ -1724,6 +1794,15 @@ public struct GimbalStickMapping: Equatable, Sendable {
 
     /// Invert pan with TT180 so stick pan stays picture-relative.
     public var invertPan: Bool { commanded180 }
+
+    /// The app starts moving the gimbal. A pending seed resolves to the pose
+    /// seen so far: past this point any |yaw| > 90° is our own pan, not a
+    /// reconnect-at-180. With no attitude yet the seed stays open.
+    public mutating func noteAppMotion() {
+        guard !poseSeeded, pendingWant180.isEmpty, yawTenthDeg != nil else { return }
+        poseSeeded = true
+        poseSeedFrontCount = 0
+    }
 
     public mutating func noteRotate180() {
         noteRotate180(fromBody: false)
@@ -1876,12 +1955,14 @@ public enum GimbalStick {
     /// Second tap inside this window recenters; a third tap in the same
     /// window flips (Mimo `0x04/0x4C` `FE 09`) instead.
     public static let doubleTapWindow: TimeInterval = 0.35
-    /// Encoded luma above this (0…1) flips the stick to dark chrome.
-    public static let chromeGoDarkAbove: Double = 0.55
-    /// Encoded luma below this flips the stick back to light chrome.
-    public static let chromeGoLightBelow: Double = 0.42
+    /// Encoded luma above this (0…1) flips the stick to dark ink.
+    public static let chromeGoDarkAbove: Double = 0.45
+    /// Encoded luma below this flips the stick back to light ink.
+    public static let chromeGoLightBelow: Double = 0.33
 
-    /// Hysteresis so a mid-grey wall does not flicker the stick.
+    /// Hysteresis so a mid-grey wall does not flicker the stick. A compositor
+    /// difference blend cannot adapt instead: iOS shows live video on its own
+    /// display plane, so the blend never sees the picture (only screenshots do).
     public static func prefersDarkChrome(luma: Double?, previous: Bool) -> Bool {
         guard let luma else { return previous }
         if previous { return luma > chromeGoLightBelow }
@@ -1907,7 +1988,6 @@ public enum GimbalStick {
             width: width / feed.width,
             height: height / feed.height)
     }
-
     public static func isTap(normalizedMagnitude: Double) -> Bool {
         normalizedMagnitude < tapSlop
     }
@@ -1960,11 +2040,6 @@ public enum GimbalStick {
         guard radius > 0, mag > radius else { return (x, y) }
         let scale = radius / mag
         return (x * scale, y * scale)
-    }
-
-    public static func isDoubleTap(secondsSincePreviousTap: TimeInterval?) -> Bool {
-        guard let since = secondsSincePreviousTap else { return false }
-        return since >= 0 && since < doubleTapWindow
     }
 
     /// Counts stick taps so double-tap can wait for a possible triple.
@@ -2167,7 +2242,7 @@ public enum GimbalStick {
     }
 
     /// `0x04/0x05` i16-LE @4 in 0.1°. |angle| > 90° is the selfie-facing pose.
-    /// Short payloads fail closed (`nil`).
+    /// Any length but the known 50-byte layout fails closed (`nil`).
     public static let rotated180TenthDeg = 900
     /// Invert latch like Mimo: end of the 180, not the midpoint.
     public static let settle180TenthDeg = 1650
@@ -2180,15 +2255,28 @@ public enum GimbalStick {
         return Int16(bitPattern: UInt16(payload[offset]) | UInt16(payload[offset + 1]) << 8)
     }
 
+    /// The only `0x04/0x05` layout with known offsets. Another length is a
+    /// different frame; reading it as attitude corrupts pan/tilt and Motion Control.
+    public static let attitudeLength = 50
+
+    public static func isAttitude(_ payload: [UInt8]) -> Bool {
+        payload.count == attitudeLength
+    }
+
     public static func yawTenthDeg(_ payload: [UInt8]) -> Int16? {
-        i16LE(payload, at: 4)
+        isAttitude(payload) ? i16LE(payload, at: 4) : nil
+    }
+
+    /// Native absolute pitch i16-LE `@0` (the `0x04/0x14` pitch reference).
+    public static func nativePitchTenthDeg(_ payload: [UInt8]) -> Int16? {
+        isAttitude(payload) ? i16LE(payload, at: 0) : nil
     }
 
     /// Tilt 0.1° from i16-LE `@20`, negated so look-up is positive.
     /// Mimo tilt take 2026-09-01: stick axis0 down → `@20` +43.5°; stick up
     /// → `@20` −115°. `@2` stays 0; `@6` stays ~13°.
     public static func pitchTenthDeg(_ payload: [UInt8]) -> Int16? {
-        guard let raw = i16LE(payload, at: 20) else { return nil }
+        guard isAttitude(payload), let raw = i16LE(payload, at: 20) else { return nil }
         return 0 &- raw
     }
 
@@ -2250,10 +2338,32 @@ public enum GimbalStick {
         }
         let pan = (invertPan != mapping.invertPan) ? -x : x
         let tilt = mapping.invertTilt ? -y : y
-        return (
-            axis(tilt, sensitivity: sensitivity, mapping: mapping),
-            axis(pan, sensitivity: sensitivity, mapping: mapping)
-        )
+        let (curvedTilt, curvedPan) = radialThrow(
+            tilt, pan, sensitivity: sensitivity, mapping: mapping)
+        return (wireAxis(curvedTilt), wireAxis(curvedPan))
+    }
+
+    /// Deadzone, curve and sensitivity act on the throw's length, then split back along
+    /// its direction, so a diagonal moves as fast as a straight push. Per-axis curves
+    /// squared each 0.71 component to 0.5: a full 45° throw ran at 0.71x speed.
+    public static func radialThrow(
+        _ a: Double, _ b: Double, sensitivity: Int = defaultSensitivity,
+        mapping: Mapping = .defaults
+    ) -> (Double, Double) {
+        let a = a.isFinite ? a : 0
+        let b = b.isFinite ? b : 0
+        let length = hypot(a, b)
+        guard length > 0 else { return (0, 0) }
+        let throwLength = Swift.min(length, 1)
+        let curved = analogCurve(throwLength, deadzone: mapping.deadzone, expo: mapping.curve.expo)
+        let scaled = Swift.min(curved * sensitivityGain(sensitivity), 1)
+        return (a / length * scaled, b / length * scaled)
+    }
+
+    private static func wireAxis(_ value: Double) -> UInt16 {
+        if value == 0 { return center }
+        let raw = Double(center) + Swift.min(Swift.max(value, -1), 1) * Double(travel)
+        return UInt16(Swift.min(Swift.max(raw.rounded(), Double(min)), Double(max)))
     }
 
     public static func encode(
@@ -2555,12 +2665,6 @@ public enum CamFov {
         return stops.contains { abs(shown - $0) < 0.05 }
     }
 
-    /// Older chip takes used slews. The 1×–3×–12× pinch take did not.
-    public static func slew(forJump factor: Double) -> UInt16? {
-        _ = factor
-        return nil
-    }
-
     /// Cycle-button write. 1× / 2× / 3× / 4× / 6× / 12× sliders.
     public enum ChipWrite: Equatable, Sendable {
         case slew(UInt16)
@@ -2577,28 +2681,8 @@ public enum CamFov {
         return nil
     }
 
-    /// Mimo pinch is always a slider. `slewing` is ignored (kept so call sites compile).
-    public enum PinchCommand: Equatable, Sendable {
-        case slider(UInt16)
-        case slew(UInt16)
-        case hold
-    }
-
-    public static func pinchCommand(
-        live: Double, preview: Double, slewing: UInt16?
-    ) -> PinchCommand {
-        _ = live
-        _ = slewing
-        return .slider(pinchLens(for: preview))
-    }
-
     /// Telephoto engages at 3.0×. 1.0…2.9 stays on the wide sensor.
     public static let teleEngage = 3.0
-
-    /// Clamp only. The camera switches at 3.0× — do not invent a 2.9→3.0 hop.
-    public static func snapHybrid(_ factor: Double) -> Double {
-        clamp(factor)
-    }
 
     /// Mimo-style 0.1× steps (1.0, 1.1, … 3.0, 3.1, … 12.0).
     public static func displayTenths(_ factor: Double) -> Double {
@@ -2631,11 +2715,6 @@ public enum CamFov {
         guard dt > 0 else { return clamp(current, max: max) }
         let t = GimbalStick.linearThrow(y)
         return clamp(current + t * zoomRatePerSecond * dt, max: max)
-    }
-
-    /// Pinch HUD between status pushes. 0.1× quantized; 2.9× stays 2.9×.
-    public static func pinchPreview(anchor: Double, magnification: Double) -> Double {
-        displayTenths(pinchFactor(anchor: anchor, magnification: magnification))
     }
 
     /// Slider lens for a pinch target. Not snapped to 0.1× — Mimo steps lens by 1.
@@ -2674,11 +2753,6 @@ public enum CamFov {
     /// exact equality would never release the pin.
     public static func matches(_ live: Double, _ target: Double) -> Bool {
         abs(displayTenths(live) - displayTenths(target)) < 0.15
-    }
-
-    /// 3.0× and above use the telephoto sensor.
-    public static func usesTelephoto(_ factor: Double) -> Bool {
-        displayTenths(factor) >= teleEngage
     }
 
     /// D-Log2 rejects every zoom SET. Hop to D-Log on the first step off 1× —

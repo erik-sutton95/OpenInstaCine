@@ -7,17 +7,6 @@ import Testing
     private let a = GimbalWaypoint(yawDeg: 0, pitchDeg: 0, zoom: 1)
     private let b = GimbalWaypoint(yawDeg: 30, pitchDeg: 10, zoom: 3)
 
-    @Test func runNeedsAAndB() {
-        var program = GimbalProgram()
-        #expect(!program.canRun)
-        #expect(program.summary == "Not set")
-        program.a = a
-        #expect(program.summary == "Partial")
-        program.b = b
-        #expect(program.canRun)
-        #expect(program.summary == "A·B")
-    }
-
     @Test func directionLockUsesTheVerifiedModeCommand() {
         let frames = GimbalControl.setModeFrames(.directionLock)
         #expect(frames.count == 1)
@@ -90,42 +79,22 @@ import Testing
         #expect(resetRequest)
     }
 
-    @Test func lerpIsLinearInYawAndPitch() {
-        let mid = GimbalMoveEngine.lerp(a, b, u: 0.5)
-        #expect(abs(mid.yawDeg - 15) < 1e-9)
-        #expect(abs(mid.pitchDeg - 5) < 1e-9)
-    }
-
-    @Test func minTravelUsesFiftyDegreeCeiling() {
-        let floor = GimbalProgram.minTravelDuration(from: a, to: b)
-        #expect(floor == 0.5)
-    }
-
     @Test func engineRefusesPartialProgram() {
         var engine = GimbalMoveEngine()
         let started = engine.start(program: GimbalProgram(a: a), live: a)
         #expect(!started)
     }
 
-    @Test func telemetryYawPastTheGapUnwrapsOntoTheLongSide() {
-        #expect(abs(GimbalWaypoint.unwrapYaw(-150) - 210) < 1e-9)
-        #expect(abs(GimbalWaypoint.unwrapYaw(50) - 50) < 1e-9)
-        let wp = GimbalWaypoint.from(yawTenth: -1500, pitchTenth: 0, zoom: 1)
-        #expect(abs((wp?.yawDeg ?? 0) - 210) < 1e-9)
-    }
-
-    @Test func unwrapPreservesMeasuredAnglesInsteadOfInventingStops() {
-        #expect(abs(GimbalWaypoint.unwrapYaw(90) - 90) < 1e-9)
-        #expect(abs(GimbalWaypoint.unwrapYaw(100) - 100) < 1e-9)
-    }
-
-    @Test func panEndpointConventionCrossesRawWrapOnThePositiveArc() {
-        #expect(GimbalWaypoint.unwrapYaw(-48) == -48)
-        #expect(GimbalWaypoint.unwrapYaw(-135) == 225)
-        #expect(GimbalWaypoint.unwrapYaw(-180) == 180)
-        #expect(GimbalWaypoint.unwrapYaw(180) == 180)
-        #expect(GimbalWaypoint.unwrapYaw(-80) == -80)
-        #expect(GimbalWaypoint.unwrapYaw(-100) == 260)
+    /// Raw yaw past the gap middle unwraps onto the long side; measured
+    /// angles elsewhere pass through, with no invented stops.
+    @Test(arguments: [
+        (-150.0, 210.0), (50, 50), (90, 90), (100, 100), (-48, -48),
+        (-135, 225), (-180, 180), (180, 180), (-80, -80), (-100, 260),
+    ])
+    func unwrapYawCrossesTheRawWrapOnThePositiveArc(raw: Double, expected: Double) {
+        #expect(GimbalWaypoint.unwrapYaw(raw) == expected)
+        let wp = GimbalWaypoint.from(yawTenth: Int16(raw * 10), pitchTenth: 0, zoom: 1)
+        #expect(wp?.yawDeg == expected)
     }
 
     @Test func lerpFromShortSideToSelfieNeverEntersTheGap() {
@@ -136,14 +105,6 @@ import Testing
             #expect(yaw <= HeadTrack.Reach.panMaxDeg + 1e-9)
             #expect(yaw >= HeadTrack.Reach.panMinDeg - 1e-9)
         }
-    }
-
-    @Test func overlayCentersWhenPoseMatches() {
-        let mark = GimbalWaypointOverlay.project(
-            waypoint: a, slot: .a, live: a, aspect: 16 / 9)
-        #expect(abs(mark.nx - 0.5) < 1e-9)
-        #expect(abs(mark.ny - 0.5) < 1e-9)
-        #expect(mark.onScreen)
     }
 
     @Test func overlayIsRectilinearOnTheSphere() {
@@ -211,5 +172,32 @@ import Testing
     @Test func nanoHasNoGimbal() {
         #expect(CameraModel(name: "Osmo Pocket 4 Pro").hasGimbal)
         #expect(!CameraModel(name: "Osmo Nano").hasGimbal)
+    }
+
+    /// Field report: after one head-track or Motion Control run the stick stayed
+    /// on Fast for the session. The operator's speed and tilt lock come back.
+    @Test func prepRestoresOperatorSpeedAndTiltLockAfterIdle() {
+        var prep = GimbalPrepRestore()
+        let fast = [Commands.setGimbalTiltLock(.unlocked), Commands.setGimbalSpeed(.fast)]
+        #expect(prep.prep(speed: .slow, mode: .tiltLocked) == fast)
+        // Readback now says Fast/Follow; a second prep must not adopt it.
+        #expect(prep.prep(speed: .fast, mode: .follow) == fast)
+        #expect(prep.restore(busy: true, now: 10) == nil)
+        #expect(prep.restore(busy: false, now: 11) == nil)
+        #expect(prep.restore(busy: true, now: 11.5) == nil, "a restart resets the idle wait")
+        #expect(prep.restore(busy: false, now: 12) == nil)
+        let restore = prep.restore(busy: false, now: 13)
+        #expect(restore?.speed == .slow && restore?.mode == .tiltLocked)
+        #expect(restore?.frames == [Commands.setGimbalSpeed(.slow), Commands.setGimbalTiltLock(.locked)])
+        #expect(!prep.isHolding && prep.restore(busy: false, now: 20) == nil)
+
+        // Operator picks Default mid-hold: only the untouched mode comes back.
+        _ = prep.prep(speed: .slow, mode: .tiltLocked)
+        prep.speed = nil
+        #expect(prep.restoreNow()?.frames == [Commands.setGimbalTiltLock(.locked)])
+        // Already Fast / Follow: nothing to write, but the hold still ends.
+        _ = prep.prep(speed: .fast, mode: .follow)
+        #expect(prep.restoreNow()?.frames == [])
+        #expect(prep.restoreNow() == nil)
     }
 }

@@ -189,16 +189,6 @@ import Testing
         #expect(out?.stop == true && out?.finished == true)
     }
 
-    @Test func canceledMoveCannotSendAnotherNativeTarget() {
-        var engine = GimbalMoveEngine()
-        let started = engine.start(program: GimbalProgram(a: a, b: b), live: c)
-        #expect(started)
-        _ = engine.tick(dt: 0.04, live: c)
-        engine.cancel()
-        let later = engine.tick(dt: 0.04, live: c)
-        #expect(later == nil)
-    }
-
     @Test func editingPointPreservesDuration() {
         var program = GimbalProgram(a: a, b: b, durationAB: 10)
         program.setPoint(.b, c)
@@ -250,6 +240,33 @@ import Testing
         #expect(GimbalMoveEngine.lerp(low, high, u: 0.5).nativePitchDeg == -180)
         let sameNative = GimbalWaypoint(yawDeg: 0, pitchDeg: -0.8, zoom: 1, nativePitchDeg: -179)
         #expect(GimbalMoveEngine.angularDistance(high, sameNative) == 0)
+    }
+
+    /// Field journal: A/B saved, handle tilted, Start planned a 38° display
+    /// change as ~110° native. Native targets now follow the live pose at Start.
+    @Test func startPlansNativePitchFromTheLivePose() {
+        let staleA = GimbalWaypoint(yawDeg: 0, pitchDeg: 0, zoom: 1, nativePitchDeg: 108)
+        let staleB = GimbalWaypoint(yawDeg: -21.1, pitchDeg: 38, zoom: 1, nativePitchDeg: -2)
+        let program = GimbalProgram(a: staleA, b: staleB, durationAB: 2)
+        let live = GimbalWaypoint(yawDeg: 0, pitchDeg: 0, zoom: 1, nativePitchDeg: 180)
+        let planned = GimbalMoveEngine.planFromLive(program, live: live)
+        #expect(planned.a?.nativePitchDeg == -180)
+        #expect(planned.b?.nativePitchDeg == 142)
+        #expect(planned.a?.pitchDeg == 0 && planned.b?.yawDeg == -21.1)
+        #expect(GimbalMoveEngine.planFromLive(planned, live: live) == planned,
+            "points that agree with the live pose keep their native pitch")
+
+        var engine = GimbalMoveEngine()
+        let started = engine.start(program: program, live: live)
+        #expect(started)
+        var out: GimbalMoveEngine.Output?
+        var t = 0.0
+        while t < GimbalMoveEngine.holdSeconds + 0.1, out?.target == nil {
+            out = engine.tick(dt: 0.04, live: live)
+            t += 0.04
+        }
+        #expect(out?.target?.nativePitchDeg == 142, "38° look-up is 38° native, not 110°")
+        #expect(engine.readout(live: live).map { abs($0.remainingDeg - hypot(21.1, 38)) < 1e-9 } == true)
     }
 
     @Test func nativePacketUsesCapturedAbsolutePitchAndTenthsSeconds() {

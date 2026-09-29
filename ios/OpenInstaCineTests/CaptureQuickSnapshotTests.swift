@@ -21,8 +21,15 @@ final class CaptureQuickSnapshotTests: XCTestCase {
             RecordConfirmationContext(
                 mode: 1, recording: false, locked: false, busy: false, phase: .idle),
         ]
+        // Mirrors the LiveRecordButton confirm guard: `pending == current && current.canConfirm`.
+        let confirms = { (current: RecordConfirmationContext) in
+            request == current && current.canConfirm
+        }
+        XCTAssertTrue(confirms(request))
         for changed in changedStates {
-            XCTAssertFalse(request == changed && changed.canConfirm)
+            XCTAssertNotEqual(
+                changed, request, "every captured field must bind the confirmation: \(changed)")
+            XCTAssertFalse(confirms(changed), "stale confirmation must not fire after \(changed)")
         }
         for photo in [0x05, 0x17] {
             XCTAssertFalse(
@@ -30,6 +37,28 @@ final class CaptureQuickSnapshotTests: XCTestCase {
                     mode: photo, recording: false, locked: false, busy: false, phase: .live
                 ).canConfirm)
         }
+    }
+
+    func testAWBLockIsAWBModeStopLeftOfAutoAndStaysSelectedWhileLocked() throws {
+        var status = CameraStatus()
+        status.whiteBalance = .auto(tint: 0)
+        let offered = try XCTUnwrap(
+            CaptureQuickSnapshot.primary(.wb, status: status, offersAwbLock: true))
+        XCTAssertEqual(offered.options, ["AWB Lock", "Auto", "Custom"])
+        XCTAssertEqual(offered.selection, "Auto")
+        XCTAssertEqual(
+            CaptureQuickSnapshot.primary(.wb, status: status)?.options, ["Auto", "Custom"])
+        // Locked: the camera is Custom, but the stop and the tile stay AWB Lock.
+        status.whiteBalance = .custom(kelvin: 4_900, tint: 0)
+        status.whiteBalanceKelvin = 4_900
+        let locked = try XCTUnwrap(
+            CaptureQuickSnapshot.primary(.wb, status: status, awbLocked: true))
+        XCTAssertEqual(locked.kind, .whiteBalanceMode)
+        XCTAssertEqual(locked.options, ["AWB Lock", "Auto", "Custom"])
+        XCTAssertEqual(locked.selection, "AWB Lock")
+        XCTAssertEqual(CaptureLists.awbLockTile, "AWB-L")
+        // Unlocked Custom returns to the Kelvin drum.
+        XCTAssertEqual(CaptureQuickSnapshot.primary(.wb, status: status)?.kind, .kelvin)
     }
 
     func testSourceIdentityIgnoresLiveHUDSelection() throws {

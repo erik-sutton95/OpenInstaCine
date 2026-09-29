@@ -59,7 +59,8 @@ struct LiveTrackingCancelButton: View {
     }
 }
 
-/// OpenZCine `dot.viewfinder` recenter — AF to centre and end tracking.
+/// Resets AF to centre and ends tracking. Uses the Settings reset glyph so it
+/// is not mistaken for the gimbal recenter crosshair.
 struct LiveFocusResetButton: View {
     @Environment(AppModel.self) private var model
 
@@ -67,7 +68,7 @@ struct LiveFocusResetButton: View {
         Button {
             model.session.resetFocusPoint()
         } label: {
-            OpcIcon.crosshair
+            OpcIcon.rotateCw
                 .frame(width: 17, height: 17)
                 .foregroundStyle(LiveDesign.text)
                 .frame(
@@ -81,6 +82,31 @@ struct LiveFocusResetButton: View {
         .accessibilityLabel("Recenter focus")
         .accessibilityHint("Moves the focus box back to the center and ends subject tracking")
         .accessibilityIdentifier("monitor.system.focusReset")
+    }
+}
+
+/// Beside the recenter key while AE is locked: releases the lock back to Auto.
+struct LiveAutoExposureUnlockButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let size = LiveChromeMetrics.focusResetSize
+        Button {
+            model.session.unlockAutoExposure()
+        } label: {
+            HStack(spacing: 2) {
+                OpcIcon.sun.frame(width: 15, height: 15)
+                OpcIcon.lockOpen.frame(width: 13, height: 13)
+            }
+            .foregroundStyle(LiveDesign.aeLock)
+            .frame(width: size * 1.5, height: size)
+            .background(.black.opacity(0.55), in: Capsule())
+            .overlay(Capsule().strokeBorder(LiveDesign.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.zcTapTarget)
+        .accessibilityLabel("Unlock exposure")
+        .accessibilityHint("Returns exposure to Auto")
+        .accessibilityIdentifier("monitor.system.aeUnlock")
     }
 }
 

@@ -1,4 +1,5 @@
 import AVFoundation
+import MonitorUI
 import OpenPocketViewCore
 import SwiftUI
 
@@ -11,8 +12,8 @@ struct WatcherLiveView: View {
     private var client: WatcherRelayClient { model.relayClient }
     private var mirrored: Bool {
         GimbalStick.liveViewFlip(
-            poseViewFlip: client.decoder.poseViewFlip, assistMirror: model.assist.isVisible(.mirror)
-        )
+            poseViewFlip: client.decoder.poseViewFlip,
+            assistMirror: model.assist.mirrorsHorizontally)
     }
 
     var body: some View {
@@ -39,7 +40,8 @@ struct WatcherLiveView: View {
                         guard client.canControl,
                             let point = WatcherFocusPoint.map(
                                 x: value.location.x, y: value.location.y,
-                                width: feed.width, height: feed.height, mirrored: mirrored)
+                                width: feed.width, height: feed.height, mirrored: mirrored,
+                                flippedVertically: model.assist.flipsVertically)
                         else { return }
                         focusPoint = CGPoint(x: Double(point.x) / 1000, y: Double(point.y) / 1000)
                         client.sendCommand(
@@ -185,6 +187,7 @@ struct WatcherLiveView: View {
                     client.state.batteryPercent >= 0 ? "\(client.state.batteryPercent)%" : "—")
             }.padding(.horizontal, 12).padding(.vertical, 7)
         }
+        .monitorScrollFade(.horizontal)
         .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 10))
     }
 
@@ -255,6 +258,7 @@ struct WatcherLiveView: View {
                 }
             }.padding(.horizontal, 12).padding(.vertical, 8)
         }
+        .monitorScrollFade(.horizontal)
         .font(LiveType.ui(size: 12, weight: .semibold))
         .foregroundStyle(LiveDesign.text)
         .background(.black.opacity(0.72), in: Capsule())

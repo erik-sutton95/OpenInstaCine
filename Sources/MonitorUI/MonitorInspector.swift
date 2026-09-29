@@ -31,6 +31,9 @@
         private let preferredWidth: MonitorInspectorWidth
         private let onClose: () -> Void
         private let helpVisible: Binding<Bool>?
+        private let scrollsContent: Bool
+        private let closeIdentifier: String
+        private let compactHeader: Bool
         private let navigation: Navigation
         private let content: Content
         private let footer: Footer
@@ -42,6 +45,7 @@
             trailing: Bool = false, hasNavigation: Bool = true,
             preferredWidth: MonitorInspectorWidth? = nil,
             helpVisible: Binding<Bool>? = nil,
+            scrollsContent: Bool = true, closeIdentifier: String = "", compactHeader: Bool = false,
             onClose: @escaping () -> Void,
             @ViewBuilder navigation: () -> Navigation,
             @ViewBuilder content: () -> Content, @ViewBuilder footer: () -> Footer
@@ -54,6 +58,9 @@
             self.preferredWidth = preferredWidth ?? (trailing ? .trailing : .assist)
             self.onClose = onClose
             self.helpVisible = helpVisible
+            self.scrollsContent = scrollsContent
+            self.closeIdentifier = closeIdentifier
+            self.compactHeader = compactHeader
             self.navigation = navigation()
             self.content = content()
             self.footer = footer()
@@ -81,7 +88,7 @@
                     .accessibilityLabel("Dismiss \(title)")
                     .accessibilityAddTraits(.isButton)
                 VStack(spacing: 0) {
-                    header
+                    header.zIndex(1)
                     if portrait && hasNavigation {
                         navigation.frame(height: 44).padding(.bottom, 8)
                     }
@@ -91,11 +98,22 @@
                             Rectangle().fill(MonitorTheme.border).frame(width: 1)
                         }
                         VStack(spacing: 0) {
-                            ScrollView {
+                            if scrollsContent {
+                                ScrollView {
+                                    content
+                                        .frame(width: max(1, contentWidth - 28), alignment: .leading)
+                                        .padding(14)
+                                }
+                                .scrollBounceBehavior(.basedOnSize)
+                                .monitorScrollFade()
+                            } else {
+                                // The host owns scrolling, e.g. fixed tab rails beside scrolled
+                                // controls; its top tabs sit directly under the header.
                                 content
-                                    .frame(width: max(1, contentWidth - 28), alignment: .leading)
-                                    .padding(14)
-                            }.scrollBounceBehavior(.basedOnSize)
+                                    .frame(width: max(1, contentWidth - 28), alignment: .topLeading)
+                                    .frame(maxHeight: .infinity, alignment: .top)
+                                    .padding([.horizontal, .bottom], 14)
+                            }
                             footer.padding(.horizontal, 14).padding(.bottom, 10)
                         }
                         .frame(width: contentWidth)
@@ -151,16 +169,22 @@
                                 helpVisible.wrappedValue ? MonitorTheme.accent : MonitorTheme.muted
                             )
                             .frame(width: 44, height: 44).contentShape(Rectangle())
-                    }.buttonStyle(MonitorButtonStyle()).accessibilityLabel("Show option help")
+                    }.buttonStyle(MonitorButtonStyle()).padding(.vertical, compactHeader ? -11 : 0)
+                    .accessibilityLabel("Show option help")
                         .accessibilityValue(helpVisible.wrappedValue ? "On" : "Off")
                 }
                 Button(action: onClose) {
                     MonitorIcon.x.frame(width: 14, height: 14)
                         .frame(width: 44, height: 44).contentShape(Rectangle())
                 }.buttonStyle(MonitorButtonStyle()).foregroundStyle(MonitorTheme.secondary)
+                    .padding(.vertical, compactHeader ? -11 : 0)
                     .accessibilityLabel("Close \(title)")
+                    .accessibilityIdentifier(closeIdentifier)
             }
-            .padding(.leading, 14).padding(.trailing, 2)
+            // A compact header is one title line: the 44 pt close target overflows it,
+            // sits 8 pt further in from the corner, and top tabs start under the title.
+            .padding(.leading, 14).padding(.trailing, compactHeader ? 10 : 2)
+            .padding(.top, compactHeader ? 16 : 0).padding(.bottom, compactHeader ? -10 : 0)
         }
     }
 

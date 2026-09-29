@@ -23,9 +23,9 @@ struct MonitorAssistPaletteLayoutTests {
         let frame = layout.anchored(leading: 14, bottom: bottom)
         #expect(frame.maxY == bottom)
         #expect(frame.y >= 62)
-        #expect(frame.width == 62)
+        #expect(frame.width == 56)
         #expect(layout.cellWidth == layout.cellHeight)
-        #expect(layout.cellWidth == 54)
+        #expect(layout.cellWidth == MonitorSystemButtonMetrics.side(tablet: false))
         #expect(layout.scrollHeight + 35 == frame.height)
         // PEAK is the second row; its centre is hundreds of points above the
         // collapsed rail but must still be inside the expanded native view.
@@ -36,16 +36,39 @@ struct MonitorAssistPaletteLayoutTests {
             "Excess tools belong to the scroller")
     }
 
+    /// Only the portrait catalog overflows on a phone, so only there can an
+    /// offset scrolled while open strand the favorite when the plate collapses.
+    /// The collapsed viewport is exactly one cell under the 24 pt chevron.
+    @Test func portraitCatalogScrollsPastTheOneCellCollapsedViewport() {
+        let full = MonitorAssistPaletteLayout(
+            portrait: true, tablet: false, expanded: true, toolCount: 15,
+            maximumWidth: 276, maximumHeight: 874 * 0.62)
+        let compact = full.resolving(expanded: false)
+        let catalog =
+            15 * full.cellHeight + 14 * MonitorAssistPaletteLayout.spacing
+        #expect(catalog > full.scrollHeight)
+        #expect(compact.scrollHeight == compact.cellHeight)
+        #expect(
+            compact.height - 2 * MonitorAssistPaletteLayout.padding - 24 - 3 == compact.cellHeight)
+        let landscape = MonitorAssistPaletteLayout(
+            portrait: false, tablet: false, expanded: true, toolCount: 15,
+            maximumWidth: 700, maximumHeight: 300)
+        let columns = Double(landscape.columns)
+        #expect(
+            columns * landscape.cellWidth + (columns - 1) * MonitorAssistPaletteLayout.spacing
+                <= landscape.scrollWidth)
+    }
+
     @Test func landscapeExpansionKeepsTwoRowsAndScrollsNarrowScreens() {
         let layout = MonitorAssistPaletteLayout(
             portrait: false, tablet: false, expanded: true, toolCount: 15,
             maximumWidth: 530, maximumHeight: 300)
-        #expect(layout.height == 119)
-        #expect(layout.cellWidth == 54)
+        #expect(layout.height == 107)
+        #expect(layout.cellWidth == MonitorSystemButtonMetrics.side(tablet: false))
         #expect(layout.cellWidth == layout.cellHeight)
         #expect(layout.columns == 8)
-        #expect(layout.scrollHeight == 111)
-        #expect(layout.scrollWidth + 38 == layout.width)
+        #expect(layout.scrollHeight == 99)
+        #expect(layout.scrollWidth + MonitorAssistPaletteLayout.horizontalInsets == layout.width)
         #expect(layout.width <= 530)
         #expect(layout.iconSide == MonitorSystemButtonMetrics.iconSide(tablet: false))
         let needed = Double(layout.columns) * (layout.cellWidth + 3) - 3

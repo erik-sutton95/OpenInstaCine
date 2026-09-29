@@ -125,6 +125,43 @@ final class MonitorUIFlowTests: XCTestCase {
         }
     }
 
+    func testSettingsTabsShareEdgesAndKeepSelection() {
+        let physicalReview = ProcessInfo.processInfo.environment["OPV_PHYSICAL_UI_REVIEW"] == "1"
+        if physicalReview { app.launchEnvironment["OPV_PHYSICAL_UI_REVIEW"] = "1" }
+        app.launch()
+        let liveSettings = app.buttons["monitor.system.settings"]
+        let homeSettings = app.buttons["cameras.settings"]
+        expectation(
+            for: NSPredicate { _, _ in liveSettings.exists || homeSettings.exists },
+            evaluatedWith: app)
+        waitForExpectations(timeout: 20)
+        // On hardware the launch splash can cover controls already in the AX tree.
+        if physicalReview { Thread.sleep(forTimeInterval: 3) }
+        let settings = liveSettings.exists ? liveSettings : homeSettings
+        XCTAssertTrue(settings.isHittable)
+        settings.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            rotate(orientation)
+            let link = app.buttons["monitor.settings.tab.Link"]
+            let sharing = app.buttons["monitor.settings.tab.Sharing"]
+            XCTAssertTrue(link.waitForExistence(timeout: 5))
+            XCTAssertGreaterThanOrEqual(link.frame.height, 44 - 0.001)
+            XCTAssertGreaterThanOrEqual(sharing.frame.height, 44 - 0.001)
+            if orientation == .portrait {
+                XCTAssertEqual(link.frame.maxX, sharing.frame.minX, accuracy: 0.5)
+            } else {
+                XCTAssertEqual(link.frame.maxY, sharing.frame.minY, accuracy: 0.5)
+            }
+            sharing.tap()
+            XCTAssertTrue(sharing.isSelected)
+            XCTAssertFalse(link.isSelected)
+            link.tap()
+            XCTAssertTrue(link.isSelected)
+            XCTAssertFalse(sharing.isSelected)
+            capture("settings-joined-tabs-\(orientation.rawValue)")
+        }
+    }
+
     func testSettingsCoverageAndCardTitleSpacing() throws {
         app.launch()
         rotate(.landscapeLeft)
@@ -271,9 +308,33 @@ final class MonitorUIFlowTests: XCTestCase {
             "The portrait zoom disc covers the bottom system controls")
         capture("zoom-dial-portrait")
         app.buttons["Close zoom dial"].tap()
+        let iso = app.buttons["monitor.capture.iso"]
+        let display = app.buttons["monitor.system.display"]
+        // Dismissal keeps the overlay mounted through its exit animation.
+        expectation(
+            for: NSPredicate { _, _ in
+                !dial.exists && iso.isHittable && record.isHittable && display.isHittable
+            }, evaluatedWith: app)
+        waitForExpectations(timeout: 3)
         XCTAssertTrue(app.buttons["monitor.capture.iso"].isHittable)
         XCTAssertTrue(app.buttons["monitor.system.record"].isHittable)
         XCTAssertTrue(app.buttons["monitor.system.display"].isHittable)
+    }
+
+    func testFocusRecenterShowsInPortraitAndLandscape() {
+        app.launch()
+        let reset = app.buttons["monitor.system.focusReset"]
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            rotate(orientation)
+            XCTAssertTrue(app.buttons["monitor.system.record"].waitForExistence(timeout: 10))
+            // An off-centre tap-to-focus is what offers Recenter.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.3)).tap()
+            XCTAssertTrue(reset.waitForExistence(timeout: 5))
+            XCTAssertTrue(reset.isHittable)
+            capture("focus-recenter-\(orientation.rawValue)")
+            reset.tap()
+            XCTAssertTrue(reset.waitForNonExistence(timeout: 5))
+        }
     }
 
     func testAssistInspectorTabsSurviveRotation() {
@@ -701,6 +762,12 @@ final class MonitorUIFlowTests: XCTestCase {
             ]
             XCTAssertTrue(
                 app.staticTexts[expected[screen]!].firstMatch.waitForExistence(timeout: 10))
+            if screen == "pair" {
+                XCTAssertTrue(
+                    app.staticTexts[
+                        "Before pairing, turn off DJI Frame Tap and force quit DJI Mimo."
+                    ].firstMatch.exists)
+            }
             capture(screen + "-portrait")
             rotate(.landscapeLeft)
             capture(screen + "-landscape")
@@ -840,6 +907,67 @@ final class MonitorUIFlowTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(wifi.frame.height, 43.5)
             XCTAssertEqual(app.buttons.matching(identifier: "cameras.addSetup").count, 0)
             capture("camera-setup-chips-\(orientation.rawValue)")
+        }
+    }
+
+    func testMultiviewReusesStationNetworkWizard() {
+        app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "cameras"
+        app.launch()
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            rotate(orientation)
+            let multiview = app.buttons["cameras.multiview"]
+            XCTAssertTrue(multiview.waitForExistence(timeout: 10))
+            multiview.tap()
+            let wifi = app.buttons["multiview.setup.wifi"]
+            XCTAssertTrue(wifi.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["multiview.setup.phoneHotspot"].isHittable)
+            capture("multiview-setup-choose-\(orientation.rawValue)")
+            wifi.tap()
+            let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+                .buttons["Allow While Using App"]
+            if allow.waitForExistence(timeout: 2) { allow.tap() }
+            XCTAssertTrue(
+                app.descendants(matching: .any)["multiview.setup.scanStatus"]
+                    .waitForExistence(timeout: 5))
+            let other = app.buttons["Other network…"]
+            XCTAssertTrue(other.isHittable, "Manual entry remains available during the scan")
+            XCTAssertLessThanOrEqual(other.frame.maxY, app.frame.maxY)
+            XCTAssertLessThan(app.frame.maxY - other.frame.maxY, 90)
+            other.tap()
+            let alert = app.alerts["Other network"]
+            alert.textFields.firstMatch.typeText("Test network")
+            alert.buttons["Next"].tap()
+            let password = app.secureTextFields["multiview.setup.password"]
+            XCTAssertTrue(password.waitForExistence(timeout: 5))
+            let connect = app.buttons["multiview.setup.connect"]
+            XCTAssertTrue(connect.isHittable)
+            XCTAssertLessThan(app.frame.maxY - connect.frame.maxY, 90)
+            if orientation != .portrait {
+                let summary = app.descendants(matching: .any)["multiview.setup.networkSummary"]
+                    .firstMatch
+                let field = app.descendants(matching: .any)["multiview.setup.password.field"]
+                    .firstMatch
+                XCTAssertEqual(summary.frame.minY, field.frame.minY, accuracy: 1)
+            }
+            capture("multiview-password-layout-\(orientation.rawValue)")
+            password.tap()
+            capture("multiview-password-focused-\(orientation.rawValue)")
+            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+            XCTAssertLessThanOrEqual(connect.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
+            password.typeText("short")
+            XCTAssertFalse(app.buttons["multiview.setup.connect"].isEnabled)
+            app.buttons["Show password"].tap()
+            XCTAssertTrue(app.textFields["multiview.setup.password"].exists)
+            capture("multiview-setup-password-\(orientation.rawValue)")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.buttons["multiview.setup.phoneHotspot"].tap()
+            XCTAssertTrue(
+                app.textFields["multiview.setup.hotspotName"].waitForExistence(timeout: 5))
+            capture("multiview-setup-hotspot-\(orientation.rawValue)")
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.navigationBars.buttons["Cancel"].tap()
+            XCTAssertTrue(multiview.waitForExistence(timeout: 10))
         }
     }
 

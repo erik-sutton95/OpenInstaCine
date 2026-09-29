@@ -135,6 +135,11 @@ struct CapturePickerPanel: View {
     var preview: CaptureDrumPresentation? = nil
     var onSelectRecordingCategory: ((CaptureSheet) -> Void)? = nil
     var showsRecordingCategories: Bool = false
+    var prefixContent: AnyView? = nil
+    var subtitleOverride: String? = nil
+    var controlsEnabled = true
+    /// Controls only: a host such as Multiview's side panel owns glass, header and scrolling.
+    var chromeless = false
     var onClose: () -> Void
     @Environment(AppModel.self) private var model
     @Environment(\.interfaceLocked) private var interfaceLocked
@@ -169,38 +174,10 @@ struct CapturePickerPanel: View {
         let presented: Bool
     }
 
-    private var drumOptions: [String] {
-        switch sheet {
-        case .iso: isIsoAutoTab ? isoAutoDrumLabels : isoDrumLabels
-        case .shutter: isEvSheet ? evLabels : (isAngleSheet ? shutterAngleLabels : shutterLabels)
-        default: []
-        }
-    }
-
-    private var drumContext: DrumContext {
-        DrumContext(
-            cameraID: model.session.connectedCamera?.id, phase: model.session.phase.label,
-            sheet: sheet, mode: selectedMode, color: model.session.status.colorMode,
-            fps: model.session.status.fps, shutterDenoms: shutterDenoms,
-            snapshotIdentity: CaptureQuickSnapshot.primary(sheet, model: model)?.sourceIdentity,
-            focusTrack: sheet == .focus ? model.session.status.focusTrack : nil,
-            options: drumOptions)
-    }
-
-    private var canApplyDrum: Bool {
-        preview == nil && appeared && isPresented() && scenePhase == .active
-            && !interfaceLocked && !model.session.isLocked
-    }
-
-    var body: some View {
-        let kind: MonitorCapturePopupKind = preview == nil ? .details : .compact
-        MonitorCapturePanel(
-            title: headerTitle, subtitle: kind.subtitle ?? headerSubtitle,
-            maximumHeight: maximumHeight, bottomPadding: bottomPadding,
-            topPadding: topPadding, topCornerRadius: topCornerRadius,
-            bottomCornerRadius: bottomCornerRadius, kind: kind, edge: edge, close: onClose
-        ) {
-            VStack(alignment: .leading, spacing: 8) {
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let prefixContent { prefixContent }
+            Group {
                 if let held = preview {
                     CaptureDrumWheel(
                         options: held.snapshot.options, selection: .constant(held.selection),
@@ -232,6 +209,46 @@ struct CapturePickerPanel: View {
                     if sheet == .iso, model.session.supportsIsoLimit { nativeIsoHopToggle }
                     if isEvSheet { facePriorityToggle }
                 }
+            }.disabled(!controlsEnabled)
+        }
+    }
+
+    private var drumOptions: [String] {
+        switch sheet {
+        case .iso: isIsoAutoTab ? isoAutoDrumLabels : isoDrumLabels
+        case .shutter: isEvSheet ? evLabels : (isAngleSheet ? shutterAngleLabels : shutterLabels)
+        default: []
+        }
+    }
+
+    private var drumContext: DrumContext {
+        DrumContext(
+            cameraID: model.session.connectedCamera?.id, phase: model.session.phase.label,
+            sheet: sheet, mode: selectedMode, color: model.session.status.colorMode,
+            fps: model.session.status.fps, shutterDenoms: shutterDenoms,
+            snapshotIdentity: CaptureQuickSnapshot.primary(sheet, model: model)?.sourceIdentity,
+            focusTrack: sheet == .focus ? model.session.status.focusTrack : nil,
+            options: drumOptions)
+    }
+
+    private var canApplyDrum: Bool {
+        controlsEnabled && preview == nil && appeared && isPresented() && scenePhase == .active
+            && !interfaceLocked && !model.session.isLocked
+    }
+
+    var body: some View {
+        let kind: MonitorCapturePopupKind = preview == nil ? .details : .compact
+        Group {
+            if chromeless {
+                controls
+            } else {
+                MonitorCapturePanel(
+                    title: headerTitle,
+                    subtitle: subtitleOverride ?? kind.subtitle ?? headerSubtitle,
+                    maximumHeight: maximumHeight, bottomPadding: bottomPadding,
+                    topPadding: topPadding, topCornerRadius: topCornerRadius,
+                    bottomCornerRadius: bottomCornerRadius, kind: kind, edge: edge, close: onClose
+                ) { controls }
             }
         }
         .environment(
@@ -358,11 +375,16 @@ struct CapturePickerPanel: View {
             }
         case .wb:
             if selectedMode == 0 {
+                let awbLocked = model.session.autoWhiteBalanceLock != nil
                 choiceDrum(
-                    WhiteBalanceMode.allCases.map(\.label),
-                    selected: model.session.status.whiteBalance?.mode.label
+                    CaptureLists.whiteBalanceModeLabels(
+                        offersLock: awbLocked || model.session.canLockAutoWhiteBalance),
+                    selected: CaptureLists.whiteBalanceModeSelection(
+                        model.session.status.whiteBalance, awbLocked: awbLocked)
                 ) { label in
-                    if label == WhiteBalanceMode.auto.label {
+                    if label == CaptureLists.awbLock {
+                        model.session.lockAutoWhiteBalance()
+                    } else if label == WhiteBalanceMode.auto.label {
                         model.session.setWhiteBalanceAuto()
                     } else {
                         model.session.setWhiteBalanceCustom(
@@ -391,8 +413,11 @@ struct CapturePickerPanel: View {
                 }
             }
         case .exposure:
+            let aeLocked = model.session.autoExposureLock != nil
             choiceDrum(
-                ExpoMode.allCases.map(\.label), selected: model.session.status.expoMode?.label
+                CaptureLists.exposureLabels(aeLocked: aeLocked),
+                selected: CaptureLists.exposureSelection(
+                    model.session.status.expoMode, aeLocked: aeLocked)
             ) { label in
                 if let mode = ExpoMode.allCases.first(where: { $0.label == label }) {
                     model.session.setExpoMode(mode)
@@ -683,7 +708,10 @@ struct CapturePickerPanel: View {
             reseatShutterOrEv()
         case .wb:
             let mode = model.session.status.whiteBalance?.mode
-            selectedMode = (mode == nil || mode == .auto) ? 0 : 1
+            // AWB Lock is a Mode choice, not an active Kelvin.
+            let modeTab =
+                mode == nil || mode == .auto || model.session.autoWhiteBalanceLock != nil
+            selectedMode = modeTab ? 0 : 1
             let k = "\(currentKelvin)K"
             drumSelection =
                 (2_000...10_000).contains(model.session.status.whiteBalanceKelvin) ? k : ""
@@ -791,13 +819,8 @@ struct CapturePickerPanel: View {
             }
             if isAngleSheet {
                 guard let degrees = ShutterAngle.parse(value) else { return }
-                let denom = ShutterAngle.denom(
-                    degrees: degrees,
-                    fps: model.session.status.fps,
-                    available: shutterDenoms)
                 enqueueDrumSend(value) {
-                    OperatorPrefs.shutterAngleDegrees = degrees
-                    model.session.setShutterDenom(denom)
+                    model.session.setShutterAngle(degrees)
                 }
                 return
             }
@@ -1021,10 +1044,6 @@ struct CapturePickerPanel: View {
                 return
             }
             let next = ShutterAngle.nearestLabel(denom: liveDenom, fps: fps)
-            if preview == nil {
-                OperatorPrefs.shutterAngleDegrees =
-                    ShutterAngle.parse(next) ?? ShutterAngle.defaultDegrees
-            }
             lastApplied = next
             drumSelection = next
             return
@@ -1247,8 +1266,32 @@ enum CaptureLists {
     static let nativeIsoHopHelp =
         "On: switching color mode hops ISO to that curve's starred native if you were still on native. Off: keep the ISO you set."
 
-    static let kelvinValues = Array(stride(from: 2_000, through: 10_000, by: 100))
+    static let kelvinValues = WhiteBalance.kelvinLadder
     static let kelvinLabels = kelvinValues.map { "\($0)K" }
+    /// WB Mode drum entry left of Auto: Custom at the live Auto Kelvin. It stays
+    /// selected while the lock holds; Auto or Custom releases it.
+    static let awbLock = "AWB Lock"
+    /// WB tile while locked; `AWB Lock` would outgrow the tile's `10000K` width.
+    static let awbLockTile = "AWB-L"
+
+    static func whiteBalanceModeLabels(offersLock: Bool) -> [String] {
+        (offersLock ? [awbLock] : []) + WhiteBalanceMode.allCases.map(\.label)
+    }
+
+    static func whiteBalanceModeSelection(_ wb: WhiteBalance?, awbLocked: Bool) -> String? {
+        awbLocked ? awbLock : wb?.mode.label
+    }
+    /// EXPOSURE tile and drum entry left of Auto while the feed AE lock holds.
+    /// Auto or Manual releases it; the entry leaves the drum once released.
+    static let aeLock = "AE-L"
+
+    static func exposureLabels(aeLocked: Bool) -> [String] {
+        (aeLocked ? [aeLock] : []) + ExpoMode.allCases.map(\.label)
+    }
+
+    static func exposureSelection(_ mode: ExpoMode?, aeLocked: Bool) -> String? {
+        aeLocked ? aeLock : mode?.label
+    }
 
     static func kelvin(from label: String) -> Int? {
         Int(label.replacingOccurrences(of: "K", with: ""))

@@ -1,17 +1,13 @@
+import Foundation
 import OpenPocketViewCore
 import Testing
 
 @Suite
 struct GimbalStickVirtualMappingTests {
     @Test func defaultMappingMatchesLegacyEncode() {
-        #expect(GimbalStick.Mapping.defaults.invertPan == false)
-        #expect(GimbalStick.Mapping.defaults.invertTilt == false)
         #expect(GimbalStick.Mapping.defaults.deadzone == GimbalStick.deadzone)
-        #expect(GimbalStick.Mapping.defaults.curve == .standard)
         #expect(GimbalStick.Mapping.defaults.curve.expo == GimbalStick.analogExpo)
         #expect(GimbalStick.Mapping.defaults.isDefault)
-        #expect(GimbalStick.deadzone == 0.08)
-        #expect(GimbalStick.defaultDeadzonePercent == 8)
         #expect(GimbalStick.deadzoneFromPercent(8) == GimbalStick.deadzone)
         let samples: [Double] = [-1, -0.7, -0.5, -0.08, 0, 0.08, 0.5, 0.7, 1]
         let expected: [Int: [UInt16]] = [
@@ -34,6 +30,21 @@ struct GimbalStickVirtualMappingTests {
         #expect(GimbalStick.encode(x: 0.04, y: -0.04) == (GimbalStick.center, GimbalStick.center))
     }
 
+    @Test func diagonalThrowMovesAsFastAsAStraightPush() {
+        func speed(_ axes: (axis0: UInt16, axis1: UInt16)) -> Double {
+            hypot(Double(axes.axis0) - 1024, Double(axes.axis1) - 1024)
+        }
+        let d = 0.5.squareRoot()
+        for throwLength in [0.3, 0.6, 1.0] {
+            let straight = speed(GimbalStick.encode(x: throwLength, y: 0))
+            let diagonal = speed(GimbalStick.encode(x: throwLength * d, y: throwLength * d))
+            // Per-axis curves ran a full 45 degree throw at about 0.71x.
+            #expect(abs(diagonal - straight) <= 1.5)
+        }
+        let full = GimbalStick.encode(x: d, y: d)
+        #expect(full.axis0 == 1024 + 389 && full.axis1 == 1024 + 389)
+    }
+
     @Test func operatorInvertComposesPictureInvertOnce() {
         let right = GimbalStick.encode(x: 1, y: 0)
         let picture = GimbalStick.encode(x: 1, y: 0, invertPan: true)
@@ -53,8 +64,11 @@ struct GimbalStickVirtualMappingTests {
             x: 1, y: 1,
             invertPan: true,
             mapping: GimbalStick.Mapping(invertPan: true, invertTilt: true))
-        #expect(tiltAndPan.axis0 == GimbalStick.min)
-        #expect(tiltAndPan.axis1 == GimbalStick.max)
+        // A corner throw is clamped to the stick circle: both inverts flip direction only.
+        #expect(tiltAndPan.axis0 < GimbalStick.center && tiltAndPan.axis1 > GimbalStick.center)
+        #expect(
+            Int(GimbalStick.center) - Int(tiltAndPan.axis0)
+                == Int(tiltAndPan.axis1) - Int(GimbalStick.center))
     }
 
     @Test func linearPathIgnoresVirtualMapping() {

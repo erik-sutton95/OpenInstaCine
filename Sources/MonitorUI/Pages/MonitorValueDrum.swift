@@ -285,6 +285,10 @@
                 MonitorMotion.curve(MonitorMotion.soft, duration: 0.18, reduceMotion: reduceMotion),
                 value: row.selected
             )
+            // The row can gain selection in the same update that moves it (the
+            // sheet seating its current value). Keep the emphasis animation off the
+            // row's placement, or the value slides in from its old slot.
+            .geometryGroup()
             .position(x: canvasWidth / 2 + row.distance * row.metrics.cellWidth, y: 39)
             .animation(nil, value: row.distance)
             .allowsHitTesting(false)

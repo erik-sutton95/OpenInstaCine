@@ -37,6 +37,7 @@
         case folder
         case focus
         case funnel
+        case gauge
         case grid3x3 = "grid-3x3"
         case image
         case info
@@ -46,6 +47,7 @@
         case link2Off = "link-2-off"
         case listFilter = "list-filter"
         case lock
+        case lockOpen = "lock-open"
         case maximize
         case menu
         case minimize

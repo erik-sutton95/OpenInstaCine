@@ -117,7 +117,7 @@ enum ReliabilityReporting {
     static func isFinalized(_ bundle: FeedIncidentBundle) -> Bool {
         switch bundle.header.outcome {
         case .open: return false
-        case .recovered, .interrupted, .exhausted, .suppressed: return true
+        case .recovered, .interrupted, .exhausted, .suppressed, .userEnded: return true
         }
     }
 
@@ -199,7 +199,8 @@ enum ReliabilityReporting {
         options.shutdownTimeInterval = 0
         options.enableCrashHandler = true
         options.enableAppHangTracking = true
-        options.enableWatchdogTerminationTracking = true
+        options.enableWatchdogTerminationTracking =
+            ReliabilityReportingConfiguration.tracksWatchdogTerminations
         options.sessionReplay.sessionSampleRate = 0
         options.sessionReplay.onErrorSampleRate = 0
         options.maxBreadcrumbs = 32
@@ -462,10 +463,21 @@ enum ReliabilityReporting {
         }
     }
 
+    /// Only an incident the recovery ladder gave up on is an error. Recovered and
+    /// suppressed ones are the reliability baseline, not failures.
+    static func level(forOutcome outcome: String) -> SentryLevel {
+        switch outcome {
+        case FeedIncidentOutcome.exhausted.rawValue: return .error
+        case FeedIncidentOutcome.interrupted.rawValue, FeedIncidentOutcome.userEnded.rawValue:
+            return .warning
+        default: return .info
+        }
+    }
+
     private static func makeEvent(
         envelope: FeedIncidentVendorEnvelope, eventID: SentryId
     ) -> Event {
-        let event = Event(level: .error)
+        let event = Event(level: level(forOutcome: envelope.grouping.outcome))
         event.eventId = eventID
         // Kind is in the fingerprint, so the issue title stays stable per group.
         event.message = SentryMessage(

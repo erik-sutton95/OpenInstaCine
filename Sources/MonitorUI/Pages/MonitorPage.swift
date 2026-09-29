@@ -132,9 +132,11 @@
         }
     }
 
+    /// Same type scale as the Your cameras header.
     public struct MonitorPageHeading: View {
         private let brand: String
         private let title: String
+        @Environment(\.monitorWindowGeometry) private var windowGeometry
 
         public init(brand: String, title: String) {
             self.brand = brand
@@ -144,16 +146,20 @@
         public var body: some View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(brand.uppercased())
-                    .font(MonitorTheme.font(8, weight: .bold)).tracking(1.4)
+                    .font(MonitorTheme.font(8.5, weight: .bold)).tracking(1.7)
                     .foregroundStyle(MonitorTheme.accent)
                     .lineLimit(1).minimumScaleFactor(0.9)
-                Text(title).font(MonitorTheme.font(13, weight: .semibold))
-                    .lineLimit(1).minimumScaleFactor(0.9)
+                Text(title).font(MonitorTheme.font(tablet ? 24 : 19, weight: .semibold))
+                    .tracking(-0.2).lineLimit(1).minimumScaleFactor(0.75)
             }
             .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
             .foregroundStyle(MonitorTheme.text)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("monitor.page.heading")
+        }
+
+        private var tablet: Bool {
+            min(windowGeometry.size.width, windowGeometry.size.height) >= 600
         }
     }
 
@@ -162,28 +168,27 @@
         private let subtitle: String?
         private let count: String?
         private let selected: Bool
+        private let separator: Bool
         private let action: () -> Void
 
         public init(
             _ title: String, subtitle: String? = nil, count: String? = nil,
-            selected: Bool, action: @escaping () -> Void
+            selected: Bool, separator: Bool = true, action: @escaping () -> Void
         ) {
             self.title = title
             self.subtitle = subtitle
             self.count = count
             self.selected = selected
+            self.separator = separator
             self.action = action
         }
 
         public var body: some View {
             Button(action: action) {
                 HStack(spacing: 9) {
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(selected ? MonitorTheme.accent : .clear)
-                        .frame(width: 4, height: subtitle == nil ? 20 : 24)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(title).font(MonitorTheme.font(12.5, weight: .semibold))
-                            .foregroundStyle(selected ? MonitorTheme.text : MonitorTheme.muted)
+                            .foregroundStyle(selected ? MonitorTheme.accent : MonitorTheme.muted)
                         if let subtitle {
                             Text(subtitle).font(MonitorTheme.font(10))
                                 .foregroundStyle(MonitorTheme.faint)
@@ -196,14 +201,10 @@
                             .foregroundStyle(selected ? MonitorTheme.accent : MonitorTheme.faint)
                     }
                 }
-                .padding(.horizontal, 8).frame(minHeight: 44)
-                .background(
-                    selected ? Color.white.opacity(0.08) : .clear,
-                    in: RoundedRectangle(cornerRadius: 9)
-                )
-                .contentShape(Rectangle())
+                .padding(.horizontal, 12).frame(minHeight: 44)
+                .monitorTabSurface(selected: selected, separator: separator)
             }
-            .buttonStyle(MonitorButtonStyle())
+            .buttonStyle(MonitorTabButtonStyle())
             .accessibilityAddTraits(selected ? .isSelected : [])
         }
     }

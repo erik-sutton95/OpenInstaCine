@@ -1,3 +1,4 @@
+import MonitorPresentation
 import MonitorUI
 import SwiftUI
 
@@ -32,12 +33,13 @@ enum LiveChromeMetrics {
     static var batteryInlineWidth: CGFloat { 52 * scale }
     static var zoomChipInset: CGFloat { 10 * scale }
     static var zoomButtonSize: CGFloat { 44 * scale }
-    static var gimbalStickSize: CGFloat { 88 * scale }
-    static var gimbalKnobSize: CGFloat { 36 * scale }
+    static var gimbalStickSize: CGFloat { CGFloat(FieldMonitorLayout.stickSide) * scale }
+    static var gimbalKnobSize: CGFloat { 41 * scale }
     static var gimbalStickInset: CGFloat { 16 * scale }
     static var gimbalStickGap: CGFloat { 8 * scale }
     /// On-feed stick. Light on dark picture, dark on bright picture.
-    static let gimbalStickOpacity: CGFloat = 0.55
+    /// Resting ink is solid white or black (sampled from the picture).
+    static let gimbalStickOpacity: CGFloat = 0.9
     static var focusResetSize: CGFloat { 40 * scale }
     static var focusResetGap: CGFloat { 24 * scale }
     static var popupGap: CGFloat { 10 * scale }

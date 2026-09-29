@@ -12,11 +12,16 @@ import Foundation
 /// the socket paused. SoftAP bind stays.
 ///
 /// Encoder pause: DUML status still landing, HEVC silent, past GOP/AF-C
-/// grace. One `0x09/0xa8`, then one UDP rebuild. Keepalive must not flap
+/// grace. One `0x09/0xa8`, then one UDP rebuild `enableAnswerWindow` later. Keepalive must not flap
 /// while status is young. `escalateAfter` between actions — do not 1 Hz loop.
 /// Field data (1,960 incidents, 2026-09): when an enable restarts HEVC it does
 /// so within 4 s; a second enable almost never did and delayed the endpoint
 /// rebuild that fixed 292 of 521 transport stalls by ~5 s.
+///
+/// Build 158 (2026-09): 36 of 37 transport stalls credited to the enable only
+/// recovered after the endpoint rebuild, and the camera answers a keyframe
+/// request in 0.1-1.1 s (#443). An unanswered encoder-pause enable therefore
+/// escalates after `enableAnswerWindow`, not `escalateAfter`.
 ///
 /// After picture the ladder is bounded and ends in a **new handshake**:
 /// enable ×1 (encoder pause only) → one session-preserving UDP rebuild →
@@ -33,6 +38,15 @@ public struct FeedWatchdog: Equatable, Sendable {
     public static let escalateAfter: TimeInterval = 5
     public static let cooldownDuration: TimeInterval = 15
     public static let decoderRepairDeadline: TimeInterval = 16
+    /// An encoder-pause enable with no video after this long was not answered.
+    /// The #148 rule still holds: the enable goes first, never a 2 s reopen.
+    public static let enableAnswerWindow: TimeInterval = 1.5
+    /// Decoder repair resends its keyframe request this often while no IRAP
+    /// newer than the last request has landed.
+    public static let keyframeResendInterval: TimeInterval = 2
+    /// Unanswered keyframe requests (the repair enable plus resends) before the
+    /// decoder repair rebuilds the endpoint instead of waiting out its deadline.
+    public static let keyframeRequestLimit = 2
     /// After one UDP rebuild, do not bind again on the 2s stall cadence.
     /// Thirty rebuilds in a minute is what dropped SoftAP. Inside this window
     /// the next rung is a new handshake, not a second bind.
@@ -80,6 +94,9 @@ public struct FeedWatchdog: Equatable, Sendable {
         /// Explicit compressed discontinuity after valid references, not an
         /// ordinary startup/GOP hold or an intentional decoder replacement.
         public var referenceRecoveryNeeded: Bool
+        /// Age of the last IRAP the decoder accepted. Newer than the last enable
+        /// means that enable was answered, so its GOP-reset window is over.
+        public var secondsSinceLastIrap: TimeInterval?
         /// Shell can execute a repair now; blocked requests spend no ladder rung.
         public var repairReady: Bool
         public var live: Bool
@@ -141,6 +158,7 @@ public struct FeedWatchdog: Equatable, Sendable {
             lastDecoderOutputAge: TimeInterval? = nil,
             decoderOutputExpected: Bool = false,
             referenceRecoveryNeeded: Bool = false,
+            secondsSinceLastIrap: TimeInterval? = nil,
             repairReady: Bool = true
         ) {
             self.now = now
@@ -155,6 +173,7 @@ public struct FeedWatchdog: Equatable, Sendable {
             self.lastDecoderOutputAge = lastDecoderOutputAge
             self.decoderOutputExpected = decoderOutputExpected
             self.referenceRecoveryNeeded = referenceRecoveryNeeded
+            self.secondsSinceLastIrap = secondsSinceLastIrap
             self.repairReady = repairReady
             self.live = live
             self.sawPicture = sawPicture
@@ -204,11 +223,6 @@ public struct FeedWatchdog: Equatable, Sendable {
         return status < stallThreshold
     }
 
-    /// Either HEVC or DUML status still landing — do not tear the socket.
-    public static func socketAlive(_ snap: Snapshot) -> Bool {
-        udpReceiveAlive(snap) || controlReceiveAlive(snap)
-    }
-
     /// BLE still up and SoftAP still on the path — do not flap UDP / fullRejoin.
     public static func shouldHoldBind(pathReady: Bool, lastBleNotifyAge: TimeInterval?) -> Bool {
         pathReady && (lastBleNotifyAge ?? .infinity) < stallThreshold
@@ -237,6 +251,13 @@ public struct FeedWatchdog: Equatable, Sendable {
     ///
     /// If HEVC has been silent *longer* than this enable, the enable did not
     /// restart the encoder — do not sit in the 8s IDR window.
+    public static func irapAnsweredLastEnable(_ snap: Snapshot) -> Bool {
+        guard let irap = snap.secondsSinceLastIrap, let enable = snap.secondsSinceLastEnable else {
+            return false
+        }
+        return irap < enable
+    }
+
     public static func shouldHoldForGOPReset(
         secondsSinceLastEnable: TimeInterval?,
         lastVideoPacketAge: TimeInterval? = nil
@@ -286,22 +307,6 @@ public struct FeedWatchdog: Equatable, Sendable {
     ) -> Bool {
         if secondsSinceLastEnable >= 1 { return true }
         return hasPresentedPicture && liveViewEnableSends <= 1
-    }
-
-    /// After one UDP rebuild, do not rebuild again on the 2s stall cadence.
-    /// First picture (`hadVideo == false`) is not a live flap — do not hold.
-    public static func shouldHoldRebuildAfterRecentUDP(
-        secondsSinceLastRebuild: TimeInterval?,
-        pathReady: Bool,
-        lastBleNotifyAge: TimeInterval?,
-        hadVideo: Bool = true
-    ) -> Bool {
-        guard hadVideo else { return false }
-        guard shouldHoldBind(pathReady: pathReady, lastBleNotifyAge: lastBleNotifyAge) else {
-            return false
-        }
-        guard let since = secondsSinceLastRebuild else { return false }
-        return since < rebuildBackoff
     }
 
     /// HEVC silent, a repair in flight, or clocks wiped after a live GOP.
@@ -358,6 +363,64 @@ public struct FeedWatchdog: Equatable, Sendable {
         return secondsSinceLastEnable >= stallThreshold
     }
 
+    public enum DecoderRepairStep: String, Equatable, Sendable {
+        case wait
+        case resendKeyframe
+        case rebuildEndpoint
+        case deadline
+    }
+
+    /// The decoder repair owner's loop after its first keyframe request.
+    /// An IRAP newer than the last request means the camera answered: wait for
+    /// output under `decoderRepairDeadline`. Unanswered, resend every
+    /// `keyframeResendInterval`; after `keyframeRequestLimit` requests go
+    /// unanswered, rebuild the endpoint (new handshake, BLE and SoftAP kept).
+    /// Field (build 158): half the exhausted repairs had AUs at ~30/s and the
+    /// decoder awaiting an IRAP for 16 s after one request; on Pocket 3 the
+    /// enable brought picture back 0 of 52 times, the endpoint rebuild did.
+    public static func decoderRepairStep(
+        secondsSinceRepairStart: TimeInterval,
+        secondsSinceLastEnable: TimeInterval,
+        secondsSinceLastIrap: TimeInterval?,
+        keyframeRequests: Int
+    ) -> DecoderRepairStep {
+        if secondsSinceRepairStart >= decoderRepairDeadline { return .deadline }
+        let answered = secondsSinceLastIrap.map { $0 < secondsSinceLastEnable } ?? false
+        guard !answered, secondsSinceLastEnable >= keyframeResendInterval else { return .wait }
+        return keyframeRequests < keyframeRequestLimit ? .resendKeyframe : .rebuildEndpoint
+    }
+
+    /// A feed repair that ran out of picture time must not become a BLE session
+    /// recovery while the camera is still sending video on the same socket.
+    /// That stall is a keyframe/decoder problem; the BLE disconnect was the
+    /// Pocket 3 connect/disconnect loop (acks ~40 Hz, Wi-Fi never lost). The
+    /// shell hands it back to the watchdog, whose ladder ends in the endpoint rebuild.
+    public static func shouldHoldSessionRecovery(lastVideoPacketAge: TimeInterval?) -> Bool {
+        (lastVideoPacketAge ?? .infinity) < stallThreshold
+    }
+
+    /// Repair picture deadlines in one stall episode before the Bluetooth hold
+    /// is released. Each cycle is resend, endpoint rebuild and a 16 s wait
+    /// (~20 s), so the hold ends after about 60 s and `SessionRecovery` (its own
+    /// 180 s budget, then the operator) takes over.
+    public static let maxHeldRepairCycles = 3
+
+    /// Called at each repair picture deadline. Returns the episode's cycle
+    /// count after this deadline: > 0 holds Bluetooth (the watchdog keeps the
+    /// stall), 0 releases it to `SessionRecovery` and resets the episode. A
+    /// picture presented since the previous cycle starts a new episode.
+    public static func nextSessionHoldCycles(
+        lastVideoPacketAge: TimeInterval?,
+        previousCycles: Int,
+        pictureSinceLastCycle: Bool
+    ) -> Int {
+        let cycles = (pictureSinceLastCycle ? 0 : max(0, previousCycles)) + 1
+        guard shouldHoldSessionRecovery(lastVideoPacketAge: lastVideoPacketAge),
+            cycles < maxHeldRepairCycles
+        else { return 0 }
+        return cycles
+    }
+
     public mutating func tick(_ snap: Snapshot) -> Action {
         if !snap.live {
             resetIdle()
@@ -397,11 +460,20 @@ public struct FeedWatchdog: Equatable, Sendable {
                 (snap.lastAccessUnitAge ?? .infinity) < Self.stallThreshold
             {
                 // After the one decoder attempt, ownership passes to the shell
-                // rejoin. Continuous packets must not restart the repair budget.
-                guard stage != .fullRejoin && stage != .cooldown else { return .none }
-                if Self.shouldHoldForGOPReset(
-                    secondsSinceLastEnable: snap.secondsSinceLastEnable,
-                    lastVideoPacketAge: snap.lastVideoPacketAge)
+                // rejoin. Continuous packets must not restart the repair budget
+                // before cooldown ends, but a rejoin that brought packets back
+                // without references must not strand the picture either.
+                if stage == .fullRejoin || stage == .cooldown,
+                    snap.now - lastActionAt < Self.cooldownDuration
+                {
+                    return .none
+                }
+                // An IRAP after the last enable answered it. This loss is new and
+                // needs its own request, not the rest of the old 8 s window.
+                if (!Self.irapAnsweredLastEnable(snap)
+                    && Self.shouldHoldForGOPReset(
+                        secondsSinceLastEnable: snap.secondsSinceLastEnable,
+                        lastVideoPacketAge: snap.lastVideoPacketAge))
                     || Self.shouldHoldForControlGrace(
                         snap, stalledStageAge: snap.lastDecoderOutputAge ?? snap.lastDecodedFrameAge
                     )
@@ -453,10 +525,10 @@ public struct FeedWatchdog: Equatable, Sendable {
             }
         }
 
-        // After picture: one bounded ladder, escalateAfter between rungs.
-        // Encoder pause (status still on 9004, HEVC silent): one enable
-        // first (#148: reopening at 2 s left lastVideo=none). Then one
-        // session-preserving UDP rebuild (22:16 brought the picture back).
+        // After picture: one bounded ladder. Encoder pause (status still on
+        // 9004, HEVC silent): one enable first (#148: reopening at 2 s instead
+        // of enabling left lastVideo=none). No video enableAnswerWindow after
+        // it: one negotiated UDP rebuild (22:16 brought the picture back).
         // Then a new handshake — never a second bind inside rebuildBackoff,
         // and never VT tear-down or a SoftAP rejoin from here.
         if stage == .fullRejoin {
@@ -467,7 +539,10 @@ public struct FeedWatchdog: Equatable, Sendable {
             lastActionAt = snap.now
             return .none
         }
-        if stage != .idle, snap.now - lastActionAt < Self.escalateAfter {
+        // The enable is answered in about a second or not at all; other rungs
+        // (a rebuild's negotiation) keep escalateAfter.
+        let rungWait = stage == .resendEnable ? Self.enableAnswerWindow : Self.escalateAfter
+        if stage != .idle, snap.now - lastActionAt < rungWait {
             return .none
         }
         switch stage {
@@ -552,8 +627,15 @@ public struct FeedWatchdog: Equatable, Sendable {
     private static func shouldHoldForControlGrace(
         _ snap: Snapshot, stalledStageAge: TimeInterval?
     ) -> Bool {
-        shouldHoldForCameraSet(
-            secondsSinceSet: snap.secondsSinceCameraSet, lastVideoPacketAge: stalledStageAge)
+        // Our own `0x09/0xa8` goes out as a command too. It is not an operator
+        // SET and must not hold the rung that follows it.
+        let ownEnable =
+            snap.secondsSinceCameraSet.flatMap { set in
+                snap.secondsSinceLastEnable.map { abs($0 - set) < 0.25 }
+            } ?? false
+        return !ownEnable
+            && shouldHoldForCameraSet(
+                secondsSinceSet: snap.secondsSinceCameraSet, lastVideoPacketAge: stalledStageAge)
             || FocusTrackMode.shouldHoldWatchdog(
                 secondsSinceSet: snap.secondsSinceFocusTrackSet,
                 lastVideoPacketAge: stalledStageAge)
