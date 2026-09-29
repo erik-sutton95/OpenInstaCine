@@ -9,14 +9,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -80,23 +81,28 @@ fun <T> MonitorCameraPage(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    title,
-                    color = MonitorPalette.text,
-                    style = MonitorTypography.text(
-                        MonitorLayoutPolicy.cameraPageTitleSize(tablet),
-                        FontWeight.SemiBold,
-                    ).copy(letterSpacing = (-0.2).sp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        title,
+                        color = MonitorPalette.text,
+                        style = MonitorTypography.text(
+                            MonitorLayoutPolicy.cameraPageTitleSize(tablet),
+                            FontWeight.SemiBold,
+                        ).copy(letterSpacing = (-0.2).sp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (scanning) MonitorCameraScanStatus(fullLabels = fullLabels)
+                }
             }
-            if (scanning) MonitorCameraScanStatus(fullLabels = fullLabels, tablet = tablet)
             actions()
         }
+        val gridState = rememberLazyGridState()
         LazyVerticalGrid(
             columns = GridCells.Fixed(if (tablet) 2 else 1),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).monitorScrollFade(gridState),
+            state = gridState,
             contentPadding = PaddingValues(bottom = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -173,6 +179,18 @@ fun MonitorCameraCard(
     onCancel: (() -> Unit)? = null,
     glyph: @Composable () -> Unit,
     options: @Composable () -> Unit = {},
+    /** Saved-camera setups (#406); empty hides the chip row. */
+    setups: List<MonitorSetupChip> = emptyList(),
+    canAddSetup: Boolean = false,
+    /** False while any camera is connecting (iOS disables the chips while busy). */
+    setupsEnabled: Boolean = true,
+    onSetup: ((MonitorSetupChip) -> Unit)? = null,
+    onAddSetup: (() -> Unit)? = null,
+    onForgetSetup: ((MonitorSetupChip) -> Unit)? = null,
+    /** Connection progress while [busy]; empty keeps the one-line status. */
+    steps: List<MonitorConnectStep> = emptyList(),
+    failure: MonitorConnectFailure? = null,
+    onFailureAction: ((String) -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(MonitorLayoutPolicy.CAMERA_CARD_CORNER.dp)
     val fill = if (primary) CameraCardPrimaryFill else CameraCardFill
@@ -236,12 +254,28 @@ fun MonitorCameraCard(
                 )
             }
         }
+        if (setups.isNotEmpty() && onSetup != null) {
+            MonitorSetupChips(title, setups, canAddSetup, setupsEnabled, onSetup, onAddSetup, onForgetSetup)
+        }
+        if (busy && steps.isNotEmpty()) MonitorConnectProgressBar(steps)
+        if (failure != null && !busy) MonitorConnectFailureBanner(failure, enabled, onFailureAction)
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            if (busy) {
+            if (busy && steps.isNotEmpty()) {
+                Text(
+                    MonitorConnectProgress.caption(steps),
+                    color = MonitorPalette.muted,
+                    style = MonitorTypography.text(10.5f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            } else if (failure != null && !busy) {
+                Spacer(Modifier.weight(1f))
+            } else if (busy) {
                 Row(
                     Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
@@ -273,29 +307,37 @@ fun MonitorCameraCard(
                 )
             }
             options()
-            MonitorCameraAction(
-                text = if (busy) "Cancel" else actionTitle,
-                primary = primary && !busy,
-                enabled = if (busy) onCancel != null else enabled,
-                contentDescription = if (busy) "Cancel connecting to $title" else "$actionTitle $title",
-                onClick = { if (busy) onCancel?.invoke() else onOpen() },
-            )
+            if (failure != null && !busy && onFailureAction != null) {
+                failure.actions.forEach { action ->
+                    MonitorCameraAction(
+                        text = action.title,
+                        primary = action.primary,
+                        enabled = enabled,
+                        contentDescription = "${action.title} ${title}",
+                        onClick = { onFailureAction(action.id) },
+                    )
+                }
+            } else {
+                MonitorCameraAction(
+                    text = if (busy) "Cancel" else actionTitle,
+                    primary = primary && !busy,
+                    enabled = if (busy) onCancel != null else enabled,
+                    contentDescription = if (busy) "Cancel connecting to $title" else "$actionTitle $title",
+                    onClick = { if (busy) onCancel?.invoke() else onOpen() },
+                )
+            }
         }
     }
 }
 
+/** A status beside the title, not a button: no plate or frame. */
 @Composable
-private fun MonitorCameraScanStatus(fullLabels: Boolean, tablet: Boolean) {
+private fun MonitorCameraScanStatus(fullLabels: Boolean) {
     val phase = monitorPulsePhase(1400)
-    val shape = RoundedCornerShape(12.dp)
     Row(
-        Modifier.height(if (tablet) 48.dp else 43.dp)
-            .background(MonitorPalette.accent.copy(alpha = 0.1f), shape)
-            .border(1.dp, MonitorPalette.accent.copy(alpha = 0.24f), shape)
-            .padding(horizontal = if (fullLabels) 12.dp else 10.dp)
-            .semantics(mergeDescendants = true) { contentDescription = "Scanning for cameras" },
+        Modifier.semantics(mergeDescendants = true) { contentDescription = "Scanning for cameras" },
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
             Modifier.size(6.dp).background(
@@ -314,28 +356,45 @@ private fun MonitorCameraScanStatus(fullLabels: Boolean, tablet: Boolean) {
     }
 }
 
+/** The app's standard action button. Destructive uses the record red. */
 @Composable
-private fun MonitorCameraAction(
+fun MonitorCameraAction(
     text: String,
     primary: Boolean,
     enabled: Boolean,
     contentDescription: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    destructive: Boolean = false,
+    icon: (@Composable (Color) -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(11.dp)
-    Box(
-        Modifier.alpha(if (enabled) 1f else 0.38f)
+    val ink = when {
+        primary -> CameraCardPrimaryInk
+        destructive -> MonitorPalette.recording
+        else -> MonitorPalette.secondary
+    }
+    Row(
+        modifier.alpha(if (enabled) 1f else 0.38f)
             .heightIn(min = 42.dp)
             .clip(shape)
-            .background(if (primary) MonitorPalette.accent else Color.White.copy(alpha = 0.06f))
+            .background(
+                when {
+                    primary -> MonitorPalette.accent
+                    destructive -> MonitorPalette.recording.copy(alpha = 0.12f)
+                    else -> Color.White.copy(alpha = 0.06f)
+                },
+            )
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { this.contentDescription = contentDescription }
             .padding(horizontal = 17.dp),
-        contentAlignment = Alignment.Center,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
     ) {
+        icon?.invoke(ink)
         Text(
             text,
-            color = if (primary) CameraCardPrimaryInk else MonitorPalette.secondary,
+            color = ink,
             style = MonitorTypography.text(13f, FontWeight.SemiBold),
             maxLines = 1,
         )

@@ -2,6 +2,7 @@ package com.opencapture.openpocketcine.media
 
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorMaterial
+import com.opencapture.monitorui.monitorScrollFade
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -242,11 +243,13 @@ fun MediaDeliveryPopup(
                     OptionsHeader(
                         title = destination?.title ?: "Share",
                         onBack = { step = DeliveryStep.DESTINATION },
+                        onClose = onDismiss,
                     )
             }
             Spacer(Modifier.height(12.dp))
+            val bodyScroll = rememberScrollState()
             Column(
-                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                Modifier.weight(1f, fill = false).monitorScrollFade(bodyScroll).verticalScroll(bodyScroll),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
@@ -349,6 +352,9 @@ fun MediaDeliveryProgressOverlay(
                 color = LiveDesign.accent,
                 strokeWidth = 2.dp,
             )
+        } else {
+            // Native share is Android's only destination (iOS shows the destination glyph).
+            OpcIcon(OpcIcon.SHARE, null, Modifier.size(13.dp), LiveDesign.accent)
         }
         Column(Modifier.weight(1f)) {
             Text(
@@ -416,7 +422,7 @@ private fun DestinationHeader(onClose: () -> Unit) {
 }
 
 @Composable
-private fun OptionsHeader(title: String, onBack: () -> Unit) {
+private fun OptionsHeader(title: String, onBack: () -> Unit, onClose: () -> Unit) {
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -431,6 +437,7 @@ private fun OptionsHeader(title: String, onBack: () -> Unit) {
             Text(title, style = LiveType.ui(12.5f, FontWeight.SemiBold), color = LiveDesign.text)
             Text("Options", style = LiveType.ui(11f, FontWeight.Medium), color = LiveDesign.muted)
         }
+        MediaCloseButton(onClick = onClose, size = 30.dp)
     }
 }
 

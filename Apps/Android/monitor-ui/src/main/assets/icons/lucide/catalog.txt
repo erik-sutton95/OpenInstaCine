@@ -30,6 +30,7 @@ flip-horizontal-2
 folder
 focus
 funnel
+gauge
 grid-3x3
 image
 info
@@ -39,6 +40,7 @@ layout-list
 link-2-off
 list-filter
 lock
+lock-open
 maximize
 menu
 minimize

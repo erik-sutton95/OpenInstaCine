@@ -93,6 +93,8 @@ object LiveDesign {
     val rec = com.opencapture.monitorui.MonitorPalette.recording
     val info get() = accent
     val amber = Color(0.914f, 0.674f, 0.208f)
+    /** AE lock yellow: the focus box, its `AE-L` tag and the unlock key. */
+    val aeLock = Color(0xFFF5D052)
     val accentDim get() = accent.copy(alpha = 0.16f)
     val hairlineStrong = Color.White.copy(alpha = 0.10f)
     val hairline = com.opencapture.monitorui.MonitorPalette.border
@@ -109,8 +111,8 @@ object LiveDesign {
     const val DISP_HEIGHT_DP = 54f
     const val RAIL_WIDTH_DP = 70f
     const val ZOOM_CHIP_DP = 44f
-    const val GIMBAL_STICK_DP = 88f
-    const val GIMBAL_KNOB_DP = 36f
+    const val GIMBAL_STICK_DP = com.opencapture.monitorui.MonitorLayoutPolicy.STICK_SIDE
+    const val GIMBAL_KNOB_DP = 41f
     const val TOP_DECK_HEIGHT_DP = 35f
     const val FOCUS_RESET_DP = 40f
     const val TOP_PICKER_WIDTH_DP = 480f

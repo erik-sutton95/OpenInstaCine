@@ -191,10 +191,71 @@ WB dials because Luna hides the AF mode panel. The full `OpenInstaCineTests` sui
 
 ## Android
 
-Updated 2026-09-25. `Apps/Android` now carries the current OpenPocketCine Android shell
-(upstream `c1e8f94`, the same commit as the iOS sync) with OpenInstaCine identity, the yellow
-`0xFFCF00` accent and the Luna adapter driving it. Emulator only: there is no physical Android
-device, so nothing below is hardware-verified on Android.
+Updated 2026-09-29. `Apps/Android` now carries the OpenPocketCine Android shell at upstream
+`9e306c91` (`origin/main`, synced from `c1e8f94`) with OpenInstaCine identity, the yellow
+`0xFFCF00` accent and the Luna adapter driving it. Emulator and unit tests only: nothing below
+has run on a physical Android device against a real Luna.
+
+### Upstream 9e306c91 sync (2026-09-29)
+
+Every upstream Android change from `c1e8f94` to `9e306c91` was three-way merged into `:monitor`
+(upstream `app/src`) and `:monitor-ui`, keeping the Luna seams. Only six files needed hand
+resolution: `Theme.kt` (upstream AE lock yellow kept beside the brand `accentDim`),
+`OperatorSetup.kt` (new navigation width, brand wordmark kept), `SavedCamerasExperience.kt`
+(Multiview button stays behind `supportsMultiview`), `MediaLibraryController.kt` (the Luna store
+branch returns before the new DJI transport hook), `OperatorSetupContractTest.kt` (upstream dropped
+the links test) and the Luna session.
+
+Ported:
+
+- False color: scales are CineStop (scene stops around 18% gray), Video, IRE and Limits, with
+  the new Read LOG / 709 toggle and the reference ruler, over I-Log as well.
+- Per-camera setups, the Wi-Fi / Hotspot setup wizard (`StationNetworkSetup`), discovery
+  permissions (`DiscoveryPermissions`, VIBRATE, coarse location on every API), saved camera setup
+  chips and the step list on the connecting card.
+- AE and AWB lock UI (feed long press, AE-L row, AWB Lock row, unlock key, `gauge` / `lock-open`
+  icons), the live chrome refresh (tab strip, scroll fade, value drum, capture drawer, portrait
+  chrome), the CPU cut, the MediaTek Vulkan crash-loop guard (`VulkanCrashGuard`), GPU sampling on
+  the decoder `ImageReader` (face and scope taps), the decoder keyframe and IRAP bookkeeping in the
+  shared `HevcDecoder`, media listing fixes, the Multiview redesign files, and the shared
+  connection, feed and gimbal helpers.
+- Luna session (`session/PocketCameraSession.kt`, by hand): upstream top-level helpers refreshed
+  verbatim; `setShutterAngle` (the angle choice is saved and becomes 1/N at the current fps);
+  feed double tap starts Deep Track (upstream `FeedDoubleTapTrack`, the first tap still focuses);
+  the upstream `TrackingStartPolicy` drops a TRACKING frame far from a new request for 1.5 s so
+  the old subject is not drawn; `wantsFaceFrame` / `considerFaceFrame(Frame)` and
+  `setMediaTransportBrowsing` are no-ops like the rest of face and DJI transport.
+- Debug launcher (#429): `app/src/debug/res` overrides the launcher foreground with a grayscale
+  copy of the yellow mark and names the app "OpenInstaCine Dev".
+- Pairing tips name the Insta360 app ("Before pairing, force quit the Insta360 app.", "Close the
+  Insta360 app on every phone near the camera.") where upstream names DJI Frame Tap and Mimo.
+
+Gated or skipped for Luna, and why:
+
+- AE / AWB lock: upstream pins the camera's applied Auto ISO, shutter and Kelvin as Manual (there
+  is no native lock command). The Luna reports only its exposure and WB settings (ISO 0 and
+  shutter 0 in Auto, Kelvin 0 in AWB), never the applied values, so there is nothing to pin.
+  `canLockAutoExposure` is false and `autoWhiteBalanceLock` is null, which hides the long press,
+  the AE-L row and the AWB Lock row. Revisit if a Luna status field for applied exposure turns up.
+- Wi-Fi and Hotspot setups: they are DJI station mode (`07/48`, `07/39`, subnet sweep for the DUML
+  identity). `connectionSetup` stays Camera Wi-Fi, `useSetup` is a no-op and Add setup is hidden
+  with Multiview (`supportsMultiview` is false).
+- Multiview: stays off (button hidden); the new control lease is accepted and ignored.
+- Pure DJI session work not ported: station provisioning, the camera access point restore,
+  decoder repair steps and session hold cycles (`decoderRepairStep`, `nextSessionHoldCycles`,
+  keyframe resend), the status JSON cache, programmed-move gimbal prep and restore, the Selfie
+  Flip GET suspension, the DUML format pin and shutter-angle SET pinning, the DJI tracking push
+  filter. The Luna session has no DUML datalink or feed watchdog; the policy helpers are still
+  present and unit-tested.
+- Dropped as DJI-only: instrumented `MultiviewControlSessionTest` and
+  `ShutterAngleControlSessionTest` (they drive DUML SET extras and the Multiview lease).
+- Not taken: the `perf` build type (no perf soak tooling here), the debug `applicationIdSuffix`
+  (no release build to install beside), `Play/` store text and the upstream version code.
+
+Depends on the parallel engine sync (outside `Apps/Android`): the Swift facade must carry
+`exposureLockDecision`, the CineStop and 709 false color paint (ordinals 3 to 7) and the `gauge`
+/ `lock-open` iOS icons. `MonitorIconCatalogTest` compares the Android SVGs with
+`Sources/MonitorUI/Resources/Icons` and fails until those two icons land there.
 
 ### Done
 
@@ -266,17 +327,24 @@ device, so nothing below is hardware-verified on Android.
   bytes 0xD0 to 0xD6), `media/MediaModels.kt` (direct-path media host, Insta360 file timestamps),
   `media/MediaLibraryController.kt` (Luna list/thumbnail/delete branch).
 - Gating matches iOS: no AF mode, no aperture, no multiview (button hidden), no programmed moves,
-  no audio controls. The Android shell has no Wi-Fi/Hotspot setup choice or head tracking to hide.
+  no audio controls, no AE / AWB lock, no Wi-Fi / Hotspot setups.
 - I-Log to Rec.709 sits in the camera LUT tab (`MonitorTransfer.ILOG`, camera looks in the DJI
   category so upstream tab logic and tests hold). DJI LUT assets are not bundled.
 - Brand copy: legal bodies, pairing steps, wordmarks, links (`openinstacine.app`, GitHub repo)
   mirror the iOS text. Launcher and splash logo are the yellow monitor mark.
-- `./gradlew :app:assembleDebug testDebugUnitTest lintDebug` passes: 997 monitor, 121
-  monitor-ui and 29 luna-adapter JVM tests. Test edits vs upstream: the source-contract test reads
+- `./gradlew :app:assembleDebug testDebugUnitTest lintDebug` passes: 883 monitor, 114
+  monitor-ui and 29 luna-adapter JVM tests at `9e306c91` (upstream removed many tests; 997 / 121
+  at `c1e8f94`). Test edits vs upstream: the source-contract test reads
   `monitor/` instead of `app/`, and legal/link assertions name OpenInstaCine and Insta360.
 - Emulator (`OpenInstaCine_API35`, landscape): pairing, live chrome in local replay (zoom chip,
   Deep Track button, gimbal stick, lock, DISP, LUT/assist rail) and Operator Setup render with the
   yellow accent. Shots in `.local/android-shots/` for comparison with `.local/parity-shots/oic/`.
+- Emulator after the `9e306c91` sync, local replay, landscape, built against the engine sync's
+  Swift sources: live chrome, each false color scale (`sync-9e306c9-falsecolor-{cinestop-log,
+  cinestop-709,video,ire,limits}-{live,options}.png`) and Operator Setup
+  (`sync-9e306c9-settings-landscape.png`). The options sheet lists CineStop, Video, IRE, Limits
+  and Read LOG / 709; CineStop paints the replay picture over I-Log. The goldfish decoder turned
+  flat for most shots, so the 709 read and Limits could not be judged on picture content.
 
 ### Remains
 
@@ -292,5 +360,8 @@ device, so nothing below is hardware-verified on Android.
   and the "Auto Native ISO" D-Log toggle in the ISO sheet.
 - Live decode on the emulator: the goldfish HEVC decoder returned a solid frame for the Luna replay
   in this run (the 2026-09-11 review got a moving picture); needs a real device.
-- There is no Android equivalent of `scripts/sync-openpocketcine.sh`; the resync was manual
-  (upstream `app/src` into `monitor/src`, then the brand, I-Log and session seams re-applied).
+- There is no Android equivalent of `scripts/sync-openpocketcine.sh`; both resyncs were manual
+  (upstream `app/src` mapped onto `monitor/src` and three-way merged, then the session by hand).
+- Needs a real device after the `9e306c91` sync: CineStop and the 709 read over live I-Log, feed
+  double tap to Deep Track and the 1.5 s start filter against the real 0x85 stream, shutter angle
+  writes, and the Vulkan crash guard and `ImageReader` sampling on real GPUs.

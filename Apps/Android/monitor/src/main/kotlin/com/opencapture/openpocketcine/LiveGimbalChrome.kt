@@ -6,7 +6,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 import com.opencapture.monitorui.MonitorMaterial
+import com.opencapture.monitorui.monitorScrollFade
 import com.opencapture.monitorui.monitorMaterial
+import com.opencapture.monitorui.monitorReadoutShadow
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -52,15 +54,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
@@ -125,7 +122,7 @@ fun LiveGimbalButton(
         OpcIcon(
             OpcIcon.CROSSHAIR,
             contentDescription = null,
-            modifier = Modifier.size(18.dp).alpha(if (locked) 0.4f else 1f),
+            modifier = Modifier.size(18.dp).alpha(if (locked) 0.4f else 1f).monitorReadoutShadow(),
             tint = LiveDesign.text,
         )
     }
@@ -355,7 +352,7 @@ private fun LiveGimbalWaypointMarks(model: AppModel, feed: ChromeRect, program: 
                 for (sample in preview) {
                     val (nx, ny, onScreen) = GimbalMoveEngine.project(sample, live, aspect)
                     if (!onScreen) { connected = false; continue }
-                    val x = (feed.minX + motionOverlayX(nx, poseInvertPan, model.assist.mirror).toFloat() * feed.width).dp.toPx()
+                    val x = (feed.minX + motionOverlayX(nx, poseInvertPan, model.assist.mirrorsHorizontally).toFloat() * feed.width).dp.toPx()
                     val y = (feed.minY + ny.toFloat() * feed.height).dp.toPx()
                     if (connected) path.lineTo(x, y) else path.moveTo(x, y)
                     connected = true
@@ -371,7 +368,7 @@ private fun LiveGimbalWaypointMarks(model: AppModel, feed: ChromeRect, program: 
                 Modifier
                     .offset {
                         IntOffset(
-                            (feed.minX + motionOverlayX(nx, poseInvertPan, model.assist.mirror).toFloat() * feed.width - 13f).dp.roundToPx(),
+                            (feed.minX + motionOverlayX(nx, poseInvertPan, model.assist.mirrorsHorizontally).toFloat() * feed.width - 13f).dp.roundToPx(),
                             (feed.minY + ny.toFloat() * feed.height - 13f).dp.roundToPx(),
                         )
                     }
@@ -540,15 +537,7 @@ private fun LiveGimbalEditor(model: AppModel, program: GimbalProgram, running: B
             Modifier.weight(1f).fillMaxWidth()
                 .testTag("motion.settings")
                 .semantics { if (moreBelow) stateDescription = "More settings below" }
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                .drawWithContent {
-                    drawContent()
-                    if (moreBelow) {
-                        drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent),
-                            startY = max(0f, size.height - 24.dp.toPx()), endY = size.height),
-                            blendMode = BlendMode.DstIn)
-                    }
-                }
+                .monitorScrollFade(scroll)
                 .verticalScroll(scroll)
                 .padding(horizontal = 12.dp, vertical = 7.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),

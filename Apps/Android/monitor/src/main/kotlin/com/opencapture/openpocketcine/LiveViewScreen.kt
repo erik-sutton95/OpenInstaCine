@@ -106,6 +106,7 @@ import com.opencapture.monitorui.monitorBackdropSource
 import com.opencapture.openpocketcine.feed.MonitorBackdropFeed
 import com.opencapture.openpocketcine.feed.rememberMonitorBackdropFeed
 import com.opencapture.openpocketcine.feed.OpcVulkan
+import com.opencapture.openpocketcine.feed.VulkanCrashGuard
 import com.opencapture.openpocketcine.feed.rememberLiveFeedEffectsPlan
 import com.opencapture.openpocketcine.media.MediaLibraryScreen
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
@@ -114,6 +115,7 @@ import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraStatus
 import com.opencapture.openpocketcine.session.ControlHud
 import com.opencapture.openpocketcine.session.FocusOverlay
+import com.opencapture.openpocketcine.session.LiveFaceDetector
 import com.opencapture.openpocketcine.session.TrackingBox
 import com.opencapture.openpocketcine.session.VideoResolution
 import java.util.concurrent.atomic.AtomicBoolean
@@ -142,6 +144,7 @@ fun LiveViewScreen(model: AppModel) {
     val zoomDialReadout by model.session.zoomDialReadout.collectAsState()
     val zoomPinching by model.session.zoomPinching.collectAsState()
     val trackingHud by model.session.trackingHud.collectAsState()
+    val aeLock by model.session.aeLock.collectAsState()
     val poseViewFlip by model.session.gimbalPoseViewFlip.collectAsState()
     val poseInvertPan by model.session.gimbalPoseInvertPan.collectAsState()
     val gimbalLimitPulse by model.session.gimbalLimitPulse.collectAsState()
@@ -151,7 +154,9 @@ fun LiveViewScreen(model: AppModel) {
     var sheet by remember { mutableStateOf<LiveSheet?>(null) }
     val context = LocalContext.current
     val assist = model.assist
-    val wantedViewFlip = CameraCommands.liveViewFlip(poseViewFlip, assist.mirror)
+    val wantedViewFlip = CameraCommands.liveViewFlip(poseViewFlip, assist.mirrorsHorizontally)
+    // MIRROR Vertical has no pose latch, so it applies on the toggle.
+    val flipV = assist.flipsVertically
     var liveViewFlip by remember { mutableStateOf(wantedViewFlip) }
     LaunchedEffect(wantedViewFlip) {
         if (liveViewFlip == wantedViewFlip) return@LaunchedEffect
@@ -259,7 +264,7 @@ fun LiveViewScreen(model: AppModel) {
     var vulkanFailed by remember { mutableStateOf(false) }
     val vulkanSession =
         remember {
-            if (OpcVulkan.isAvailable) {
+            if (OpcVulkan.isAvailable && !VulkanCrashGuard.isTripped(context)) {
                 LiveVulkanSession(
                     context = context,
                     backdrop = backdrop,
@@ -429,14 +434,14 @@ fun LiveViewScreen(model: AppModel) {
                 hasDisplayCutout = hasDisplayCutout,
                 fill = fill,
                 showsValues = model.chromeSectionMounts(PocketDispSection.CAMERA_VALUES),
+                joystick = model.virtualJoystickSize,
             )
         val layout =
             if (zones != null) {
                 val well = zones.feed
                 val picture =
                     if (verticalPicture && well.height > 1f) {
-                        val width = well.height * 9f / 16f
-                        ChromeRect(well.midX - width / 2f, well.minY, width, well.height)
+                        portraitVerticalPicture(well)
                     } else {
                         well
                     }
@@ -541,6 +546,7 @@ fun LiveViewScreen(model: AppModel) {
                 vector = GpuOverlayBus.vector,
                 uiScale = density.density,
                 pictureMirrored = liveViewFlip,
+                pictureFlippedVertically = flipV,
             )
         }
         val readoutRegions = remember { com.opencapture.monitorui.MonitorReadoutRegions() }
@@ -577,6 +583,7 @@ fun LiveViewScreen(model: AppModel) {
             ) {
                 LiveFeedPresenter(
                     mirrored = liveViewFlip,
+                    flippedVertically = flipV,
                     stretchToRect = desqueezeVisible,
                     backdrop = backdrop,
                     sourceIdentity = model.session.connectedCamera ?: model.session,
@@ -604,7 +611,8 @@ fun LiveViewScreen(model: AppModel) {
                     (pictureContent.x - layout.onFeed.x) * density.density,
                     (pictureContent.y - layout.onFeed.y) * density.density,
                     (pictureContent.maxX - layout.onFeed.x) * density.density,
-                    (pictureContent.maxY - layout.onFeed.y) * density.density), mirrored = liveViewFlip))
+                    (pictureContent.maxY - layout.onFeed.y) * density.density), mirrored = liveViewFlip,
+                flippedVertically = flipV))
 
             // iOS `LiveZoomPinchWell` sits under chip + scopes so direct drag
             // on WAVE / PARADE / HISTO / VECTOR still reaches MovableAssistPanel.
@@ -615,14 +623,17 @@ fun LiveViewScreen(model: AppModel) {
                     feed = ChromeRect(0f, 0f, gestureFrame.width, gestureFrame.height),
                     onTap = { point ->
                         val x = if (liveViewFlip) 1f - point.x else point.x
-                        model.session.handleFeedTap(x, point.y)
+                        val y = if (flipV) 1f - point.y else point.y
+                        model.session.handleFeedTap(x, y)
                     },
                     onSwipeClean = { clean -> if (!uiLocked) setClean(clean) },
                     onPinch = { mag -> model.session.updateZoomPinch(mag.toDouble()) },
                     onPinchEnd = { model.session.endZoomPinch() },
                     onTrack = { box ->
-                        model.session.startTracking(if (liveViewFlip) box.mirrored() else box)
+                        model.session.startTracking(box.flipped(liveViewFlip, flipV))
                     },
+                    onAeLock = { model.session.lockAutoExposure() },
+                    canLockAe = { model.session.canLockAutoExposure },
                 )
             }
 
@@ -634,7 +645,8 @@ fun LiveViewScreen(model: AppModel) {
                     tracking = trackingHud,
                     showTapFocusBox =
                         model.chromeSectionMounts(PocketDispSection.FOCUS_BOX) &&
-                            model.session.supportsTapFocus,
+                            (model.session.supportsTapFocus || aeLock != null),
+                    aeLocked = aeLock != null,
                     locked = uiLocked,
                     feedFrame = if (desqueezeVisible) pictureContent else layout.onFeed.fittedContent(
                         VideoResolution.fromRaw(status.resolutionCode)?.ratio ?: pictureAspect),
@@ -644,6 +656,7 @@ fun LiveViewScreen(model: AppModel) {
                     audioPlacementFrame = scopePlacement.copy(x = layout.safeLeading,
                         width = maxOf(0f, scopePlacement.maxX - layout.safeLeading)),
                     pictureMirrored = liveViewFlip,
+                    pictureFlippedVertically = flipV,
                     showsAudio = CaptureShutterPolicy.showsAudioControls(status.shootingMode),
                     onOpenOptions = { tool, frame ->
                         assist.longPressAnchor = frame
@@ -716,7 +729,8 @@ fun LiveViewScreen(model: AppModel) {
                 LiveLevelOverlay(
                     reading = model.session.levelReading,
                     // Picture-relative like the stick: TT180 mirrors the shown picture in both Selfie Flip states.
-                    viewFlip = CameraCommands.liveInvertPan(poseInvertPan, assist.mirror),
+                    // Either flip axis reverses the on-screen roll; both (180°) restores it.
+                    viewFlip = CameraCommands.liveInvertPan(poseInvertPan, assist.mirrorsHorizontally) != flipV,
                     feed = meterFeed,
                     viewport = ChromeRect(0f, 0f, vw, vh),
                     portrait = portrait,
@@ -729,7 +743,8 @@ fun LiveViewScreen(model: AppModel) {
                 textureView = glesTextureView,
                 feed = layout.onFeed,
                 enabled = wantsFaceDetect && hasPicture,
-                onFrame = { bmp -> model.session.considerFaceFrame(bmp) },
+                wantsFrame = model.session::wantsFaceFrame,
+                onFrame = { frame -> model.session.considerFaceFrame(frame) },
             )
             Box(Modifier.liveModuleFrame(layout.onFeed)) {
                 val subject = trackingHud.overlay as? FocusOverlay.Subject
@@ -739,8 +754,15 @@ fun LiveViewScreen(model: AppModel) {
                         feedWidth = layout.onFeed.width,
                         feedHeight = layout.onFeed.height,
                         mirrored = liveViewFlip,
+                        flippedVertically = flipV,
                         onClick = { model.session.cancelSubjectTracking() },
                     )
+                }
+            }
+            // iOS: beside the recenter key in both orientations, only while AE is locked.
+            if (!uiLocked && chromeInteractive && aeLock != null) {
+                Box(Modifier.liveModuleFrame(layout.aeUnlock).zIndex(3f)) {
+                    LiveAutoExposureUnlockButton(onClick = { model.session.unlockAutoExposure() })
                 }
             }
 
@@ -760,6 +782,8 @@ fun LiveViewScreen(model: AppModel) {
                     onAssistLongPress = { assist.configureTool = it },
                     chromeInteractive = chromeInteractive,
                     controlBusy = controlBusy,
+                    focusOffCenter = focusOffCenter,
+                    onFocusReset = { model.session.resetFocusPoint() },
                     fpsLabel = fpsLabel,
                     bars = bars,
                     sourceIsVertical = verticalPicture,
@@ -977,30 +1001,34 @@ private fun LiveFaceFramePump(
     textureView: TextureView?,
     feed: ChromeRect,
     enabled: Boolean,
-    onFrame: (Bitmap) -> Unit,
+    wantsFrame: () -> Boolean,
+    onFrame: (LiveFaceDetector.Frame) -> Unit,
 ) {
     val density = LocalDensity.current
     val handler = remember { Handler(Looper.getMainLooper()) }
     val inFlight = remember { AtomicBoolean(false) }
     val latest = rememberUpdatedState(onFrame)
+    val wanted = rememberUpdatedState(wantsFrame)
     val vulkan = LocalGpuLive.current
     LaunchedEffect(surfaceView, textureView, vulkan, enabled, feed.x, feed.y, feed.width, feed.height) {
         if (!enabled) return@LaunchedEffect
-        val tapW = com.opencapture.openpocketcine.session.LiveFaceDetector.TAP_WIDTH
+        val tapW = LiveFaceDetector.TAP_WIDTH
         while (isActive) {
-            delay(com.opencapture.openpocketcine.session.LiveFaceDetector.INTERVAL_MS)
-            if (!inFlight.compareAndSet(false, true)) continue
+            delay(LiveFaceDetector.INTERVAL_MS)
             // Vulkan: identity 720p RGB, same space as iOS Vision / 0xA6.
             // PixelCopy of the swapchain is already mirrored when TT180/MIRROR
             // is on, and the overlay mirrors again — box on the opposite side.
             val session = vulkan
             if (session != null) {
-                session.requestFaceTap()
-                val src = session.takeFaceBitmap()
-                inFlight.set(false)
-                if (src != null) latest.value(src)
+                // Take a fresh readback first, then ask for the next only when the
+                // detector will use it (10 Hz idle pace skips the GPU readback too).
+                session.takeFaceNv21()?.let {
+                    latest.value(LiveFaceDetector.Frame.nv21(it, LiveFaceDetector.TAP_WIDTH, LiveFaceDetector.TAP_HEIGHT))
+                }
+                if (wanted.value()) session.requestFaceTap()
                 continue
             }
+            if (!wanted.value() || !inFlight.compareAndSet(false, true)) continue
             val tapH =
                 ((tapW * feed.height / feed.width.coerceAtLeast(1f)).toInt() and 1.inv())
                     .coerceAtLeast(16)
@@ -1008,7 +1036,7 @@ private fun LiveFaceFramePump(
             if (gles != null && gles.isAvailable) {
                 val src = gles.getBitmap(tapW, tapH)
                 inFlight.set(false)
-                if (src != null) latest.value(src)
+                if (src != null) latest.value(LiveFaceDetector.Frame.of(src))
                 continue
             }
             val view = surfaceView
@@ -1037,7 +1065,7 @@ private fun LiveFaceFramePump(
                     { result ->
                         inFlight.set(false)
                         if (result == PixelCopy.SUCCESS) {
-                            latest.value(dest)
+                            latest.value(LiveFaceDetector.Frame.of(dest))
                         } else {
                             dest.recycle()
                         }
@@ -1130,6 +1158,7 @@ private fun View.unsplitMotionEvents() {
 @Composable
 private fun LiveFeedPresenter(
     mirrored: Boolean,
+    flippedVertically: Boolean,
     stretchToRect: Boolean,
     backdrop: MonitorBackdropFeed,
     sourceIdentity: Any,
@@ -1171,7 +1200,10 @@ private fun LiveFeedPresenter(
     LaunchedEffect(plan) { session.updatePlan(plan) }
     LaunchedEffect(stretchToRect) { session.setStretchToRect(stretchToRect) }
 
-    Box(modifier.graphicsLayer { scaleX = if (mirrored) -1f else 1f }) {
+    Box(modifier.graphicsLayer {
+        scaleX = if (mirrored) -1f else 1f
+        scaleY = if (flippedVertically) -1f else 1f
+    }) {
         key(gpuFailed) {
             AndroidView(
                 factory = { viewContext ->
@@ -1645,4 +1677,14 @@ private fun LiveTopDeck(
         }
         }
     }
+}
+
+/**
+ * iOS `FieldMonitorLayout`: a vertical camera is shown whole, resting on the bottom of the
+ * well. Height-only sizing overflowed narrow phones and clipped both sides.
+ */
+internal fun portraitVerticalPicture(well: ChromeRect): ChromeRect {
+    val height = minOf(well.height, well.width * 16f / 9f)
+    val width = height * 9f / 16f
+    return ChromeRect(well.midX - width / 2f, well.maxY - height, width, height)
 }

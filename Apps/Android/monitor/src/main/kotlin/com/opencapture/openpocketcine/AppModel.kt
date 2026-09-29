@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.openpocketcine.pairing.CameraConnectionSetup
 import com.opencapture.openpocketcine.pairing.SavedCamera
 import com.opencapture.openpocketcine.pairing.SavedCameras
 import com.opencapture.openpocketcine.pairing.SharedPreferencesSavedCameraStore
@@ -29,14 +30,20 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /** [borrowing] builds a Live View model over a Multiview tile's decoder (iOS `CameraSession(borrowing:)`). */
-class AppModel(context: Context, borrowing: com.opencapture.openpocketcine.session.HevcDecoder? = null) {
+class AppModel(
+    context: Context,
+    borrowing: com.opencapture.openpocketcine.session.HevcDecoder? = null,
+    controlLease: com.opencapture.openpocketcine.session.MultiviewControlLease? = null,
+) {
     private val appContext = context.applicationContext
     init {
         DiagnosticCenter.install(appContext)
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val store = SharedPreferencesSavedCameraStore(context)
-    val session = PocketCameraSession(context, borrowing)
+    /** Wi-Fi and Hotspot passwords, shared with Multiview (iOS `MultiviewNetworkStore`). */
+    private val networkStore = com.opencapture.openpocketcine.multiview.MultiviewNetworkStore(context)
+    val session = PocketCameraSession(context, borrowing, controlLease)
     /** Set while this Live View borrows a Multiview tile; replaces the lock button. */
     var multiviewExit by mutableStateOf<(() -> Unit)?>(null)
     val assist = LiveAssistState.from(appContext)
@@ -80,6 +87,8 @@ class AppModel(context: Context, borrowing: com.opencapture.openpocketcine.sessi
     var virtualJoystickResponseCurve by mutableStateOf(
         OperatorPrefs.virtualJoystickResponseCurve(appContext),
     )
+        private set
+    var virtualJoystickSize by mutableStateOf(OperatorPrefs.virtualJoystickSize(appContext))
         private set
     val virtualJoystickMapping: CameraCommands.VirtualJoystickMapping
         get() =
@@ -259,6 +268,11 @@ class AppModel(context: Context, borrowing: com.opencapture.openpocketcine.sessi
         OperatorPrefs.setVirtualJoystickResponseCurve(appContext, value)
     }
 
+    fun updateVirtualJoystickSize(value: com.opencapture.monitorui.MonitorJoystickSize) {
+        virtualJoystickSize = value
+        OperatorPrefs.setVirtualJoystickSize(appContext, value)
+    }
+
     fun updatePortraitFeedAspect(value: PortraitFeedAspect) {
         portraitFeedAspect = value
         OperatorPrefs.setPortraitFeedAspect(appContext, value)
@@ -392,14 +406,14 @@ class AppModel(context: Context, borrowing: com.opencapture.openpocketcine.sessi
             x,
             y,
             gimbalStickSensitivity,
-            assist.mirror,
+            assist.mirrorsHorizontally,
             mapping = virtualJoystickMapping,
         )
     }
 
     fun updateGimbalPadStick(x: Float, y: Float) {
         if (uiLocked) return
-        session.updateGimbalStick(x, y, gimbalStickSensitivity, assist.mirror)
+        session.updateGimbalStick(x, y, gimbalStickSensitivity, assist.mirrorsHorizontally)
     }
 
     fun endGimbalStick() = session.endGimbalStick()
@@ -452,8 +466,57 @@ class AppModel(context: Context, borrowing: com.opencapture.openpocketcine.sessi
     }
 
     fun reconnect(camera: SavedCamera) {
+        reconnect(camera, camera.preferredSetup)
+    }
+
+    fun reconnect(camera: SavedCamera, setup: CameraConnectionSetup) {
+        // Switching setups is a new connection, never a live-session no-op.
+        if (session.connectedCamera?.id == camera.id && session.connectionSetup != setup) session.disconnect()
+        if (setup.movesCamera) {
+            savedCameras = SavedCameras.stamping(setup, camera.id, savedCameras)
+            store.save(savedCameras)
+        }
+        val network = camera.ssid(setup)?.takeIf { setup.movesCamera }
+            ?.let { networkStore.load(it, setup == CameraConnectionSetup.PHONE_HOTSPOT) }
+        session.useSetup(setup, network, restoreAccessPoint = camera.lastSetup?.movesCamera == true)
         session.reconnect(camera.id)
     }
+
+    /** Password goes to the store Multiview also reads; the name stays per camera. */
+    fun addSetup(setup: CameraConnectionSetup, ssid: String, password: String, camera: SavedCamera) {
+        if (!setup.movesCamera) return
+        networkStore.save(ssid, password, setup == CameraConnectionSetup.PHONE_HOTSPOT)
+        savedCameras = SavedCameras.setting(setup, ssid, camera.id, savedCameras)
+        store.save(savedCameras)
+        savedCameras.firstOrNull { it.id == camera.id }?.let { reconnect(it, setup) }
+    }
+
+    fun forgetSetup(setup: CameraConnectionSetup, camera: SavedCamera) {
+        savedCameras = SavedCameras.setting(setup, null, camera.id, savedCameras)
+        store.save(savedCameras)
+    }
+
+    /** Add setup's camera scan, or null when the camera is not nearby or already in use. */
+    fun networkScan(camera: SavedCamera): (suspend ((String) -> Unit) -> Unit)? {
+        val found = session.found.value.firstOrNull { it.id == camera.id } ?: return null
+        if (session.connectedCamera?.id == camera.id) return null
+        return { onFound ->
+            com.opencapture.openpocketcine.multiview.MultiviewProvisioner(appContext).scanNetworks(
+                found,
+                // Stamped first: the scan moves the camera to station role, so a lost reset
+                // is repaired by the next Camera Wi-Fi connect.
+                beforeStationChange = {
+                    savedCameras = SavedCameras.stamping(CameraConnectionSetup.WIFI, camera.id, savedCameras)
+                    store.save(savedCameras)
+                },
+                onRestored = {},
+                onFound = onFound,
+            )
+        }
+    }
+
+    fun savedNetworks(): List<com.opencapture.openpocketcine.multiview.MultiviewNetworkStore.Network> =
+        networkStore.savedNetworks()
 
     fun forget(camera: SavedCamera) {
         savedCameras = SavedCameras.removing(camera.id, savedCameras)
@@ -479,6 +542,7 @@ class AppModel(context: Context, borrowing: com.opencapture.openpocketcine.sessi
                 modelName = found.model.name,
                 lastSSID = session.joinedSSID,
                 lastConnectedAt = System.currentTimeMillis(),
+                lastSetup = session.connectionSetup,
             )
         savedCameras = SavedCameras.upserting(record, savedCameras)
         store.save(savedCameras)

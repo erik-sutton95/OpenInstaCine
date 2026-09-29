@@ -1,7 +1,6 @@
 package com.opencapture.openpocketcine.feed
 
 import com.opencapture.openpocketcine.session.CameraCommands
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.exp
@@ -94,6 +93,9 @@ object ScopeExposureCeiling {
     const val DLOG2_LIVE_TAP_BYTE_AT_1600_HIGH = 248
     const val DLOG_LIVE_TAP_BYTE_AT_NATIVE = 223
     const val DLOG_LIVE_TAP_BYTE_AT_NATIVE_HIGH = 224
+
+    /** iOS `ScopeExposureCeiling.clipShelfCodes`: clipped detail reads 242–247 (D-Log2), 219–223 (D-Log). */
+    const val CLIP_SHELF_CODES = 7
 
     @Volatile private var iso: Int = REFERENCE_EI
     @Volatile private var refined1600: Int = DLOG2_LIVE_TAP_BYTE_AT_1600
@@ -213,24 +215,8 @@ data class ScopeAnchors(
             val span = maxOf(0.0, clip - black) * 255
             val crushFloor = floor(black * 255).toInt()
             val crushEdge = ceil(black * 255 + 0.02 * span).toInt()
-            val target95 =
-                ScopeDisplayScale.CRUSH_LEVEL +
-                    0.95 * (ScopeDisplayScale.CLIP_LEVEL - ScopeDisplayScale.CRUSH_LEVEL)
-            val encoded95 =
-                if (clip <= mid || mid <= black) {
-                    black + 0.95 * (clip - black)
-                } else if (target95 <= midLevel) {
-                    val t =
-                        (target95 - ScopeDisplayScale.CRUSH_LEVEL) /
-                            maxOf(midLevel - ScopeDisplayScale.CRUSH_LEVEL, 1e-9)
-                    black + t * (mid - black)
-                } else {
-                    val t =
-                        (target95 - midLevel) /
-                            maxOf(ScopeDisplayScale.CLIP_LEVEL - midLevel, 1e-9)
-                    mid + t * (clip - mid)
-                }
-            val clipFloor = minOf(clipEdge, maxOf(0, floor(encoded95 * 255).toInt()))
+            // iOS `ScopeAnchors.make`: the clip shelf every clip tool shares, not WAVE 95.
+            val clipFloor = maxOf(0, clipEdge - ScopeExposureCeiling.CLIP_SHELF_CODES)
             return ScopeAnchors(
                 black = black,
                 mid = mid,
@@ -300,35 +286,11 @@ object ScopeDisplayScale {
         return a.mid + t * (a.clip - a.mid)
     }
 
-    fun remapHistogram(bins: IntArray, transfer: MonitorTransfer, iso: Int? = null): IntArray {
-        val out = IntArray(256)
-        val table = levelTable(transfer, iso)
-        val limit = minOf(bins.size, 256)
-        for (code in 0 until limit) {
-            val count = bins[code]
-            if (count == 0) continue
-            val bucket = round(table[code] * 255.0).toInt().coerceIn(0, 255)
-            out[bucket] += count
-        }
-        return out
-    }
-
-    fun levelTable(transfer: MonitorTransfer, iso: Int? = null): FloatArray {
-        val ei = iso ?: ScopeExposureCeiling.resolvedISO()
-        val clip = ScopeExposureCeiling.clipByte(transfer, ei)
-        val key = transfer.ordinal.toLong() shl 32 or clip.toLong()
-        return tables.getOrPut(key) {
-            FloatArray(256) { waveformLevel(it / 255.0, transfer, ei).toFloat() }
-        }
-    }
-
     private fun overshoot(v: Double, clip: Double): Double {
         val headroom = 1.0 - clip
         if (headroom <= 0) return CLIP_LEVEL
         return CLIP_LEVEL + (v - clip) / headroom * (1.0 - CLIP_LEVEL)
     }
-
-    private val tables = ConcurrentHashMap<Long, FloatArray>()
 }
 
 /**

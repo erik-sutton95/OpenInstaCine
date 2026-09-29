@@ -59,6 +59,24 @@ class CompressedAccessUnitAdmissionTest {
     }
 
     @Test
+    fun gateDropsCountOnlyNonKeyUnitsRefusedWhileAwaitingIrap() {
+        val q = CompressedAccessUnitAdmission()
+        q.offer(avcKey)
+        q.offer(pSlice(1))
+        q.noteIncompleteLoss()
+        assertEquals(2, q.drops)
+        assertEquals(0, q.gateDrops)
+        q.offer(pSlice(2))
+        q.offer(pSlice(3))
+        assertEquals(4, q.drops)
+        assertEquals(2, q.gateDrops)
+        q.offer(avcKey)
+        q.offer(pSlice(4))
+        assertEquals(2, q.gateDrops)
+        assertEquals(2, q.irapSeen)
+    }
+
+    @Test
     fun pocketParameterSetsSurviveOverload() {
         val q = CompressedAccessUnitAdmission()
         q.offer(hevcParams)

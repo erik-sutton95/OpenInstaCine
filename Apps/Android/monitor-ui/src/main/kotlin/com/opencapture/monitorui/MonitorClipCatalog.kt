@@ -133,11 +133,10 @@ fun MonitorClipSelection(selected: Boolean, onClick: (() -> Unit)? = null) {
     Box(Modifier.size(44.dp).then(
         if (onClick != null) Modifier.combinedClickable(role = Role.Checkbox, onClick = onClick) else Modifier,
     ).semantics { contentDescription = if (selected) "Deselect clip" else "Select clip" }, contentAlignment = Alignment.Center) {
-        Box(Modifier.size(20.dp).background(if (selected) MonitorPalette.accent else Color.Black.copy(alpha = .56f), CircleShape),
-            contentAlignment = Alignment.Center) {
-            MonitorIcon(if (selected) MonitorIcon.CHECK else MonitorIcon.CIRCLE, null, Modifier.size(13.dp),
-                if (selected) MonitorPalette.backgroundDeep else MonitorPalette.text)
-        }
+        // iOS: circle-check / circle glyph over a 40% black disc.
+        MonitorIcon(if (selected) MonitorIcon.CIRCLE_CHECK else MonitorIcon.CIRCLE, null,
+            Modifier.size(22.dp).background(Color.Black.copy(alpha = .4f), CircleShape),
+            if (selected) MonitorPalette.accent else Color.White.copy(alpha = .7f))
     }
 }
 
@@ -216,7 +215,8 @@ fun MonitorCatalogHeader(title: String, subtitle: String, compact: Boolean, sort
         }
     }
     val controls: @Composable () -> Unit = {
-        Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically,
+        val controlsScroll = rememberScrollState()
+        Row(Modifier.monitorScrollFade(controlsScroll, vertical = false).horizontalScroll(controlsScroll), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.height(34.dp).clip(RoundedCornerShape(8.dp)).background(MonitorPalette.tile)
                 .combinedClickable(role = Role.Button, onClick = onSort).padding(horizontal = 9.dp),

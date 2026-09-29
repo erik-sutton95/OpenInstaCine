@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -19,11 +20,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -64,6 +69,10 @@ fun MonitorValueDrum(options: List<String>, selection: String, modifier: Modifie
     val metrics = remember(options) { MonitorDrumSelection.metrics(options) }
     val cell = with(density) { metrics.cellWidth.dp.toPx() }
     val textMeasurer = rememberTextMeasurer()
+    val star = painterResource(R.drawable.opc_lucide_star_fill)
+    // A sheet seats its current value just after the drum appears. That first
+    // seat must land in place, not slide in from the first option.
+    var seated by remember { mutableStateOf(selection in options) }
     LaunchedEffect(selection, options, interactive, displayPosition) {
         val preview = displayPosition
         if (preview != null && preview.isFinite()) {
@@ -79,6 +88,11 @@ fun MonitorValueDrum(options: List<String>, selection: String, modifier: Modifie
             lastTickIndex = cursor.roundToInt()
         }
         expected = null
+        if (!seated && selection in options) {
+            // Arm the settle animation only after the seat has rendered.
+            withFrameNanos { }
+            seated = true
+        }
     }
     fun choose(position: Float) {
         if (!position.isFinite()) return
@@ -92,7 +106,7 @@ fun MonitorValueDrum(options: List<String>, selection: String, modifier: Modifie
     }
     val rendered by animateFloatAsState(
         displayPosition ?: cursor,
-        animationSpec = if (dragging || displayPosition != null) snap()
+        animationSpec = if (dragging || displayPosition != null || !seated) snap()
             else tween(MonitorMotion.DRUM_SETTLE_MS, easing = MonitorMotion.DrumSettle),
         label = "drum detent",
     )
@@ -147,11 +161,17 @@ fun MonitorValueDrum(options: List<String>, selection: String, modifier: Modifie
             val text = options[index]
             val layout = textMeasurer.measure(text, MonitorTypography.readout(15f, if (index == base) FontWeight.SemiBold else FontWeight.Normal), maxLines = 1)
             val baseline = 44.dp.toPx()
+            // iOS: a filled 8pt star 3pt after the value, centered with it and in the value's tint.
+            val marked = options[index] in markedValues
+            val starSide = 8.dp.toPx()
+            val starGap = if (marked) 3.dp.toPx() + starSide else 0f
+            val left = x - (layout.size.width + starGap) / 2f
             withTransform({ scale(labelScale, labelScale, Offset(x, baseline)) }) {
-                drawText(layout, color = tint, topLeft = Offset(x - layout.size.width / 2f, baseline - layout.size.height))
+                drawText(layout, color = tint, topLeft = Offset(left, baseline - layout.size.height))
+                if (marked) translate(left + layout.size.width + 3.dp.toPx(), baseline - (layout.size.height + starSide) / 2f) {
+                    with(star) { draw(Size(starSide, starSide), colorFilter = ColorFilter.tint(tint)) }
+                }
             }
-            if (options[index] in markedValues) drawCircle(MonitorPalette.accent.copy(alpha = edgeAlpha),
-                radius = 2.dp.toPx(), center = Offset(x, 9.dp.toPx()))
             drawLine(if (index == base) MonitorPalette.accent else MonitorPalette.faint.copy(alpha = edgeAlpha),
                 Offset(x, 78.dp.toPx()), Offset(x, (78f - 10f - 7f * emphasis).dp.toPx()),
                 strokeWidth = 2.dp.toPx())
