@@ -232,10 +232,23 @@
                 while s.gimbalAim != nil { try? await Task.sleep(for: .milliseconds(20)) }
                 try? await Task.sleep(for: .seconds(1.5))
                 return ["ok": true, "settle": Date().timeIntervalSince(began), "state": state(model)]
+            case "headLogStart":
+                s.headTrackLog.removeAll(); s.imuRateLog.removeAll(); s.headTrackRecording = true
+            case "headLog":
+                s.headTrackRecording = false
+                func r(_ v: Double) -> Double { (v * 100).rounded() / 100 }
+                let latest = max(s.headTrackLog.last?.first ?? 0, s.imuRateLog.last?.first ?? 0)
+                let t0 = latest - 12  // last 12 s keeps the reply under the server's size limit
+                s.headTrackLog.removeAll { $0[0] < t0 }
+                s.imuRateLog.removeAll { $0[0] < t0 }
+                return ["ok": true,
+                        "track": s.headTrackLog.map { row in [r(row[0] - t0)] + row.dropFirst().map(r) },
+                        "imu": s.imuRateLog.map { row in [r(row[0] - t0), r(row[1]), r(row[2])] }]
             case "headTune":
                 if let v = num("lead") { CameraSession.headTrackLeadSeconds = v }
                 if let v = num("smoothing") { CameraSession.headTrackSmoothing = v }
                 if let v = num("velocityKeep") { CameraSession.headTrackVelocityKeep = v }
+                if let v = num("window") { CameraSession.headTrackVelocityWindow = v }
                 return ["ok": true, "lead": CameraSession.headTrackLeadSeconds,
                         "smoothing": CameraSession.headTrackSmoothing,
                         "velocityKeep": CameraSession.headTrackVelocityKeep]

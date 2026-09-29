@@ -734,7 +734,27 @@ extension CameraSession {
         Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
     }
 
+    #if DEBUG
+        /// Head-track recorder: 10 ms bins of camera-head rate (deg/s) from the gyro.
+        func logIMU(_ samples: [LunaIMUSample]) {
+            guard !headTrackLog.isEmpty || headTrackRecording else { return }
+            let end = ProcessInfo.processInfo.systemUptime
+            let stride = 10
+            for start in Swift.stride(from: 0, to: samples.count, by: stride) {
+                let slice = samples[start..<min(start + stride, samples.count)]
+                let yaw = slice.reduce(0) { $0 + $1.gyro.z } / Double(slice.count) * 180 / .pi
+                let pitch = slice.reduce(0) { $0 + $1.gyro.y } / Double(slice.count) * 180 / .pi
+                let age = Double(samples.count - start) / 1000
+                imuRateLog.append([end - age, yaw, pitch])
+            }
+            if imuRateLog.count > 6000 { imuRateLog.removeFirst(1000) }
+        }
+    #endif
+
     func ingestIMU(_ samples: [LunaIMUSample]) {
+        #if DEBUG
+            logIMU(samples)
+        #endif
         gimbalPose.ingest(samples, commanding: gimbalStick.isHeld || gimbalAim != nil || gimbalMoveRunning)
         lastIMUAt = ProcessInfo.processInfo.systemUptime
     }
@@ -755,8 +775,9 @@ extension CameraSession {
             // both axes at the same speed toward each SET_ANGLE, so a far target comes out
             // as a dog-leg (diagonal, then one axis). Short straight steps keep it straight.
             var glide = self?.freshGimbalWaypoint ?? target
-            var lastTarget = target
-            var velocity = (yaw: 0.0, pitch: 0.0)
+            // Distinct head samples only: AirPods updates skip about a third of the 30 Hz
+            // ticks, and treating a repeated target as "head stopped" made the lead saw back.
+            var history: [(t: Double, yaw: Double, pitch: Double)] = []
             let started = ProcessInfo.processInfo.systemUptime
             while !Task.isCancelled {
                 guard let self, let aim = self.gimbalAim, aim.token == token,
@@ -768,15 +789,46 @@ extension CameraSession {
                 } else {
                     // Lead the head along its own motion so the camera's stop-at-target
                     // planner never brakes between updates (that braking is the stepping).
-                    let dt = 0.033  // gimbalSetInterval
-                    let keep = Self.headTrackVelocityKeep
-                    velocity.yaw = velocity.yaw * keep + (aim.target.yawDeg - lastTarget.yawDeg) / dt * (1 - keep)
-                    velocity.pitch = velocity.pitch * keep + (aim.target.pitchDeg - lastTarget.pitchDeg) / dt * (1 - keep)
-                    lastTarget = aim.target
+                    let now = ProcessInfo.processInfo.systemUptime
+                    if history.last.map({ $0.yaw != aim.target.yawDeg || $0.pitch != aim.target.pitchDeg }) ?? true {
+                        history.append((now, aim.target.yawDeg, aim.target.pitchDeg))
+                    }
+                    history.removeAll { now - $0.t > Self.headTrackVelocityWindow }
+                    // Least-squares slope over the window's distinct samples; a spike from one
+                    // late sample no longer swings the lead. Head still: no lead, camera settles.
+                    var velocity = (yaw: 0.0, pitch: 0.0)
+                    if history.count >= 3, let last = history.last, now - last.t < 0.15 {
+                        let n = Double(history.count)
+                        let mt = history.reduce(0) { $0 + $1.t } / n
+                        let my = history.reduce(0) { $0 + $1.yaw } / n
+                        let mp = history.reduce(0) { $0 + $1.pitch } / n
+                        let stt = history.reduce(0) { $0 + ($1.t - mt) * ($1.t - mt) }
+                        if stt > 1e-6 {
+                            velocity = (
+                                history.reduce(0) { $0 + ($1.t - mt) * ($1.yaw - my) } / stt,
+                                history.reduce(0) { $0 + ($1.t - mt) * ($1.pitch - mp) } / stt
+                            )
+                        }
+                    }
                     var ahead = aim.target
                     ahead.yawDeg += velocity.yaw * Self.headTrackLeadSeconds
                     ahead.pitchDeg += velocity.pitch * Self.headTrackLeadSeconds
-                    next = Self.smooth(from: glide, toward: ahead, keep: Self.headTrackSmoothing)
+                    var smoothed = Self.smooth(from: glide, toward: ahead, keep: Self.headTrackSmoothing)
+                    // Never step against a clear head motion: that back-and-forth is the stepping.
+                    if abs(velocity.yaw) > 3, (smoothed.yawDeg - glide.yawDeg) * velocity.yaw < 0 {
+                        smoothed.yawDeg = glide.yawDeg
+                    }
+                    if abs(velocity.pitch) > 3, (smoothed.pitchDeg - glide.pitchDeg) * velocity.pitch < 0 {
+                        smoothed.pitchDeg = glide.pitchDeg
+                    }
+                    next = smoothed
+                    #if DEBUG
+                        self.headTrackLog.append([
+                            ProcessInfo.processInfo.systemUptime, aim.target.yawDeg, aim.target.pitchDeg,
+                            next.yawDeg, next.pitchDeg,
+                        ])
+                        if self.headTrackLog.count > 1500 { self.headTrackLog.removeFirst(300) }
+                    #endif
                 }
                 glide = next
                 if next != sent {
@@ -802,6 +854,8 @@ extension CameraSession {
     nonisolated(unsafe) static var headTrackLeadSeconds = 0.15
     nonisolated(unsafe) static var headTrackSmoothing = 0.3
     nonisolated(unsafe) static var headTrackVelocityKeep = 0.6
+    /// Span of distinct head samples the velocity is measured over.
+    nonisolated(unsafe) static var headTrackVelocityWindow = 0.3
 
     /// Exponential step toward `target`; `keep` is the share of the old value kept per tick.
     static func smooth(from current: GimbalWaypoint, toward target: GimbalWaypoint, keep: Double)

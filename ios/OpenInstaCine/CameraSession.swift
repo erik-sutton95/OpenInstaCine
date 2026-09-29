@@ -165,6 +165,11 @@ final class CameraSession {
     private(set) var gimbalPoseInvertPan = false
     /// Camera-head world pitch from the IMU stream (Level) and the fallback pose.
     @ObservationIgnored var gimbalPose = LunaGimbalPoseEstimator()
+    #if DEBUG
+        @ObservationIgnored var headTrackLog: [[Double]] = []
+        @ObservationIgnored var imuRateLog: [[Double]] = []
+        @ObservationIgnored var headTrackRecording = false
+    #endif
     @ObservationIgnored var lastIMUAt: TimeInterval?
     /// Handle-relative gimbal angle from cmd 226 GET_ANGLE, polled while live.
     @ObservationIgnored var gimbalAngle: (angle: LunaGimbalAngle, at: TimeInterval)?
