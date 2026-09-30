@@ -214,6 +214,13 @@ def main() -> None:
     )
     replace_phrase(snapshot_tests, "for option in FocusOption.allCases {", "for option in CaptureLists.focusOptions {")
 
+    # --- ISO sheet: the DJI native-ISO hop toggle only for cameras that hop (not Luna). ---
+    replace_once(
+        APP / "CaptureControlSheets.swift",
+        "if sheet == .iso { nativeIsoHopToggle }",
+        "if sheet == .iso, model.session.supportsNativeIsoHop { nativeIsoHopToggle }",
+    )
+
     # --- EV meter: a camera without metered EV (Luna) meters the picture instead. ---
     fx = APP / "LiveMonitorFx.swift"
     replace_once(fx, "    var ndMeter = false\n    var lutDimension = 0\n",

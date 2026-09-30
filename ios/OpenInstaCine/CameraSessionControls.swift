@@ -45,6 +45,8 @@ extension CameraSession {
     var reportsMeteredEV: Bool { false }
     /// Auto ISO ceiling and native-ISO hop are Osmo camcap features; Luna has neither.
     var supportsIsoLimit: Bool { false }
+    /// DJI camcap hop to the log curve's native ISO on a color change; the ISO sheet hides its toggle.
+    var supportsNativeIsoHop: Bool { false }
     /// Luna media browse runs over HTTP next to the live socket.
     var hasControlLink: Bool { backend.isControlReady }
     var bodyFamily: CameraBodyFamily { .other }

@@ -610,7 +610,7 @@ private fun LiveControlSheetContent(
                                 )
                             }
                         }
-                        PrefToggle(
+                        if (model.session.supportsNativeIsoHop) PrefToggle(
                             title = CaptureLists.NATIVE_ISO_HOP_TITLE,
                             help = CaptureLists.NATIVE_ISO_HOP_HELP,
                             checked = model.nativeISOHopEnabled,

@@ -206,7 +206,7 @@ struct CapturePickerPanel: View {
                                     category, isPhoto: isPhoto))
                         }
                     }
-                    if sheet == .iso, model.session.supportsIsoLimit { nativeIsoHopToggle }
+                    if sheet == .iso, model.session.supportsNativeIsoHop { nativeIsoHopToggle }
                     if isEvSheet { facePriorityToggle }
                 }
             }.disabled(!controlsEnabled)

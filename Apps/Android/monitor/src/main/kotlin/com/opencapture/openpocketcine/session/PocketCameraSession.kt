@@ -269,6 +269,8 @@ class PocketCameraSession(
     val supportsAudio: Boolean get() = can(CameraCapability.AUDIO)
     /** iOS `reportsMeteredEV`: the Luna sends none, so the EV meter reads the picture. */
     val reportsMeteredEV: Boolean get() = CameraCapability.METERED_EV in capabilities
+    /** DJI camcap hop to the log curve's native ISO on a color change; the Luna has none, so the ISO sheet hides the toggle. */
+    val supportsNativeIsoHop: Boolean get() = CameraCapability.NATIVE_ISO_HOP in capabilities
     /** iOS `faceMetering`: true Face Priority, false Matrix, null until the camera reports it (METER tile hidden). */
     private val _faceMetering = MutableStateFlow<Boolean?>(null)
     val faceMetering: StateFlow<Boolean?> = _faceMetering.asStateFlow()
