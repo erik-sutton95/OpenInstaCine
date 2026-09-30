@@ -72,7 +72,7 @@ class ManualProblemReportTest {
             ManualProblemReportEnvelope.compose(
                 eventId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 timestampMs = 1_700_000_000_000L,
-                release = "com.opencapture.openpocketcine@1.0+1",
+                release = "com.opencapture.openinstacine@1.0+1",
                 message = "Live view froze. Contact $userEmail",
                 contactEmail = userEmail,
                 diagnostics =
@@ -82,7 +82,7 @@ class ManualProblemReportTest {
         val feedback = JSONObject(String(composed.items[0].payload, Charsets.UTF_8))
         assertEquals("feedback", feedback.getString("type"))
         assertEquals("java", feedback.getString("platform"))
-        assertEquals("com.opencapture.openpocketcine@1.0+1", feedback.getString("release"))
+        assertEquals("com.opencapture.openinstacine@1.0+1", feedback.getString("release"))
         val ctx = feedback.getJSONObject("contexts").getJSONObject("feedback")
         assertEquals("Live view froze. Contact $userEmail", ctx.getString("message"))
         assertEquals(userEmail, ctx.getString("contact_email"))
@@ -118,7 +118,7 @@ class ManualProblemReportTest {
             ManualProblemReportEnvelope.compose(
                 eventId = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 timestampMs = 1L,
-                release = "com.opencapture.openpocketcine@1.0+1",
+                release = "com.opencapture.openinstacine@1.0+1",
                 message = ManualProblemReportEnvelope.sanitizeMessage(message),
                 contactEmail = "operator.reply@example.com",
                 diagnostics = huge,
@@ -337,7 +337,7 @@ class ManualProblemReportTest {
             ManualProblemReportEnvelope.compose(
                 eventId = "dddddddddddddddddddddddddddddddd",
                 timestampMs = 1L,
-                release = "com.opencapture.openpocketcine@1.0+1",
+                release = "com.opencapture.openinstacine@1.0+1",
                 message = "black live view",
                 contactEmail = null,
                 diagnostics = null,

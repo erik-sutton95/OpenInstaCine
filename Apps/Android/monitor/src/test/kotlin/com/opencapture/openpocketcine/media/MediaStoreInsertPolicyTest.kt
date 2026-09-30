@@ -15,7 +15,7 @@ class MediaStoreInsertPolicyTest {
                 "$mime must not be inserted under Movies",
             )
         }
-        assertEquals("Movies/OpenPocketCine", MediaStoreInsertPolicy.relativePath("video/mp4"))
+        assertEquals("Movies/OpenInstaCine", MediaStoreInsertPolicy.relativePath("video/mp4"))
     }
 
     @Test

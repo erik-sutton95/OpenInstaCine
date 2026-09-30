@@ -133,7 +133,7 @@ object DiagnosticCenter {
                 } catch (_: Exception) {
                     Handler(Looper.getMainLooper()).post {
                         android.widget.Toast.makeText(app,
-                            "Couldn't prepare the report. Please try again or email support@openpocketcine.app.",
+                            "Couldn't prepare the report. Please try again or email support@opencapture.org.",
                             android.widget.Toast.LENGTH_LONG).show()
                     }
                 } finally {
@@ -220,7 +220,7 @@ object DiagnosticCenter {
             }
         if (emailSupport) {
             intent.selector = Intent(Intent.ACTION_SENDTO, "mailto:".toUri())
-            intent.putExtra(Intent.EXTRA_EMAIL, arrayOf("support@openpocketcine.app"))
+            intent.putExtra(Intent.EXTRA_EMAIL, arrayOf("support@opencapture.org"))
             intent.putExtra(Intent.EXTRA_SUBJECT, "OpenInstaCine — report a problem")
             intent.putExtra(Intent.EXTRA_TEXT,
                 "What happened?\n\n\nTechnical details are attached to help us investigate. Please do not include private footage or passwords.")
@@ -231,7 +231,7 @@ object DiagnosticCenter {
             context.startActivity(chooser)
         } catch (_: android.content.ActivityNotFoundException) {
             android.widget.Toast.makeText(context,
-                "Email support@openpocketcine.app. No compatible app is available.",
+                "Email support@opencapture.org. No compatible app is available.",
                 android.widget.Toast.LENGTH_LONG).show()
         }
     }

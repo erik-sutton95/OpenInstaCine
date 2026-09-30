@@ -103,7 +103,7 @@ private val PRIVACY_BODY =
     """
 OpenInstaCine talks to your Insta360 Luna over Bluetooth and the camera's own Wi-Fi. The app has no account. Automatic error reports are optional and off by default.
 
-OpenCapture is the data controller. Privacy or deletion requests: support@openinstacine.app.
+OpenCapture is the data controller. Privacy or deletion requests: support@opencapture.org.
 
 Optional reliability reports
 With your consent, configured builds send crash, hang and feed diagnostics, app/OS/device versions and session health counts through Sentry. Automatic reports exclude all images. No footage, screenshots, raw camera packets or GPS location are included. Sentry receives the connection IP; stored event IP and derived geography are removed. Event storage uses Germany. Some provider processing may occur internationally.
@@ -129,7 +129,7 @@ Third parties
 
 Android may ask for location so the app can join the camera Wi-Fi or scan BLE. OpenInstaCine does not use that permission for maps, ads, or a location history.
 
-The full privacy policy is https://openinstacine.app/privacy/
+The full privacy policy is https://opencapture.org/openinstacine/privacy
     """.trimIndent()
 
 private val TERMS_BODY =

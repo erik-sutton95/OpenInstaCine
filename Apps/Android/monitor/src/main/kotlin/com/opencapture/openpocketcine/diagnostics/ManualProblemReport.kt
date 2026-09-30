@@ -168,7 +168,7 @@ internal object ManualProblemReport {
                     eventId = eventId,
                     timestampMs = nowMs(),
                     release =
-                        "com.opencapture.openpocketcine@${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}",
+                        "com.opencapture.openinstacine@${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}",
                     message = trimmed,
                     contactEmail = email,
                     diagnostics = diagnostics,
@@ -350,7 +350,7 @@ internal object ManualProblemReport {
                     .header("Accept", "application/json")
                     .header(
                         "X-Sentry-Auth",
-                        "Sentry sentry_version=7, sentry_client=openpocketcine-android/${BuildConfig.VERSION_NAME}, sentry_key=${endpoint.sentryKey}",
+                        "Sentry sentry_version=7, sentry_client=openinstacine-android/${BuildConfig.VERSION_NAME}, sentry_key=${endpoint.sentryKey}",
                     )
                     .build()
             val call = client.newCall(request)
@@ -444,7 +444,7 @@ internal object ManualProblemReport {
                 code in 400..499 -> {
                     meta.status = "failed"
                     meta.detail =
-                        "Report couldn't be sent. Remove it and try again, or contact support@openpocketcine.app."
+                        "Report couldn't be sent. Remove it and try again, or contact support@opencapture.org."
                 }
                 else -> {
                     meta.status = "waiting"

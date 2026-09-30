@@ -270,7 +270,7 @@ fun StationNetworkSetup(
             locationHint = when {
                 ssid != null -> null
                 !permitted && wifiNameAccess.needsSettings -> "Allow Location to show this phone’s Wi-Fi" to
-                    "Settings › Apps › OpenPocketCine › Permissions › Location, with Use precise location on. Only the Wi-Fi name is used."
+                    "Settings › Apps › OpenInstaCine › Permissions › Location, with Use precise location on. Only the Wi-Fi name is used."
                 !permitted -> "Allow Location to show this phone’s Wi-Fi" to
                     "Tap to allow precise location. Only the Wi-Fi name is used."
                 !located -> "Turn on Location to show this phone’s Wi-Fi" to

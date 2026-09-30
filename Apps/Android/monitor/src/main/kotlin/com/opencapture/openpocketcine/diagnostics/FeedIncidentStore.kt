@@ -81,7 +81,7 @@ internal class FeedIncidentStore(
     companion object {
         fun text(bundles: List<FeedIncidentBundle>): String {
             val lines = mutableListOf(
-                "OpenPocketCine feed incidents (typed snapshots, no journal)",
+                "OpenInstaCine feed incidents (typed snapshots, no journal)",
                 "count=${bundles.size} schema=${FeedIncidentSchema.VERSION}",
             )
             for (bundle in bundles) {

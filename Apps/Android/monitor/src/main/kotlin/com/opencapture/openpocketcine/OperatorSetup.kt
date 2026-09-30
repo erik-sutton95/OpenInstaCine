@@ -223,8 +223,8 @@ object OpenPocketCineLinks {
         "https://github.com/erik-sutton95/OpenInstaCine/issues/new?template=bug_report.yml"
     const val FEATURE_REQUEST =
         "https://github.com/erik-sutton95/OpenInstaCine/discussions/new?category=ideas"
-    const val PRIVACY = "https://openinstacine.app/privacy/"
-    const val TERMS = "https://openinstacine.app/terms/"
+    const val PRIVACY = "https://opencapture.org/openinstacine/privacy"
+    const val TERMS = "https://opencapture.org/openinstacine/terms"
 }
 
 internal object OperatorLinkHealth {

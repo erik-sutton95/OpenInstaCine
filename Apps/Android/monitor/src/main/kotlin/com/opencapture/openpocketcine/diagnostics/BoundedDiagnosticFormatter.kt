@@ -143,7 +143,7 @@ internal object BoundedDiagnosticFormatter {
             }
         val lines =
             mutableListOf(
-                "OpenPocketCine diagnostic report",
+                "OpenInstaCine diagnostic report",
                 "Privacy: no personal name, email, location, device name, or Wi-Fi password.",
                 "Generated: ${iso.format(Date(generatedAtMs))}",
                 "Prepared for explicit manual submission.",

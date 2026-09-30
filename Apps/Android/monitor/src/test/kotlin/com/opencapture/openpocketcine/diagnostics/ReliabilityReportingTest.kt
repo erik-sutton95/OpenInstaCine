@@ -381,7 +381,7 @@ class ReliabilityReportingTest {
         var captured = false
         ReliabilityReporting.setCaptureHandlerForTests { event, _ ->
             captured = true
-            assertEquals("com.opencapture.openpocketcine@0.1.0+107", event.release)
+            assertEquals("com.opencapture.openinstacine@0.1.0+107", event.release)
             assertEquals("107", event.dist)
             assertEquals(java.util.Date(1_780_000_000_000L), event.timestamp)
             assertEquals("a".repeat(40), event.tags?.get("sourceRevision"))
@@ -571,7 +571,7 @@ class ReliabilityReportingTest {
         assertEquals(30, options.maxCacheItems)
         assertEquals(256 * 1_024L, options.maxAttachmentSize)
         assertEquals(0, options.shutdownTimeoutMillis)
-        assertTrue(options.release.orEmpty().startsWith("com.opencapture.openpocketcine@"))
+        assertTrue(options.release.orEmpty().startsWith("com.opencapture.openinstacine@"))
         assertEquals(com.opencapture.openpocketcine.BuildConfig.VERSION_CODE.toString(), options.dist)
         assertEquals("development", options.environment)
     }

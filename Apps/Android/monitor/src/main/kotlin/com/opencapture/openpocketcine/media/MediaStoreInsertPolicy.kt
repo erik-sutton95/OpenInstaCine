@@ -15,8 +15,8 @@ package com.opencapture.openpocketcine.media
 internal object MediaStoreInsertPolicy {
     const val PICTURES = "Pictures"
     const val MOVIES = "Movies"
-    const val ALBUM = "OpenPocketCine"
-    const val FALLBACK_NAME = "OpenPocketCine_media"
+    const val ALBUM = "OpenInstaCine"
+    const val FALLBACK_NAME = "OpenInstaCine_media"
 
     fun isImage(mime: String): Boolean = mime.startsWith("image/")
 

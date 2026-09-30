@@ -226,7 +226,7 @@ internal object ReliabilityReporting {
         options.isAttachViewHierarchy = false
         options.isAttachStacktrace = false
         options.release =
-            "com.opencapture.openpocketcine@${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}"
+            "com.opencapture.openinstacine@${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}"
         options.dist = BuildConfig.VERSION_CODE.toString()
         options.environment = if (BuildConfig.DEBUG) "development" else "production"
         options.isAnrEnabled = true
@@ -421,7 +421,7 @@ internal object ReliabilityReporting {
         event.eventId = ReliabilityReportingPrivacy.eventId(summary.sessionID)
         event.timestamp = Date(summary.recordedAtMs)
         event.release = if (summary.appVersion != null && summary.appBuild != null)
-            "com.opencapture.openpocketcine@${summary.appVersion}+${summary.appBuild}"
+            "com.opencapture.openinstacine@${summary.appVersion}+${summary.appBuild}"
         else "legacy-session-unknown-release"
         event.dist = summary.appBuild
         val message = Message()
@@ -547,7 +547,7 @@ internal object ReliabilityReporting {
         event.level = level(envelope.grouping.outcome)
         event.eventId = eventId
         event.timestamp = Date(envelope.startedAtWallClockMs)
-        event.release = "com.opencapture.openpocketcine@${envelope.appVersion}+${envelope.appBuild}"
+        event.release = "com.opencapture.openinstacine@${envelope.appVersion}+${envelope.appBuild}"
         event.dist = envelope.appBuild
         val message = Message()
         message.formatted = "feed incident ${envelope.grouping.failingStage}"
