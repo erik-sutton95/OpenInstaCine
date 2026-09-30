@@ -29,11 +29,12 @@ internal class LunaControlPins {
     var gimbalMode: CameraValuePin<GimbalMode>? = null
     var gimbalSpeed: CameraValuePin<GimbalSpeed>? = null
     var focus: CameraValuePin<FocusOption>? = null
+    var faceMetering: CameraValuePin<Boolean>? = null
     var photoInFlight = false
 
     fun clear() {
         isoIndex = null; shutterDenom = null; expoMode = null; ev = null; whiteBalance = null; color = null
-        format = null; shootingMode = null; recording = null; gimbalMode = null; gimbalSpeed = null; focus = null
+        format = null; shootingMode = null; recording = null; gimbalMode = null; gimbalSpeed = null; focus = null; faceMetering = null
         photoInFlight = false
     }
 }

@@ -667,6 +667,7 @@ fun LiveCaptureStrip(
     val auto = status.expoMode == CameraCommands.EXPO_AUTO
     val aeLocked = model?.session?.aeLock?.collectAsState()?.value != null
     val awbLocked = model?.session?.awbLockKelvin?.collectAsState()?.value != null
+    val faceMetering = model?.session?.faceMetering?.collectAsState()?.value
     val shutter = captureShutterReadout(
         status,
         shutterUsesAngle,
@@ -688,6 +689,9 @@ fun LiveCaptureStrip(
             badgeIcon = if (auto && facePriority) OpcIcon.SCAN else null))
         add(value(LiveSheet.EXPO, "EXPOSURE", if (aeLocked) CaptureLists.AE_LOCK
             else if (status.expoMode == CameraCommands.EXPO_MANUAL) "M" else if (auto) "A" else "—"))
+        // iOS `LunaMeteringTile`: two values, so a tap toggles in place; hidden until the camera reports it.
+        if (faceMetering != null) add(com.opencapture.openpocketcine.monitor.MonitorValue(
+            METER_TILE, "METER", if (faceMetering) "Face" else "Matrix"))
         add(value(LiveSheet.WB, "WB", CaptureLists.wbChipValue(status, awbLocked),
             valueIcon = if (CaptureLists.wbIsAuto(status) && !awbLocked) OpcIcon.APERTURE else null))
         if (showFocus) add(value(LiveSheet.FOCUS, "FOCUS", status.focusLabel))
@@ -704,7 +708,7 @@ fun LiveCaptureStrip(
         enabled = enabled && quickLifetime.active,
         portrait = isPortrait,
         modifier = modifier,
-        quickControl = { id -> model?.let { captureQuickControl(LiveSheet.valueOf(id), status, it, context, quickLifetime) } },
+        quickControl = { id -> if (id == METER_TILE) null else model?.let { captureQuickControl(LiveSheet.valueOf(id), status, it, context, quickLifetime) } },
         quickPreview = { id, preview, maxHeight ->
             model?.let {
                 LiveControlSheet(LiveSheet.valueOf(id), it, status, locked = false,
@@ -718,10 +722,14 @@ fun LiveCaptureStrip(
             releaseCaptureQuickControl(LiveSheet.valueOf(id), source, value, it, context, quickLifetime,
                 enabled && active == null)
         } },
-        onOpen = { onOpen(LiveSheet.valueOf(it)) },
-        onFrame = { id, rect -> onTileFrame(LiveSheet.valueOf(id), rect) },
+        onOpen = { id ->
+            if (id == METER_TILE) faceMetering?.let { model?.session?.setFaceMetering(!it) } else onOpen(LiveSheet.valueOf(id))
+        },
+        onFrame = { id, rect -> if (id != METER_TILE) onTileFrame(LiveSheet.valueOf(id), rect) },
     )
 }
+
+private const val METER_TILE = "METER"
 
 /** iOS `a.circle.fill` stand-in for Auto white-balance. */
 @Composable

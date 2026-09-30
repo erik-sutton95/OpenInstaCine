@@ -260,6 +260,9 @@ class PocketCameraSession(
     val supportsAudio: Boolean get() = can(CameraCapability.AUDIO)
     /** iOS `reportsMeteredEV`: the Luna sends none, so the EV meter reads the picture. */
     val reportsMeteredEV: Boolean get() = CameraCapability.METERED_EV in capabilities
+    /** iOS `faceMetering`: true Face Priority, false Matrix, null until the camera reports it (METER tile hidden). */
+    private val _faceMetering = MutableStateFlow<Boolean?>(null)
+    val faceMetering: StateFlow<Boolean?> = _faceMetering.asStateFlow()
     var videoPackets = 0
     var accessUnits = 0
     var framesEnqueued = 0
@@ -422,6 +425,7 @@ class PocketCameraSession(
         readout.gimbalSpeed?.let(LunaShellMapping::gimbalSpeed)?.let { speed ->
             if (pins::gimbalSpeed.hold(speed, now) == null) _gimbalSpeed.value = speed
         }
+        _faceMetering.value = readout.faceMetering?.let { pins::faceMetering.hold(it, now) ?: it }
         readout.zoom?.let { if (zoomTarget == null && zoomPinchPreview == null) _zoomReadout.value = it }
         // Capture: the REC lamp holds its pin until capture status confirms.
         val recording = readout.recording
@@ -856,6 +860,19 @@ class PocketCameraSession(
         coalesce("focus") { sendControl("Focus ${option.chip}", onFail = { pins.focus = null }) { setFocusMode(mode) } }
     }
     fun refreshFocusTrack() = Unit
+
+    /** fw 1.1.15 stores option 46 3.7 to 4.9 s after the SET. */
+    fun setFaceMetering(on: Boolean) {
+        if (!canSendControl()) return
+        val previous = _faceMetering.value
+        pins.faceMetering = pin(on, SystemClock.elapsedRealtime(), 6_000)
+        _faceMetering.value = on
+        // The usual read 0.4 s after the SET is too early for 46; read again before the pin lapses.
+        sendControl(if (on) "Metering Face" else "Metering Matrix", onFail = { pins.faceMetering = null; _faceMetering.value = previous },
+            onSuccess = { scope.launch { delay(5_200); controls?.requestSettingsRefresh() } }) {
+            setFaceMetering(on)
+        }
+    }
 
     fun setColorMode(mode: Int, hopEnabled: Boolean = false) {
         if (!canSendControl()) return
