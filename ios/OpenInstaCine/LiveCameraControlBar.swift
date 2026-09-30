@@ -48,6 +48,7 @@ struct LiveCameraControlBar: View {
 
     private var visibleTileCount: Int {
         4 + (model.session.supportsFocusMode ? 1 : 0) + (model.session.supportsAperture ? 1 : 0)
+            + (model.session.supportsFaceMetering ? 1 : 0)
             + (showsAudio ? 1 : 0)
     }
 
@@ -73,6 +74,7 @@ struct LiveCameraControlBar: View {
                         && !model.session.status.isPhoto ? "346°" : "1/16000")
             }
             tile(.exposure, label: "EXPOSURE", value: expoValue, widest: "Manual")
+            LunaMeteringTile(session: model.session)
             tile(.wb, label: "WB", value: wbValue, widest: "10000K", valueIcon: wbIcon)
             if model.session.supportsFocusMode {
                 tile(.focus, label: "FOCUS", value: focusValue, widest: "Showcase")

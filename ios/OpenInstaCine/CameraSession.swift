@@ -185,6 +185,7 @@ final class CameraSession {
     /// Phone wall-clock seconds minus the live frame clock (earliest arrival), reset per live start.
     @ObservationIgnored var frameClockOffset: Double?
     @ObservationIgnored var lastTimecodeSecond: Int?
+    @ObservationIgnored var lastFeedTap: (at: Double, x: Double, y: Double)?
     #if DEBUG
         @ObservationIgnored var lastFrameClock: UInt64 = 0
     #endif

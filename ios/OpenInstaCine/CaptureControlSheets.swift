@@ -208,7 +208,6 @@ struct CapturePickerPanel: View {
                     }
                     if sheet == .iso, model.session.supportsIsoLimit { nativeIsoHopToggle }
                     if isEvSheet { facePriorityToggle }
-                    if sheet == .exposure { LunaMeteringToggle(session: model.session) }
                 }
             }.disabled(!controlsEnabled)
         }

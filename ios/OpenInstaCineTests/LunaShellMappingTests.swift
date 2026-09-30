@@ -196,3 +196,23 @@ final class PictureEVMeterTests: XCTestCase {
         XCTAssertEqual(meter.stops(picture: 0.4, transfer: .rec709, evComp: nil, now: t + 2), 0.4, accuracy: 1e-9)
     }
 }
+
+@MainActor
+final class LunaDoubleTapTrackTests: XCTestCase {
+    func testSecondTapNearbyAndQuickIsADoubleTap() {
+        XCTAssertTrue(CameraSession.isDoubleTap(from: (10, 0.5, 0.5), to: (10.3, 0.53, 0.52)))
+        XCTAssertFalse(CameraSession.isDoubleTap(from: (10, 0.5, 0.5), to: (10.5, 0.5, 0.5)), "too slow")
+        XCTAssertFalse(CameraSession.isDoubleTap(from: (10, 0.5, 0.5), to: (10.2, 0.6, 0.5)), "too far")
+    }
+
+    func testTrackBoxIsCentredAndStaysInFrame() {
+        let centre = CameraSession.doubleTapTrackBox(x: 0.5, y: 0.5)
+        XCTAssertEqual(centre.x + centre.width / 2, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(centre.y + centre.height / 2, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(centre.height, centre.width * 16 / 9, accuracy: 1e-9)
+        XCTAssertFalse(centre.isTooSmall)
+        let corner = CameraSession.doubleTapTrackBox(x: 0.99, y: 0.01)
+        XCTAssertEqual(corner.maxX, 1, accuracy: 1e-9)
+        XCTAssertEqual(corner.minY, 0, accuracy: 1e-9)
+    }
+}

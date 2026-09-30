@@ -28,19 +28,28 @@ enum OsmoMonitorPresentation {
     }
 }
 
-/// Luna Matrix / Face Priority metering row in the shared Exposure sheet (overlay hook).
-/// Hidden until the camera has reported option 46.
-struct LunaMeteringToggle: View {
+/// Luna METER tile beside EXPOSURE (overlay hook): tap switches Matrix and Face Priority
+/// metering (option 46). Two values, so it toggles in place instead of opening a drum.
+/// Shows a dash until the camera has reported option 46.
+struct LunaMeteringTile: View {
     let session: CameraSession
 
     var body: some View {
-        if session.supportsFaceMetering, let on = session.faceMetering {
-            MonitorCaptureToggle(
-                "Face metering",
-                help: on
-                    ? "Face Priority: the camera meters on faces."
-                    : "Matrix: the camera meters the whole frame.",
-                isOn: Binding(get: { on }, set: { session.setFaceMetering($0) }))
+        if session.supportsFaceMetering {
+            let face = session.faceMetering
+            Button {
+                if let face { session.setFaceMetering(!face) }
+            } label: {
+                CaptureBarReadout(
+                    label: "METER", value: face.map { $0 ? "Face" : "Matrix" } ?? "-", widest: "Matrix")
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .sensoryFeedback(.selection, trigger: face)
+            .accessibilityIdentifier("monitor.capture.metering")
+            .accessibilityLabel("Metering")
+            .accessibilityValue(face.map { $0 ? "Face Priority" : "Matrix" } ?? "Unknown")
+            .accessibilityHint("Switches between Matrix and Face Priority metering")
         }
     }
 }

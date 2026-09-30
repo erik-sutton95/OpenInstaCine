@@ -205,15 +205,8 @@ def main() -> None:
     )
 
     # --- Luna AF modes (focus drum lists only what the camera offers) and metering row. ---
-    sheets = APP / "CaptureControlSheets.swift"
     for name in ("CaptureControlSheets.swift", "CaptureQuickControl.swift"):
         replace_phrase(APP / name, "FocusOption.allCases", "CaptureLists.focusOptions")
-    replace_once(
-        sheets,
-        "                    if isEvSheet { facePriorityToggle }\n",
-        "                    if isEvSheet { facePriorityToggle }\n"
-        "                    if sheet == .exposure { LunaMeteringToggle(session: model.session) }\n",
-    )
     replace_phrase(
         snapshot_tests,
         'XCTAssertEqual(snapshot.options, ["AF-S", "AF-C", "Showcase", "Lock", "Priority"])',
@@ -261,6 +254,13 @@ def main() -> None:
     replace_once(APP / "SettingsRootView.swift",
                  "\"Show the camera's exposure meter at the picture's left edge in DISP 1. Auto and Manual use the camera reading without changing exposure settings.\"",
                  "\"Show the exposure meter at the picture's left edge in DISP 1. It reads the camera's metered EV, or meters the picture when the camera reports none. It never changes exposure settings.\"")
+
+    # --- Luna METER tile (Matrix / Face Priority, option 46) beside EXPOSURE. ---
+    bar = APP / "LiveCameraControlBar.swift"
+    replace_once(bar, "        4 + (model.session.supportsFocusMode ? 1 : 0) + (model.session.supportsAperture ? 1 : 0)\n",
+                 "        4 + (model.session.supportsFocusMode ? 1 : 0) + (model.session.supportsAperture ? 1 : 0)\n            + (model.session.supportsFaceMetering ? 1 : 0)\n")
+    replace_once(bar, "            tile(.exposure, label: \"EXPOSURE\", value: expoValue, widest: \"Manual\")\n",
+                 "            tile(.exposure, label: \"EXPOSURE\", value: expoValue, widest: \"Manual\")\n            LunaMeteringTile(session: model.session)\n")
 
     # --- Launch wiring + gates that assumed a DJI datalink. ---
     replace_once(

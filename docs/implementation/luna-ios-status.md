@@ -35,7 +35,7 @@ Parity values:
 | Gimbal Level (double tap) | Luna-adapted | SET_ANGLE to GET pitch minus IMU gravity pitch, yaw kept; one refine pass. Lands within 0.4° of world level. Hardware-verified 2026-09-29 |
 | Programmed moves (A/B/C) | Luna-adapted | Waypoints from GET_ANGLE; the session interpolates legs (shell curve with smoothness) and streams SET_ANGLE at 30 Hz; countdown, loop, pause, stop. Zoom changes between points are refused. Hardware-verified 2026-09-29 |
 | Tap focus | Luna-adapted | ROI 0.15 x 0.27 of the preview centred on the tap (official app geometry) |
-| Deep Track | Luna-adapted | Drag or tap a face box opens Luna tracking (cmd 237) with the drawn rectangle; cancel supported |
+| Deep Track | Luna-adapted | Drag a box, tap a face box, or double-tap the feed (a 0.2-wide box, square on the sensor, centred on the tap) opens Luna tracking (cmd 237); cancel supported. Double-tap hardware-verified 2026-09-30 |
 | Record + timer | Luna-adapted | Start/stop and photo; lamp waits for camera capture status. REC timer is elapsed time from capture status (no timecode) |
 | Lock | Same | Interface lock blocks every control |
 | DISP clean view | Same | DISP 1/2, clean mode, chrome editor |
@@ -48,7 +48,7 @@ Parity values:
 | Histogram | Same | |
 | Vectorscope | Same | |
 | Traffic lights | Same | |
-| ND / EV meters, de-squeeze | Same | |
+| ND / EV meters, de-squeeze | Luna-adapted | EV meter reads the picture (median vs 18% grey, less the learned auto-exposure placement, `PictureEVMeter`); the Luna sends no metered EV |
 | Level assist overlay | Luna-adapted | Tool present; shows "No level data" (no camera attitude) |
 | Guides | Same | |
 | Grid | Same | |
@@ -65,7 +65,7 @@ Parity values:
 | Audio (setting, meters) | Hidden-not-supported | `supportsAudio` false: AUDIO tile, live AUDIO assist and meter overlay hidden (playback audio meters stay). fw 1.1.15 has no phone-protocol audio mode GET or SET and no levels (probed 2026-09-29, verification doc Audio section); Original Audio / Wind Reduction / Voice Enhancement are camera-screen only. `LunaFileMetadata.audioMode` decodes the mode a clip was recorded with (field 61), not yet shown in the UI |
 | Timecode | Luna-adapted | Time-of-day timecode from the camera clock: the app sets the clock at live start (options 12/13/175, then cmd 214 to the millisecond) and times each live frame from its frame-clock stamp. Status bar, portrait bar and Apple Watch. No protocol field carries timecode ([luna-timecode.md](../research/luna-timecode.md)). Hardware-verified 2026-09-30 |
 | AF mode (AF-S / AF-C / Product Showcase) | Luna-adapted | Shared FOCUS drum and chip list only the three official modes (option 93 = 1 / 3 / 6, overlay `CaptureLists.focusOptions`); readout from GET 93 on connect and refresh with a 3 s pin. Hardware-verified 2026-09-29. Android: follow-up |
-| Metering (Matrix / Face Priority) | Luna-adapted | "Face metering" row in the Exposure sheet (`LunaMeteringToggle`, overlay hook); option 46 bool; camera stores it 3.7 to 4.9 s after the SET, so a 6 s pin holds the readout. Hardware-verified 2026-09-29. Android: follow-up |
+| Metering (Matrix / Face Priority) | Luna-adapted | METER tile beside EXPOSURE (`LunaMeteringTile`, overlay hook): tap switches Matrix and Face Priority; option 46 bool; camera stores it 3.7 to 4.9 s after the SET, so a 6 s pin holds the readout. Hardware-verified 2026-09-29. Android: follow-up |
 | Aperture | Hidden-not-supported | `supportsAperture` false; fixed iris |
 | Head tracking | Luna-adapted | Stick (MOVE) at 30 Hz closed on GET_ANGLE: AirPods rate and acceleration fed forward plus a pull to the exact angle (a SET_ANGLE stream judders at the send rate). 1.8° RMS on a 20° / 3 s sine, ~0.02 s lag; pan tops out at 63 deg/s. Hardware-verified 2026-09-30 |
 | Multiview | Hidden-not-supported | Entry removed from the camera list (`SavedCamerasView.swift`); stages DJI bodies over RTMP |
@@ -93,7 +93,7 @@ setting changed was restored.
 | Gimbal mode / speed / recenter / flip / stick | Pass (command accepted) | Remote; gimbal sheet tabs Mode, Speed, Ramp, Double-tap by UI |
 | Programmed moves | Pass (2026-09-29) | Now enabled on SET_ANGLE; see the absolute-angle section |
 | Tap focus | Pass | UI tap moves the focus box; control accepted |
-| Deep Track | Partial | Drag sends Track (camera "ok"); no lock on a uniform dark scene, box clears as designed |
+| Deep Track | Luna-adapted | Drag a box, tap a face box, or double-tap the feed (a 0.2-wide box, square on the sensor, centred on the tap) opens Luna tracking (cmd 237); cancel supported. Double-tap hardware-verified 2026-09-30 |
 | Record with confirmation, REC timer | Pass | UI confirm popover; REC 00:02 with red frame; 5 s clip on the camera |
 | Lock, DISP clean view | Pass | UI taps; locked tiles ignore taps; long-press unlock |
 | Assists (all 16) | Pass | Toggled each by remote, screenshots; LEVEL shows "No level data" |

@@ -1211,10 +1211,18 @@ extension CameraSession {
 
     // MARK: - Focus and tracking
 
-    /// Feed tap: inside a face box → Deep Track that face. Anywhere else → tap-to-focus.
+    /// Feed tap: inside a face box → Deep Track that face. A second tap on the same spot
+    /// → Deep Track whatever is there. Anywhere else → tap-to-focus.
     func handleFeedTap(at normalized: CGPoint) {
         let x = min(max(Double(normalized.x), 0), 1)
         let y = min(max(Double(normalized.y), 0), 1)
+        let now = ProcessInfo.processInfo.systemUptime
+        if let last = lastFeedTap, Self.isDoubleTap(from: last, to: (now, x, y)) {
+            lastFeedTap = nil
+            startTracking(Self.doubleTapTrackBox(x: x, y: y))
+            return
+        }
+        lastFeedTap = (now, x, y)
         if let box = FaceTrackTap.boxIfTapped(
             overlay: focusOverlay, x: x, y: y, sceneFaces: dimmedFaces)
         {
@@ -1222,6 +1230,22 @@ extension CameraSession {
             return
         }
         markFocus(at: CGPoint(x: x, y: y))
+    }
+
+    /// Second tap within the double-tap window and about a finger's width away.
+    static func isDoubleTap(from first: (at: Double, x: Double, y: Double), to second: (at: Double, x: Double, y: Double))
+        -> Bool
+    {
+        second.at - first.at <= GimbalStick.doubleTapWindow && hypot(second.x - first.x, second.y - first.y) <= 0.06
+    }
+
+    /// Double-tap Deep Track box: square on the 16:9 sensor, a fifth of the width, centred
+    /// on the tap and kept inside the frame.
+    static func doubleTapTrackBox(x: Double, y: Double) -> TrackingBox {
+        let w = 0.2
+        let h = w * 16 / 9
+        return TrackingBox(
+            x: min(max(x - w / 2, 0), 1 - w), y: min(max(y - h / 2, 0), 1 - h), width: w, height: h)
     }
 
     func markFocus(at normalized: CGPoint) {
