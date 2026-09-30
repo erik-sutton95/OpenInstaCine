@@ -1,5 +1,16 @@
-New features
-- OpenInstaCine is a free, open-source field monitor for the Insta360 Luna Ultra: live view, scopes, exposure assists, recording and gimbal control from your iPhone.
-- It needs a Luna Ultra on camera firmware 1.1.15. Force quit the Insta360 app first, then pair from the start screen and allow Bluetooth, Wi-Fi and Local Network access.
-- Try pairing, live view with waveform and false colour, starting and stopping a recording, zoom, and moving the gimbal. Double-tap the picture to start Deep Track.
-- Something wrong? Take a screenshot in TestFlight and paste the copied report into your feedback, or use Report a problem in Operator Setup. Email support@opencapture.org.
+New and changed
+
+- First open beta: a free, open-source field monitor for the Insta360 Luna Ultra (firmware 1.1.15) with live view, scopes, false color, zebras, peaking and LUTs.
+- Full camera control: exposure, white balance, METER (Matrix or Face), focus, recording and timecode, plus gimbal joystick, Recenter and AirPods head tracking.
+- Double-tap the picture to start Deep Track. Long-press the focus box to lock it so a stray tap cannot move it.
+
+Fixes
+
+- AirPods head tracking now follows your head smoothly instead of jumping, and the gimbal stops as soon as you stop moving.
+- LUT set to Auto now applies the right look for the camera's color profile.
+
+What to test
+
+- Force quit the Insta360 app, then pair from the start screen and allow Bluetooth, Wi-Fi and Local Network. Pairing should reach live view.
+- Start and stop a recording, check the timecode, and try waveform, false color and a LUT on I-Log.
+- Move the gimbal with the joystick and AirPods, double-tap a subject to track it, then report anything off with a TestFlight screenshot.
