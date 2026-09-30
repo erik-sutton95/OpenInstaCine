@@ -1,0 +1,92 @@
+# Automatic area labels for pull requests.
+# actions/labeler v5 requires each label to contain match configuration objects.
+
+"area:core":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Sources/OpenPocketViewCore/**/*"
+          - "Sources/Monitor*/**/*"
+
+"area:protocol":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Adapters/**/*"
+          - "Apps/Android/luna-adapter/**/*"
+          - "docs/protocol-notes.md"
+          - "docs/research/**/*"
+          - "docs/implementation/luna-*.md"
+          - "tools/luna_*"
+          - "tools/test_luna_*.py"
+          - "tools/LunaProbe/**/*"
+          - "tools/ble_lab.py"
+          - "tools/*ucd2.py"
+
+"area:ios":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "ios/OpenInstaCine/**/*"
+          - "ios/OpenInstaCineWatch/**/*"
+          - "ios/project.yml"
+
+"area:live-view":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Sources/OpenPocketViewCore/Hevc*.swift"
+          - "Sources/OpenPocketViewCore/Feed*.swift"
+          - "ios/OpenInstaCine/Hevc*.swift"
+          - "ios/OpenInstaCine/LiveView*.swift"
+          - "ios/OpenInstaCine/VideoView.swift"
+          - "ios/OpenInstaCine/Feed*.swift"
+
+"area:monitoring":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "ios/OpenInstaCine/Assists/**/*"
+          - "ios/OpenInstaCine/LiveAssists.swift"
+          - "ios/OpenInstaCine/LiveMonitorFx.swift"
+          - "ios/OpenInstaCine/LiveScopes.swift"
+          - "ios/OpenInstaCine/Scope*.swift"
+
+"area:control":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Adapters/Insta360Protocol/Sources/Insta360Protocol/LunaControl.swift"
+          - "Apps/Android/luna-adapter/src/main/kotlin/**/LunaControl.kt"
+          - "Sources/OpenPocketViewCore/CameraControl.swift"
+          - "ios/OpenInstaCine/CameraSession*.swift"
+
+"area:media":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Sources/OpenPocketViewCore/Media*.swift"
+          - "Sources/OpenPocketViewCore/*LUT*.swift"
+          - "Sources/MonitorUI/Media/**/*"
+          - "ios/OpenInstaCine/Media*.swift"
+          - "ios/OpenInstaCine/*LUT*.swift"
+
+"area:ui":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "ios/OpenInstaCine/*View.swift"
+          - "ios/OpenInstaCine/*View*.swift"
+          - "ios/OpenInstaCine/Design*.swift"
+          - "ios/OpenInstaCine/Branding.swift"
+          - "ios/OpenInstaCine/OpenInstaCineBrand.swift"
+          - "ios/OpenInstaCine/StartupChrome.swift"
+          - "Sources/MonitorUI/**/*"
+
+"area:docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**/*"
+          - ".github/**/*"
+          - "README.md"
+
+"area:android":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Apps/Android/**/*"
+          - "Sources/OpenPocketCineAndroidFacade/**/*"
+          - "Sources/CJNI/**/*"
+          - "scripts/android-*.sh"

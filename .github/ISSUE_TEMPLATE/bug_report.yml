@@ -1,0 +1,93 @@
+name: Report a problem
+description: Tell us when something is not working. No technical experience is needed.
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve OpenInstaCine. Describe what you saw in your own words.
+        **What went wrong** and **App version** are required. Skip anything marked **optional**.
+
+        App version lives in Operator Setup → System (and at the top of Share Diagnostics).
+        Copy the whole string, including the number in parentheses: `0.1.0` alone is not enough.
+
+        Open the signed-in [bug-report form](https://github.com/erik-sutton95/OpenInstaCine/issues/new?template=bug_report.yml) directly at
+        any time. Do not include camera Wi-Fi passwords, packet captures, or other secrets.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What went wrong?
+      description: Tell us what you expected to happen and what happened instead.
+      placeholder: |
+        Example: I expected the live camera view to keep playing, but it froze after about 10 seconds.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: What were you doing when it happened? (optional)
+      description: A short list of the last few things you tapped or changed is enough.
+      placeholder: |
+        Example:
+        1. Connected to my Luna Ultra over Wi-Fi
+        2. Opened the live monitor
+        3. Rotated the gimbal
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Add screenshots, videos, or logs (optional)
+      description: Paste from your clipboard, drag and drop files here, or click below to choose files.
+      placeholder: You can also paste log text or add any other information that helps explain the problem.
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: >
+        Operator Setup → System → App Version, or the `app:` line in Share Diagnostics.
+        We need the build number in parentheses so we can tell Play / TestFlight builds apart.
+      placeholder: "0.1.0 (36)"
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Optional details
+
+        The details below can help us investigate faster, but it is completely fine to leave them blank.
+
+  - type: input
+    id: camera
+    attributes:
+      label: Camera and connection (optional)
+      description: Include the camera model and how your phone or tablet was connected, if you know.
+      placeholder: "Example: Luna Ultra over camera Wi-Fi"
+
+  - type: input
+    id: platform
+    attributes:
+      label: Phone or tablet (optional)
+      description: Device model and OS version.
+      placeholder: "Example: iPhone 16 Pro on iOS 18.5, or Pixel 9 on Android 16"
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does this happen? (optional)
+      options:
+        - I am not sure
+        - It happened once
+        - It happens sometimes
+        - It happens every time
+
+  - type: checkboxes
+    id: advanced-context
+    attributes:
+      label: Advanced context (optional)
+      options:
+        - label: This worked in an earlier version of OpenInstaCine
+        - label: I can reproduce this in the simulator without a real camera
