@@ -14,6 +14,7 @@ internal class LunaChannel(
     private val video: (ByteArray, Long) -> Unit = { _, _ -> },
     private val notify: (LunaWire.Message) -> Unit = {},
     private val track: (LunaTrackFrame) -> Unit = {},
+    private val imu: (List<LunaImuSample>) -> Unit = {},
 ) {
     private val parser = LunaWire.Parser()
     private val sequence = AtomicInteger()
@@ -37,6 +38,7 @@ internal class LunaChannel(
                                 val tick = java.nio.ByteBuffer.wrap(bytes, 1, 8).order(java.nio.ByteOrder.LITTLE_ENDIAN).long
                                 video(bytes.copyOfRange(9, bytes.size), tick * 1000)
                             }
+                            0x30 -> LunaImu.decode(bytes, 9).takeIf { it.isNotEmpty() }?.let(imu)
                             // A malformed Deep Track frame is dropped, not a link failure.
                             0x85 -> runCatching { LunaTrackFrame.parse(bytes.copyOfRange(9, bytes.size)) }.getOrNull()?.let(track)
                         }

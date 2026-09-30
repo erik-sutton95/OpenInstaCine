@@ -76,6 +76,7 @@ import com.opencapture.openpocketcine.MonitorConfiguration
 import com.opencapture.openpocketcine.core.CameraBackend
 import com.opencapture.openpocketcine.core.CameraCapability
 import com.opencapture.openpocketcine.core.CameraControls
+import com.opencapture.openpocketcine.core.CameraGimbalAngle
 import com.opencapture.openpocketcine.core.CameraIdentity
 import com.opencapture.openpocketcine.core.CameraMediaStore
 import com.opencapture.openpocketcine.core.CameraReadout
@@ -226,8 +227,9 @@ class PocketCameraSession(
     private var isBrowsingMedia = false
     val browsingMedia: Boolean get() = isBrowsingMedia
 
-    // Programmed moves need a native pose readback the Luna does not report yet.
-    val gimbalMoveCountdown: StateFlow<Int?> = MutableStateFlow<Int?>(null).asStateFlow()
+    // Programmed moves: waypoints from GET_ANGLE, the path streamed as SET_ANGLE (iOS 309049f).
+    private val _gimbalMoveCountdown = MutableStateFlow<Int?>(null)
+    val gimbalMoveCountdown: StateFlow<Int?> = _gimbalMoveCountdown.asStateFlow()
     val gimbalMoveReadout: StateFlow<String> = MutableStateFlow("").asStateFlow()
     var gimbalRamp: GimbalRamp = GimbalRamp.OFF
     var gimbalDoubleTap: GimbalDoubleTap = GimbalDoubleTap.RECENTER
@@ -235,17 +237,24 @@ class PocketCameraSession(
     val gimbalMode: StateFlow<GimbalMode> = _gimbalMode.asStateFlow()
     private val _gimbalSpeed = MutableStateFlow(GimbalSpeed.DEFAULT)
     val gimbalSpeed: StateFlow<GimbalSpeed> = _gimbalSpeed.asStateFlow()
-    val gimbalProgram: StateFlow<GimbalProgram> = MutableStateFlow(GimbalProgram()).asStateFlow()
-    val gimbalMovePaused: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
-    val gimbalMoveRunning: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
+    private val _gimbalProgram = MutableStateFlow(GimbalProgram())
+    val gimbalProgram: StateFlow<GimbalProgram> = _gimbalProgram.asStateFlow()
+    private val _gimbalMovePaused = MutableStateFlow(false)
+    val gimbalMovePaused: StateFlow<Boolean> = _gimbalMovePaused.asStateFlow()
+    private val _gimbalMoveRunning = MutableStateFlow(false)
+    val gimbalMoveRunning: StateFlow<Boolean> = _gimbalMoveRunning.asStateFlow()
     val hasGimbal: Boolean get() = connectedCamera != null && can(CameraCapability.GIMBAL)
     val supportsZoom: Boolean get() = connectedCamera != null && can(CameraCapability.ZOOM)
-    val canRunProgrammedMove: Boolean get() = false
+    val canRunProgrammedMove: Boolean
+        get() = programmedZoomUnavailableReason() == null && phase == ConnectionPhase.LIVE && hasVideoFormat &&
+            _gimbalProgram.value.canRun
+    // ponytail: lens zoom is not streamed with the move (iOS); add a zoom track when asked.
+    @Suppress("UNUSED_PARAMETER")
     fun programmedZoomUnavailableReason(status: CameraStatus = _status.value): String? =
-        "Programmed moves are not available on the Luna Ultra yet."
-    fun gimbalDebugText(): String = "luna gimbal: rate stick only"
-    fun predictedGimbalWaypoint(nowSeconds: Double): GimbalWaypoint? = null
-    val liveGimbalWaypoint: GimbalWaypoint? get() = null
+        if (_gimbalProgram.value.changesZoom) "Luna moves cannot change zoom. Set every point at one zoom." else null
+    fun gimbalDebugText(): String = "luna gimbal: " + (gimbalAngle?.first?.let { "pitch %.1f yaw %.1f".format(Locale.US, it.pitch, it.yaw) } ?: "no angle")
+    fun predictedGimbalWaypoint(nowSeconds: Double): GimbalWaypoint? = liveGimbalWaypoint
+    val liveGimbalWaypoint: GimbalWaypoint? get() = freshGimbalAngle(500)?.let { LunaGimbalAim.waypoint(it, _zoomReadout.value) }
 
     var connectedCamera: FoundCamera? = null
     var joinedSSID: String? = null
@@ -339,13 +348,16 @@ class PocketCameraSession(
         scope.launch {
             backend.phase.collect { value ->
                 when (value) {
-                    ConnectionPhase.LIVE -> { holdsMonitor = true; _recoveryState.value = SessionRecoveryUi.Idle; resetFrameClock() }
+                    ConnectionPhase.LIVE -> {
+                        holdsMonitor = true; _recoveryState.value = SessionRecoveryUi.Idle; resetFrameClock()
+                        startGimbalAnglePoll()
+                    }
                     ConnectionPhase.FAILED -> {
-                        resetFrameClock()
+                        resetFrameClock(); stopGimbalAngle()
                         if (holdsMonitor) _recoveryState.value = SessionRecoveryUi.WaitingForOperator(1)
                     }
                     ConnectionPhase.IDLE -> {
-                        resetFrameClock()
+                        resetFrameClock(); stopGimbalAngle()
                         holdsMonitor = false; _recoveryState.value = SessionRecoveryUi.Idle
                         pins.clear(); recordStartedAt = null; _controlBusy.value = false
                     }
@@ -662,9 +674,70 @@ class PocketCameraSession(
         GimbalDoubleTap.RECENTER -> recenterGimbal()
         GimbalDoubleTap.LEVEL -> levelGimbalToWorld()
     }
-    fun levelGimbalToWorld() = unavailable("World leveling")
+    /** iOS `levelGimbalToWorld`: tilt the head to the horizon, keeping yaw; one refine pass from still. */
+    fun levelGimbalToWorld(refine: Boolean = true) {
+        val angle = freshGimbalAngle(500)
+        val head = controls?.gimbalHeadPitch
+        if (angle == null || head == null) return presentControlNote(WorldLevelSnap.NO_LEVEL_DATA)
+        val target = LunaGimbalAim.levelTarget(angle, head, _zoomReadout.value)
+        Log.i("OpenInstaCine", "gimbal-level: angle=%.1f,%.1f head=%.1f target=%.1f".format(Locale.US, angle.pitch, angle.yaw, head, target.pitchDeg))
+        aimGimbal(target)
+        if (!refine) return
+        // The IMU pitch filter lags a recent move by about 0.5 deg: correct once from still.
+        scope.launch {
+            delay(2_500)
+            val pitch = controls?.gimbalHeadPitch ?: return@launch
+            if (aimJob?.isActive != true && stickJob?.isActive != true && !_gimbalMoveRunning.value && abs(pitch) > 0.3) {
+                levelGimbalToWorld(refine = false)
+            }
+        }
+    }
+
+    // Absolute angle: GET_ANGLE every 100 ms while live (iOS `startGimbalAnglePoll`).
+    private var gimbalAngle: Pair<CameraGimbalAngle, Long>? = null
+    private var anglePollJob: Job? = null
+    private var aimJob: Job? = null
+    private fun freshGimbalAngle(maxAgeMs: Long) =
+        gimbalAngle?.takeIf { SystemClock.elapsedRealtime() - it.second <= maxAgeMs }?.first
+    private fun startGimbalAnglePoll() {
+        val link = controls?.takeIf { can(CameraCapability.GIMBAL) } ?: return
+        anglePollJob?.cancel()
+        anglePollJob = scope.launch {
+            while (isActive) {
+                link.gimbalAngle()?.let { gimbalAngle = it to SystemClock.elapsedRealtime() }
+                delay(100)
+            }
+        }
+    }
+    private fun stopGimbalAngle() {
+        cancelProgrammedMove(); aimJob?.cancel()
+        anglePollJob?.cancel(); anglePollJob = null; gimbalAngle = null
+    }
+    private fun sendGimbalAngle(target: GimbalWaypoint) {
+        val (pitch, yaw) = LunaGimbalAim.setAngle(target)
+        scope.launch { controls?.gimbalSetAngle(pitch, yaw) }
+    }
+    /** iOS `aimGimbal`: one SET_ANGLE; the aim ends once GET_ANGLE reads within 0.5 deg, or after 8 s. */
+    private fun aimGimbal(target: GimbalWaypoint) {
+        if (!canSetGimbalConfiguration() || stickJob?.isActive == true || _gimbalMoveRunning.value) return
+        aimJob?.cancel()
+        aimJob = scope.launch {
+            sendGimbalAngle(target)
+            val started = SystemClock.elapsedRealtime()
+            while (isActive && canSetGimbalConfiguration() && stickJob?.isActive != true) {
+                val elapsed = SystemClock.elapsedRealtime() - started
+                if (elapsed > 8_000) break
+                val reading = gimbalAngle
+                if (elapsed > 300 && reading != null && reading.second > started + 200 &&
+                    LunaGimbalAim.reached(reading.first, target)
+                ) break
+                delay(33)
+            }
+        }
+    }
     fun recenterGimbal() {
         if (!hasGimbal) return
+        aimJob?.cancel()
         scope.launch { if (controls?.gimbalRecenter() != true) presentControlNote("Recenter did not reach the camera.") }
     }
     fun flipGimbal() {
@@ -680,6 +753,11 @@ class PocketCameraSession(
         mapping: CameraCommands.VirtualJoystickMapping = CameraCommands.VirtualJoystickMapping.DEFAULT,
     ) {
         if (!hasGimbal) return
+        // The operator's stick always wins over an aim or a programmed move.
+        if (x != 0f || y != 0f) {
+            aimJob?.cancel()
+            if (_gimbalMoveRunning.value) cancelProgrammedMove()
+        }
         // Same shaping as the iOS Luna session: deadzone, ease-in curve, sensitivity scale.
         val dead = if (linear) CameraCommands.GIMBAL_STICK_DEADZONE else mapping.deadzone
         val still = hypot(x.toDouble(), y.toDouble()) < dead
@@ -722,17 +800,107 @@ class PocketCameraSession(
             setGimbalSpeed(LunaShellMapping.cameraGimbalSpeed(speed))
         }
     }
-    fun setGimbalWaypoint(slot: GimbalWaypointSlot) = unavailable("Programmed moves")
-    fun clearGimbalWaypoint(slot: GimbalWaypointSlot) = Unit
-    fun setGimbalLegDuration(ab: Double? = null, bc: Double? = null) = Unit
-    fun setGimbalSmoothness(value: Double) = Unit
-    fun setGimbalLoop(enabled: Boolean) = Unit
-    fun clearGimbalProgram() = Unit
-    fun runProgrammedMove() = unavailable("Programmed moves")
-    fun pauseProgrammedMove() = Unit
-    fun resumeProgrammedMove() = Unit
-    fun restartProgrammedMove() = Unit
-    fun cancelProgrammedMove() = Unit
+    fun setGimbalWaypoint(slot: GimbalWaypointSlot) {
+        if (!hasGimbal) return
+        if (_gimbalMoveRunning.value || stickJob?.isActive == true) return presentControlNote(GimbalHudCopy.HOLD_STILL)
+        val angle = freshGimbalAngle(300) ?: return presentControlNote(GimbalHudCopy.POSE_NOT_READY)
+        _gimbalProgram.update { it.withPoint(slot, LunaGimbalAim.waypoint(angle, _zoomReadout.value)) }
+    }
+    fun clearGimbalWaypoint(slot: GimbalWaypointSlot) {
+        cancelProgrammedMove()
+        _gimbalProgram.update { it.withPoint(slot, null) }
+    }
+    fun setGimbalLegDuration(ab: Double? = null, bc: Double? = null) {
+        if (_gimbalMoveRunning.value) cancelProgrammedMove()
+        _gimbalProgram.update { program ->
+            var next = program
+            if (ab != null) next = next.copy(durationAB = GimbalProgram.snapDuration(maxOf(ab, GimbalProgram.minTravelDuration(next.a, next.b))))
+            if (bc != null) next = next.copy(durationBC = GimbalProgram.snapDuration(maxOf(bc, GimbalProgram.minTravelDuration(next.b, next.c))))
+            next
+        }
+    }
+    fun setGimbalSmoothness(value: Double) {
+        if (!value.isFinite()) return
+        cancelProgrammedMove()
+        _gimbalProgram.update { it.copy(smoothness = value.coerceIn(0.0, 1.0)) }
+    }
+    fun setGimbalLoop(enabled: Boolean) {
+        cancelProgrammedMove()
+        _gimbalProgram.update { it.copy(loop = enabled) }
+    }
+    fun clearGimbalProgram() {
+        cancelProgrammedMove()
+        _gimbalProgram.update { GimbalProgram(durationAB = it.durationAB, durationBC = it.durationBC) }
+    }
+
+    private var moveJob: Job? = null
+    private var moveCanPause = false
+    /** iOS `runProgrammedMove`: countdown while the head goes to A, then stream the path every 33 ms; loop ping-pongs. */
+    fun runProgrammedMove() {
+        if (!hasGimbal) return
+        if (_gimbalMoveRunning.value) return cancelProgrammedMove()
+        programmedZoomUnavailableReason()?.let { return presentControlNote(it) }
+        val take = _gimbalProgram.value
+        val a = take.a
+        if (!canRunProgrammedMove || a == null || gimbalAngle == null) {
+            return presentControlNote(if (take.canRun) GimbalHudCopy.POSE_NOT_READY else GimbalHudCopy.NEED_AB)
+        }
+        _controlNote.value = null
+        aimJob?.cancel()
+        if (stickJob?.isActive == true) endGimbalStick()
+        _gimbalMoveRunning.value = true
+        _gimbalMovePaused.value = false
+        moveCanPause = false
+        moveJob?.cancel()
+        moveJob = scope.launch {
+            sendGimbalAngle(a)
+            for (remaining in 3 downTo 1) { _gimbalMoveCountdown.value = remaining; delay(1_000) }
+            _gimbalMoveCountdown.value = null
+            moveCanPause = true
+            val duration = LunaGimbalAim.programDuration(take)
+            Log.i("OpenInstaCine", "gimbal-move: start ${take.summary} duration=$duration")
+            var clock = 0.0
+            var last = SystemClock.elapsedRealtime()
+            var reverse = false
+            while (isActive) {
+                if (phase != ConnectionPhase.LIVE) return@launch cancelProgrammedMove()
+                val now = SystemClock.elapsedRealtime()
+                if (!_gimbalMovePaused.value) clock += (now - last) / 1_000.0
+                last = now
+                if (clock >= duration) {
+                    if (!take.loop) break
+                    clock -= duration
+                    reverse = !reverse
+                }
+                if (!_gimbalMovePaused.value) {
+                    LunaGimbalAim.programPose(take, if (reverse) duration - clock else clock)?.let(::sendGimbalAngle)
+                }
+                delay(33)
+            }
+            LunaGimbalAim.programPose(take, if (reverse) 0.0 else duration)?.let(::sendGimbalAngle)
+            Log.i("OpenInstaCine", "gimbal-move: done")
+            finishProgrammedMove()
+        }
+    }
+    // The head settles on the last target; re-sending the GET pose (about 70 ms stale) steps it back.
+    fun pauseProgrammedMove() { if (_gimbalMoveRunning.value && moveCanPause) _gimbalMovePaused.value = true }
+    fun resumeProgrammedMove() { if (_gimbalMoveRunning.value && moveCanPause) _gimbalMovePaused.value = false }
+    fun restartProgrammedMove() {
+        if (!_gimbalMoveRunning.value || !_gimbalMovePaused.value) return
+        cancelProgrammedMove()
+        runProgrammedMove()
+    }
+    fun cancelProgrammedMove() {
+        moveJob?.cancel()
+        finishProgrammedMove()
+    }
+    private fun finishProgrammedMove() {
+        moveJob = null
+        _gimbalMoveCountdown.value = null
+        _gimbalMoveRunning.value = false
+        _gimbalMovePaused.value = false
+        moveCanPause = false
+    }
 
     // Focus and Deep Track.
     private val feedDoubleTap = FeedDoubleTapTrack()

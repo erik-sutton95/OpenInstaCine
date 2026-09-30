@@ -69,7 +69,16 @@ public interface CameraControls {
  public fun requestSettingsRefresh() {}
  /** The camera's own subject tracking, from the live stream; only changes are delivered. */
  public val trackFrames: Flow<CameraTrackFrame> get() = kotlinx.coroutines.flow.emptyFlow()
+ /** Absolute head angle in the handle frame (Luna GET_ANGLE), or null when unavailable. */
+ public suspend fun gimbalAngle(): CameraGimbalAngle? = null
+ /** Aim the head at an absolute handle-frame angle (Luna SET_ANGLE); the latest request wins. */
+ public suspend fun gimbalSetAngle(pitch: Double, yaw: Double): Boolean = false
+ /** Head world pitch from the camera IMU in degrees (up positive), or null without a sample in the last 0.3 s. */
+ public val gimbalHeadPitch: Double? get() = null
 }
+
+/** Degrees: pitch up positive, yaw as the camera reports it (-180..180). */
+public data class CameraGimbalAngle(public val pitch: Double, public val yaw: Double)
 
 public enum class CameraTrackState { TRACKING, LOST, IDLE }
 /** Tracking state and the camera's box, top-left fractions of the preview. */

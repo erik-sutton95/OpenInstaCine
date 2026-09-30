@@ -174,6 +174,11 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
             video = { bytes, tick -> lastVideoAt.set(android.os.SystemClock.elapsedRealtime()); video.tryEmit(EncodedVideoFrame(bytes, tick)) },
             notify = { message -> val note = LunaNotification.parse(message.code, message.body); scope.launch { handle(note) } },
             track = { frame -> if (frame != lastTrack) { lastTrack = frame; frame.shared?.let(trackFlow::tryEmit) } },
+            imu = { samples ->
+                val now = android.os.SystemClock.elapsedRealtime()
+                synchronized(headPitch) { headPitch.ingest(samples, commanding = now - gimbalCommandAt < 500) }
+                imuAt = now
+            },
         )
         lastTrack = null
         tcp = channel
@@ -326,7 +331,28 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
         return runCatching { channel.request(request.code, request.body) }.isSuccess
     }
     override suspend fun setZoom(factor: Double) = send { LunaControl.zoom(factor.coerceIn(zoomRange), functionMode) }
-    override suspend fun gimbalStick(pan: Double, tilt: Double) = send { LunaControl.gimbalStick(pan, tilt) }
+    override suspend fun gimbalStick(pan: Double, tilt: Double): Boolean {
+        if (pan != 0.0 || tilt != 0.0) gimbalCommandAt = android.os.SystemClock.elapsedRealtime()
+        return send { LunaControl.gimbalStick(pan, tilt) }
+    }
+    // iOS: GET_ANGLE with a 1 s timeout, SET_ANGLE fire and forget within 2 s.
+    override suspend fun gimbalAngle(): CameraGimbalAngle? {
+        val channel = tcp?.takeIf { _phase.value == ConnectionPhase.LIVE } ?: return null
+        val request = LunaControl.gimbalGetAngle
+        val reply = withTimeoutOrNull(1_000) { runCatching { channel.request(request.code, request.body) }.getOrNull() } ?: return null
+        return runCatching { LunaControl.gimbalAngle(reply) }.getOrNull()?.let { CameraGimbalAngle(it.pitch.toDouble(), it.yaw.toDouble()) }
+    }
+    override suspend fun gimbalSetAngle(pitch: Double, yaw: Double): Boolean {
+        gimbalCommandAt = android.os.SystemClock.elapsedRealtime()
+        return withTimeoutOrNull(2_000) { send { LunaControl.gimbalSetAngle(pitch.toFloat(), yaw.toFloat()) } } ?: false
+    }
+    private val headPitch = LunaHeadPitch()
+    @Volatile private var imuAt = 0L
+    @Volatile private var gimbalCommandAt = 0L
+    override val gimbalHeadPitch: Double?
+        get() = synchronized(headPitch) {
+            headPitch.pitchDeg.takeIf { headPitch.sampleCount > 0 && android.os.SystemClock.elapsedRealtime() - imuAt <= 300 }
+        }
     override suspend fun gimbalRecenter() = send { LunaControl.gimbal(2) }
     override suspend fun gimbalFlip() = send { LunaControl.gimbal(3) }
     /** Official ROI centred on the tap, kept inside the frame. */
