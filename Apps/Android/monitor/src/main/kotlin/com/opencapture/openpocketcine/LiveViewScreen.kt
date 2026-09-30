@@ -183,7 +183,7 @@ fun LiveViewScreen(model: AppModel) {
     }
     LaunchedEffect(status.shootingMode) {
         sheet = CaptureShutterPolicy.retainedSheet(sheet, status.shootingMode)
-        if (!CaptureShutterPolicy.showsAudioControls(status.shootingMode) &&
+        if (!model.showsAudio(status) &&
             assist.configureTool == LiveAssistTool.AUDIO
         ) {
             assist.configureTool = null
@@ -657,7 +657,7 @@ fun LiveViewScreen(model: AppModel) {
                         width = maxOf(0f, scopePlacement.maxX - layout.safeLeading)),
                     pictureMirrored = liveViewFlip,
                     pictureFlippedVertically = flipV,
-                    showsAudio = CaptureShutterPolicy.showsAudioControls(status.shootingMode),
+                    showsAudio = model.showsAudio(status),
                     onOpenOptions = { tool, frame ->
                         assist.longPressAnchor = frame
                         assist.configureTool = tool
@@ -1542,7 +1542,7 @@ internal fun LandscapeChrome(
                 com.opencapture.openpocketcine.assists.MonitorAssistCluster(
                     portrait = false, locked = uiLocked || !hits,
                     isOn = assist::isOn, onToggle = { assist.toggle(it) }, onLongPress = onAssistLongPress,
-                    showsAudio = CaptureShutterPolicy.showsAudioControls(status.shootingMode),
+                    showsAudio = model.showsAudio(status),
                     onBoundsChanged = onAssistBoundsChanged,
                 )
             }

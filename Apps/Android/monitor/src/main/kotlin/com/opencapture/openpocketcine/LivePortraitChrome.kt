@@ -314,7 +314,7 @@ fun LivePortraitChrome(
                 com.opencapture.openpocketcine.assists.MonitorAssistCluster(
                     portrait = true, locked = uiLocked || !chromeInteractive,
                     isOn = assist::isOn, onToggle = { assist.toggle(it) }, onLongPress = onAssistLongPress,
-                    showsAudio = CaptureShutterPolicy.showsAudioControls(status.shootingMode),
+                    showsAudio = model.showsAudio(status),
                     onBoundsChanged = onAssistBoundsChanged,
                 )
             }
@@ -692,7 +692,7 @@ fun LiveCaptureStrip(
             valueIcon = if (CaptureLists.wbIsAuto(status) && !awbLocked) OpcIcon.APERTURE else null))
         if (showFocus) add(value(LiveSheet.FOCUS, "FOCUS", status.focusLabel))
         if (showAperture) add(value(LiveSheet.APERTURE, "APERTURE", ApertureStrategy.tileValue(status)))
-        if (CaptureShutterPolicy.showsAudioControls(status.shootingMode)) {
+        if (model?.session?.supportsAudio != false && CaptureShutterPolicy.showsAudioControls(status.shootingMode)) {
             add(value(LiveSheet.AUDIO, "AUDIO", status.audioLabel))
         }
     }

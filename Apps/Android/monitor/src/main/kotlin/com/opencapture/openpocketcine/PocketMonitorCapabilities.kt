@@ -11,7 +11,7 @@ internal fun AppModel.monitorCapabilities(status: CameraStatus): MonitorCapabili
         zoom = session.supportsZoom,
         focus = body?.supportsFocusMode == true,
         iris = body?.supportsAperture == true,
-        audio = true,
+        audio = session.supportsAudio,
         headTracking = session.hasGimbal,
         clipDelete = true,
         clipStar = true,
@@ -19,6 +19,10 @@ internal fun AppModel.monitorCapabilities(status: CameraStatus): MonitorCapabili
         timecode = true,
     )
 }
+
+/** AUDIO tile, live meters and rail entry: a video mode on a camera that reports audio levels. */
+internal fun AppModel.showsAudio(status: CameraStatus): Boolean =
+    session.supportsAudio && CaptureShutterPolicy.showsAudioControls(status.shootingMode)
 
 /** The camera profile, including current recording mode limits, owns shortcut availability. */
 internal fun AppModel.monitorZoomStops(): com.opencapture.monitorui.MonitorZoomTapStops {

@@ -255,6 +255,8 @@ class PocketCameraSession(
     fun useSetup(setup: CameraConnectionSetup, network: MultiviewNetworkStore.Network?, restoreAccessPoint: Boolean) = Unit
     val supportsFocusMode: Boolean get() = false
     val supportsTapFocus: Boolean get() = can(CameraCapability.FOCUS)
+    /** iOS `supportsAudio`: the Luna sends no audio levels, so AUDIO is hidden live (clip playback keeps its meters). */
+    val supportsAudio: Boolean get() = can(CameraCapability.AUDIO)
     var videoPackets = 0
     var accessUnits = 0
     var framesEnqueued = 0

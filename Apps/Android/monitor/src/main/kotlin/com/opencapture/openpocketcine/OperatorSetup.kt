@@ -1530,7 +1530,7 @@ private fun DispToggles(model: AppModel, mode: PocketDispMode, view: View) {
 private fun CleanViewPinStrip(model: AppModel, view: View) {
     val assist = model.assist
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        CleanPinTool.entries.chunked(2).forEach { row ->
+        CleanPinTool.entries.filter { it != CleanPinTool.AUDIO || model.session.supportsAudio }.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 row.forEach { tool ->
                     val on = assist.pinned.any { it.name == tool.key }

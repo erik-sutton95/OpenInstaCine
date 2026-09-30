@@ -46,6 +46,8 @@ fun MonitorAssistInspector(
     isPhoto: Boolean = false,
 ) {
     var helpVisible by remember { mutableStateOf(false) }
+    // Live AUDIO only where the camera reports levels; clip playback keeps its meters.
+    val tabs = LiveAssistTool.settingsCases.filter { it != LiveAssistTool.AUDIO || playback || model?.session?.supportsAudio != false }
     MonitorInspector(
         title = tool.title,
         helpVisible = helpVisible,
@@ -62,12 +64,12 @@ fun MonitorAssistInspector(
             if (portrait) {
                 val tabScroll = rememberScrollState()
                 Row(Modifier.fillMaxWidth().monitorScrollFade(tabScroll, vertical = false).horizontalScroll(tabScroll).monitorTabStrip()) {
-                    LiveAssistTool.settingsCases.forEach { InspectorTab(it, tool, state, true) }
+                    tabs.forEach { InspectorTab(it, tool, state, true) }
                 }
             } else {
                 val tabScroll = rememberScrollState()
                 Column(Modifier.fillMaxHeight().monitorScrollFade(tabScroll).verticalScroll(tabScroll).monitorTabStrip()) {
-                    LiveAssistTool.settingsCases.forEach { InspectorTab(it, tool, state, false) }
+                    tabs.forEach { InspectorTab(it, tool, state, false) }
                 }
             }
         },
