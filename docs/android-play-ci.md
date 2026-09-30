@@ -50,21 +50,32 @@ just android-version
 Short description (80 characters):
 
 ```text
-Open-source field monitor for the Insta360 Luna Ultra. Live view and control.
+Open-source field monitor for Insta360 cameras. Live view, scopes, control.
 ```
 
 Full description:
 
 ```text
-OpenInstaCine is a free, open-source field monitor for the Insta360 Luna Ultra.
-It is not made or endorsed by Insta360.
+OpenInstaCine is a free, open-source field monitor for Insta360 cameras, starting with the Luna Ultra. It is an independent project, not made or endorsed by Insta360.
 
-Pair over Bluetooth, join the camera's Wi-Fi, and watch a live view with
-waveform, histogram and false colour. Record, zoom and move the gimbal from
-your phone. Needs camera firmware 1.1.15, a 64-bit phone and Android 10 or
-newer. There is no account in the app.
+Pair over Bluetooth, join the camera's Wi-Fi, and get a clean live view with the monitoring tools you expect on set:
 
-Source: https://github.com/erik-sutton95/OpenInstaCine
+• Waveform, histogram and false color
+• Zebras, focus peaking and frame guides
+• LUT preview, including I-Log to Rec.709
+• An EV meter read from the live picture
+
+Control the camera from your phone:
+
+• Exposure, white balance, metering (Matrix or Face) and focus
+• Start and stop recording, with timecode on screen
+• Zoom, gimbal joystick and Recenter
+• Double-tap the picture to start Deep Track subject tracking
+• Long-press the focus box to lock it in place
+
+Needs a Luna Ultra on camera firmware 1.1.15, a 64-bit phone and Android 10 or newer. There is no account and no ads. Error reports are optional and off by default.
+
+Source code: https://github.com/erik-sutton95/OpenInstaCine
 Privacy: https://opencapture.org/openinstacine/privacy
 ```
 
