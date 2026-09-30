@@ -182,6 +182,12 @@ final class CameraSession {
     /// Head-tracking targets stamped with their AirPods measurement time (last second).
     @ObservationIgnored var headTrackSamples: [HeadTrackSample] = []
     @ObservationIgnored var isSteeringHead = false
+    /// Phone wall-clock seconds minus the live frame clock (earliest arrival), reset per live start.
+    @ObservationIgnored var frameClockOffset: Double?
+    @ObservationIgnored var lastTimecodeSecond: Int?
+    #if DEBUG
+        @ObservationIgnored var lastFrameClock: UInt64 = 0
+    #endif
     /// Programmed A/B/C move runner (SET_ANGLE stream).
     @ObservationIgnored var gimbalMoveTask: Task<Void, Never>?
     @ObservationIgnored var gimbalMoveClock = 0.0
@@ -599,6 +605,7 @@ final class CameraSession {
                 recordFeedBreadcrumb(.sceneActivity, detail: "live")
                 startLinkTicker()
                 startGimbalAnglePoll()
+                syncCameraClock()
                 applyLinkPresentation()
             }
         case .information(let info):
@@ -607,7 +614,8 @@ final class CameraSession {
             break
         case .joinedWiFi(let ssid):
             joinedSSID = ssid
-        case .videoAccessUnit(let data, _):
+        case .videoAccessUnit(let data, let milliseconds):
+            noteFrameClock(milliseconds)
             ingestAccessUnit(data)
         case .disconnected(let reason):
             guard connectedCamera != nil else { return }
@@ -721,7 +729,6 @@ final class CameraSession {
             recording
             ? max(Int(capture.captureSeconds), recordStartedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0)
             : 0
-        next.timecode = recording ? LunaShellMapping.clock(next.recordElapsedSec) : nil
         status = next
         if pins.recording == nil, controlBusy, !pins.photoInFlight { controlBusy = false }
     }
@@ -774,7 +781,6 @@ final class CameraSession {
                     let elapsed = Int(Date().timeIntervalSince(started))
                     if elapsed != self.status.recordElapsedSec {
                         self.status.recordElapsedSec = elapsed
-                        self.status.timecode = LunaShellMapping.clock(elapsed)
                     }
                 }
                 self.publishFeedIncidentSnapshot()

@@ -54,6 +54,8 @@ Free and open source.
   Traffic Lights, focus peaking, an EV meter and ND suggestions.
 - **See log as it will grade.** The official Insta360 I-Log to Rec.709 LUT is built in, next to
   built-in and custom `.cube` looks.
+- **Match the camera's timecode.** The app sets the Luna's clock when it connects and shows the
+  same time-of-day timecode as the camera.
 - **Frame once for every delivery.** Grids, aspect guides and a center crosshair, in landscape
   and portrait.
 - **Run the camera from the phone.** Record, ISO, shutter, white balance, EV, zoom, FORMAT,
@@ -64,7 +66,7 @@ Free and open source.
 - **Review before striking the set.** Browse clips and stills on the camera, star the keepers,
   delete bad takes, and play the `.lrv` proxy back with the same scopes and assists as live view.
 
-iPhone and iPad are the daily driver. Not on the Luna yet: timecode, live audio control and
+iPhone and iPad are the daily driver. Not on the Luna yet: live audio control and
 meters (the camera sets audio on its own screen), Multiview, and Wi-Fi or Hotspot setups (the
 Luna only connects over its own network).
 

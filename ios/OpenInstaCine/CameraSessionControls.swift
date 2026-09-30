@@ -40,7 +40,7 @@ extension CameraSession {
     /// Luna phone protocol exposes no audio channel setting or meters.
     var supportsAudio: Bool { false }
     /// Luna reports no timecode; the REC timer carries elapsed time.
-    var supportsTimecode: Bool { false }
+    var supportsTimecode: Bool { true }
     /// Auto ISO ceiling and native-ISO hop are Osmo camcap features; Luna has neither.
     var supportsIsoLimit: Bool { false }
     /// Luna media browse runs over HTTP next to the live socket.
@@ -1453,4 +1453,59 @@ struct HeadTrackSample: Equatable {
     var t: Double
     var yaw: Double
     var pitch: Double
+}
+
+// MARK: - Timecode
+
+extension CameraSession {
+    /// Capture to phone delay of a live frame at best (official-app captures: frames land
+    /// 90 to 200 ms after their camera clock stamp).
+    static let frameLatencySeconds = 0.09
+
+    /// The Luna's timecode is time of day from its own clock, which the phone app is
+    /// expected to set (the camera's "Sync system time" asks for the app). Set it like the
+    /// official app does on connect, but to the millisecond.
+    func syncCameraClock() {
+        frameClockOffset = nil
+        lastTimecodeSecond = nil
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let zone = TimeZone.current
+            let now = Date()
+            guard let request = try? LunaProtocol.setClockRequest(
+                unixSeconds: UInt64(now.timeIntervalSince1970),
+                timeZoneSeconds: Int32(zone.secondsFromGMT(for: now)), zone: zone.identifier),
+                (try? await self.backend.send(request, timeout: .seconds(2))) != nil
+            else { return }
+            // Stamped at send: a GET round trip on the camera AP is about 4 ms (the clock
+            // SET takes ~220 ms, but that is the camera's own processing).
+            for count: UInt32 in 0..<2 {
+                let milliseconds = UInt64((Date().timeIntervalSince1970 * 1000).rounded())
+                if let request = try? LunaProtocol.syncTimeAccurateRequest(unixMilliseconds: milliseconds, count: count) {
+                    _ = try? await self.backend.send(request, timeout: .seconds(2))
+                }
+            }
+            ControlLiveLog.line("luna: camera clock synced")
+        }
+    }
+
+    /// Timecode of the live frame just received. Frame stamps run on a camera clock that
+    /// does not follow its time of day (MEDIA_TIME jumped 2380 s when the camera time was
+    /// set; the frame clock did not), so frames are pinned to the phone clock by their
+    /// earliest arrival. With the camera clock synced to the phone, that is the camera's
+    /// timecode. The HUD shows HH:MM:SS, so the status only changes once a second.
+    func noteFrameClock(_ milliseconds: UInt64) {
+        #if DEBUG
+            lastFrameClock = milliseconds
+        #endif
+        let seen = Date().timeIntervalSince1970 - Double(milliseconds) / 1000 - Self.frameLatencySeconds
+        let offset = min(frameClockOffset ?? seen, seen)
+        frameClockOffset = offset
+        let wall = Double(milliseconds) / 1000 + offset
+        let second = Int(wall.rounded(.down))
+        guard second != lastTimecodeSecond else { return }
+        lastTimecodeSecond = second
+        status.timecode = LunaShellMapping.timecode(
+            unixSeconds: wall, timeZoneSeconds: TimeZone.current.secondsFromGMT(), fps: status.fps)
+    }
 }

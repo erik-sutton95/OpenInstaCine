@@ -128,6 +128,18 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertEqual(CameraSession.headTrackReference(line, at: 9), HeadTrackReference(yaw: 2, pitch: 0))
     }
 
+    func testTimeOfDayTimecode() {
+        // 2026-09-30 08:51:10.54 UTC, Stockholm (UTC+2).
+        let t = 1_790_758_270.54
+        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 25), "10:51:10:13")
+        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 30), "10:51:10:16")
+        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 50), "10:51:10:13")
+        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 120), "10:51:10:16")
+        // Wraps at midnight, west of GMT too.
+        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: 86_399.99, timeZoneSeconds: 0, fps: 24), "23:59:59:23")
+        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: 3600, timeZoneSeconds: -7200, fps: 24), "23:00:00:00")
+    }
+
     func testCameraNaming() {
         XCTAssertEqual(LunaCameraNames.title(advertised: "XBQFN7"), "Luna Ultra XBQFN7")
         XCTAssertEqual(LunaCameraNames.title(advertised: "Luna Ultra XBQFN7"), "Luna Ultra XBQFN7")

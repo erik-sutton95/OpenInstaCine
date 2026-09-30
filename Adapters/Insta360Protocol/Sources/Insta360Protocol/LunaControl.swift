@@ -385,6 +385,34 @@ extension LunaProtocol {
         return LunaRequest(command: .getFileExtra, body: body, requiresEncryption: false)
     }
 
+    // MARK: Camera clock
+
+    /// Observed: the official app sets LOCAL_TIME (12, unix seconds), TIME_ZONE (13,
+    /// seconds east of GMT) and GEOGRAPHIC_TIME_ZONE (175) on every connect. The camera's
+    /// time-of-day timecode runs from this clock. fw 1.1.15 does not return 12, 13 or 175
+    /// on GET.
+    public static func setClockRequest(unixSeconds: UInt64, timeZoneSeconds: Int32, zone: String) throws
+        -> LunaRequest
+    {
+        let nested = try ProtoMessage.integer(field: 12, value: unixSeconds)
+            + ProtoMessage.integer(field: 13, value: UInt64(bitPattern: Int64(timeZoneSeconds)))
+            + ProtoMessage.blob(field: 175, value: Data(zone.utf8))
+        return try setDeviceOptions(types: [12, 13, 175], nested: nested)
+    }
+
+    /// PHONE_COMMAND_SYNCTIME_ACCURATE (214): `{1: {1: s, 2: ms}, 2: count}`, sent twice
+    /// by the official app (count 0, then 1). fw 1.1.15 accepts it with an empty reply
+    /// (hardware 2026-09-30); it sets the clock to the millisecond.
+    public static func syncTimeAccurateRequest(unixMilliseconds: UInt64, count: UInt32) throws -> LunaRequest {
+        let time = try ProtoMessage.integer(field: 1, value: unixMilliseconds / 1000)
+            + ProtoMessage.integer(field: 2, value: unixMilliseconds % 1000)
+        var body = try ProtoMessage.blob(field: 1, value: time)
+        if count > 0 { body += try ProtoMessage.integer(field: 2, value: UInt64(count)) }
+        return LunaRequest(code: syncTimeAccurateCode, body: body)
+    }
+
+    public static let syncTimeAccurateCode: UInt16 = 214
+
     /// Observed: official 1 Hz poll of battery (11), storage (20), 85, screen battery (180).
     public static func statusRequest() throws -> LunaRequest {
         try getOptions([11, 20, 85, 180], packed: true)

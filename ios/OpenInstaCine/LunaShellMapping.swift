@@ -331,8 +331,16 @@ enum LunaShellMapping {
         stops.min { abs($0 - factor) < abs($1 - factor) } ?? 1
     }
 
-    static func clock(_ seconds: Int) -> String {
-        String(format: "%02d:%02d:%02d:00", seconds / 3600, (seconds / 60) % 60, seconds % 60)
+    /// Time-of-day timecode, non-drop. Frames count at the recording rate, halved above 30
+    /// (50 and 100 count 25s, 60 and 120 count 30s).
+    static func timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int) -> String {
+        var base = fps > 0 ? fps : 25
+        while base > 30 { base /= 2 }
+        let local = unixSeconds + Double(timeZoneSeconds)
+        let whole = local.rounded(.down)
+        let second = ((Int(whole) % 86_400) + 86_400) % 86_400
+        let frame = min(base - 1, Int((local - whole) * Double(base)))
+        return String(format: "%02d:%02d:%02d:%02d", second / 3600, (second / 60) % 60, second % 60, frame)
     }
 }
 

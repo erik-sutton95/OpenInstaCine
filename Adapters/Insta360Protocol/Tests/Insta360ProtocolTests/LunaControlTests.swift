@@ -521,3 +521,27 @@ final class LunaAudioModeTests: XCTestCase {
         XCTAssertEqual(LunaAudioMode.allCases.map(\.label), ["Wind Reduction", "Voice Enhancement", "Original Audio"])
     }
 }
+
+final class LunaClockTests: XCTestCase {
+    func testSetClockMatchesOfficialConnect() throws {
+        // official-fw1115/01-connect: types 12, 13, 175 and 12:1790315162 13:7200 175:'Europe/Stockholm'
+        // (the official app also re-sends its cached 1, 5, 42 and 82; the camera applies only the types).
+        let request = try LunaProtocol.setClockRequest(
+            unixSeconds: 1_790_315_162, timeZoneSeconds: 7200, zone: "Europe/Stockholm")
+        XCTAssertEqual(request.command, .setOptions)
+        XCTAssertEqual(
+            request.body,
+            hex("0a040c0daf01 121c 609a95d8d506 68a038 fa0a10") + Data("Europe/Stockholm".utf8))
+        // West of GMT is a negative int32: ten-byte two's-complement varint.
+        let west = try LunaProtocol.setClockRequest(unixSeconds: 1, timeZoneSeconds: -3600, zone: "")
+        XCTAssertEqual(west.body, hex("0a040c0daf01 1210 6001 68f0e3ffffffffffffff01 fa0a00"))
+    }
+
+    func testSyncTimeAccurate() throws {
+        let first = try LunaProtocol.syncTimeAccurateRequest(unixMilliseconds: 1_790_758_255_639, count: 0)
+        XCTAssertEqual(first.wireCode, 214)
+        XCTAssertEqual(first.body, hex("0a09 08ef9af3d506 10ff04"))
+        let second = try LunaProtocol.syncTimeAccurateRequest(unixMilliseconds: 1_790_758_255_639, count: 1)
+        XCTAssertEqual(second.body, hex("0a09 08ef9af3d506 10ff04 1001"))
+    }
+}
