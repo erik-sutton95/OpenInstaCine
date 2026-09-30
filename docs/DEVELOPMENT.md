@@ -13,7 +13,7 @@ contract is [SHARED-MONITOR-ENGINE.md](SHARED-MONITOR-ENGINE.md).
 | `Adapters/Insta360Apple` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport |
 | `tools/LunaProbe` | Swift CLI that drives the camera from a Mac on its Wi-Fi (used for the fw 1.1.15 verification) |
 | `tools/` | Python lab tools: BLE capture, Mac preview, DEBUG remote client |
-| `Apps/Android` | Android app from the pre-rebase shell, **not yet synced** to the new iOS shell |
+| `Apps/Android` | Android app on the OpenPocketCine Android shell (synced to upstream `9e306c91`); builds, not yet verified on a physical Luna |
 
 Luna-specific app code lives in `ios/OpenInstaCine/CameraSession.swift`,
 `CameraSessionControls.swift`, `CameraMedia.swift` (Luna extension),
@@ -39,7 +39,8 @@ Needs Xcode 26, XcodeGen and `just`. Run from the repository root.
 | `just sync-openpocketcine` | Re-sync the shell from `../OpenPocketCine` |
 | `just luna-official-xc device` | XCUITest driver for the official Insta360 app (lab captures) |
 | `just lab-setup`, `just luna-view` | Python venv and the Mac live-view lab |
-| `just android-build`, `just android-check` | Android APK and checks (old shell) |
+| `just android-build`, `just android-check` | Android debug APK, unit tests and lint |
+| `just sentry-test`, `just testflight-notes`, `just android-play-notes` | Release tooling checks ([`RELEASE.md`](RELEASE.md)) |
 
 ## Simulator live testing rig
 

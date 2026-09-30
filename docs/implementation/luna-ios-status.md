@@ -71,7 +71,7 @@ Parity values:
 | Multiview | Hidden-not-supported | Entry removed from the camera list (`SavedCamerasView.swift`); stages DJI bodies over RTMP |
 | Wi-Fi / Hotspot setups | Hidden-not-supported | `canAddSetup: false`; Luna only connects over its own AP |
 | Color Recovery | Not yet | Screen protocol code exists (`LunaScreenRecovery.swift`, [luna-color-recovery.md](luna-color-recovery.md)); not exposed in the UI |
-| Android | Not yet | `Apps/Android` is the pre-rebase shell, not synced to this one |
+| Android | Builds, unverified on hardware | `Apps/Android` is synced to the OpenPocketCine shell (`9e306c91`); not yet run against a physical Luna (see Android below) |
 
 ## Verified live (2026-09-25)
 
@@ -376,7 +376,7 @@ Depends on the parallel engine sync (outside `Apps/Android`): the Swift facade m
   (button hidden), no programmed moves, no audio controls, no AE / AWB lock, no Wi-Fi / Hotspot setups.
 - I-Log to Rec.709 sits in the camera LUT tab (`MonitorTransfer.ILOG`, camera looks in the DJI
   category so upstream tab logic and tests hold). DJI LUT assets are not bundled.
-- Brand copy: legal bodies, pairing steps, wordmarks, links (`openinstacine.app`, GitHub repo)
+- Brand copy: legal bodies, pairing steps, wordmarks, links (`opencapture.org/openinstacine`, GitHub repo)
   mirror the iOS text. Launcher and splash logo are the yellow monitor mark.
 - `./gradlew :app:assembleDebug testDebugUnitTest lintDebug` passes: 883 monitor, 114
   monitor-ui and 29 luna-adapter JVM tests at `9e306c91` (upstream removed many tests; 997 / 121

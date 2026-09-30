@@ -40,7 +40,7 @@ Free and open source.
 | --- | :---: | :---: | :---: | --- |
 | **Insta360 Luna Ultra** | ✅ | ✅ | ✅ | Firmware 1.1.15. 720p HEVC live feed at 25 fps, I-Log and Dolby Vision, digital zoom to 15×. |
 
-✅ works on iOS. Android is not synced with the iOS app yet.
+✅ works on iOS. The Android app is synced with the iOS app and builds, but is not yet verified on a physical Luna.
 
 > [!WARNING]
 > Camera control is reverse-engineered and can be incomplete. Check that recording starts and
@@ -74,8 +74,8 @@ Luna only connects over its own network).
 
 | Platform | How | Notes |
 | --- | --- | --- |
-| **iPhone and iPad** | [Build from source](#build-from-source) | One universal app. No TestFlight yet. |
-| **Android** | Not yet | `Apps/Android` still has the older shell. |
+| **iPhone and iPad** | [Build from source](#build-from-source) | One universal app. TestFlight setup: [`docs/RELEASE.md`](docs/RELEASE.md). |
+| **Android** | [Build from source](#build-from-source) | Synced with the iOS app and builds. Not yet verified on a physical Luna. |
 
 Pairing and live view need a real camera nearby. The first connection asks you to approve the
 phone on the camera's touchscreen.
@@ -84,7 +84,7 @@ phone on the camera's touchscreen.
 
 What works, what is Luna-specific and what is still missing is tracked feature by feature in
 [`docs/implementation/luna-ios-status.md`](docs/implementation/luna-ios-status.md). Next up:
-syncing Android, showing a clip's audio mode, and Color Recovery for the detachable screen.
+verifying Android on a real Luna, showing a clip's audio mode, and Color Recovery for the detachable screen.
 
 ## Free. Open source. Yours
 
