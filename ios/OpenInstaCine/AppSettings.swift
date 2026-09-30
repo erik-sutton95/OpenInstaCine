@@ -193,8 +193,8 @@ enum OpenInstaCineLinks {
     )
     static let featureRequest = URL(
         string: "https://github.com/erik-sutton95/OpenInstaCine/discussions/new?category=ideas")
-    static let privacy = URL(string: "https://openinstacine.app/privacy/")
-    static let terms = URL(string: "https://openinstacine.app/terms/")
+    static let privacy = URL(string: "https://opencapture.org/openinstacine/privacy")
+    static let terms = URL(string: "https://opencapture.org/openinstacine/terms")
 }
 
 /// Live chrome and home both present this. `onClose` lets a cover dismiss without `homePanel`.
@@ -1092,7 +1092,7 @@ struct AppPanelChrome<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("OPENPOCKETCINE")
+                    Text("OPENINSTACINE")
                         .font(LiveType.ui(size: 10, weight: .semibold, design: .rounded))
                         .tracking(1.3)
                         .foregroundStyle(StartupColors.muted)

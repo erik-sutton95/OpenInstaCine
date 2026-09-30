@@ -262,6 +262,29 @@ def main() -> None:
     replace_once(bar, "            tile(.exposure, label: \"EXPOSURE\", value: expoValue, widest: \"Manual\")\n",
                  "            tile(.exposure, label: \"EXPOSURE\", value: expoValue, widest: \"Manual\")\n            LunaMeteringTile(session: model.session)\n")
 
+    # --- Wordmark (the sync rename is case-sensitive) and public pages on the combined site. ---
+    for name in ("StartupChrome.swift", "AppSettings.swift"):
+        replace_phrase(APP / name, 'Text("OPENPOCKETCINE")', 'Text("OPENINSTACINE")')
+    site = "https://opencapture.org/openinstacine"
+    for name, pairs in (
+        ("AppSettings.swift", (("https://openinstacine.app/privacy/", f"{site}/privacy"),
+                               ("https://openinstacine.app/terms/", f"{site}/terms"))),
+        ("LegalScreens.swift", (("https://openinstacine.app/privacy/", f"{site}/privacy"),
+                                ("openinstacine.app/privacy and /terms", "opencapture.org/openinstacine/privacy and /terms"),
+                                ("support@openinstacine.app", "support@opencapture.org"))),
+        ("ProblemReportView.swift", (("support@openinstacine.app", "support@opencapture.org"),)),
+        ("ProblemReporting.swift", (("support@openinstacine.app", "support@opencapture.org"),)),
+        ("SettingsRootView.swift", (("support@openinstacine.app", "support@opencapture.org"),)),
+    ):
+        for old_phrase, new_phrase in pairs:
+            replace_phrase(APP / name, old_phrase, new_phrase)
+    # Synced verbatim (not renamed): hash the OpenInstaCine app and the Luna adapters.
+    replace_once(
+        ROOT / "tools/build-identity.py",
+        '        paths += ["ios/OpenPocketCine", ',
+        '        paths += ["ios/OpenInstaCine", "Adapters", ',
+    )
+
     # --- Launch wiring + gates that assumed a DJI datalink. ---
     replace_once(
         APP / "OpenInstaCineApp.swift",

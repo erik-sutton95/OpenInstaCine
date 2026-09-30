@@ -9,7 +9,7 @@ import subprocess
 def identity(root: Path, platform: str, configuration: str) -> str:
     paths = ["Sources", "Package.swift", "Package.resolved", "tools/build-identity.py"]
     if platform == "ios":
-        paths += ["ios/OpenPocketCine", "ios/Config", "ios/project.yml", "ios/ci_scripts", "tools/stamp-source-revision.sh"]
+        paths += ["ios/OpenInstaCine", "Adapters", "ios/Config", "ios/project.yml", "ios/ci_scripts", "tools/stamp-source-revision.sh"]
     else:
         paths += ["Apps/Android", "scripts/android-stage-swift-core.sh"]
     listed = subprocess.check_output(

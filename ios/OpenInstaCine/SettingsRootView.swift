@@ -150,7 +150,7 @@ struct SettingsRootView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(
-                "Email support@openinstacine.app. You can save a report under Diagnostic options.")
+                "Email support@opencapture.org. You can save a report under Diagnostic options.")
         }
         .sheet(item: $diagnosticsShare) { payload in
             DiagnosticActivityShareView(items: [payload.url])

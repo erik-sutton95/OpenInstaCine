@@ -140,7 +140,7 @@ struct ProblemReportView: View {
                     Button("Reporting privacy") { showPrivacy = true }
                     if !ReliabilityReporting.isAvailable {
                         Text(
-                            "Reporting isn't available in this build. Contact support@openinstacine.app."
+                            "Reporting isn't available in this build. Contact support@opencapture.org."
                         )
                     }
                     Button("Send report") {

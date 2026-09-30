@@ -148,7 +148,7 @@ struct StartupHeader: View {
     var body: some View {
         HStack(alignment: .center, spacing: 11) {
             VStack(alignment: .leading, spacing: 1) {
-                Text("OPENPOCKETCINE")
+                Text("OPENINSTACINE")
                     .font(LiveType.ui(size: 10, weight: .semibold, design: .rounded))
                     .tracking(1.3)
                     .foregroundStyle(StartupColors.muted)

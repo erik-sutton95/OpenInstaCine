@@ -206,7 +206,7 @@ import UIKit
         }
         guard !record.failed else {
             status =
-                "Report couldn't be sent. Remove it and try again, or contact support@openinstacine.app."
+                "Report couldn't be sent. Remove it and try again, or contact support@opencapture.org."
             return
         }
         guard upload == nil, now >= record.nextAttempt, gate.hasValidInternet,
@@ -262,7 +262,7 @@ import UIKit
         pending = record
         status =
             record.failed
-            ? "Report couldn't be sent. Remove it and try again, or contact support@openinstacine.app."
+            ? "Report couldn't be sent. Remove it and try again, or contact support@opencapture.org."
             : "Waiting for a connection — your report is saved on this phone"
     }
 
@@ -297,7 +297,7 @@ import UIKit
             case .pending: "A report is already waiting to send."
             case .invalid: "Describe what happened and check your optional email address."
             case .unavailable:
-                "Reporting isn't available in this build. Contact support@openinstacine.app."
+                "Reporting isn't available in this build. Contact support@opencapture.org."
             }
         }
     }

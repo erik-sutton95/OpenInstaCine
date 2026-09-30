@@ -1,7 +1,7 @@
 import MonitorUI
 import SwiftUI
 
-/// In-app legal pages. Canonical website copy lives at openinstacine.app/privacy and /terms.
+/// In-app legal pages. Canonical website copy lives at opencapture.org/openinstacine/privacy and /terms.
 struct LegalDocumentView: View {
     @Environment(AppModel.self) private var model
     let kind: Kind
@@ -92,7 +92,7 @@ struct LegalDocumentView: View {
                 """
                 OpenInstaCine talks to your Insta360 Luna over Bluetooth and the camera's own Wi-Fi. The app has no account. Automatic error reports are optional and off by default.
 
-                OpenCapture is the data controller. Privacy or deletion requests: support@openinstacine.app.
+                OpenCapture is the data controller. Privacy or deletion requests: support@opencapture.org.
 
                 Optional reliability reports
                 With your consent, configured builds send crash, hang and feed diagnostics, app/OS/device versions and session health counts through Sentry. No footage, screenshots, raw camera packets or GPS location are included. Sentry receives the connection IP; stored event IP and derived geography are removed. Event storage uses Germany. Some provider processing may occur internationally.
@@ -116,7 +116,7 @@ struct LegalDocumentView: View {
                 • AF-C face boxes are computed on this phone from the live preview. Face geometry is not uploaded.
                 • The source is at github.com/erik-sutton95/OpenInstaCine.
 
-                The full privacy policy is https://openinstacine.app/privacy/
+                The full privacy policy is https://opencapture.org/openinstacine/privacy
                 """
             case .terms:
                 """
