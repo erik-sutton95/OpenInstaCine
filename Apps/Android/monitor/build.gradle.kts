@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.compose)
@@ -80,6 +82,82 @@ android {
     }
 }
 
+// Ported from OpenPocketCine app/build.gradle.kts. The monitor code reads this module's
+// BuildConfig, so the release wiring lives here, not in :app. Contract: docs/sentry-deployment.md
+val sourceRevisionField =
+    providers.exec {
+        workingDir = repositoryRoot
+        commandLine("git", "rev-parse", "--short=12", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText
+        .zip(
+            providers.exec {
+                workingDir = repositoryRoot
+                commandLine("git", "status", "--porcelain")
+                isIgnoreExitValue = true
+            }.standardOutput.asText,
+        ) { rev, status ->
+            val envRev =
+                System.getenv("OPENPOCKETCINE_SOURCE_REVISION")
+                    ?: System.getenv("GITHUB_SHA")?.take(12)
+            val cleaned =
+                (envRev ?: rev.trim())
+                    .filter { it.isLetterOrDigit() || it == '.' || it == '-' || it == '_' }
+                    .ifEmpty { "unknown" }
+            val dirty =
+                status.isNotBlank() || System.getenv("OPENPOCKETCINE_SOURCE_DIRTY") == "1"
+            val value = if (dirty) "$cleaned+" else cleaned
+            com.android.build.api.variant.BuildConfigField("String", "\"$value\"", "git source revision")
+        }
+
+// Non-empty SENTRY_DSN_ANDROID wins; otherwise the ignored repo-root .local/reliability.properties.
+val sentryDsnAndroidField =
+    providers.environmentVariable("SENTRY_DSN_ANDROID")
+        .orElse("")
+        .zip(
+            providers.of(LocalReliabilityDsnValueSource::class.java) {
+                parameters.propertiesFile.set(
+                    repositoryRoot.resolve(".local/reliability.properties"),
+                )
+            },
+        ) { env, file ->
+            val raw = env.trim().ifEmpty { file.trim() }
+            val escaped = raw.replace("\\", "\\\\").replace("\"", "\\\"")
+            com.android.build.api.variant.BuildConfigField(
+                "String",
+                "\"$escaped\"",
+                "optional Sentry Android DSN",
+            )
+        }
+
+// Windows CPython installs put `python` on PATH and no `python3`. `PYTHON` overrides both.
+val pythonExecutable: Provider<String> =
+    providers.environmentVariable("PYTHON").orElse(
+        providers.systemProperty("os.name").map { osName ->
+            if (osName.startsWith("Windows", ignoreCase = true)) "python" else "python3"
+        }
+    )
+
+androidComponents {
+    onVariants { variant ->
+        variant.buildConfigFields?.put("SOURCE_REVISION", sourceRevisionField)
+        variant.buildConfigFields?.put("SENTRY_DSN_ANDROID", sentryDsnAndroidField)
+        val identity = providers.exec {
+            workingDir = repositoryRoot
+            commandLine(
+                pythonExecutable.get(), repositoryRoot.resolve("tools/build-identity.py").absolutePath,
+                "--platform", "android", "--configuration",
+                "${variant.name}-$resolvedVersionName-$resolvedVersionCode-${gradle.gradleVersion}",
+            )
+        }.standardOutput.asText.map { value ->
+            com.android.build.api.variant.BuildConfigField(
+                "String", "\"${value.trim()}\"", "content identity of build inputs",
+            )
+        }
+        variant.buildConfigFields?.put("BUILD_IDENTITY", identity)
+    }
+}
+
 val stageSwiftCore =
     tasks.register<Exec>("stageSwiftCore") {
         group = "build"
@@ -159,4 +237,22 @@ listOf("Debug", "Release").forEach { variant ->
         doLast { marker.get().asFile.mkdirs() }
     }
     tasks.matching { it.name == "bundle${variant}LocalLintAar" }.configureEach { dependsOn(prepare) }
+}
+
+abstract class LocalReliabilityDsnValueSource :
+    ValueSource<String, LocalReliabilityDsnValueSource.Params> {
+    interface Params : ValueSourceParameters {
+        @get:org.gradle.api.tasks.Optional
+        @get:InputFile
+        @get:PathSensitive(PathSensitivity.NONE)
+        val propertiesFile: RegularFileProperty
+    }
+
+    override fun obtain(): String {
+        val file = parameters.propertiesFile.orNull?.asFile ?: return ""
+        if (!file.isFile) return ""
+        val props = Properties()
+        file.inputStream().use { props.load(it) }
+        return props.getProperty("SENTRY_DSN_ANDROID")?.trim().orEmpty()
+    }
 }
