@@ -1,10 +1,27 @@
 package com.opencapture.openpocketcine.lut
 
+import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.session.CameraCommands
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class PlaybackLutColorTest {
+    @Test
+    fun cameraLookTransferKeepsLastLogLikeDji() {
+        val saved = LutCatalog.cameraLooks
+        try {
+            LutCatalog.configureCameraLooks(
+                listOf(LutEntry("camera:ilog", "I-Log", LutCategory.DJI, "i.cube", MonitorTransfer.ILOG)),
+            )
+            assertEquals(
+                CameraCommands.COLOR_ILOG,
+                PlaybackLutColor.resolve(CameraCommands.COLOR_NORMAL, CameraCommands.COLOR_ILOG),
+            )
+        } finally {
+            LutCatalog.configureCameraLooks(saved)
+        }
+    }
+
     @Test
     fun keepsLastLogWhenLiveAndFileSayRec709() {
         assertEquals(

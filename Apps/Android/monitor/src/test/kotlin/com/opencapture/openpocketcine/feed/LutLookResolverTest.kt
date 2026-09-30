@@ -1,12 +1,38 @@
 package com.opencapture.openpocketcine.feed
 
 import com.opencapture.openpocketcine.lut.LutCatalog
+import com.opencapture.openpocketcine.lut.LutCategory
+import com.opencapture.openpocketcine.lut.LutEntry
 import com.opencapture.openpocketcine.session.CameraCommands
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class LutLookResolverTest {
+    private val iLogLook =
+        LutEntry(
+            id = "camera:ilog",
+            title = "I-Log → Rec.709",
+            category = LutCategory.DJI,
+            fileName = "Luna_I-Log_to_Rec709_BT1886_s33_v2.cube",
+            inputTransfer = MonitorTransfer.ILOG,
+        )
+
+    @Test
+    fun `Auto picks the camera look matching the live transfer`() {
+        fun auto(colorMode: Int) =
+            LutLookResolver.resolve(LutCatalog.AUTO, true, colorMode, "generic", "Luna Ultra", cameraLooks = listOf(iLogLook))
+        val iLog = auto(CameraCommands.COLOR_ILOG)
+        assertEquals(
+            LutLookSource.Asset("Luna_I-Log_to_Rec709_BT1886_s33_v2.cube", MonitorTransfer.ILOG, "I-Log → Rec.709"),
+            iLog,
+        )
+        assertEquals("Auto · I-Log → Rec.709", LutLookResolver.statusLabel(true, LutCatalog.AUTO, iLog))
+        assertEquals(LutLookSource.Off, auto(CameraCommands.COLOR_NORMAL))
+        assertEquals(LutLookSource.Off, auto(CameraCommands.COLOR_DOLBY_VISION))
+        assertEquals(LutLookSource.Off, auto(-1))
+    }
+
     @Test
     fun `chip off drops the cube`() {
         assertEquals(

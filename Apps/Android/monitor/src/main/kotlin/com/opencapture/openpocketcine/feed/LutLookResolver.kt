@@ -36,7 +36,11 @@ internal object LutLookResolver {
             return entry.fileName?.let { LutLookSource.Asset(it, entry.inputTransfer, entry.title) }
                 ?: LutLookSource.Off
         }
-        if (family == "generic" && (selection == LutCatalog.AUTO || selection == LutCatalog.DJI_AUTO)) return LutLookSource.Off
+        if (selection == LutCatalog.AUTO || selection == LutCatalog.DJI_AUTO) {
+            // Auto picks the brand camera look whose input transfer matches the live transfer (Luna I-Log).
+            autoCameraLook(colorMode, cameraLooks)?.let { return it }
+            if (family == "generic") return LutLookSource.Off
+        }
         return when (selection) {
             LutCatalog.OFF -> LutLookSource.Off
             LutCatalog.AUTO, LutCatalog.DJI_AUTO -> djiAuto(colorMode, family, cameraName)
@@ -82,7 +86,8 @@ internal object LutLookResolver {
             is LutLookSource.Asset -> {
                 val title = sourceTitle(source)
                 val official =
-                    LutCatalog.officialDji.any { it.fileName == source.fileName }
+                    LutCatalog.officialDji.any { it.fileName == source.fileName } ||
+                        LutCatalog.cameraLooks.any { it.fileName == source.fileName }
                 if (official) "Applying official $title" else "Applying $title"
             }
             is LutLookSource.Custom -> "Applying ${LutCatalog.displayName(source.fileName)}"
@@ -104,6 +109,13 @@ internal object LutLookResolver {
     /** Manual conversion changes the cube's exposure math, never source metering metadata. */
     fun exposureColorMode(source: LutLookSource, sourceColorMode: Int): Int =
         (source as? LutLookSource.Asset)?.inputTransfer?.colorMode ?: sourceColorMode
+
+    private fun autoCameraLook(colorMode: Int, cameraLooks: List<LutEntry>): LutLookSource? {
+        if (colorMode < 0) return null
+        val transfer = MonitorTransfer.fromColorMode(colorMode)
+        val entry = cameraLooks.firstOrNull { it.inputTransfer == transfer && it.fileName != null } ?: return null
+        return LutLookSource.Asset(entry.fileName!!, entry.inputTransfer, entry.title)
+    }
 
     private fun djiAuto(colorMode: Int, family: String, cameraName: String?): LutLookSource {
         val nano = family.equals("nano", ignoreCase = true)

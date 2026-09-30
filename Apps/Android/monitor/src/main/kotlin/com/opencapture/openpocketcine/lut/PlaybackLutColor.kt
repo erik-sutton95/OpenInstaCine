@@ -14,7 +14,8 @@ internal object PlaybackLutColor {
         when (code) {
             CameraCommands.COLOR_DLOG, CameraCommands.COLOR_DLOG2, CameraCommands.COLOR_DLOG_M ->
                 true
-            else -> false
+            // Brand camera looks (Luna I-Log) bind Auto the same way.
+            else -> LutCatalog.cameraLooks.any { it.inputTransfer?.colorMode == code }
         }
 
     fun resolve(live: Int, last: Int): Int = resolve(clip = -1, live = live, last = last)
