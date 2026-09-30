@@ -18,6 +18,8 @@ struct LiveImageEffects: Equatable, Sendable {
     var vectorscope = false
     var trafficLights = false
     var ndMeter = false
+    /// EV meter reading the picture: the scope tap must run.
+    var evMeter = false
     var lutDimension = 0
     var lutRGBA = Data()
 
@@ -86,7 +88,7 @@ struct LiveImageEffects: Equatable, Sendable {
 
     /// WAVE / PARADE / HISTO / VECTOR / LIGHTS / ND share the source tap.
     var needsScopes: Bool {
-        histogram || waveform || parade || vectorscope || trafficLights || ndMeter
+        histogram || waveform || parade || vectorscope || trafficLights || ndMeter || evMeter
     }
 
     var needsScopePoints: Bool {
@@ -104,6 +106,12 @@ struct LiveImageEffects: Equatable, Sendable {
     }
 
     var needsProcessedFeed: Bool { needsSample }
+
+    func withEVMeter(_ on: Bool) -> LiveImageEffects {
+        var fx = self
+        fx.evMeter = on
+        return fx
+    }
 
     func withFaceAF(_ on: Bool) -> LiveImageEffects {
         var fx = self

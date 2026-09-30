@@ -221,6 +221,34 @@ def main() -> None:
     )
     replace_phrase(snapshot_tests, "for option in FocusOption.allCases {", "for option in CaptureLists.focusOptions {")
 
+    # --- EV meter: a camera without metered EV (Luna) meters the picture instead. ---
+    fx = APP / "LiveMonitorFx.swift"
+    replace_once(fx, "    var ndMeter = false\n    var lutDimension = 0\n",
+                 "    var ndMeter = false\n    /// EV meter reading the picture: the scope tap must run.\n    var evMeter = false\n    var lutDimension = 0\n")
+    replace_once(fx, "        histogram || waveform || parade || vectorscope || trafficLights || ndMeter\n    }",
+                 "        histogram || waveform || parade || vectorscope || trafficLights || ndMeter || evMeter\n    }")
+    replace_once(fx, "    func withFaceAF(_ on: Bool) -> LiveImageEffects {",
+                 "    func withEVMeter(_ on: Bool) -> LiveImageEffects {\n        var fx = self\n        fx.evMeter = on\n        return fx\n    }\n\n    func withFaceAF(_ on: Bool) -> LiveImageEffects {")
+    assists = APP / "LiveAssists.swift"
+    replace_once(assists, "    var monitorFamily: CameraBodyFamily = .pocket\n",
+                 "    var monitorFamily: CameraBodyFamily = .pocket\n    /// The camera reports no metered EV, so the EV meter reads the picture.\n    var evMeterFromPicture = false\n")
+    replace_once(assists, "        .withInspectorDemand(inspectorSceneActive && !gradesClip ? configureTool : nil)\n",
+                 "        .withEVMeter(evMeterFromPicture && isVisible(.evMeter))\n        .withInspectorDemand(inspectorSceneActive && !gradesClip ? configureTool : nil)\n")
+    replace_once(assists, "        fx.ndMeter = isPlaybackVisible(.ndMeter)\n",
+                 "        fx.ndMeter = isPlaybackVisible(.ndMeter)\n        fx.evMeter = false\n")
+    replace_once(APP / "AppRoot.swift", "        let photo = session.status.isPhoto\n        assist.syncLUT(\n",
+                 "        let photo = session.status.isPhoto\n        assist.evMeterFromPicture = !session.reportsMeteredEV\n        assist.syncLUT(\n")
+    ev = APP / "CameraEVMeter.swift"
+    replace_once(ev, """        let reading = ExposureMeterReading(
+            cameraValue: model.session.sessionRecovery.isRecovering || model.session.feedRecovering
+                ? nil : model.session.status.meteredEv)
+""", """        let recovering = model.session.sessionRecovery.isRecovering || model.session.feedRecovering
+        let reading = ExposureMeterReading(
+            cameraValue: recovering ? nil : model.session.status.meteredEv ?? pictureEV)
+""")
+    replace_once(ev, "    var avoiding: CGRect?\n\n    var body: some View {\n        let frame = CameraEVMeter.frame(in: feed, avoiding: avoiding)\n",
+                 "    var avoiding: CGRect?\n\n    /// Metered EV from the live picture, for cameras that report none.\n    private var pictureEV: EvComp? {\n        guard model.assist.evMeterFromPicture else { return nil }\n        let bundle = model.monitorSamples.bundle\n        guard let picture = NDFilterRecommendation.pictureStops(\n            lumaHistogram: bundle.samples.histogramLuma, transfer: bundle.transfer)\n        else { return nil }\n        let status = model.session.status\n        let stops = PictureEVMeter.shared.stops(\n            picture: picture, transfer: bundle.transfer,\n            evComp: status.expoMode == .auto ? status.evComp.map { Double($0.thirds) / 3 } : nil,\n            now: ProcessInfo.processInfo.systemUptime)\n        return EvComp(thirds: Int((stops * 3).rounded()))\n    }\n\n    var body: some View {\n        let frame = CameraEVMeter.frame(in: feed, avoiding: avoiding)\n")
+
     # --- Launch wiring + gates that assumed a DJI datalink. ---
     replace_once(
         APP / "OpenInstaCineApp.swift",

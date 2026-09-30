@@ -41,6 +41,8 @@ extension CameraSession {
     var supportsAudio: Bool { false }
     /// Luna reports no timecode; the REC timer carries elapsed time.
     var supportsTimecode: Bool { true }
+    /// Luna sends no metered EV; the EV meter reads the picture.
+    var reportsMeteredEV: Bool { false }
     /// Auto ISO ceiling and native-ISO hop are Osmo camcap features; Luna has neither.
     var supportsIsoLimit: Bool { false }
     /// Luna media browse runs over HTTP next to the live socket.

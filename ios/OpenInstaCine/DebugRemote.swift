@@ -453,6 +453,11 @@
                 } catch {
                     return ["ok": false, "error": error.localizedDescription]
                 }
+            case "mediaStats":
+                return ["ok": true, "subtypes": s.backend.mediaSubtypeStats.map { key, value in
+                    ["subtype": String(format: "0x%02x", key), "count": value.count,
+                     "head": value.last.map { String(format: "%02x", $0) }.joined()]
+                }]
             case "wait":
                 try? await Task.sleep(for: .seconds(num("seconds") ?? 1))
             default:

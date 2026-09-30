@@ -53,6 +53,7 @@ final class AppModel {
         guard !isWatchingFeed, !assist.gradesClip, !session.status.inPlayback else { return }
         let raw = session.status.colorMode
         let photo = session.status.isPhoto
+        assist.evMeterFromPicture = !session.reportsMeteredEV
         assist.syncLUT(
             to: raw,
             family: session.bodyFamily,

@@ -37,6 +37,7 @@ LUNA_OWNED=(
   OpenInstaCine/OpenInstaCineBrand.swift
   OpenInstaCine/OsmoCameraPageAdapter.swift
   OpenInstaCine/OsmoMonitorPresentation.swift
+  OpenInstaCine/PictureEVMeter.swift
   OpenInstaCine/Assets.xcassets
   OpenInstaCine/Resources
   OpenInstaCineWatch/Assets.xcassets

@@ -268,6 +268,8 @@ final class LiveAssistState {
     var lutSelection: LUTSelection = .djiAuto
     var monitorColorMode: ColorMode?
     var monitorFamily: CameraBodyFamily = .pocket
+    /// The camera reports no metered EV, so the EV meter reads the picture.
+    var evMeterFromPicture = false
     var monitorCameraName: String?
     /// Media player is grading a clip (connected or not). LUT sheet must not
     /// restamp Auto from the live SET — disconnected has no `inPlayback` flag.
@@ -354,6 +356,7 @@ final class LiveAssistState {
             desqueezeHorizontal: desqueezeHorizontal,
             trafficThreshold: crushClipCompensation.pixelFractionThreshold
         )
+        .withEVMeter(evMeterFromPicture && isVisible(.evMeter))
         .withInspectorDemand(inspectorSceneActive && !gradesClip ? configureTool : nil)
     }
 
@@ -371,6 +374,7 @@ final class LiveAssistState {
         fx.vectorscope = isPlaybackVisible(.vectorscope)
         fx.trafficLights = isPlaybackVisible(.trafficLights)
         fx.ndMeter = isPlaybackVisible(.ndMeter)
+        fx.evMeter = false
         fx.lutDimension = isPlaybackVisible(.lut) ? lutDimension : 0
         fx.lutRGBA = isPlaybackVisible(.lut) ? lutRGBA : Data()
         fx.splitComparison = splitComparison && isPlaybackVisible(.lut)

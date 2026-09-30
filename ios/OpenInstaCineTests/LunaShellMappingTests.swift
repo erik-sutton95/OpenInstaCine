@@ -173,3 +173,26 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertEqual(CameraSession.programPose(take, at: 6), c)
     }
 }
+
+@MainActor
+final class PictureEVMeterTests: XCTestCase {
+    func testLearnsTheAutoExposurePlacementAndReadsManualAgainstIt() {
+        let defaults = UserDefaults(suiteName: "PictureEVMeterTests")!
+        defaults.removePersistentDomain(forName: "PictureEVMeterTests")
+        let meter = PictureEVMeter(defaults: defaults)
+        // Seeded: auto at EV 0 with the I-Log median 1.3 stops under grey reads 0.
+        XCTAssertEqual(meter.stops(picture: -1.3, transfer: .ilog, evComp: nil, now: 0), 0, accuracy: 1e-9)
+        // Auto at EV 0 in a scene the camera places at -0.8: the offset follows.
+        var t = 0.0
+        while t < 20 {
+            t += 0.04
+            _ = meter.stops(picture: -0.8, transfer: .ilog, evComp: 0, now: t)
+        }
+        XCTAssertEqual(meter.offset(for: .ilog), -0.8, accuracy: 0.01)
+        // Manual, one stop darker than auto chose: reads -1.0; the offset holds.
+        XCTAssertEqual(meter.stops(picture: -1.8, transfer: .ilog, evComp: nil, now: t + 1), -1.0, accuracy: 0.01)
+        XCTAssertEqual(meter.offset(for: .ilog), -0.8, accuracy: 0.01)
+        // Rec.709 has no seed.
+        XCTAssertEqual(meter.stops(picture: 0.4, transfer: .rec709, evComp: nil, now: t + 2), 0.4, accuracy: 1e-9)
+    }
+}

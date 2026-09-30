@@ -30,6 +30,8 @@ public final class LunaCameraBackend: CameraBackend {
     public var onDeviceInformation: ((LunaDeviceInformation) -> Void)?
     /// Every request/notification summary, for the shell's diagnostics journal.
     public var onLog: ((String) -> Void)?
+    /// Media packets seen per UCD2 subtype, with the first bytes of the latest (lab).
+    public var mediaSubtypeStats: [UInt8: (count: Int, last: Data)] = [:]
 
     public var isOnCameraNetwork: Bool { LunaWiFi.localAddress != nil }
     public var isControlReady: Bool { handshakeComplete && isTCP }
@@ -601,6 +603,8 @@ public final class LunaCameraBackend: CameraBackend {
                 if frame.type == UCD2Frame.mediaType, fromTCP {
                     guard liveStartAttempted else { continue }
                     let media = try LunaMediaPacket(frame: frame)
+                    mediaSubtypeStats[media.subtype, default: (0, Data())].count += 1
+                    mediaSubtypeStats[media.subtype]?.last = media.bytes.prefix(64)
                     if let video = media.hevcAnnexB {
                         lastVideoAt = Date()
                         eventHandler?(
