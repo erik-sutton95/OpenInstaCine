@@ -169,11 +169,16 @@ public struct LunaVideoResolution: Equatable, Sendable {
             .keys.sorted { (observed.contains($0) ? 0 : 1, $0) < (observed.contains($1) ? 0 : 1, $1) }.first
     }
 
-    static let index: [UInt64: (Int, Int, Double)] = stride(from: 0, to: schemaTable.count, by: 4)
-        .reduce(into: [:]) { result, i in
-            result[UInt64(schemaTable[i])] = (Int(schemaTable[i + 1]), Int(schemaTable[i + 2]),
-                                              Double(schemaTable[i + 3]) / 100)
+    // ponytail: plain loop, the reduce form timed out the type checker in Release archives.
+    static let index: [UInt64: (Int, Int, Double)] = {
+        var result: [UInt64: (Int, Int, Double)] = [:]
+        for i in stride(from: 0, to: schemaTable.count, by: 4) {
+            let row: ArraySlice<UInt32> = schemaTable[i..<(i + 4)]
+            let fps: Double = Double(row[i + 3]) / 100
+            result[UInt64(row[i])] = (Int(row[i + 1]), Int(row[i + 2]), fps)
         }
+        return result
+    }()
 }
 
 /// `PhotoSize` enum (photography option 40). Observed 29, 31, 34.
@@ -190,8 +195,14 @@ public struct LunaPhotoSize: Equatable, Sendable {
 
     public var aspectLabel: String { LunaAspect.label(width: width, height: height) }
 
-    static let index: [UInt64: (Int, Int)] = stride(from: 0, to: schemaTable.count, by: 3)
-        .reduce(into: [:]) { $0[UInt64(schemaTable[$1])] = (Int(schemaTable[$1 + 1]), Int(schemaTable[$1 + 2])) }
+    static let index: [UInt64: (Int, Int)] = {
+        var result: [UInt64: (Int, Int)] = [:]
+        for i in stride(from: 0, to: schemaTable.count, by: 3) {
+            let row: ArraySlice<UInt32> = schemaTable[i..<(i + 3)]
+            result[UInt64(row[i])] = (Int(row[i + 1]), Int(row[i + 2]))
+        }
+        return result
+    }()
 }
 
 enum LunaAspect {
