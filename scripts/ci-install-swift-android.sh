@@ -42,7 +42,7 @@ fi
 # symlink swift/swiftc into /usr/local/bin. Those names are often links to
 # `swift-driver`. Invoking the resolved binary makes argv0 `swift-driver`,
 # which exits: "invalid driver name: swift-driver". Always invoke as `swift`.
-# llvm-objcopy / llvm-objdump live next to the real driver — follow the link
+# llvm-objcopy / llvm-objdump live next to the real driver, so follow the link
 # only to find that directory.
 swift_real="$(readlink -f "$swift_cmd")"
 [[ -x "$swift_real" ]] || fail "could not resolve the swift executable"

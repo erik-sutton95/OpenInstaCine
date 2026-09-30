@@ -52,7 +52,7 @@ requested="$(cat "$download_log")"
 [[ "$requested" == "test-dist 3.7.0 https://downloads.sentry-cdn.com/sentry-cli/3.7.0/sentry-cli-test-dist" ]] \
   || fail "unexpected downloader request: $requested"
 
-# Reuse when checksum matches — downloader must not run again.
+# Reuse when checksum matches: the downloader must not run again.
 SENTRY_CLI_DOWNLOADER="$downloader" \
   SENTRY_CLI_CHECKSUMS="$checksums" \
   SENTRY_CLI_DIST="test-dist" \

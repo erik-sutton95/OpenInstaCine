@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Validate TestFlight notes: this-build window, compact or detailed, safe for testers.
-# Caps: scripts/tester-notes-limits.sh  Contract: docs/tester-notes.md
+# Caps: scripts/tester-notes-limits.sh  Contract: docs/testflight-ci.md
 set -euo pipefail
 
 notes_path="${1:-ios/TestFlight/WhatToTest.en-US.txt}"

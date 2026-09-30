@@ -139,7 +139,7 @@ What to test
 EOF
 expect_fail "${temp_dir}/too-many.txt"
 
-# The Fixes section has its own, larger cap — a release can answer a lot of reports.
+# The Fixes section has its own, larger cap: a release can answer a lot of reports.
 cat > "${temp_dir}/too-many-fixes.txt" <<'EOF'
 New and changed
 

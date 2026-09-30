@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Validate Android closed-testing notes: this-build window plus Play what's new.
-# Caps: scripts/tester-notes-limits.sh  Contract: docs/tester-notes.md
+# Caps: scripts/tester-notes-limits.sh  Contract: docs/testflight-ci.md
 set -euo pipefail
 
 notes_path="${1:-Apps/Android/Play/WhatToTest.en-US.txt}"

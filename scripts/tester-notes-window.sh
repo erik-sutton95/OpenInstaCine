@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Print the operator-visible feat/fix window for TestFlight / Play notes.
-# Does not write notes files. Contract: docs/tester-notes.md
+# Does not write notes files. Contract: docs/testflight-ci.md
 set -euo pipefail
 
 range="${1:-}"
@@ -19,7 +19,7 @@ operator_commits() {
     | head -n 8 || true
 }
 
-printf 'this-build window — keep about four items this platform can see.\n' >&2
+printf 'this-build window: keep about four items this platform can see.\n' >&2
 printf 'This PR leads. Skip build/ci/docs/chore and the other shell.\n' >&2
 printf 'Replace WhatToTest; CHANGELOG.md is the cumulative record.\n\n' >&2
 
