@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="ios/OpenInstaCine/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" alt="OpenInstaCine app icon" width="96" height="96">
+<img src="docs/assets/icon.png" alt="OpenInstaCine app icon" width="96" height="96">
 
 # OpenInstaCine
 
