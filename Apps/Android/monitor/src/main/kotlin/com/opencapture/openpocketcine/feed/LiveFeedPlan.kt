@@ -85,6 +85,8 @@ internal fun rememberLiveFeedEffectsPlan(
         vectorscope,
         trafficLights,
         ndMeter,
+        assist.evMeter,
+        assist.evMeterFromPicture,
         crushClip,
         lutExposureStops,
         status.colorMode,

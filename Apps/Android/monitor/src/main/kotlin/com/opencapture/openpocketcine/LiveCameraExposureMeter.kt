@@ -16,6 +16,11 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.opencapture.monitorui.monitorReadoutShadow
+import android.content.Context
+import android.os.SystemClock
+import com.opencapture.openpocketcine.assists.LiveAssistState
+import com.opencapture.openpocketcine.session.CameraCommands
+import com.opencapture.openpocketcine.session.CameraStatus
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -55,7 +60,7 @@ internal class CameraExposureMeter(raw: Int, available: Boolean = true) {
 /** Fixed to the visible feed's left edge in DISP 1; it has no pointer handlers or saved placement. */
 @Composable
 internal fun LiveCameraExposureMeter(
-    raw: Int,
+    raw: () -> Int,
     available: Boolean,
     feed: ChromeRect,
     mode: PocketDispMode,
@@ -63,7 +68,7 @@ internal fun LiveCameraExposureMeter(
     avoid: ChromeRect? = null,
 ) {
     val frame = CameraExposureMeter.frame(feed, mode, avoid) ?: return
-    val reading = CameraExposureMeter(raw, available)
+    val reading = CameraExposureMeter(raw(), available)
     val measurer = rememberTextMeasurer()
     Canvas(
         modifier.offset(frame.x.dp, frame.y.dp).size(frame.width.dp, frame.height.dp)
@@ -109,4 +114,15 @@ internal fun LiveCameraExposureMeter(
             }
         }
     }
+}
+
+/** iOS `CameraEVMeterOverlay.pictureEV`: metered EV from the live picture for a camera that reports none (raw, or -1). */
+internal fun pictureMeteredEv(context: Context, assist: LiveAssistState, status: CameraStatus): Int {
+    if (!assist.evMeterFromPicture) return -1
+    val bundle = assist.scopeBundle
+    val picture = NDFilterRecommendation.pictureStops(bundle.samples.histogramLuma, bundle.transfer) ?: return -1
+    val evComp = EvComp.fromRaw(status.evComp)?.takeIf { status.expoMode == CameraCommands.EXPO_AUTO }
+    val stops = PictureEVMeter.shared(context).stops(
+        picture, bundle.transfer, evComp?.thirds?.div(3.0), SystemClock.elapsedRealtime() / 1000.0)
+    return EvComp.fromThirds(Math.round(stops * 3).toInt()).rawValue
 }

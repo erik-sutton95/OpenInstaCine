@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -714,9 +715,12 @@ fun LiveViewScreen(model: AppModel) {
             val meterAvoid = if (showsAssist) assistPaletteBounds ?: collapsedPalette else null
             val meterFeed = if (desqueezeVisible) pictureContent else layout.onFeed
             val evShown = assist.evMeter && model.currentDispMode == PocketDispMode.LIVE
+            SideEffect { assist.evMeterFromPicture = !model.session.reportsMeteredEV }
             if (evShown) {
+                val evContext = LocalContext.current
                 LiveCameraExposureMeter(
-                    raw = status.meteredEv,
+                    // Read in the meter's own scope so the scope tap recomposes only the meter.
+                    raw = { status.meteredEv.takeIf { it >= 0 } ?: pictureMeteredEv(evContext, assist, status) },
                     available = !recovery.isRecovering && !model.session.isFeedRecovering,
                     feed = meterFeed,
                     mode = model.currentDispMode,

@@ -257,6 +257,8 @@ class PocketCameraSession(
     val supportsTapFocus: Boolean get() = can(CameraCapability.FOCUS)
     /** iOS `supportsAudio`: the Luna sends no audio levels, so AUDIO is hidden live (clip playback keeps its meters). */
     val supportsAudio: Boolean get() = can(CameraCapability.AUDIO)
+    /** iOS `reportsMeteredEV`: the Luna sends none, so the EV meter reads the picture. */
+    val reportsMeteredEV: Boolean get() = CameraCapability.METERED_EV in capabilities
     var videoPackets = 0
     var accessUnits = 0
     var framesEnqueued = 0

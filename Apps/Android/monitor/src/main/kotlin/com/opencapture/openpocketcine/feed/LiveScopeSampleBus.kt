@@ -88,6 +88,8 @@ internal data class ScopeTapPolicy(
     val vectorscope: Boolean = false,
     val trafficLights: Boolean = false,
     val ndMeter: Boolean = false,
+    /** EV meter reading the picture: the scope tap must run. */
+    val evMeter: Boolean = false,
     val trafficThreshold: Double = 0.0,
     val colorMode: Int = com.opencapture.openpocketcine.session.CameraCommands.COLOR_NORMAL,
     val iso: Int = ScopeExposureCeiling.REFERENCE_EI,
@@ -95,7 +97,7 @@ internal data class ScopeTapPolicy(
     val allowsTransferInference: Boolean = true,
 ) {
     val activeScopeCount: Int
-        get() = listOf(waveform, parade, histogram, vectorscope, trafficLights, ndMeter).count { it }
+        get() = listOf(waveform, parade, histogram, vectorscope, trafficLights, ndMeter, evMeter).count { it }
 
     val needsTap: Boolean
         get() = activeScopeCount > 0 || previewOwner != null

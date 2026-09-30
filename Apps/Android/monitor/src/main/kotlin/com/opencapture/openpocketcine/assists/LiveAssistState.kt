@@ -50,6 +50,8 @@ class LiveAssistState(
         private set
     var evMeter by mutableStateOf(false)
         private set
+    /** The camera reports no metered EV, so the EV meter reads the picture (and needs the scope tap). */
+    var evMeterFromPicture by mutableStateOf(false)
     var level by mutableStateOf(false)
         private set
     var audioMeters by mutableStateOf(false)

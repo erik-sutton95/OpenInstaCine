@@ -4,7 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 public enum class ConnectionPhase { IDLE, SCANNING, CONNECTING_GATT, PAIRING, AWAITING_APPROVAL, READING_WIFI_CREDS, JOINING_WIFI, OPENING_DATALINK, LIVE, FAILED }
-public enum class CameraCapability { LIVE_VIDEO, CAMERA_SETTINGS, RECORD, GIMBAL, FOCUS, CAMERA_MEDIA, AUDIO, ZOOM, TRACKING }
+public enum class CameraCapability { LIVE_VIDEO, CAMERA_SETTINGS, RECORD, GIMBAL, FOCUS, CAMERA_MEDIA, AUDIO, ZOOM, TRACKING, METERED_EV }
 public data class CameraIdentity(public val id: String, public val advertisedName: String, public val modelName: String)
 public data class CameraSnapshot(public val firmware: String? = null, public val batteryPercent: Int? = null, public val previewWidth: Int = 1280, public val previewHeight: Int = 720, public val previewFps: Int = 25)
 public data class EncodedVideoFrame(public val annexB: ByteArray, public val timestampMicros: Long)
