@@ -116,6 +116,7 @@ import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraStatus
 import com.opencapture.openpocketcine.session.ControlHud
 import com.opencapture.openpocketcine.session.FocusOverlay
+import com.opencapture.openpocketcine.session.LiveFeedFocusGesture
 import com.opencapture.openpocketcine.session.LiveFaceDetector
 import com.opencapture.openpocketcine.session.TrackingBox
 import com.opencapture.openpocketcine.session.VideoResolution
@@ -622,7 +623,11 @@ fun LiveViewScreen(model: AppModel) {
                 LiveFeedGestureWell(
                     enabled = !uiLocked && model.liveOperatorPanel == null && chromeInteractive,
                     feed = ChromeRect(0f, 0f, gestureFrame.width, gestureFrame.height),
-                    onTap = { point ->
+                    onTap = onTap@{ point ->
+                        if (model.focusBoxLocked) {
+                            model.session.presentControlNote(LiveFeedFocusGesture.FOCUS_LOCKED_NOTE)
+                            return@onTap
+                        }
                         val x = if (liveViewFlip) 1f - point.x else point.x
                         val y = if (flipV) 1f - point.y else point.y
                         model.session.handleFeedTap(x, y)
@@ -635,6 +640,15 @@ fun LiveViewScreen(model: AppModel) {
                     },
                     onAeLock = { model.session.lockAutoExposure() },
                     canLockAe = { model.session.canLockAutoExposure },
+                    focusBox = focusPoint.takeIf {
+                        model.session.supportsTapFocus && trackingHud.overlay == FocusOverlay.Focus
+                    },
+                    mirrored = liveViewFlip,
+                    flippedVertically = flipV,
+                    onToggleFocusLock = {
+                        model.focusBoxLocked = !model.focusBoxLocked
+                        model.focusBoxLocked
+                    },
                 )
             }
 
@@ -648,6 +662,7 @@ fun LiveViewScreen(model: AppModel) {
                         model.chromeSectionMounts(PocketDispSection.FOCUS_BOX) &&
                             (model.session.supportsTapFocus || aeLock != null),
                     aeLocked = aeLock != null,
+                    focusLocked = model.focusBoxLocked,
                     locked = uiLocked,
                     feedFrame = if (desqueezeVisible) pictureContent else layout.onFeed.fittedContent(
                         VideoResolution.fromRaw(status.resolutionCode)?.ratio ?: pictureAspect),
@@ -787,7 +802,7 @@ fun LiveViewScreen(model: AppModel) {
                     chromeInteractive = chromeInteractive,
                     controlBusy = controlBusy,
                     focusOffCenter = focusOffCenter,
-                    onFocusReset = { model.session.resetFocusPoint() },
+                    onFocusReset = { model.resetFocusPoint() },
                     fpsLabel = fpsLabel,
                     bars = bars,
                     sourceIsVertical = verticalPicture,
@@ -816,7 +831,7 @@ fun LiveViewScreen(model: AppModel) {
                     stick = stick,
                     gimbalButton = gimbalButton,
                     focusOffCenter = focusOffCenter,
-                    onFocusReset = { model.session.resetFocusPoint() },
+                    onFocusReset = { model.resetFocusPoint() },
                     zoomReadout = zoomReadout,
                     zoomDialReadout = zoomDialReadout,
                     zoomPinching = zoomPinching,
