@@ -39,7 +39,7 @@ Parity values:
 | Record + timer | Luna-adapted | Start/stop and photo; lamp waits for camera capture status. REC timer is elapsed time from capture status (no timecode) |
 | Lock | Same | Interface lock blocks every control |
 | DISP clean view | Same | DISP 1/2, clean mode, chrome editor |
-| LUT incl. Insta360 I-Log look | Luna-adapted | Camera LUTs: Auto and the official Insta360 I-Log to Rec.709 cube (`Luna_I-Log_to_Rec709_BT1886_s33_v2.cube`); Creative and Custom unchanged. Android: the I-Log cube is in the camera LUT tab, but Auto does not pick it |
+| LUT incl. Insta360 I-Log look | Luna-adapted | Camera LUTs: Auto and the official Insta360 I-Log to Rec.709 cube (`Luna_I-Log_to_Rec709_BT1886_s33_v2.cube`); Creative and Custom unchanged. Android: same; Auto picks the camera look whose input transfer matches the live one (I-Log cube for I-Log, nothing for Standard or Dolby Vision) and the chip reads "Auto · I-Log → Rec.709"; playback of I-Log takes resolves the same way |
 | Peaking | Same | |
 | False color | Same | |
 | Zebra | Same | |
@@ -261,6 +261,7 @@ live view. What the Android app does now, beyond the sync below:
   programmed A/B/C moves on SET_ANGLE (`LunaGimbalAim`, GET_ANGLE poll every 100 ms), with the
   shared Motion Control drawer.
 - Portrait link pill on the leading side, beside storage, as on iOS.
+- LUT Auto picks the official I-Log to Rec.709 cube in I-Log, live and in playback.
 
 Still missing on Android versus iOS:
 
@@ -273,8 +274,8 @@ Still missing on Android versus iOS:
 - Gimbal: limit pulses (8302 / option 92, `gimbalLimitPulse` stays 0); Level uses the IMU pitch
   only (no fallback), and the gyro-drift learning pause is approximated as 500 ms after the last
   gimbal command.
-- The capture-stopped note (8201), re-listing media after a capture while the album is open, a
-  decoder flush on album exit, and Auto LUT picking the I-Log cube.
+- The capture-stopped note (8201), re-listing media after a capture while the album is open,
+  and a decoder flush on album exit.
 - The ISO sheet still shows the DJI "Auto Native ISO" toggle.
 
 ### Upstream 9e306c91 sync (2026-09-29)
