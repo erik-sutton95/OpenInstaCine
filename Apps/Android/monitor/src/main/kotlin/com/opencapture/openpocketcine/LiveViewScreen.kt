@@ -116,6 +116,7 @@ import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraStatus
 import com.opencapture.openpocketcine.session.ControlHud
 import com.opencapture.openpocketcine.session.FocusOverlay
+import com.opencapture.openpocketcine.session.FocusResetPolicy
 import com.opencapture.openpocketcine.session.LiveFeedFocusGesture
 import com.opencapture.openpocketcine.session.LiveFaceDetector
 import com.opencapture.openpocketcine.session.TrackingBox
@@ -484,10 +485,13 @@ fun LiveViewScreen(model: AppModel) {
         } else {
             scopeRight = minOf(scopeRight, layout.settings.minX - 6f)
         }
-        if (!portrait && model.session.isFocusResetAvailable) scopeTop = maxOf(scopeTop, layout.focusReset.maxY)
+        // Read through the collected flows so the key recomposes when it becomes available.
+        val focusOffCenter = FocusResetPolicy.isAvailable(
+            focusPoint.first.toDouble(), focusPoint.second.toDouble(), trackingHud.isTracking,
+        )
+        if (!portrait && focusOffCenter) scopeTop = maxOf(scopeTop, layout.focusReset.maxY)
         val scopePlacement = ChromeRect(scopeLeft, scopeTop, maxOf(0f, scopeRight - scopeLeft),
             maxOf(0f, minOf(scopeBottom, layout.viewportHeight) - scopeTop))
-        val focusOffCenter = model.session.isFocusResetAvailable
 
         val effectsPlan =
             rememberLiveFeedEffectsPlan(

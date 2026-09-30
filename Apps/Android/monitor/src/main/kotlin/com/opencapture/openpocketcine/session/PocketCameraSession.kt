@@ -297,7 +297,9 @@ class PocketCameraSession(
     val isReconnecting: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
     val isFeedRecovering: Boolean get() = recoveryState.value.isRecovering
     val isTrackingActive: Boolean get() = _trackingHud.value.isTracking
-    val isFocusResetAvailable: Boolean get() = false
+    /** iOS: the focus key shows once the focus point is off centre or Deep Track runs. */
+    val isFocusResetAvailable: Boolean
+        get() = _focusPoint.value.let { (x, y) -> FocusResetPolicy.isAvailable(x.toDouble(), y.toDouble(), isTrackingActive) }
     // AE / AWB lock pin the camera's applied Auto values as Manual (core `AutoExposureLock`). The Luna
     // reports only its exposure and WB settings, never the applied Auto ISO, shutter or Kelvin, so there
     // is nothing to pin: the long-press, the AE-L row and the AWB Lock row stay hidden.
@@ -656,7 +658,10 @@ class PocketCameraSession(
     // Gimbal.
     private var stickJob: Job? = null
     @Volatile private var stick = 0.0 to 0.0
-    fun performGimbalDoubleTap() = recenterGimbal()
+    fun performGimbalDoubleTap() = when (gimbalDoubleTap) {
+        GimbalDoubleTap.RECENTER -> recenterGimbal()
+        GimbalDoubleTap.LEVEL -> levelGimbalToWorld()
+    }
     fun levelGimbalToWorld() = unavailable("World leveling")
     fun recenterGimbal() {
         if (!hasGimbal) return
@@ -759,6 +764,8 @@ class PocketCameraSession(
     }
     fun tapFocus(x: Float, y: Float) {
         if (!supportsTapFocus) return
+        // iOS `markFocus`: a tap focus ends Deep Track.
+        cancelTracking()
         _focusPoint.value = x to y
         // The backend centres its official ROI on the tap (iOS: 0.1545 x 0.2727).
         scope.launch { if (controls?.tapFocus(x.toDouble(), y.toDouble()) != true) presentControlNote("Focus did not reach the camera.") }
@@ -811,7 +818,8 @@ class PocketCameraSession(
         }
     }
     fun handleGamepadTrackToggle() = if (isTrackingActive) cancelTracking() else startTracking(0.5f, 0.5f)
-    fun resetFocusPoint() { _focusPoint.value = 0.5f to 0.5f }
+    /** iOS `resetFocusPoint`: `markFocus(0.5, 0.5)`, which also ends Deep Track. */
+    fun resetFocusPoint() = tapFocus(0.5f, 0.5f)
     fun applyDetectedFaces(faces: List<TrackingBox>) = Unit
     fun wantsFaceFrame(): Boolean = false
     fun considerFaceFrame(frame: LiveFaceDetector.Frame) = frame.release()
