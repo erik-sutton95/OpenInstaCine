@@ -740,7 +740,9 @@ class PocketCameraSession(
         val nx = x.coerceIn(0f, 1f).toDouble()
         val ny = y.coerceIn(0f, 1f).toDouble()
         if (can(CameraCapability.TRACKING)) {
-            feedDoubleTap.register(nx, ny, SystemClock.elapsedRealtime() / 1000.0)?.let { return startTracking(it) }
+            if (feedDoubleTap.register(nx, ny, SystemClock.elapsedRealtime() / 1000.0) != null) {
+                return startTracking(LunaShellMapping.doubleTapTrackBox(nx, ny))
+            }
         }
         tapFocus(x, y)
     }

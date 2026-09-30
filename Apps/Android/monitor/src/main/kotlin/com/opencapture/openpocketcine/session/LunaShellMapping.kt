@@ -156,6 +156,13 @@ internal object LunaShellMapping {
         FocusOption.SUBJECT_LOCK, FocusOption.REGISTERED_PRIORITY -> null
     }
 
+    /** iOS `doubleTapTrackBox`: square on the 16:9 sensor, a fifth of the width, centred on the tap and kept in frame. */
+    fun doubleTapTrackBox(x: Double, y: Double): TrackingBox {
+        val w = 0.2
+        val h = w * 16 / 9
+        return TrackingBox((x - w / 2).coerceIn(0.0, 1 - w), (y - h / 2).coerceIn(0.0, 1 - h), w, h)
+    }
+
     /** Shared (focusMode, focusTrack) for [option]; null blanks the readout. */
     fun withFocus(status: CameraStatus, option: FocusOption?): CameraStatus = status.copy(
         focusMode = when (option) {

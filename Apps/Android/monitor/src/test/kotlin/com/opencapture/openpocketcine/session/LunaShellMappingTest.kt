@@ -120,7 +120,19 @@ class LunaShellMappingTest {
         assertNull(shown(status))
     }
 
-        @Test fun settingsMapOntoSharedStatus() {
+        /** iOS `testTrackBoxIsCentredAndStaysInFrame`. */
+    @Test fun doubleTapTrackBoxIsCentredSquareOnTheSensorAndStaysInFrame() {
+        val centre = m.doubleTapTrackBox(0.5, 0.5)
+        assertEquals(0.5, centre.x + centre.width / 2, 1e-9)
+        assertEquals(0.5, centre.y + centre.height / 2, 1e-9)
+        assertEquals(0.2, centre.width, 1e-9)
+        assertEquals(centre.width * 16 / 9, centre.height, 1e-9)
+        val corner = m.doubleTapTrackBox(0.99, 0.01)
+        assertEquals(1.0, corner.x + corner.width, 1e-9)
+        assertEquals(0.0, corner.y, 1e-9)
+    }
+
+    @Test fun settingsMapOntoSharedStatus() {
         val pins = LunaControlPins()
         val (s, table) = m.applySettings(readout, CameraStatus(shootingMode = CameraCommands.SHOOT_VIDEO), pins, now = 0)
         assertEquals(CameraCommands.EXPO_MANUAL, s.expoMode)
