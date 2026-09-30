@@ -42,6 +42,8 @@ LUNA_OWNED=(
   OpenInstaCine/Resources
   OpenInstaCineWatch/Assets.xcassets
   LunaOfficialUITests
+  TestFlight
+  Config/Version.xcconfig
 )
 
 # Upstream files that only test or serve the Osmo DUML session. Never synced.
@@ -63,6 +65,14 @@ OSMO_ONLY=(
 
 ENGINE=(MonitorPresentation MonitorUI OpenPocketViewCore CJNI OpenPocketCineAndroidFacade)
 TOOLS=(stamp-source-revision.sh build-identity.py pull-control-log.sh analyze-live-log.py)
+# Release tooling copied once and retargeted (openinstacine-* Sentry projects, OpenInstaCine and
+# :monitor paths). OpenInstaCine owns these copies; a sync never writes them. Port upstream fixes by hand.
+RELEASE_OWNED=(
+  'tools/sentry-*' tools/build-identity-test.py tools/ios-package-resolved-check.py
+  'scripts/ios-release-notes*' 'scripts/android-release-notes*' 'scripts/tester-notes-*'
+  'scripts/ios-package-resolved-*' scripts/ci-install-swift-android.sh
+  .github/workflows/ci.yml .github/workflows/android-play.yml
+)
 
 rename_tree() {
   local dir="$1"
@@ -118,6 +128,11 @@ for f in "${LUNA_OWNED[@]}"; do UP_OWNED+=("ios/$(echo "$f" | sed 's/OpenInstaCi
 if [[ -n "$(git -C "$SRC" diff --name-only "$OLD" "$NEW" -- "${UP_OWNED[@]}")" ]]; then
   echo "warning: upstream changed Luna-owned files (not applied, port by hand):"
   git -C "$SRC" diff --stat "$OLD" "$NEW" -- "${UP_OWNED[@]}"
+fi
+
+if [[ -n "$(git -C "$SRC" diff --name-only "$OLD" "$NEW" -- "${RELEASE_OWNED[@]}")" ]]; then
+  echo "warning: upstream changed release tooling OpenInstaCine owns (not applied, port by hand):"
+  git -C "$SRC" diff --stat "$OLD" "$NEW" -- "${RELEASE_OWNED[@]}"
 fi
 
 if [[ ! -s "$T/sync.patch" ]]; then
