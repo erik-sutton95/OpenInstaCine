@@ -15,6 +15,19 @@ class LunaControlTest {
         assertFailsWith<IllegalArgumentException> { LunaControl.zoom(15.5) }
     }
 
+    @Test fun clockMatchesSwiftEncoder() {
+        // official-fw1115/01-connect: types 12, 13, 175 and 12:1790315162 13:7200 175:'Europe/Stockholm'.
+        val set = LunaControl.setClock(1_790_315_162, 7200, "Europe/Stockholm")
+        assertEquals(LunaControl.SET_OPTIONS, set.code)
+        assertEquals("0a040c0daf01121c609a95d8d50668a038fa0a10" + hex("Europe/Stockholm".toByteArray()), hex(set.body))
+        // West of GMT is a negative int32: ten-byte two's-complement varint.
+        assertEquals("0a040c0daf011210600168f0e3ffffffffffffff01fa0a00", hex(LunaControl.setClock(1, -3600, "").body))
+        val first = LunaControl.syncTimeAccurate(1_790_758_255_639, 0)
+        assertEquals(214, first.code)
+        assertEquals("0a0908ef9af3d50610ff04", hex(first.body))
+        assertEquals("0a0908ef9af3d50610ff041001", hex(LunaControl.syncTimeAccurate(1_790_758_255_639, 1).body))
+    }
+
     @Test fun gimbalAbsoluteAngleMatchesSwift() {
         assertEquals("08052a0a15000020411d0000a0c1", hex(LunaControl.gimbalSetAngle(pitch = 10f, yaw = -20f).body))
         assertEquals("08052a00", hex(LunaControl.gimbalSetAngle(0f, 0f).body))

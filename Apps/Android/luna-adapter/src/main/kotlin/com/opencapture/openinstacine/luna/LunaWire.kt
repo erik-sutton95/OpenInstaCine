@@ -87,10 +87,10 @@ internal object LunaWire {
             return result
         }
     }
+    /** A negative number encodes as its unsigned 64-bit value (ten bytes), like protobuf int32/int64. */
     fun varint(number: Long): ByteArray {
-        require(number >= 0)
         var value = number; val out = ByteArrayOutputStream()
-        while (value > 127) { out.write((value.toInt() and 127) or 128); value = value ushr 7 }
+        while (value !in 0..127) { out.write((value.toInt() and 127) or 128); value = value ushr 7 }
         out.write(value.toInt()); return out.toByteArray()
     }
     fun integer(field: Int, number: Long): ByteArray = varint((field.toLong() shl 3)) + varint(number)

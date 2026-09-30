@@ -201,6 +201,26 @@ internal object LunaControl {
         return Request(SET_OPTIONS, LunaWire.blob(1, packed(listOf(type))) + LunaWire.blob(2, joined(all)))
     }
 
+    // Camera clock. Its time-of-day timecode runs from it; the phone app is expected to set it.
+
+    const val SYNC_TIME_ACCURATE = 214
+
+    /**
+     * Official connect: LOCAL_TIME 12 (unix seconds), TIME_ZONE 13 (seconds east of GMT, int32)
+     * and GEOGRAPHIC_TIME_ZONE 175. fw 1.1.15 does not return them on GET.
+     */
+    fun setClock(unixSeconds: Long, timeZoneSeconds: Int, zone: String): Request {
+        val nested = LunaWire.integer(12, unixSeconds) + LunaWire.integer(13, timeZoneSeconds.toLong()) +
+            LunaWire.blob(175, zone.toByteArray())
+        return Request(SET_OPTIONS, LunaWire.blob(1, packed(listOf(12, 13, 175))) + LunaWire.blob(2, nested))
+    }
+
+    /** PHONE_COMMAND_SYNCTIME_ACCURATE `{1: {1: s, 2: ms}, 2: count}`, sent twice by the official app (count 0, then 1). */
+    fun syncTimeAccurate(unixMilliseconds: Long, count: Int): Request {
+        val time = LunaWire.integer(1, unixMilliseconds / 1000) + LunaWire.integer(2, unixMilliseconds % 1000)
+        return Request(SYNC_TIME_ACCURATE, LunaWire.blob(1, time) + (if (count > 0) LunaWire.integer(2, count.toLong()) else ByteArray(0)))
+    }
+
     // Capture, media and status requests.
 
     val startLive = Request(1, LunaWire.liveBody)

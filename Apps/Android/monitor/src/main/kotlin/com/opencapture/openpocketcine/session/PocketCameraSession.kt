@@ -83,6 +83,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 
 /** Main-thread admission closes before negotiation is dispatched to the IO worker. */
 internal class EndpointCommandAdmission {
@@ -327,10 +328,13 @@ class PocketCameraSession(
         scope.launch {
             backend.phase.collect { value ->
                 when (value) {
-                    ConnectionPhase.LIVE -> { holdsMonitor = true; _recoveryState.value = SessionRecoveryUi.Idle }
-                    ConnectionPhase.FAILED ->
+                    ConnectionPhase.LIVE -> { holdsMonitor = true; _recoveryState.value = SessionRecoveryUi.Idle; resetFrameClock() }
+                    ConnectionPhase.FAILED -> {
+                        resetFrameClock()
                         if (holdsMonitor) _recoveryState.value = SessionRecoveryUi.WaitingForOperator(1)
+                    }
                     ConnectionPhase.IDLE -> {
+                        resetFrameClock()
                         holdsMonitor = false; _recoveryState.value = SessionRecoveryUi.Idle
                         pins.clear(); recordStartedAt = null; _controlBusy.value = false
                     }
@@ -341,6 +345,7 @@ class PocketCameraSession(
         if (borrowing == null) {
             scope.launch(Dispatchers.Default) {
                 backend.frames.collect { frame ->
+                    noteFrameClock(frame.timestampMicros)
                     videoPackets += 1
                     accessUnits += 1
                     if (decoder.decode(frame.annexB)) { framesEnqueued += 1; hasVideoFormat = true }
@@ -418,9 +423,36 @@ class PocketCameraSession(
         if (!recording) recordStartedAt = null
         if (pins::recording.hold(recording, now) == null) next = next.copy(isRecording = recording)
         val elapsed = if (recording) maxOf(readout.captureSeconds, recordStartedAt?.let { ((now - it) / 1_000).toInt() } ?: 0) else 0
-        next = next.copy(recordElapsedSec = elapsed, timecode = if (recording) LunaShellMapping.clock(elapsed) else null)
-        _status.value = next
+        next = next.copy(recordElapsedSec = elapsed)
+        // The frame clock owns the timecode (set from the decode thread).
+        _status.update { next.copy(timecode = it.timecode) }
         if (pins.recording == null && _controlBusy.value && !pins.photoInFlight) _controlBusy.value = false
+    }
+
+    // Timecode, iOS `noteFrameClock`. Frame stamps run on a camera clock that does not follow its
+    // time of day, so each is pinned to the phone clock by the earliest arrival; with the camera
+    // clock synced at live start (the backend), that is the camera's time-of-day timecode.
+    @Volatile private var frameClockOffsetMs: Long? = null
+    @Volatile private var lastTimecodeSecond: Long? = null
+
+    private fun resetFrameClock() {
+        frameClockOffsetMs = null; lastTimecodeSecond = null
+        _status.update { it.copy(timecode = null) }
+    }
+
+    /** [stampMicros]: the frame's camera clock (Luna: its u64 ms header stamp, in microseconds). */
+    private fun noteFrameClock(stampMicros: Long) {
+        val stamp = stampMicros / 1_000
+        val seen = System.currentTimeMillis() - stamp - FRAME_LATENCY_MS
+        val offset = minOf(frameClockOffsetMs ?: seen, seen)
+        frameClockOffsetMs = offset
+        val wall = stamp + offset
+        val second = Math.floorDiv(wall, 1_000L)
+        // The HUD shows HH:MM:SS: publish once per displayed second.
+        if (second == lastTimecodeSecond) return
+        lastTimecodeSecond = second
+        val zone = java.util.TimeZone.getDefault().getOffset(wall) / 1_000
+        _status.update { it.copy(timecode = LunaShellMapping.timecode(wall / 1_000.0, zone, it.fps)) }
     }
 
     private fun canSendControl(): Boolean {
@@ -862,6 +894,8 @@ class PocketCameraSession(
     companion object {
         /** fw 1.1.15 official presets, same as iOS `LunaShellMapping.zoomChips`; the ceiling is appended when larger. */
         val LUNA_ZOOM_CHIPS = listOf(1.0, 2.0, 3.0, 6.0, 15.0)
+        /** Capture to phone delay of a live frame at best (official-app captures: 90 to 200 ms after its stamp). */
+        const val FRAME_LATENCY_MS = 90L
     }
 }
 

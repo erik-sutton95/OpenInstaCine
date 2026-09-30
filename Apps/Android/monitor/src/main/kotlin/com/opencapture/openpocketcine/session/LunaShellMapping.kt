@@ -170,7 +170,19 @@ internal object LunaShellMapping {
         return table
     }
 
-    fun clock(seconds: Int): String = String.format(Locale.US, "%02d:%02d:%02d:00", seconds / 3600, (seconds / 60) % 60, seconds % 60)
+    /**
+     * Time-of-day timecode, non-drop. Frames count at the recording rate, halved above 30
+     * (50 and 100 count 25s, 60 and 120 count 30s); 25 until the rate is known.
+     */
+    fun timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int): String {
+        var base = if (fps > 0) fps else 25
+        while (base > 30) base /= 2
+        val local = unixSeconds + timeZoneSeconds
+        val whole = kotlin.math.floor(local)
+        val second = Math.floorMod(whole.toLong(), 86_400L).toInt()
+        val frame = minOf(base - 1, ((local - whole) * base).toInt())
+        return String.format(Locale.US, "%02d:%02d:%02d:%02d", second / 3600, (second / 60) % 60, second % 60, frame)
+    }
 
     /** Battery, storage and shooting mode (iOS `apply(device:)` + `applyDeviceStatus`). */
     fun applyDevice(readout: CameraReadout, status: CameraStatus, pins: LunaControlPins, now: Long): CameraStatus {

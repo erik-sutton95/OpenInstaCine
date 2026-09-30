@@ -206,6 +206,7 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
             runCatching { channel.request(wake.code, wake.body) }
             channel.request(1, LunaWire.liveBody)
             lastVideoAt.set(android.os.SystemClock.elapsedRealtime())
+            launch { syncClock() }
             watchdog = launch { while (isActive) { delay(2_000); if (!livePaused && android.os.SystemClock.elapsedRealtime() - lastVideoAt.get() > 10_000) { channel.fail(IllegalStateException("No live video received")); break } } }
             // Same cadence as iOS: capture state every second (REC timer), battery and storage every 5 s.
             poll = launch {
@@ -258,6 +259,18 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
     private suspend fun call(request: LunaControl.Request): ByteArray? {
         val channel = tcp ?: return null
         return runCatching { channel.request(request.code, request.body) }.getOrNull()
+    }
+    /**
+     * iOS `syncCameraClock`: the Luna's timecode is time of day from its own clock. Set it like the
+     * official app on connect (options 12/13/175), then to the millisecond with cmd 214, twice,
+     * each stamped at send (a GET round trip on the camera AP is about 4 ms).
+     */
+    private suspend fun syncClock() {
+        val zone = java.util.TimeZone.getDefault()
+        val now = System.currentTimeMillis()
+        call(LunaControl.setClock(now / 1000, zone.getOffset(now) / 1000, zone.id)) ?: return
+        for (count in 0..1) call(LunaControl.syncTimeAccurate(System.currentTimeMillis(), count))
+        android.util.Log.i("LunaBackend", "luna: camera clock synced")
     }
     private fun publish() { _readout.value = LunaReadout.readout(settings, device, capture) }
     private fun applyDevice(status: LunaDeviceStatus) {

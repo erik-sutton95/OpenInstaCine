@@ -186,7 +186,19 @@ class LunaShellMappingTest {
         }
         assertEquals("20260916124229", MediaFile("/DCIM/Camera01/VID_20260916_124229_002.mp4", "").filenameTimestamp)
         assertEquals("20260814125250", MediaFile("DJI_20260814125250_0034_D.MP4", "").filenameTimestamp)
-        assertEquals("00:01:05:00", m.clock(65))
+    }
+
+    @Test fun timeOfDayTimecode() {
+        val m = LunaShellMapping
+        // 2026-09-30 08:51:10.54 UTC, Stockholm (UTC+2).
+        val t = 1_790_758_270.54
+        assertEquals("10:51:10:13", m.timecode(t, 7200, 25))
+        assertEquals("10:51:10:16", m.timecode(t, 7200, 30))
+        assertEquals("10:51:10:13", m.timecode(t, 7200, 50))
+        assertEquals("10:51:10:16", m.timecode(t, 7200, 120))
+        // Wraps at midnight, west of GMT too.
+        assertEquals("23:59:59:23", m.timecode(86_399.99, 0, 24))
+        assertEquals("23:00:00:00", m.timecode(3600.0, -7200, 24))
     }
 
     @Test fun deepTrackStreamStatesDriveTheBoxes() {
