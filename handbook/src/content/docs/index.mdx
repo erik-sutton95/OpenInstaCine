@@ -1,0 +1,60 @@
+---
+title: OpenInstaCine docs
+description: Protocol, apps, and how to build OpenInstaCine, the open field monitor for the Insta360 Luna Ultra.
+---
+
+OpenInstaCine is the open field monitor for the Insta360 Luna Ultra: scopes,
+exposure assists, camera and gimbal control, and playback on your phone. These
+pages are the **public handbook**: protocol, both apps, and how to build and
+maintain the project. Markdown in `handbook/src/content/docs/` is the source.
+Research logs and status ledgers stay in the git repository's
+[`docs/`](https://github.com/erik-sutton95/OpenInstaCine/tree/main/docs) folder;
+these pages summarize them.
+
+Product page: [opencapture.org/openinstacine](https://opencapture.org/openinstacine/).
+Privacy: [opencapture.org/openinstacine/privacy](https://opencapture.org/openinstacine/privacy/).
+Help: [opencapture.org/openinstacine/support](https://opencapture.org/openinstacine/support/).
+
+OpenInstaCine is not affiliated with, endorsed by, or supported by Insta360
+(Arashi Vision Inc.). No Insta360 SDK or proprietary documentation is in this
+repository. Protocol facts come from public community schemas, observed
+behavior and the hardware we test.
+
+:::caution[Do not publish captures]
+Packet captures, camera Wi-Fi passwords and approval identities stay in the
+gitignored `captures/` and `.local/` folders and are never committed. Do not
+open issues with pcaps, passwords or identities.
+:::
+
+## Start here
+
+- [Setup and build](./guides/setup/): `just`, Xcode, Android, tests
+- [Troubleshooting](./guides/troubleshooting/): pairing, camera Wi-Fi, live view, a sleeping gimbal
+- [iOS app](./apps/ios/): the daily driver, iPhone and iPad
+- [Android app](./apps/android/): the shared OpenPocketCine Android shell on a Luna backend
+- [Architecture](./apps/architecture/): shared monitor core, Luna protocol package, native shells
+- [Keeping docs current](./contribute/documentation/): what to update in the same change
+
+## Insta360 Devices
+
+[Device references](./devices/) collect captured command sets and capability
+surveys by camera model. Start here for model-specific behavior and firmware limits:
+
+- [Luna Ultra](./devices/luna-ultra/): firmware 1.1.15 verification, official-app survey and implementation gaps
+
+## Shared protocol
+
+BLE is control and bootstrap only; control, live view and media go over the camera's own Wi-Fi.
+
+```text
+BLE scan → GATT connect → key exchange → owner approval → read Wi-Fi creds → join AP → TCP 6666 UCD2 → HTTP media
+```
+
+- [Connection spine](./protocol/connection/)
+- [BLE pairing](./protocol/ble/)
+- [Camera Wi-Fi](./protocol/wifi/)
+- [UCD2 frame](./protocol/ucd2-frame/) · [transport](./protocol/ucd2-transport/)
+- [Command catalog](./protocol/commands/)
+- [Live view](./protocol/live-view/)
+- [Media](./protocol/media/)
+- [iOS protocol notes](./protocol/ios/)

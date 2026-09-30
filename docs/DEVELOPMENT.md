@@ -3,6 +3,10 @@
 Lab and build notes that used to live in the README. The shared monitor engine
 contract is [SHARED-MONITOR-ENGINE.md](SHARED-MONITOR-ENGINE.md).
 
+The public handbook ([opencapture.org/openinstacine/docs](https://opencapture.org/openinstacine/docs/))
+is the Astro Starlight site in [`handbook/`](../handbook/README.md); update it in the
+same change when protocol, app behavior or setup changes.
+
 ## Layout
 
 | Path | What |

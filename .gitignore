@@ -37,3 +37,8 @@ local.properties
 *.jks
 *.keystore
 .swiftpm/
+
+# Handbook (Astro) dependencies and output.
+handbook/node_modules/
+handbook/dist/
+handbook/.astro/

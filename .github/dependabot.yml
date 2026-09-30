@@ -12,3 +12,9 @@ updates:
       interval: weekly
     commit-message:
       prefix: build
+  - package-ecosystem: npm
+    directory: "/handbook"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build

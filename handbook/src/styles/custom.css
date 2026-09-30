@@ -1,0 +1,13 @@
+/* OpenInstaCine yellow in place of Starlight's default accent. Light mode uses
+   ochre so accent text stays readable on white. */
+:root {
+  --sl-color-accent-low: #3a3300;
+  --sl-color-accent: #fdda01;
+  --sl-color-accent-high: #fdea02;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #fff6b3;
+  --sl-color-accent: #7a6200;
+  --sl-color-accent-high: #3d3100;
+}

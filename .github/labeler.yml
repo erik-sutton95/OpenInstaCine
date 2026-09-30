@@ -80,6 +80,7 @@
       - any-glob-to-any-file:
           - "**/*.md"
           - "docs/**/*"
+          - "handbook/**/*"
           - ".github/**/*"
           - "README.md"
 

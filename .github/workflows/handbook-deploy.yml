@@ -1,0 +1,27 @@
+name: Handbook deploy
+
+# opencapture.org (a separate Vercel project) builds this handbook at
+# /openinstacine/docs/. A handbook change on main pokes its deploy hook.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "handbook/**"
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Trigger opencapture.org deploy
+    if: github.repository == 'erik-sutton95/OpenInstaCine'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the Vercel deploy hook
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [[ -z "$VERCEL_DEPLOY_HOOK" ]]; then
+            echo "::notice::VERCEL_DEPLOY_HOOK is not set; skipping the opencapture.org deploy."
+            exit 0
+          fi
+          curl -fsS -X POST "$VERCEL_DEPLOY_HOOK"
