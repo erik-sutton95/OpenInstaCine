@@ -254,14 +254,20 @@ fun LivePortraitChrome(
                 gaugeTop, if (tablet) 58f else 186f, if (tablet) 68f else 22f)),
                 contentAlignment = if (tablet) Alignment.TopStart else Alignment.TopEnd) {
                 com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
-                    model.phoneBatteryPercent, status.batteryPercent, horizontal = !tablet)
+                    model.phoneBatteryPercent, status.batteryPercent, horizontal = !tablet, showsLink = tablet)
             }
-            if (model.chromeSectionMounts(PocketDispSection.STORAGE)) {
-                Row(Modifier.liveModuleFrame(ChromeRect(14f, if (tablet) 52f else gaugeTop, 120f, 28f)).monitorReadoutShadow(),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    SdCardGlyph(LiveDesign.text)
-                    Text(portraitStorageLabel(status).substringBefore(" ·"), style = LiveType.mono(13.5f, FontWeight.SemiBold))
+            // iOS portrait phone: storage then the link pill on the leading side, centred on the battery row.
+            Row(Modifier.liveModuleFrame(ChromeRect(14f, if (tablet) 52f else gaugeTop - 4f, if (tablet) 120f else 240f, 28f)),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (model.chromeSectionMounts(PocketDispSection.STORAGE)) {
+                    Row(Modifier.monitorReadoutShadow(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        SdCardGlyph(LiveDesign.text)
+                        Text(portraitStorageLabel(status).substringBefore(" ·"), style = LiveType.mono(13.5f, FontWeight.SemiBold))
+                    }
                 }
+                if (!tablet) com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
+                    model.phoneBatteryPercent, status.batteryPercent, horizontal = true, showsPower = false)
             }
             val recContext = LocalContext.current
             val recLifetime = rememberCaptureQuickLifetime(model)
