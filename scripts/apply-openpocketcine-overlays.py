@@ -85,6 +85,8 @@ def main() -> None:
         "  OpenPocketViewCore:\n    path: ..\n"
         "  Insta360Protocol:\n    path: ../Adapters/Insta360Protocol\n",
     )
+    # External adapter sources get their own group, not a repo-root "OpenInstaCine" folder.
+    replace_once(project, "  createIntermediateGroups: true\n", "  createIntermediateGroups: false\n")
     replace_once(
         project,
         "targets:\n  OpenInstaCine:\n",
@@ -94,8 +96,10 @@ def main() -> None:
         "    type: framework\n"
         "    platform: iOS\n"
         "    sources:\n"
-        "      - ../Adapters/Insta360Apple/Sources/Insta360Apple\n"
+        "      - path: ../Adapters/Insta360Apple/Sources/Insta360Apple\n"
+        "        group: Insta360Apple\n"
         "      - path: ../Adapters/Insta360Apple/Sources/CKcp\n"
+        "        group: Insta360Apple\n"
         "        excludes:\n"
         "          - module.modulemap\n"
         "          - LICENSE\n"
@@ -107,7 +111,7 @@ def main() -> None:
         "    settings:\n"
         "      base:\n"
         '        SWIFT_VERSION: "5.0"\n'
-        "        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.insta360adapter\n"
+        "        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.insta360apple\n"
         "        CLANG_ENABLE_MODULES: YES\n"
         "        GENERATE_INFOPLIST_FILE: YES\n"
         '        DEVELOPMENT_TEAM: "4V4EGQ6LZA"\n'
@@ -131,37 +135,6 @@ def main() -> None:
         '"OpenInstaCine uses Bluetooth to find and pair with your DJI Osmo Pocket and hand off Wi-Fi."',
         '"OpenInstaCine uses Bluetooth to find your Insta360 Luna, ask it for approval, and hand off to its Wi-Fi."',
     )
-    replace_once(
-        project,
-        "schemes:\n",
-        "  # Lab-only XC driver for the official Insta360 app (capture sessions).\n"
-        "  LunaOfficialUITests:\n"
-        "    type: bundle.ui-testing\n"
-        "    platform: iOS\n"
-        "    sources:\n"
-        "      - LunaOfficialUITests\n"
-        "    dependencies:\n"
-        "      - target: OpenInstaCine\n"
-        "    settings:\n"
-        "      base:\n"
-        '        SWIFT_VERSION: "5.0"\n'
-        "        GENERATE_INFOPLIST_FILE: YES\n"
-        "        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.official-uitests\n"
-        "        TEST_TARGET_NAME: OpenInstaCine\n"
-        '        DEVELOPMENT_TEAM: "4V4EGQ6LZA"\n'
-        "        CODE_SIGN_STYLE: Automatic\n"
-        "\n"
-        "schemes:\n"
-        "  LunaOfficialCapture:\n"
-        "    build:\n"
-        "      targets:\n"
-        "        OpenInstaCine: all\n"
-        "        LunaOfficialUITests: [test]\n"
-        "    test:\n"
-        "      targets:\n"
-        "        - LunaOfficialUITests\n",
-    )
-
     replace_once(
         project,
         "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",

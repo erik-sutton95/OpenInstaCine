@@ -4,7 +4,7 @@ options:
   deploymentTarget:
     iOS: "17.0"
     watchOS: "10.0"
-  createIntermediateGroups: true
+  createIntermediateGroups: false
   # Xcode Cloud disables SPM auto-resolution; copy ios/Package.resolved into
   # the generated (gitignored) workspace after every xcodegen run.
   postGenCommand: sh sync-package-resolved.sh
@@ -24,8 +24,10 @@ targets:
     type: framework
     platform: iOS
     sources:
-      - ../Adapters/Insta360Apple/Sources/Insta360Apple
+      - path: ../Adapters/Insta360Apple/Sources/Insta360Apple
+        group: Insta360Apple
       - path: ../Adapters/Insta360Apple/Sources/CKcp
+        group: Insta360Apple
         excludes:
           - module.modulemap
           - LICENSE
@@ -37,7 +39,7 @@ targets:
     settings:
       base:
         SWIFT_VERSION: "5.0"
-        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.insta360adapter
+        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.insta360apple
         CLANG_ENABLE_MODULES: YES
         GENERATE_INFOPLIST_FILE: YES
         DEVELOPMENT_TEAM: "4V4EGQ6LZA"
@@ -196,32 +198,7 @@ targets:
         DEVELOPMENT_TEAM: "4V4EGQ6LZA"
         CODE_SIGN_STYLE: Automatic
 
-  # Lab-only XC driver for the official Insta360 app (capture sessions).
-  LunaOfficialUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    sources:
-      - LunaOfficialUITests
-    dependencies:
-      - target: OpenInstaCine
-    settings:
-      base:
-        SWIFT_VERSION: "5.0"
-        GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.official-uitests
-        TEST_TARGET_NAME: OpenInstaCine
-        DEVELOPMENT_TEAM: "4V4EGQ6LZA"
-        CODE_SIGN_STYLE: Automatic
-
 schemes:
-  LunaOfficialCapture:
-    build:
-      targets:
-        OpenInstaCine: all
-        LunaOfficialUITests: [test]
-    test:
-      targets:
-        - LunaOfficialUITests
   OpenInstaCine:
     build:
       targets:

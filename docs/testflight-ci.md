@@ -36,7 +36,7 @@ CI_PRIMARY_REPOSITORY_PATH=$PWD CI_APP_STORE_SIGNED_APP_PATH=$PWD sh ios/ci_scri
 
 ## Workflow settings
 
-- Scheme **OpenInstaCine** (never `LunaOfficialCapture`, the lab driver), action
+- Scheme **OpenInstaCine**, action
   Archive, platform iOS, deployment **TestFlight and App Store**.
 - Start condition: branch `main`, Files and Folders limited to `Sources/`,
   `Tests/`, `Adapters/`, `ios/`, `Resources/`, `Package.swift`, `scripts/`,

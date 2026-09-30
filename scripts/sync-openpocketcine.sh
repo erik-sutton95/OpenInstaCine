@@ -41,7 +41,6 @@ LUNA_OWNED=(
   OpenInstaCine/Assets.xcassets
   OpenInstaCine/Resources
   OpenInstaCineWatch/Assets.xcassets
-  LunaOfficialUITests
   TestFlight
   Config/Version.xcconfig
 )
