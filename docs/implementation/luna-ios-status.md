@@ -18,28 +18,28 @@ Parity values:
 
 | Feature | Parity with OpenPocketCine | Luna implementation (where) |
 | --- | --- | --- |
-| Connect / pairing | Luna-adapted | BLE scan, owner approval on the camera, encrypted Wi-Fi credential read, then camera AP join and TCP 6666. Bluetooth first whenever the camera advertises (it wakes the AP); saved Wi-Fi is the fallback. Join retries for 60 s, alternating persistent and join-once configs, and continues as soon as the phone is on 192.168.42.x (`LunaCameraBackend.swift`). Camera named "Luna Ultra XXXXXX" (`LunaCameraNames`) |
-| Live view | Luna-adapted | 1280x720 HEVC, 25 fps, 2 s keyframe interval, UCD2 subtype 0x20 over TCP. I-Log preview treated as flat log by default (`OperatorPrefs.lunaFlatPreview`, `previewColorMode`) |
-| ISO | Luna-adapted | Auto plus 100, 160, 200, 400, 800, 1600, 3200, 6400 (`LunaShellMapping.isoValues`). No auto ISO ceiling or native-ISO hop (`supportsIsoLimit` false): the Auto tab shows a read-only Auto stop, holding the tile in Auto offers the manual ISO drum |
+| Connect / pairing | Luna-adapted | BLE scan, owner approval on the camera, encrypted Wi-Fi credential read, then camera AP join and TCP 6666. Bluetooth first whenever the camera advertises (it wakes the AP); saved Wi-Fi is the fallback. Join retries for 60 s, alternating persistent and join-once configs, and continues as soon as the phone is on 192.168.42.x (`LunaCameraBackend.swift`). Camera named "Luna Ultra XXXXXX" (`LunaCameraNames`). Android: BLE handshake and Wi-Fi credential read on every connect (`WifiNetworkSpecifier` join, 90 s), no saved Wi-Fi fallback or 60 s join retry |
+| Live view | Luna-adapted | 1280x720 HEVC, 25 fps, 2 s keyframe interval, UCD2 subtype 0x20 over TCP. I-Log preview treated as flat log by default (`OperatorPrefs.lunaFlatPreview`, `previewColorMode`). Android: same stream, no flat-preview preference |
+| ISO | Luna-adapted | Auto plus 100, 160, 200, 400, 800, 1600, 3200, 6400 (`LunaShellMapping.isoValues`). No auto ISO ceiling or native-ISO hop (`supportsIsoLimit` false): the Auto tab shows a read-only Auto stop, holding the tile in Auto offers the manual ISO drum. Android: the ISO sheet still shows the DJI "Auto Native ISO" toggle |
 | Shutter | Same | 1/8000 to 1/5 (`shutterDenoms`); manual exposure sends program, ISO and shutter in one message |
 | White balance | Luna-adapted | Auto or kelvin 2000 to 10000; no tint (sent as 0). Camera applies kelvin 3.5 to 3.9 s after the SET, pinned for 5 s |
 | EV | Same | Exposure bias in thirds |
 | Format drum | Same | Table of every RecordResolution fw 1.1.15 stored: 8K, 8K 2.35:1, 4K, 4K 2.35:1, 2.7K, 1080p, and 9:16 4K/3K/2.7K/1080 (`videoFormatValues`) |
 | Color modes incl. I-Log | Luna-adapted | Standard, I-Log, Dolby Vision (`colorModes`). Vivid and HDR are refused by the camera and not offered |
 | Shooting modes | Luna-adapted | Video, Timelapse, TimeShift, Slow Motion, PureVideo, Photo (shared drum with Luna labels); Live Photo has no Luna mode. Pano reads back as Photo |
-| Zoom chip + pinch | Luna-adapted | Chips 1x, 2x, 4x, 8x, 15x; digital zoom to 15.0 (fw 1.1.15 max) |
+| Zoom chip + pinch | Luna-adapted | Chips 1x, 2x, 3x, 6x, 15x (`LunaShellMapping.zoomChips`, Android `LUNA_ZOOM_CHIPS`); digital zoom to 15.0 (fw 1.1.15 max) |
 | Gimbal stick | Luna-adapted | Streams Luna gimbal stick commands |
 | Gimbal mode | Luna-adapted | Follow = roll lock, Tilt locked = roll and tilt lock, FPV, Direction lock = lock |
 | Gimbal speed | Luna-adapted | Slow, Default = medium, Fast |
 | Gimbal recenter / flip | Same | Luna recenter and flip requests |
-| Gimbal Level (double tap) | Luna-adapted | SET_ANGLE to GET pitch minus IMU gravity pitch, yaw kept; one refine pass. Lands within 0.4° of world level. Hardware-verified 2026-09-29 |
-| Programmed moves (A/B/C) | Luna-adapted | Waypoints from GET_ANGLE; the session interpolates legs (shell curve with smoothness) and streams SET_ANGLE at 30 Hz; countdown, loop, pause, stop. Zoom changes between points are refused. Hardware-verified 2026-09-29 |
-| Tap focus | Luna-adapted | ROI 0.15 x 0.27 of the preview centred on the tap (official app geometry) |
-| Deep Track | Luna-adapted | Drag a box, tap a face box, or double-tap the feed (a 0.2-wide box, square on the sensor, centred on the tap) opens Luna tracking (cmd 237); cancel supported. Double-tap hardware-verified 2026-09-30 |
+| Gimbal Level (double tap) | Luna-adapted | SET_ANGLE to GET pitch minus IMU gravity pitch, yaw kept; one refine pass. Lands within 0.4° of world level. Hardware-verified 2026-09-29. Android: same, pitch from the IMU stream (0x30, `LunaImu`); phone-verified 2026-09-30 |
+| Programmed moves (A/B/C) | Luna-adapted | Waypoints from GET_ANGLE; the session interpolates legs (shell curve with smoothness) and streams SET_ANGLE at 30 Hz; countdown, loop, pause, stop. Zoom changes between points are refused. Hardware-verified 2026-09-29. Android: same (`LunaGimbalAim`, 100 ms GET_ANGLE poll); phone-verified 2026-09-30 |
+| Tap focus | Luna-adapted | ROI 0.15 x 0.27 of the preview centred on the tap (official app geometry). Long-press the focus box to lock it; the focus key recentres it. Android: same, phone-verified 2026-09-30 |
+| Deep Track | Luna-adapted | Drag a box, tap a face box, or double-tap the feed (a 0.2-wide box, square on the sensor, centred on the tap) opens Luna tracking (cmd 237); cancel supported. Double-tap hardware-verified 2026-09-30. Android: drag and double-tap, phone-verified 2026-09-30; no face boxes, and the 8315 cancel notice and no-lock timeout are not ported |
 | Record + timer | Luna-adapted | Start/stop and photo; lamp waits for camera capture status. REC timer is elapsed time from capture status (no timecode) |
 | Lock | Same | Interface lock blocks every control |
 | DISP clean view | Same | DISP 1/2, clean mode, chrome editor |
-| LUT incl. Insta360 I-Log look | Luna-adapted | Camera LUTs: Auto and the official Insta360 I-Log to Rec.709 cube (`Luna_I-Log_to_Rec709_BT1886_s33_v2.cube`); Creative and Custom unchanged |
+| LUT incl. Insta360 I-Log look | Luna-adapted | Camera LUTs: Auto and the official Insta360 I-Log to Rec.709 cube (`Luna_I-Log_to_Rec709_BT1886_s33_v2.cube`); Creative and Custom unchanged. Android: the I-Log cube is in the camera LUT tab, but Auto does not pick it |
 | Peaking | Same | |
 | False color | Same | |
 | Zebra | Same | |
@@ -48,7 +48,7 @@ Parity values:
 | Histogram | Same | |
 | Vectorscope | Same | |
 | Traffic lights | Same | |
-| ND / EV meters, de-squeeze | Luna-adapted | EV meter reads the picture (median vs 18% grey, less the learned auto-exposure placement, `PictureEVMeter`); the Luna sends no metered EV |
+| ND / EV meters, de-squeeze | Luna-adapted | EV meter reads the picture (median vs 18% grey, less the learned auto-exposure placement, `PictureEVMeter`); the Luna sends no metered EV. Android: same (`PictureEVMeter.kt`, `reportsMeteredEV` false) |
 | Level assist overlay | Luna-adapted | Tool present; shows "No level data" (no camera attitude) |
 | Guides | Same | |
 | Grid | Same | |
@@ -60,18 +60,18 @@ Parity values:
 | Download | Same | Original over HTTP into the per-camera cache |
 | Delete | Same | Luna delete command; removes the MP4 and its LRV |
 | Favorites | Luna-adapted | Stored on the phone; Luna has no favorite write |
-| Disconnect / reconnect | Luna-adapted | Reconnect uses the BLE-first path above |
+| Disconnect / reconnect | Luna-adapted | Reconnect uses the BLE-first path above. Android: no automatic reconnect; a drop shows the Retry card at once, and the app retries on return to the foreground |
 | Recovery card | Same | Shared bounded session recovery after a drop |
-| Audio (setting, meters) | Hidden-not-supported | `supportsAudio` false: AUDIO tile, live AUDIO assist and meter overlay hidden (playback audio meters stay). fw 1.1.15 has no phone-protocol audio mode GET or SET and no levels (probed 2026-09-29, verification doc Audio section); Original Audio / Wind Reduction / Voice Enhancement are camera-screen only. `LunaFileMetadata.audioMode` decodes the mode a clip was recorded with (field 61), not yet shown in the UI |
-| Timecode | Luna-adapted | Time-of-day timecode from the camera clock: the app sets the clock at live start (options 12/13/175, then cmd 214 to the millisecond) and times each live frame from its frame-clock stamp. Status bar, portrait bar and Apple Watch. No protocol field carries timecode ([luna-timecode.md](../research/luna-timecode.md)). Hardware-verified 2026-09-30 |
-| AF mode (AF-S / AF-C / Product Showcase) | Luna-adapted | Shared FOCUS drum and chip list only the three official modes (option 93 = 1 / 3 / 6, overlay `CaptureLists.focusOptions`); readout from GET 93 on connect and refresh with a 3 s pin. Hardware-verified 2026-09-29. Android: follow-up |
-| Metering (Matrix / Face Priority) | Luna-adapted | METER tile beside EXPOSURE (`LunaMeteringTile`, overlay hook): tap switches Matrix and Face Priority; option 46 bool; camera stores it 3.7 to 4.9 s after the SET, so a 6 s pin holds the readout. Hardware-verified 2026-09-29. Android: follow-up |
+| Audio (setting, meters) | Hidden-not-supported | `supportsAudio` false: AUDIO tile, live AUDIO assist and meter overlay hidden (playback audio meters stay). fw 1.1.15 has no phone-protocol audio mode GET or SET and no levels (probed 2026-09-29, verification doc Audio section); Original Audio / Wind Reduction / Voice Enhancement are camera-screen only. `LunaFileMetadata.audioMode` decodes the mode a clip was recorded with (field 61), not yet shown in the UI. Android: same gate, phone-verified 2026-09-30 |
+| Timecode | Luna-adapted | Time-of-day timecode from the camera clock: the app sets the clock at live start (options 12/13/175, then cmd 214 to the millisecond) and times each live frame from its frame-clock stamp. Status bar, portrait bar and Apple Watch. No protocol field carries timecode ([luna-timecode.md](../research/luna-timecode.md)). Hardware-verified 2026-09-30. Android: same clock sync and frame stamps, status bar only; phone-verified 2026-09-30 |
+| AF mode (AF-S / AF-C / Product Showcase) | Luna-adapted | Shared FOCUS drum and chip list only the three official modes (option 93 = 1 / 3 / 6, overlay `CaptureLists.focusOptions`); readout from GET 93 on connect and refresh with a 3 s pin. Hardware-verified 2026-09-29. Android: same drum, phone-verified 2026-09-30 |
+| Metering (Matrix / Face Priority) | Luna-adapted | METER tile beside EXPOSURE (`LunaMeteringTile`, overlay hook): tap switches Matrix and Face Priority; option 46 bool; camera stores it 3.7 to 4.9 s after the SET, so a 6 s pin holds the readout. Hardware-verified 2026-09-29. Android: same tile (second settings read at 5.2 s), phone-verified 2026-09-30 |
 | Aperture | Hidden-not-supported | `supportsAperture` false; fixed iris |
-| Head tracking | Luna-adapted | Stick (MOVE) at 30 Hz closed on GET_ANGLE: AirPods rate and acceleration fed forward plus a pull to the exact angle (a SET_ANGLE stream judders at the send rate). 1.8° RMS on a 20° / 3 s sine, ~0.02 s lag; pan tops out at 63 deg/s. Hardware-verified 2026-09-30 |
+| Head tracking | Luna-adapted | Stick (MOVE) at 30 Hz closed on GET_ANGLE: AirPods rate and acceleration fed forward plus a pull to the exact angle (a SET_ANGLE stream judders at the send rate). 1.8° RMS on a 20° / 3 s sine, ~0.02 s lag; pan tops out at 63 deg/s. Hardware-verified 2026-09-30. Android: not yet |
 | Multiview | Hidden-not-supported | Entry removed from the camera list (`SavedCamerasView.swift`); stages DJI bodies over RTMP |
 | Wi-Fi / Hotspot setups | Hidden-not-supported | `canAddSetup: false`; Luna only connects over its own AP |
 | Color Recovery | Not yet | Screen protocol code exists (`LunaScreenRecovery.swift`, [luna-color-recovery.md](luna-color-recovery.md)); not exposed in the UI |
-| Android | Builds, unverified on hardware | `Apps/Android` is synced to the OpenPocketCine shell (`9e306c91`); not yet run against a physical Luna (see Android below) |
+| Android | Luna-adapted, phone-verified | `Apps/Android` runs the OpenPocketCine shell (`9e306c91`) against a real Luna on a Samsung S25 since 2026-09-30; remaining gaps in Android below |
 
 ## Verified live (2026-09-25)
 
@@ -209,7 +209,7 @@ Not yet re-verified on the camera after this sync (it was off): live picture, Ci
 2. **XCUITest on the phone** needs Face ID or the passcode to re-enable
    automation mode, so official-app capture on fw 1.1.15 is still pending
    (`just luna-official-xc`).
-3. **Android** is synced to the new shell but only partly wired (see Android below).
+3. **Android** runs against the camera but still lacks some iOS behavior (see Android below).
 4. **Color Recovery** (screen protocol) is not exposed in the UI.
 5. **Simulator crash, not reproduced on device**: `HevcDecoder.publishWatchPreview`
    crashed wrapping the VT buffer in a `CIImage` (bad colour attachments). It now
@@ -239,8 +239,43 @@ WB dials because Luna hides the AF mode panel. The full `OpenInstaCineTests` sui
 
 Updated 2026-09-29. `Apps/Android` now carries the OpenPocketCine Android shell at upstream
 `9e306c91` (`origin/main`, synced from `c1e8f94`) with OpenInstaCine identity, the yellow
-`0xFFCF00` accent and the Luna adapter driving it. Emulator and unit tests only: nothing below
-has run on a physical Android device against a real Luna.
+`0xFFCF00` accent and the Luna adapter driving it. The subsections after "Android today" are the
+2026-09-29 sync notes, written before the app ran on hardware.
+
+### Android today (2026-09-30)
+
+Run on a Samsung S25 against the Luna Ultra (fw 1.1.15): BLE approval, camera Wi-Fi, TCP 6666 and
+live view. What the Android app does now, beyond the sync below:
+
+- Time-of-day timecode from the camera clock (`LunaBackend.syncClock` after live start, frame
+  stamps from the u64 ms clock), shown in the status bar.
+- AUDIO tile, meters and assist tabs hidden (`CameraCapability.AUDIO` absent, `supportsAudio`).
+- EV meter reads the picture (`PictureEVMeter.kt`, learned offset per curve) because the Luna
+  reports no metered EV (`METERED_EV` absent).
+- FOCUS drum with AF-S, AF-C and Product Showcase (option 93) and the METER tile beside EXPOSURE
+  (Matrix / Face Priority, option 46, second settings read at 5.2 s).
+- Double tap on the feed opens Deep Track with a 0.2-wide box, square on the sensor; long press on
+  the focus box locks it (taps and Deep Track are blocked while locked); the focus key recentres
+  focus and cancels Deep Track (`FocusResetPolicy`).
+- Gimbal Level (double tap choice) from the IMU stream pitch (`LunaImu`, subtype 0x30) and
+  programmed A/B/C moves on SET_ANGLE (`LunaGimbalAim`, GET_ANGLE poll every 100 ms), with the
+  shared Motion Control drawer.
+- Portrait link pill on the leading side, beside storage, as on iOS.
+
+Still missing on Android versus iOS:
+
+- Connect: no saved Wi-Fi fallback or 60 s join retry (BLE on every connect), and no automatic
+  reconnect after a drop (the Retry card shows at once).
+- Flat I-Log preview preference (`lunaFlatPreview`, `previewColorMode`).
+- Deep Track from a tapped face box (no face detection), the 8315 cancel notice and the no-lock
+  timeout.
+- Head tracking.
+- Gimbal: limit pulses (8302 / option 92, `gimbalLimitPulse` stays 0); Level uses the IMU pitch
+  only (no fallback), and the gyro-drift learning pause is approximated as 500 ms after the last
+  gimbal command.
+- The capture-stopped note (8201), re-listing media after a capture while the album is open, a
+  decoder flush on album exit, and Auto LUT picking the I-Log cube.
+- The ISO sheet still shows the DJI "Auto Native ISO" toggle.
 
 ### Upstream 9e306c91 sync (2026-09-29)
 
@@ -372,8 +407,9 @@ Depends on the parallel engine sync (outside `Apps/Android`): the Swift facade m
   overrides), `session/Models.kt` (Luna color wheel), `session/VideoFormat.kt` (Luna resolution
   bytes 0xD0 to 0xD6), `media/MediaModels.kt` (direct-path media host, Insta360 file timestamps),
   `media/MediaLibraryController.kt` (Luna list/thumbnail/delete branch).
-- Gating (iOS has since added AF mode and programmed moves): no AF mode, no aperture, no multiview
-  (button hidden), no programmed moves, no audio controls, no AE / AWB lock, no Wi-Fi / Hotspot setups.
+- Gating at the sync: no AF mode, no aperture, no multiview (button hidden), no programmed moves,
+  no audio controls, no AE / AWB lock, no Wi-Fi / Hotspot setups. AF mode, programmed moves and the
+  audio gate have since shipped (see Android today).
 - I-Log to Rec.709 sits in the camera LUT tab (`MonitorTransfer.ILOG`, camera looks in the DJI
   category so upstream tab logic and tests hold). DJI LUT assets are not bundled.
 - Brand copy: legal bodies, pairing steps, wordmarks, links (`opencapture.org/openinstacine`, GitHub repo)
@@ -394,16 +430,8 @@ Depends on the parallel engine sync (outside `Apps/Android`): the Swift facade m
 
 ### Remains
 
-- Everything above is emulator and unit-test verified only: no status read, control, capture or
-  media call has run against a real Luna from Android. Real Luna over Android BLE, Wi-Fi and TCP,
-  reconnect/background recovery and all controls: untested on hardware.
-- Not ported from iOS yet: gimbal limit pulses (8302 / option 92), the Deep Track cancel
-  notification 8315 and the no-lock timeout (the 0x85 idle frame clears a lock), the
-  capture-stopped error note (8201), face priority,
-  re-listing media after a capture while the album is open, a decoder flush on album exit, and
-  Auto LUT picking the I-Log cube (the shared resolver keeps Auto off for the generic family).
-- Shared chrome still shows DJI-only affordances the Luna cannot use: the AUDIO readout (a dash)
-  and the "Auto Native ISO" D-Log toggle in the ISO sheet.
+- Superseded 2026-09-30: the app now runs on a real Luna, and the iOS gaps are listed under
+  Android today. Face priority ships as the METER tile and the AUDIO readout is hidden.
 - Live decode on the emulator: the goldfish HEVC decoder returned a solid frame for the Luna replay
   in this run (the 2026-09-11 review got a moving picture); needs a real device.
 - There is no Android equivalent of `scripts/sync-openpocketcine.sh`; both resyncs were manual
