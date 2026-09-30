@@ -546,7 +546,7 @@ struct SettingsRootView: View {
             SettingsSwitchInlineRow(
                 title: "Enabled",
                 help:
-                    "Show the camera's exposure meter at the picture's left edge in DISP 1. Auto and Manual use the camera reading without changing exposure settings.",
+                    "Show the exposure meter at the picture's left edge in DISP 1. It reads the camera's metered EV, or meters the picture when the camera reports none. It never changes exposure settings.",
                 showTopDivider: false, isOn: model.assist.evMeter
             ) { model.assist.toggle(.evMeter) }
         }

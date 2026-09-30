@@ -237,7 +237,7 @@ def main() -> None:
     replace_once(assists, "        fx.ndMeter = isPlaybackVisible(.ndMeter)\n",
                  "        fx.ndMeter = isPlaybackVisible(.ndMeter)\n        fx.evMeter = false\n")
     replace_once(APP / "AppRoot.swift", "        let photo = session.status.isPhoto\n        assist.syncLUT(\n",
-                 "        let photo = session.status.isPhoto\n        assist.evMeterFromPicture = !session.reportsMeteredEV\n        assist.syncLUT(\n")
+                 "        let photo = session.status.isPhoto\n        assist.evMeterFromPicture = !session.reportsMeteredEV\n        assist.cameraHasAudio = session.supportsAudio\n        assist.syncLUT(\n")
     ev = APP / "CameraEVMeter.swift"
     replace_once(ev, """        let reading = ExposureMeterReading(
             cameraValue: model.session.sessionRecovery.isRecovering || model.session.feedRecovering
@@ -248,6 +248,19 @@ def main() -> None:
 """)
     replace_once(ev, "    var avoiding: CGRect?\n\n    var body: some View {\n        let frame = CameraEVMeter.frame(in: feed, avoiding: avoiding)\n",
                  "    var avoiding: CGRect?\n\n    /// Metered EV from the live picture, for cameras that report none.\n    private var pictureEV: EvComp? {\n        guard model.assist.evMeterFromPicture else { return nil }\n        let bundle = model.monitorSamples.bundle\n        guard let picture = NDFilterRecommendation.pictureStops(\n            lumaHistogram: bundle.samples.histogramLuma, transfer: bundle.transfer)\n        else { return nil }\n        let status = model.session.status\n        let stops = PictureEVMeter.shared.stops(\n            picture: picture, transfer: bundle.transfer,\n            evComp: status.expoMode == .auto ? status.evComp.map { Double($0.thirds) / 3 } : nil,\n            now: ProcessInfo.processInfo.systemUptime)\n        return EvComp(thirds: Int((stops * 3).rounded()))\n    }\n\n    var body: some View {\n        let frame = CameraEVMeter.frame(in: feed, avoiding: avoiding)\n")
+
+    # --- AUDIO only where the camera reports levels (the Luna sends none); clip playback keeps it. ---
+    replace_once(assists, "    var evMeterFromPicture = false\n",
+                 "    var evMeterFromPicture = false\n    /// The camera reports audio levels (AUDIO in the live rail and View Assist list).\n    var cameraHasAudio = true\n")
+    replace_once(APP / "FieldMonitorChrome.swift", "        return LiveAssistTool.toolbarCases + [.audioMeters]\n",
+                 "        return LiveAssistTool.toolbarCases + (model.session.supportsAudio ? [.audioMeters] : [])\n")
+    replace_once(assists, "                ForEach(LiveAssistTool.settingsCases) { tool in\n",
+                 "                ForEach(LiveAssistTool.settingsCases.filter { $0 != .audioMeters || assist.cameraHasAudio }) { tool in\n")
+    replace_once(APP / "Assists/AssistLongPressChrome.swift", "        LiveAssistTool.settingsCases.filter(\\.hasConfiguration)\n",
+                 "        LiveAssistTool.settingsCases.filter { $0.hasConfiguration && ($0 != .audioMeters || assist.cameraHasAudio) }\n")
+    replace_once(APP / "SettingsRootView.swift",
+                 "\"Show the camera's exposure meter at the picture's left edge in DISP 1. Auto and Manual use the camera reading without changing exposure settings.\"",
+                 "\"Show the exposure meter at the picture's left edge in DISP 1. It reads the camera's metered EV, or meters the picture when the camera reports none. It never changes exposure settings.\"")
 
     # --- Launch wiring + gates that assumed a DJI datalink. ---
     replace_once(

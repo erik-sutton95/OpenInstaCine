@@ -345,6 +345,20 @@ restore; the camera stayed in Wind Reduction throughout. Photography types 120 a
 once while testing SET reply shapes (reply echoes the type, GET stays empty, so not stored). The six
 test clips were deleted; the four pre-existing files are untouched.
 
+### Live audio and levels, 2026-09-30
+
+No route gives the phone live audio or audio levels on fw 1.1.15:
+
+| Test | Result |
+| --- | --- |
+| `PHONE_COMMAND_SET_AUDIO_STREAM` (251) `{1: 2}` while live | Empty reply, no new media subtype. In the official app 251 belongs to the GO Ultra voice assistant (LC3 on subtype 0x12), not to Luna. |
+| Start live with `enableAudio` (`{1: 1, 3: 1, 5: 128000}` added to the official `{2:1 4:48000 7:43 10:14 12:1}`), with and without `isForLive` (13), after STOP_LIVE | Accepted; the preview keeps running with subtypes 0x20, 0x30 and 0x40 only. No AAC (0x10). |
+| Official app | No audio meter or audio setting for Luna (`Z03SupportConfig`); its captures carry no audio notifications. |
+
+Media subtype 0x40, sent with every video frame, is the live shutter time in seconds as a little-endian double (0.0300 at EV +1 and 0.0200 at EV -1 in auto).
+
+The camera does broadcast what looks like a dBFS level about 10 times a second (service 1027, method 3, level -60 to 0) on the detachable screen's own Wi-Fi link (fw 1.0.288 captures). The phone is on the camera's main network, so the app cannot receive it. The AUDIO tool is therefore hidden in the live rail and View Assist list (`supportsAudio` false); clip playback keeps its meters.
+
 ## Open items
 
 - Official-app v1.1.15 traffic (needs a person or UI automation to tap Connect).

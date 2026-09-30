@@ -270,6 +270,8 @@ final class LiveAssistState {
     var monitorFamily: CameraBodyFamily = .pocket
     /// The camera reports no metered EV, so the EV meter reads the picture.
     var evMeterFromPicture = false
+    /// The camera reports audio levels (AUDIO in the live rail and View Assist list).
+    var cameraHasAudio = true
     var monitorCameraName: String?
     /// Media player is grading a clip (connected or not). LUT sheet must not
     /// restamp Auto from the live SET — disconnected has no `inPlayback` flag.
@@ -1794,7 +1796,7 @@ struct AssistToolRow: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(LiveAssistTool.settingsCases) { tool in
+                ForEach(LiveAssistTool.settingsCases.filter { $0 != .audioMeters || assist.cameraHasAudio }) { tool in
                     Button {
                         guard !isLocked else { return }
                         assist.toggle(tool)

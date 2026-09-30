@@ -54,6 +54,7 @@ final class AppModel {
         let raw = session.status.colorMode
         let photo = session.status.isPhoto
         assist.evMeterFromPicture = !session.reportsMeteredEV
+        assist.cameraHasAudio = session.supportsAudio
         assist.syncLUT(
             to: raw,
             family: session.bodyFamily,

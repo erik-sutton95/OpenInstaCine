@@ -326,7 +326,7 @@ struct FieldMonitorAssistPalette: View {
         if model.session.status.isPhoto {
             return LiveAssistTool.toolbarCases
         }
-        return LiveAssistTool.toolbarCases + [.audioMeters]
+        return LiveAssistTool.toolbarCases + (model.session.supportsAudio ? [.audioMeters] : [])
     }
 
     private var shouldCollapse: Bool {
