@@ -2,6 +2,7 @@ package com.opencapture.openinstacine.luna
 
 import com.opencapture.openpocketcine.core.CameraColorProfile
 import com.opencapture.openpocketcine.core.CameraExposure
+import com.opencapture.openpocketcine.core.CameraFocusMode
 import com.opencapture.openpocketcine.core.CameraGimbalMode
 import com.opencapture.openpocketcine.core.CameraGimbalSpeed
 import com.opencapture.openpocketcine.core.CameraMediaItem
@@ -42,6 +43,8 @@ internal object LunaReadout {
         4L to CameraGimbalMode.FPV_VERTICAL, 5L to CameraGimbalMode.LOCK, 6L to CameraGimbalMode.STABILIZED_VERTICAL)
     val gimbalSpeeds = mapOf(1L to CameraGimbalSpeed.SLOW, 2L to CameraGimbalSpeed.MEDIUM, 3L to CameraGimbalSpeed.FAST,
         4L to CameraGimbalSpeed.SENSITIVE)
+    /** Option 93 values the official app offers; it never offers 0, 2, 4, 5 (OFF, MACRO, CONTINUOUS_PICTURE, EDOF). */
+    val focusModes = mapOf(1L to CameraFocusMode.SINGLE, 3L to CameraFocusMode.CONTINUOUS, 6L to CameraFocusMode.PRODUCT_SHOWCASE)
 
     fun <K, V> Map<K, V>.key(value: V): K = entries.first { it.value == value }.key
 
@@ -69,7 +72,8 @@ internal object LunaReadout {
             zoom = settings?.zoom,
             gimbalMode = settings?.gimbal?.let { gimbalModes[it.mode] },
             gimbalSpeed = settings?.gimbal?.let { gimbalSpeeds[it.followSpeed] },
-            afMode = settings?.afMode?.toInt(),
+            focusMode = settings?.afMode?.let(focusModes::get),
+            faceMetering = settings?.faceMetering,
         )
     }
 

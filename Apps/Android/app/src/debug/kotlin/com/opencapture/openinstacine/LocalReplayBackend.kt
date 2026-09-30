@@ -45,7 +45,7 @@ class LocalReplayBackend(context: Context) : CameraBackend, CameraControls {
             zoom = 1.0,
             gimbalMode = CameraGimbalMode.ROLL_LOCK,
             gimbalSpeed = CameraGimbalSpeed.MEDIUM,
-            afMode = 3,
+            focusMode = CameraFocusMode.CONTINUOUS,
         ),
     )
     private val camera = CameraIdentity("local-replay", "LOCAL REPLAY — Luna Ultra", "Luna recording · not a live camera")

@@ -1,5 +1,6 @@
 package com.opencapture.openinstacine.luna
 
+import com.opencapture.openpocketcine.core.CameraFocusMode
 import kotlin.test.*
 import org.junit.Test
 
@@ -15,7 +16,26 @@ class LunaControlTest {
         assertFailsWith<IllegalArgumentException> { LunaControl.zoom(15.5) }
     }
 
-    @Test fun clockMatchesSwiftEncoder() {
+    /** Swift `testAutofocusAndMeteringSets` (fw 1.1.15 verified on the camera). */
+    @Test fun autofocusAndMeteringSets() {
+        assertEquals("0a015d120fa20100aa0100f80101c00501e805011807", hex(LunaControl.afMode(1).body))
+        assertEquals("0a015d120fa20100aa0100f80101c00501e805031807", hex(LunaControl.afMode(3).body))
+        assertEquals("0a015d120fa20100aa0100f80101c00501e805061806", hex(LunaControl.afMode(6, LunaControl.FUNCTION_MODE_PHOTO).body))
+        assertEquals("0a012e120fa20100aa0100f80101f00201c005011807", hex(LunaControl.faceMetering(true).body))
+        // Matrix is an explicit 0; the camera stores it.
+        assertEquals("0a012e120fa20100aa0100f80101f00200c005011807", hex(LunaControl.faceMetering(false).body))
+        // A requested 46 that proto3 omits reads as Matrix; an unrequested one stays unknown.
+        assertEquals(false, LunaPhotographySettings.parse(LunaWire.hex("082e1200")).faceMetering)
+        assertNull(LunaPhotographySettings.parse(LunaWire.hex("085d1200")).faceMetering)
+        val showcase = LunaPhotographySettings.parse(LunaWire.hex("082e085d1206f00200e80506"))
+        assertEquals(CameraFocusMode.PRODUCT_SHOWCASE, LunaReadout.readout(showcase, null, null).focusMode)
+        assertEquals(false, LunaReadout.readout(showcase, null, null).faceMetering)
+        // Values the official app never offers (2 MACRO) read as unknown.
+        assertNull(LunaReadout.readout(showcase.copy(afMode = 2), null, null).focusMode)
+        with(LunaReadout) { for ((wire, mode) in focusModes) assertEquals(wire, focusModes.key(mode)) }
+    }
+
+        @Test fun clockMatchesSwiftEncoder() {
         // official-fw1115/01-connect: types 12, 13, 175 and 12:1790315162 13:7200 175:'Europe/Stockholm'.
         val set = LunaControl.setClock(1_790_315_162, 7200, "Europe/Stockholm")
         assertEquals(LunaControl.SET_OPTIONS, set.code)

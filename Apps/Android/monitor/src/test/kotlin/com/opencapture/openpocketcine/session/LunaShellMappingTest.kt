@@ -2,6 +2,7 @@ package com.opencapture.openpocketcine.session
 
 import com.opencapture.openpocketcine.core.CameraColorProfile
 import com.opencapture.openpocketcine.core.CameraExposure
+import com.opencapture.openpocketcine.core.CameraFocusMode
 import com.opencapture.openpocketcine.core.CameraGimbalMode
 import com.opencapture.openpocketcine.core.CameraGimbalSpeed
 import com.opencapture.openpocketcine.core.CameraReadout
@@ -41,7 +42,7 @@ class LunaShellMappingTest {
         recordFormat = formats[1],
         recordFormats = formats,
         zoom = 2.5,
-        afMode = 3,
+        focusMode = CameraFocusMode.CONTINUOUS, faceMetering = false,
     )
 
     @Test fun enumsRoundTrip() {
@@ -96,7 +97,30 @@ class LunaShellMappingTest {
         assertEquals(m.unknownResolution, m.resolution(4000, 3000))
     }
 
-    @Test fun settingsMapOntoSharedStatus() {
+    /** iOS `testAutofocusModesMapToFocusDrum`: option 93 values 1, 3, 6 are AF-S, AF-C, Product Showcase. */
+    @Test fun autofocusModesMapToFocusDrum() {
+        assertEquals(listOf("AF-S", "AF-C", "Showcase"), m.focusOptions.map { it.chip })
+        for (mode in CameraFocusMode.entries) assertEquals(mode, m.cameraFocusMode(m.focusOption(mode)))
+        assertNull(m.cameraFocusMode(FocusOption.SUBJECT_LOCK))
+        assertNull(m.cameraFocusMode(FocusOption.REGISTERED_PRIORITY))
+        fun shown(s: CameraStatus) = FocusOption.resolve(s.focusMode, s.focusTrack)
+        val pins = LunaControlPins()
+        val showcase = readout.copy(focusMode = CameraFocusMode.PRODUCT_SHOWCASE)
+        var status = m.applySettings(showcase, CameraStatus(), pins, now = 0).first
+        assertEquals(FocusOption.PRODUCT_SHOWCASE, shown(status))
+        // An optimistic AF-S pin holds until the camera reports it.
+        pins.focus = pin(FocusOption.SINGLE, now = 0, settleMs = 3_000)
+        status = m.applySettings(showcase, status, pins, now = 1_000).first
+        assertEquals(FocusOption.SINGLE, shown(status))
+        status = m.applySettings(readout.copy(focusMode = CameraFocusMode.SINGLE), status, pins, now = 1_500).first
+        assertEquals(FocusOption.SINGLE, shown(status))
+        assertNull(pins.focus)
+        // Values the official app never offers read as null and blank the readout rather than guess.
+        status = m.applySettings(readout.copy(focusMode = null), status, pins, now = 2_000).first
+        assertNull(shown(status))
+    }
+
+        @Test fun settingsMapOntoSharedStatus() {
         val pins = LunaControlPins()
         val (s, table) = m.applySettings(readout, CameraStatus(shootingMode = CameraCommands.SHOOT_VIDEO), pins, now = 0)
         assertEquals(CameraCommands.EXPO_MANUAL, s.expoMode)

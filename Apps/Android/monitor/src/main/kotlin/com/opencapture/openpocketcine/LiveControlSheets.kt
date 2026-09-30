@@ -979,7 +979,7 @@ private fun CheckedRows(
 private fun FocusBody(status: CameraStatus, enabled: Boolean, onSelect: (String) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CaptureDrumWheel(CaptureFocusChoices.labels, CaptureFocusChoices.selection(status), interactive = enabled, onSelect = onSelect)
-        Text("AF-S focuses once. AF-C follows focus continuously; Showcase, Lock and Priority use the camera's supported tracking modes.",
+        Text("AF-S focuses once. AF-C follows focus continuously; the other modes use the camera's supported tracking modes.",
             style = LiveType.ui(9.5f).copy(lineHeight = 13.3.sp), color = LiveDesign.faint)
     }
 }

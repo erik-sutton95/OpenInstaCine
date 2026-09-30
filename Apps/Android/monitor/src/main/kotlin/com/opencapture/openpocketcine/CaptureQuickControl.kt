@@ -202,7 +202,8 @@ internal fun captureQuickFocusControl(status: CameraStatus) = MonitorQuickContro
 
 /** One native option list for the persistent picker and the readout preview. */
 internal object CaptureFocusChoices {
-    val labels = com.opencapture.openpocketcine.session.FocusOption.entries.map { it.chip }
+    /** A camera session narrows this at launch to the modes its body offers. */
+    var labels = com.opencapture.openpocketcine.session.FocusOption.entries.map { it.chip }
     fun selection(status: CameraStatus): String = when (status.focusMode) {
         CameraCommands.FOCUS_SINGLE -> "AF-S"
         CameraCommands.FOCUS_CONTINUOUS -> labels.getOrNull(status.focusTrack + 1)

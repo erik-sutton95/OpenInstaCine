@@ -1,6 +1,7 @@
 package com.opencapture.openinstacine.luna
 
 import com.opencapture.openpocketcine.core.CameraColorProfile
+import com.opencapture.openpocketcine.core.CameraFocusMode
 import com.opencapture.openpocketcine.core.CameraGimbalMode
 import com.opencapture.openpocketcine.core.CameraGimbalSpeed
 import com.opencapture.openpocketcine.core.CameraShootingMode
@@ -40,6 +41,7 @@ class LunaStatusTest {
         assertEquals(LunaGimbalOptions(2, 2, 3, 2), s.gimbal)
         assertEquals(false, s.gimbalStatus?.stall)
         assertEquals(3L, s.afMode)
+        assertEquals(true, s.faceMetering)
         assertEquals(1L, s.iq3AMode)
         assertEquals(3L, s.filterStrength)
         assertNull(s.functionMode)
@@ -219,6 +221,8 @@ class LunaStatusTest {
         assertEquals(LunaReadout.videoFormatValues.size, r.recordFormats.size)
         assertEquals(CameraGimbalMode.ROLL_LOCK, r.gimbalMode); assertEquals(CameraGimbalSpeed.MEDIUM, r.gimbalSpeed)
         assertEquals(0, r.videoExposure?.program)
+        assertEquals(CameraFocusMode.CONTINUOUS, r.focusMode)
+        assertEquals(true, r.faceMetering)
         // Before the first settings read the picker has nothing to offer.
         assertTrue(LunaReadout.readout(null, device, null).recordFormats.isEmpty())
         // Every neutral enum value maps back to the wire number it came from.

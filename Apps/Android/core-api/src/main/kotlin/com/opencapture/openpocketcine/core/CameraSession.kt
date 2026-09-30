@@ -62,6 +62,9 @@ public interface CameraControls {
  public suspend fun setShootingMode(mode: CameraShootingMode): Boolean = false
  public suspend fun setGimbalMode(mode: CameraGimbalMode): Boolean = false
  public suspend fun setGimbalSpeed(speed: CameraGimbalSpeed): Boolean = false
+ public suspend fun setFocusMode(mode: CameraFocusMode): Boolean = false
+ /** True Face Priority metering, false Matrix. */
+ public suspend fun setFaceMetering(on: Boolean): Boolean = false
  /** Re-read settings shortly after a burst of writes. */
  public fun requestSettingsRefresh() {}
  /** The camera's own subject tracking, from the live stream; only changes are delivered. */
@@ -76,6 +79,7 @@ public enum class CameraShootingMode { VIDEO, TIMELAPSE, TIMESHIFT, SLOW_MOTION,
 public enum class CameraColorProfile { STANDARD, LOG, VIVID, HDR, DOLBY_VISION }
 public enum class CameraGimbalMode { FPV, ROLL_LOCK, ROLL_TILT_LOCK, FPV_VERTICAL, LOCK, STABILIZED_VERTICAL }
 public enum class CameraGimbalSpeed { SLOW, MEDIUM, FAST, SENSITIVE }
+public enum class CameraFocusMode { SINGLE, CONTINUOUS, PRODUCT_SHOWCASE }
 
 /** [program]: 0 auto, 1 ISO priority, 2 shutter priority, 3 manual, 4 adaptive, 5 full auto. ISO 0 / shutter 0 = camera chooses. */
 public data class CameraExposure(public val program: Int, public val iso: Int, public val shutterSeconds: Double)
@@ -104,8 +108,10 @@ public data class CameraReadout(
  public val zoom: Double? = null,
  public val gimbalMode: CameraGimbalMode? = null,
  public val gimbalSpeed: CameraGimbalSpeed? = null,
- /** 1 single AF, otherwise continuous. */
- public val afMode: Int? = null,
+ /** Null also when the camera reports a mode the shell does not offer. */
+ public val focusMode: CameraFocusMode? = null,
+ /** True Face Priority metering, false Matrix. */
+ public val faceMetering: Boolean? = null,
 ) {
  public companion object { public val NONE: StateFlow<CameraReadout> = kotlinx.coroutines.flow.MutableStateFlow(CameraReadout()) }
 }

@@ -99,11 +99,14 @@ internal data class LunaPhotographySettings(
     val colorMode: Long? = null,
     val whiteBalanceKelvin: Long? = null,
     val photoResolution: Long? = null,
+    /** Option 46: true Face Priority, false Matrix. */
+    val faceMetering: Boolean? = null,
     val zoom: Double? = null,
     val iLog: Boolean? = null,
     val colorRecovery: Boolean? = null,
     val gimbal: LunaGimbalOptions? = null,
     val gimbalStatus: LunaGimbalStatus? = null,
+    /** Option 93: 1 AF-S, 3 AF-C, 6 Product Showcase (the official app offers only these). */
     val afMode: Long? = null,
     /** Option 99: (seconds, card location) pairs. */
     val remainingRecordTime: List<Pair<Long, Long>> = emptyList(),
@@ -118,7 +121,7 @@ internal data class LunaPhotographySettings(
         other.exposureBiasTenths ?: exposureBiasTenths, other.filter ?: filter, other.stillExposure ?: stillExposure,
         other.videoExposure ?: videoExposure, other.isoTopLimit ?: isoTopLimit, other.recordResolution ?: recordResolution,
         other.fov ?: fov, other.colorMode ?: colorMode, other.whiteBalanceKelvin ?: whiteBalanceKelvin,
-        other.photoResolution ?: photoResolution, other.zoom ?: zoom, other.iLog ?: iLog, other.colorRecovery ?: colorRecovery,
+        other.photoResolution ?: photoResolution, other.faceMetering ?: faceMetering, other.zoom ?: zoom, other.iLog ?: iLog, other.colorRecovery ?: colorRecovery,
         other.gimbal ?: gimbal, other.gimbalStatus ?: gimbalStatus, other.afMode ?: afMode, remainingRecordTime,
         other.iq3AMode ?: iq3AMode, other.filterStrength ?: filterStrength,
     )
@@ -135,7 +138,9 @@ internal data class LunaPhotographySettings(
                 exposureBiasTenths = o.u(7)?.let(LunaProto::unzigzag32), filter = o.u(18),
                 stillExposure = o.bytes(20)?.let(LunaExposure::parse), videoExposure = o.bytes(21)?.let(LunaExposure::parse),
                 isoTopLimit = o.u(24), recordResolution = o.u(31), fov = o.u(33), colorMode = o.u(35),
-                whiteBalanceKelvin = o.u(39), photoResolution = o.u(40), zoom = o.double(53), iLog = o.b(72),
+                whiteBalanceKelvin = o.u(39), photoResolution = o.u(40),
+                // proto3 may omit false: a requested 46 with no value is Matrix.
+                faceMetering = o.b(46) ?: if (46 in types) false else null, zoom = o.double(53), iLog = o.b(72),
                 colorRecovery = o.b(73),
                 gimbal = o.bytes(91)?.let { LunaProto(it) }?.let { LunaGimbalOptions(it.u(1, 0), it.u(2, 0), it.u(3, 0), it.u(4, 0)) },
                 gimbalStatus = o.bytes(92)?.let(LunaGimbalStatus::parse), afMode = o.u(93),

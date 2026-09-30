@@ -120,6 +120,12 @@ internal object LunaControl {
         return photographySet(types, fields, functionMode)
     }
 
+    /** Option 93, fw 1.1.15 verified (stored at once, video and photo share it): 1 AF-S, 3 AF-C, 6 Product Showcase. */
+    fun afMode(mode: Long, functionMode: Int = FUNCTION_MODE_VIDEO) = photographyValue(93, mode, functionMode)
+
+    /** Option 46 `metering_enable`: true Face Priority, false Matrix (an explicit 0). fw 1.1.15 stores it 3.7 to 4.9 s after the SET. */
+    fun faceMetering(on: Boolean, functionMode: Int = FUNCTION_MODE_VIDEO) = photographyValue(46, if (on) 1 else 0, functionMode)
+
     /** Option 91 field 2: 1 slow, 2 medium, 3 fast, 4 sensitive. */
     fun gimbalFollowSpeed(speed: Long, functionMode: Int = FUNCTION_MODE_VIDEO) =
         photographySet(listOf(91), mapOf(91 to LunaWire.blob(91, LunaWire.integer(2, speed))), functionMode)
@@ -289,5 +295,5 @@ internal object LunaControl {
         Request(GET_PHOTOGRAPHY_OPTIONS, optionTypes(types, packed) + LunaWire.integer(2, functionMode.toLong()))
 
     /** Every photography type the monitor shows. */
-    val settingTypes = listOf(6, 7, 18, 20, 21, 24, 31, 33, 35, 39, 40, 43, 53, 72, 73, 91, 92, 93, 100, 104)
+    val settingTypes = listOf(6, 7, 18, 20, 21, 24, 31, 33, 35, 39, 40, 43, 46, 53, 72, 73, 91, 92, 93, 100, 104)
 }

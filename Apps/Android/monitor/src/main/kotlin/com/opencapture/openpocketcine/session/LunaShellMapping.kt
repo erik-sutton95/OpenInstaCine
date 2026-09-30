@@ -2,6 +2,7 @@ package com.opencapture.openpocketcine.session
 
 import com.opencapture.openpocketcine.EvComp
 import com.opencapture.openpocketcine.core.CameraColorProfile
+import com.opencapture.openpocketcine.core.CameraFocusMode
 import com.opencapture.openpocketcine.core.CameraGimbalMode
 import com.opencapture.openpocketcine.core.CameraGimbalSpeed
 import com.opencapture.openpocketcine.core.CameraReadout
@@ -27,11 +28,13 @@ internal class LunaControlPins {
     var recording: CameraValuePin<Boolean>? = null
     var gimbalMode: CameraValuePin<GimbalMode>? = null
     var gimbalSpeed: CameraValuePin<GimbalSpeed>? = null
+    var focus: CameraValuePin<FocusOption>? = null
     var photoInFlight = false
 
     fun clear() {
         isoIndex = null; shutterDenom = null; expoMode = null; ev = null; whiteBalance = null; color = null
-        format = null; shootingMode = null; recording = null; gimbalMode = null; gimbalSpeed = null; photoInFlight = false
+        format = null; shootingMode = null; recording = null; gimbalMode = null; gimbalSpeed = null; focus = null
+        photoInFlight = false
     }
 }
 
@@ -135,6 +138,36 @@ internal object LunaShellMapping {
         GimbalSpeed.DEFAULT -> CameraGimbalSpeed.MEDIUM
         GimbalSpeed.FAST -> CameraGimbalSpeed.FAST
     }
+
+    /** The official app's three AF modes (option 93); the shared FOCUS drum and chip list only these. */
+    val focusOptions = listOf(FocusOption.SINGLE, FocusOption.CONTINUOUS_DEFAULT, FocusOption.PRODUCT_SHOWCASE)
+
+    fun focusOption(mode: CameraFocusMode): FocusOption = when (mode) {
+        CameraFocusMode.SINGLE -> FocusOption.SINGLE
+        CameraFocusMode.CONTINUOUS -> FocusOption.CONTINUOUS_DEFAULT
+        CameraFocusMode.PRODUCT_SHOWCASE -> FocusOption.PRODUCT_SHOWCASE
+    }
+
+    fun cameraFocusMode(option: FocusOption): CameraFocusMode? = when (option) {
+        FocusOption.SINGLE -> CameraFocusMode.SINGLE
+        FocusOption.CONTINUOUS_DEFAULT -> CameraFocusMode.CONTINUOUS
+        FocusOption.PRODUCT_SHOWCASE -> CameraFocusMode.PRODUCT_SHOWCASE
+        FocusOption.SUBJECT_LOCK, FocusOption.REGISTERED_PRIORITY -> null
+    }
+
+    /** Shared (focusMode, focusTrack) for [option]; null blanks the readout. */
+    fun withFocus(status: CameraStatus, option: FocusOption?): CameraStatus = status.copy(
+        focusMode = when (option) {
+            null -> -1
+            FocusOption.SINGLE -> CameraCommands.FOCUS_SINGLE
+            else -> CameraCommands.FOCUS_CONTINUOUS
+        },
+        focusTrack = when (option) {
+            null -> -1
+            FocusOption.PRODUCT_SHOWCASE -> FocusTrackMode.PRODUCT_SHOWCASE.raw
+            else -> FocusTrackMode.DEFAULT.raw
+        },
+    )
 
     /** Shared resolution byte for a Luna frame size: DJI bytes where the shape matches, Luna bytes (0xD0...) otherwise. */
     fun resolution(width: Int, height: Int): VideoResolution {
@@ -258,13 +291,11 @@ internal object LunaShellMapping {
             availableVideoFormats = table.keys.sortedWith(compareBy({ it.resolution.rawValue }, { it.frameRate.fps })),
             availableIsoIndices = isoIndices,
             availableShutterDenoms = shutterDenoms,
-            focusMode = when {
-                readout.afMode == 1 -> CameraCommands.FOCUS_SINGLE
-                readout.afMode != null || next.focusMode < 0 -> CameraCommands.FOCUS_CONTINUOUS
-                else -> next.focusMode
-            },
             zoomFactor = readout.zoom ?: next.zoomFactor,
         )
+        // AF modes the official app never offers (0, 2, 4, 5) leave the readout blank.
+        val focus = readout.focusMode?.let(::focusOption)
+        next = withFocus(next, pins::focus.hold(focus, now) ?: focus)
         return next to table
     }
 }

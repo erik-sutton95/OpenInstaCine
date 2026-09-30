@@ -253,7 +253,8 @@ class PocketCameraSession(
     val connectionSetup: CameraConnectionSetup get() = CameraConnectionSetup.CAMERA_WIFI
     val setupProgress: StateFlow<String?> = MutableStateFlow<String?>(null).asStateFlow()
     fun useSetup(setup: CameraConnectionSetup, network: MultiviewNetworkStore.Network?, restoreAccessPoint: Boolean) = Unit
-    val supportsFocusMode: Boolean get() = false
+    /** iOS `supportsFocusMode`: AF-S, AF-C and Product Showcase (option 93). */
+    val supportsFocusMode: Boolean get() = can(CameraCapability.CAMERA_SETTINGS)
     val supportsTapFocus: Boolean get() = can(CameraCapability.FOCUS)
     /** iOS `supportsAudio`: the Luna sends no audio levels, so AUDIO is hidden live (clip playback keeps its meters). */
     val supportsAudio: Boolean get() = can(CameraCapability.AUDIO)
@@ -310,6 +311,7 @@ class PocketCameraSession(
         CameraCommands.shootingModeLabelOverrides = LunaShellMapping.shootingModeLabels
         GimbalMode.labelOverrides = LunaShellMapping.gimbalModeLabels
         CameraCommands.colorLabelOverrides = mapOf(CameraCommands.COLOR_NORMAL to "Standard")
+        com.opencapture.openpocketcine.CaptureFocusChoices.labels = LunaShellMapping.focusOptions.map { it.chip }
         com.opencapture.openpocketcine.media.MediaHTTP.host = "192.168.42.1"
         com.opencapture.openpocketcine.media.MediaHTTP.directPath = true
         scope.launch {
@@ -362,7 +364,7 @@ class PocketCameraSession(
         value.id, value.id, value.advertisedName,
         CameraModel(
             name = value.modelName, datalinkPort = 0, tcpPoke = false, verified = true, pairingToken = "luna",
-            family = "generic", supportsTapFocus = CameraCapability.FOCUS in capabilities, supportsFocusMode = false,
+            family = "generic", supportsTapFocus = CameraCapability.FOCUS in capabilities, supportsFocusMode = supportsFocusMode,
             usesCapturedLiveEnable = false, zoomStops = lunaZoomStops(), hasGimbal = CameraCapability.GIMBAL in capabilities,
             supportsZoom = CameraCapability.ZOOM in capabilities, sendsLiveViewPrepare = false, supportsAperture = false,
         ),
@@ -843,9 +845,16 @@ class PocketCameraSession(
             }
         }
     }
-    // Luna video AF is continuous-only in the official app; no AF-S/AF-C chip.
-    fun setFocusMode(continuous: Boolean) = Unit
-    fun setFocusTrack(mode: Int) = Unit
+    // AF-S, AF-C and Product Showcase (iOS `setFocusOption`); the shared drum sends AF-C then a track, so the last wins.
+    fun setFocusMode(continuous: Boolean) = setFocusOption(if (continuous) FocusOption.CONTINUOUS_DEFAULT else FocusOption.SINGLE)
+    fun setFocusTrack(mode: Int) { FocusOption.resolve(CameraCommands.FOCUS_CONTINUOUS, mode)?.let(::setFocusOption) }
+    private fun setFocusOption(option: FocusOption) {
+        if (!canSendControl()) return
+        val mode = LunaShellMapping.cameraFocusMode(option) ?: return presentControlNote("${option.chip} is not offered by this camera.")
+        pins.focus = pin(option, SystemClock.elapsedRealtime(), 3_000)
+        _status.value = LunaShellMapping.withFocus(_status.value, option)
+        coalesce("focus") { sendControl("Focus ${option.chip}", onFail = { pins.focus = null }) { setFocusMode(mode) } }
+    }
     fun refreshFocusTrack() = Unit
 
     fun setColorMode(mode: Int, hopEnabled: Boolean = false) {

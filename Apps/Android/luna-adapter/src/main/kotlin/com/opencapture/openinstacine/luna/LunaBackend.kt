@@ -359,6 +359,8 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
     }
     override suspend fun setGimbalMode(mode: CameraGimbalMode) = with(LunaReadout) { send { LunaControl.gimbalMode(gimbalModes.key(mode), functionMode) } }
     override suspend fun setGimbalSpeed(speed: CameraGimbalSpeed) = with(LunaReadout) { send { LunaControl.gimbalFollowSpeed(gimbalSpeeds.key(speed), functionMode) } }
+    override suspend fun setFocusMode(mode: CameraFocusMode) = with(LunaReadout) { send { LunaControl.afMode(focusModes.key(mode), functionMode) } }
+    override suspend fun setFaceMetering(on: Boolean) = send { LunaControl.faceMetering(on, functionMode) }
 
     // Media: cmd 13/38 list, cmd 11 thumbnail, cmd 12 delete; files over HTTP on 192.168.42.1.
     private suspend fun media(request: LunaControl.Request): ByteArray {
