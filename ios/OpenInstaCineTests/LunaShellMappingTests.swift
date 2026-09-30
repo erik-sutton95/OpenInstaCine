@@ -110,16 +110,22 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertNil(CaptureLists.focusOption(from: status))
     }
 
-    func testHeadTrackGlideStaysOnTheStraightLine() {
-        var point = GimbalWaypoint(yawDeg: 0, pitchDeg: 0, zoom: 1)
-        let target = GimbalWaypoint(yawDeg: 40, pitchDeg: 20, zoom: 1)
-        for _ in 0..<60 {
-            point = CameraSession.glide(from: point, toward: target)
-            XCTAssertEqual(point.pitchDeg * 2, point.yawDeg, accuracy: 0.001, "both axes in proportion")
+    func testHeadTrackReferenceFitsRateAndAcceleration() {
+        XCTAssertNil(CameraSession.headTrackReference([], at: 1))
+        // yaw = 5 + 30 t + 20 t² (rate 30 + 40 t, accel 40), still pitch, every 40 ms.
+        let samples = (0..<7).map { i -> HeadTrackSample in
+            let t = Double(i) * 0.04
+            return HeadTrackSample(t: 10 + t, yaw: 5 + 30 * t + 20 * t * t, pitch: 3)
         }
-        XCTAssertEqual(point, target)
-        let first = CameraSession.glide(from: GimbalWaypoint(yawDeg: 0, pitchDeg: 0, zoom: 1), toward: target)
-        XCTAssertEqual((first.yawDeg * first.yawDeg + first.pitchDeg * first.pitchDeg).squareRoot(), 2.5, accuracy: 0.001)
+        let head = CameraSession.headTrackReference(samples, at: 10.24 + 0.05)
+        XCTAssertEqual(head?.yawRate ?? 0, 30 + 40 * 0.24, accuracy: 1e-6)
+        XCTAssertEqual(head?.yawAccel ?? 0, 40, accuracy: 1e-6)
+        XCTAssertEqual(head?.yaw ?? 0, 5 + 30 * 0.29 + 20 * 0.29 * 0.29, accuracy: 1e-6)
+        XCTAssertEqual(head?.pitchRate ?? 1, 0, accuracy: 1e-9)
+        // Two samples: a straight line. A stale head holds, with no rate to feed forward.
+        let line = [HeadTrackSample(t: 1, yaw: 0, pitch: 0), HeadTrackSample(t: 1.04, yaw: 2, pitch: 0)]
+        XCTAssertEqual(CameraSession.headTrackReference(line, at: 1.14)?.yaw ?? 0, 2 + 50 * 0.1, accuracy: 1e-6)
+        XCTAssertEqual(CameraSession.headTrackReference(line, at: 9), HeadTrackReference(yaw: 2, pitch: 0))
     }
 
     func testCameraNaming() {

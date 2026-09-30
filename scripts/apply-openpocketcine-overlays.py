@@ -233,6 +233,12 @@ def main() -> None:
             "        return model.isLive && model.session.datalink != nil\n",
             "        return model.isLive && model.session.hasControlLink\n",
         )
+    # Luna renders head tracking on its own clock, so it needs each AirPods sample's time.
+    replace_once(
+        APP / "HeadphoneMotion.swift",
+        "model.session.updateNativeHeadTrack(target: target, token: token)",
+        "model.session.updateNativeHeadTrack(target: target, token: token, measuredAt: lastHeadMeasuredAt)",
+    )
 
 
 if __name__ == "__main__":

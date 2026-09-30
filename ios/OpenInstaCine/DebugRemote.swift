@@ -213,6 +213,21 @@
                     try? await Task.sleep(for: .milliseconds(30))
                 }
                 s.endGimbalStick()
+            case "rc":
+                // Raw VirtualRC steps: [[pan, tilt, seconds], ...] at `hz`, then release.
+                let steps = cmd["steps"] as? [[Double]] ?? []
+                let period = 1 / (num("hz") ?? 20)
+                for step in steps where step.count == 3 {
+                    let end = ProcessInfo.processInfo.systemUptime + step[2]
+                    while ProcessInfo.processInfo.systemUptime < end {
+                        if let request = try? LunaProtocol.gimbalMove(upDown: Int32(step[1]), leftRight: Int32(step[0])) {
+                            let backend = s.backend
+                            Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
+                        }
+                        try? await Task.sleep(for: .seconds(period))
+                    }
+                }
+                _ = try? await s.backend.send(LunaProtocol.gimbalReleaseRequest())
             case "recenter": s.recenterGimbal()
             case "aim":
                 guard let live = s.freshGimbalWaypoint else { return ["ok": false, "error": "no pose"] }
@@ -220,7 +235,7 @@
                     yawDeg: num("yaw") ?? live.yawDeg, pitchDeg: num("pitch") ?? live.pitchDeg,
                     zoom: live.zoom, nativePitchDeg: -(num("pitch") ?? live.pitchDeg))
                 let began = Date()
-                guard s.aimGimbal(at: target, settleAndStop: true) != nil else {
+                guard s.aimGimbal(at: target) != nil else {
                     return ["ok": false, "error": "aim refused"]
                 }
                 while s.gimbalAim != nil { try? await Task.sleep(for: .milliseconds(20)) }
@@ -233,25 +248,30 @@
                 try? await Task.sleep(for: .seconds(1.5))
                 return ["ok": true, "settle": Date().timeIntervalSince(began), "state": state(model)]
             case "headLogStart":
-                s.headTrackLog.removeAll(); s.imuRateLog.removeAll(); s.headTrackRecording = true
+                s.headTrackLog.removeAll(); s.imuRateLog.removeAll(); s.headSampleLog.removeAll(); s.headTrackRecording = true
             case "headLog":
                 s.headTrackRecording = false
                 func r(_ v: Double) -> Double { (v * 100).rounded() / 100 }
-                let latest = max(s.headTrackLog.last?.first ?? 0, s.imuRateLog.last?.first ?? 0)
-                let t0 = latest - 12  // last 12 s keeps the reply under the server's size limit
-                s.headTrackLog.removeAll { $0[0] < t0 }
-                s.imuRateLog.removeAll { $0[0] < t0 }
+                // The last 12 s of tracking (not of the IMU, which keeps logging after it
+                // ends) keeps the reply under the server's size limit.
+                let latest = (str("anchor") == "imu" ? nil : s.headTrackLog.last?.first) ?? s.imuRateLog.last?.first ?? 0
+                let t0 = latest - 12
                 return ["ok": true,
-                        "track": s.headTrackLog.map { row in [r(row[0] - t0)] + row.dropFirst().map(r) },
-                        "imu": s.imuRateLog.map { row in [r(row[0] - t0), r(row[1]), r(row[2])] }]
+                        "track": s.headTrackLog.filter { $0[0] >= t0 }.map { row in [r(row[0] - t0)] + row.dropFirst().map(r) },
+                        "samples": s.headSampleLog.filter { $0[0] >= t0 - 1 }
+                            .map { row in [((row[0] - t0) * 1000).rounded() / 1000] + row.dropFirst().map(r) },
+                        "imu": s.imuRateLog.filter { $0[0] >= t0 && $0[0] <= latest }
+                            .map { row in [r(row[0] - t0), r(row[1]), r(row[2])] }]
             case "headTune":
-                if let v = num("lead") { CameraSession.headTrackLeadSeconds = v }
-                if let v = num("smoothing") { CameraSession.headTrackSmoothing = v }
-                if let v = num("velocityKeep") { CameraSession.headTrackVelocityKeep = v }
-                if let v = num("window") { CameraSession.headTrackVelocityWindow = v }
-                return ["ok": true, "lead": CameraSession.headTrackLeadSeconds,
-                        "smoothing": CameraSession.headTrackSmoothing,
-                        "velocityKeep": CameraSession.headTrackVelocityKeep]
+                if let v = num("gain") { CameraSession.headTrackGain = v }
+                if let v = num("lead") { CameraSession.headTrackLead = v }
+                if let v = num("tick") { CameraSession.headTrackTick = v }
+                if let v = num("accel") { CameraSession.headTrackAccelFeed = v }
+                if let v = num("panScale") { CameraSession.stickPanDegPerSec = v }
+                if let v = num("tiltScale") { CameraSession.stickTiltDegPerSec = v }
+                if let v = num("window") { CameraSession.headTrackFitWindow = v }
+                return ["ok": true, "gain": CameraSession.headTrackGain, "lead": CameraSession.headTrackLead,
+                        "tick": CameraSession.headTrackTick]
             case "sweep":
                 // Smooth moving target: sine (amp, period) or ramp (rate) on yaw or pitch.
                 // mode "raw" streams SET_ANGLE at hz; "track" goes through the head-track API
@@ -307,6 +327,26 @@
                 poll.cancel()
                 trace = await poll.value
                 return ["ok": true, "sends": sends, "trace": trace]
+            case "replay":
+                // Recorded head targets [[t, yaw, pitch], ...] replayed like the shell: a 40 ms
+                // pump hands over the newest sample at least `latency` old, stamped with its time.
+                let rows = (cmd["rows"] as? [[Double]] ?? []).filter { $0.count == 3 }
+                guard let first = rows.first, let base = s.freshGimbalWaypoint, let token = s.beginNativeHeadTrack()
+                else { return ["ok": false, "error": "replay refused"] }
+                let latency = num("latency") ?? 0.03
+                let start = ProcessInfo.processInfo.systemUptime
+                while true {
+                    let elapsed = ProcessInfo.processInfo.systemUptime - start
+                    if elapsed > rows.last![0] - first[0] + 1.5 { break }
+                    if let row = rows.last(where: { $0[0] - first[0] <= elapsed - latency }) {
+                        let target = GimbalWaypoint(
+                            yawDeg: base.yawDeg + row[1] - first[1], pitchDeg: base.pitchDeg + row[2] - first[2], zoom: 1)
+                        guard s.updateNativeHeadTrack(target: target, token: token, measuredAt: start + row[0] - first[0])
+                        else { return ["ok": false, "error": "replay ended early"] }
+                    }
+                    try? await Task.sleep(for: .milliseconds(40))
+                }
+                s.endNativeHeadTrack(token: token)
             case "program":
                 switch str("op") ?? "" {
                 case "set": s.setGimbalWaypoint(GimbalWaypointSlot(rawValue: str("slot") ?? "a") ?? .a)

@@ -67,7 +67,7 @@ Parity values:
 | AF mode (AF-S / AF-C / Product Showcase) | Luna-adapted | Shared FOCUS drum and chip list only the three official modes (option 93 = 1 / 3 / 6, overlay `CaptureLists.focusOptions`); readout from GET 93 on connect and refresh with a 3 s pin. Hardware-verified 2026-09-29. Android: follow-up |
 | Metering (Matrix / Face Priority) | Luna-adapted | "Face metering" row in the Exposure sheet (`LunaMeteringToggle`, overlay hook); option 46 bool; camera stores it 3.7 to 4.9 s after the SET, so a 6 s pin holds the readout. Hardware-verified 2026-09-29. Android: follow-up |
 | Aperture | Hidden-not-supported | `supportsAperture` false; fixed iris |
-| Head tracking | Luna-adapted | AirPods target streamed as SET_ANGLE at 30 Hz (latest wins), pose from GET_ANGLE (10 Hz poll, IMU fallback). ~70 ms lag, 0.3° RMS. Hardware-verified 2026-09-29 |
+| Head tracking | Luna-adapted | Stick (MOVE) at 30 Hz closed on GET_ANGLE: AirPods rate and acceleration fed forward plus a pull to the exact angle (a SET_ANGLE stream judders at the send rate). 1.8° RMS on a 20° / 3 s sine, ~0.02 s lag; pan tops out at 63 deg/s. Hardware-verified 2026-09-30 |
 | Multiview | Hidden-not-supported | Entry removed from the camera list (`SavedCamerasView.swift`); stages DJI bodies over RTMP |
 | Wi-Fi / Hotspot setups | Hidden-not-supported | `canAddSetup: false`; Luna only connects over its own AP |
 | Color Recovery | Not yet | Screen protocol code exists (`LunaScreenRecovery.swift`, [luna-color-recovery.md](luna-color-recovery.md)); not exposed in the UI |

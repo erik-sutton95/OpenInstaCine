@@ -112,7 +112,7 @@ Luna Ultra on fw 1.1.15, iPhone DEBUG build driven over `tools/oic_remote.py`. S
 | 20 Hz | 70 ms | 0.23 to 0.27° | Smooth |
 | 30 Hz | 60 ms | 0.25 to 0.37° | Smoothest. In repeated 25° / 3 s runs, acceleration RMS was 122 to 125 deg/s² at 30 Hz against 153 to 168 at 20 Hz (ideal 77.5) |
 
-Each SET retargets smoothly: the firmware blends toward the latest target without stopping or restarting. The session streams at **30 Hz** (`CameraSession.gimbalSetInterval`, 33 ms, latest target wins, fire and forget). The head-track path gave 70 ms lag and 0.28° RMS on yaw (25° / 3 s), 0.31° RMS on pitch (15° / 3 s), and 0.20° RMS on a 20 deg/s ramp.
+Position-wise each SET retargets without a visible stop, but the motion is not smooth: see [SET streams judder](#set-streams-judder-head-tracking-uses-the-stick). The session streams at **30 Hz** (`CameraSession.gimbalSetInterval`, 33 ms, latest target wins, fire and forget). The head-track path gave 70 ms lag and 0.28° RMS on yaw (25° / 3 s), 0.31° RMS on pitch (15° / 3 s), and 0.20° RMS on a 20 deg/s ramp.
 
 ### Speed
 
@@ -132,6 +132,24 @@ SET_ANGLE and GET_ANGLE work in Roll Lock, Roll & Tilt, FPV and FPV-V. In each m
 
 - **Level**: target pitch = GET pitch minus the IMU gravity pitch, keeping yaw. From (25, -40) and (-20, 30), the head settled in 1.8 to 2.0 s at an IMU world pitch within 0.4° of level. A second pass 2.5 s later runs only if the IMU still reads more than 0.3° off level. Without that pass, the first result could be 0.5 to 0.7° off because the IMU pitch filter lags right after a move.
 - **Motion Control** (programmed moves, now on for Luna): with A (-30, 0) and B (30, 10) over 4 s, the head approached A during the 3 s countdown, then tracked the A to B line with a mean error of 0.6° and a maximum of 1.0° (mostly the 70 ms lag at 15 deg/s). It ended on B. An A·B·C move over 3 s + 3 s with smoothness 0.6 rounded the B corner (closest point 6° from B) and ended exactly on C. Loop, pause (holds to within 0.01°), resume (finishes on B) and stop (holds within 0.5° of the pose at stop) all worked.
+
+### SET streams judder; head tracking uses the stick
+
+Measured 2026-09-30 from the camera-head gyro (10 ms bins, residual after a 110 ms moving average) on a yaw sine of 20° / 3 s:
+
+| Drive | Jitter while moving |
+| --- | --- |
+| SET_ANGLE stream, 15 / 30 / 60 / 100 Hz | 16.3 / 11.4 / 8.2 / 7.1 deg/s, peak at the send rate |
+| One SET, the camera plans the whole move (cruise 60 deg/s) | 0.24 deg/s |
+| MOVE stick at a constant value | 0.05 deg/s |
+
+fw 1.1.15 plans every SET as its own start-and-stop move, so any SET stream, however smooth its targets, judders at the send rate. Motion Control still streams SET (its moves are slow), but AirPods head tracking steers with the stick:
+
+- **Stick**: linear, 0.635 deg/s per unit pan and 0.54 tilt on the gyro (99 units = 63 and 53 deg/s), first-order ease-in of about 0.23 s, stop in about 0.25 s. Against GET_ANGLE the best tracking came from 0.75 and 0.64.
+- **Loop** (`CameraSession.steerHeadTrack`, 30 Hz): GET_ANGLE is read back to back beside the loop (a lost reply must never hold it: the head coasts on the last stick value). Command = head rate + head acceleration × 0.23 s + 4/s × (head angle − camera angle). Head angle, rate and acceleration come from a quadratic least-squares fit of the last 300 ms of AirPods samples, stamped with their measurement time (overlay on the shared `HeadphoneMotion`). No sample for 0.2 s: hold. No reading for 0.3 s: stop.
+- **Result**: 20° / 3 s sine tracked with 1.8° RMS, lag about 0.02 s, 8% overshoot, gyro jitter 0.7 deg/s. On a real AirPods session, holds and slow looks stay within 1 to 3°; heads turning faster than 63 deg/s pan (the session peaked at 125 deg/s) trail because the stick is saturated.
+- **Release**: the stick release is sent from a fresh task, twice 150 ms apart. From the cancelled loop task it was never sent and the head kept moving.
+- **Pose readback**: the regular 10 Hz GET_ANGLE poll pauses only while the head-track loop reads angles itself. `freshGimbalWaypoint` falls back to the IMU pose (different yaw zero) once GET_ANGLE is 0.5 s old, so the readback must not lapse.
 
 ## 2. POV Head Tracker (CINSFAVL-01)
 
@@ -217,5 +235,5 @@ The app defines 83 top-level types that our schema lacks. They are listed in `.l
 
 1. Add `GIMBAL_ACTION_SET_ANGLE = 5`, `GIMBAL_ACTION_GET_ANGLE = 6`, the `Angle` sub-message (field 5) and `GimbalControlResp` to `LunaGimbalAction` and `LunaProtocol.gimbalControl(...)` (`Adapters/Insta360Protocol/Sources/Insta360Protocol/LunaProtocol.swift`) and to the Android `LunaControl.kt`.
 2. Probe the firmware with GET_ANGLE, then with a small SET_ANGLE step, as described in section 1. Record the response status and body.
-3. Done: SET_ANGLE works. Head tracking, Level and Motion Control now use it on iOS (30 Hz stream, GET_ANGLE pose at 10 Hz). The stick-based closed loop was removed.
+3. Done: SET_ANGLE works. Level and Motion Control use it on iOS (30 Hz stream, GET_ANGLE pose at 10 Hz). Head tracking steers with the stick, closed on GET_ANGLE (see above).
 4. Android has the encoders and parser only (`LunaControl.gimbalSetAngle`, `gimbalGetAngle`, `gimbalAngle`); the session is not wired yet.

@@ -167,6 +167,7 @@ final class CameraSession {
     @ObservationIgnored var gimbalPose = LunaGimbalPoseEstimator()
     #if DEBUG
         @ObservationIgnored var headTrackLog: [[Double]] = []
+        @ObservationIgnored var headSampleLog: [[Double]] = []
         @ObservationIgnored var imuRateLog: [[Double]] = []
         @ObservationIgnored var headTrackRecording = false
     #endif
@@ -178,6 +179,9 @@ final class CameraSession {
     @ObservationIgnored var gimbalAim: (target: GimbalWaypoint, token: UInt64)?
     @ObservationIgnored var gimbalAimTask: Task<Void, Never>?
     @ObservationIgnored var gimbalAimGeneration: UInt64 = 0
+    /// Head-tracking targets stamped with their AirPods measurement time (last second).
+    @ObservationIgnored var headTrackSamples: [HeadTrackSample] = []
+    @ObservationIgnored var isSteeringHead = false
     /// Programmed A/B/C move runner (SET_ANGLE stream).
     @ObservationIgnored var gimbalMoveTask: Task<Void, Never>?
     @ObservationIgnored var gimbalMoveClock = 0.0

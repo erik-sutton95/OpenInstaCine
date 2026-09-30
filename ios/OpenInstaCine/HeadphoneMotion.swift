@@ -574,7 +574,7 @@ final class HeadphoneMotionBridge: NSObject, CMHeadphoneMotionManagerDelegate {
         }
         if nativeToken == nil { nativeToken = model.session.beginNativeHeadTrack() }
         guard let token = nativeToken else { return }
-        guard model.session.updateNativeHeadTrack(target: target, token: token) else {
+        guard model.session.updateNativeHeadTrack(target: target, token: token, measuredAt: lastHeadMeasuredAt) else {
             stopDrive()
             return
         }
