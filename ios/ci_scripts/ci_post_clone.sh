@@ -49,9 +49,10 @@ step "sync Package.resolved"
 sh ios/sync-package-resolved.sh
 step "write Frame.io and Sentry xcconfig"
 
+# xcconfig reads // as a comment, so the redirect URI is written as scheme:/$()/path.
 cat > ios/OpenInstaCine/Frameio.local.xcconfig <<EOF
 FRAMEIO_CLIENT_ID = ${FRAMEIO_CLIENT_ID:-}
-FRAMEIO_REDIRECT_URI = ${FRAMEIO_REDIRECT_URI:-}
+FRAMEIO_REDIRECT_URI = $(printf %s "${FRAMEIO_REDIRECT_URI:-}" | sed 's#//#/$()/#g')
 FRAMEIO_URL_SCHEME = ${FRAMEIO_URL_SCHEME:-}
 EOF
 
