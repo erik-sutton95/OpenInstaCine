@@ -21,9 +21,16 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.UUID
 
-/** Luna transport, status and controls. No Compose, packet logs, or saved passwords. */
+/**
+ * Luna transport, status and controls. No Compose or packet logs. Camera Wi-Fi credentials are kept
+ * only through the host's [savedWifi] / [saveWifi] (Keystore-sealed on the app side).
+ */
 @SuppressLint("MissingPermission")
-class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMediaStore {
+class LunaBackend(
+    context: Context,
+    private val savedWifi: (cameraId: String) -> Pair<String, String>? = { null },
+    private val saveWifi: (cameraId: String, ssid: String, password: String) -> Unit = { _, _, _ -> },
+) : CameraBackend, CameraControls, CameraMediaStore {
     private val context = context.applicationContext
     private val bluetooth = context.getSystemService(BluetoothManager::class.java)
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
@@ -110,8 +117,9 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
             _failure.value = null
             _connected.value = _found.value.firstOrNull { it.id == id } ?: CameraIdentity(id, "Luna Ultra", "Insta360 Luna Ultra")
             try { runCamera(id) }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) {
+            catch (error: Exception) {
+                // A withTimeout inside (GATT, greeting) is a CancellationException too; only a real cancel propagates.
+                if (error is CancellationException && !isActive) throw error
                 _failure.value = when (_phase.value) {
                     ConnectionPhase.AWAITING_APPROVAL -> "Camera approval was not completed. Wake Luna and accept the connection on its screen."
                     ConnectionPhase.JOINING_WIFI -> "Could not join Luna Wi-Fi. Keep the camera awake and accept Android's Wi-Fi connection request."
@@ -124,6 +132,31 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
         }
     }
     private suspend fun runCamera(id: String): Unit = coroutineScope {
+        val identity = clientIdentity.toByteArray()
+        // Initiator 1 follows the hardware-verified bootstrap; IDs are this installation's own.
+        val authBody = LunaWire.blob(1, identity) + LunaWire.integer(2, 1) + LunaWire.blob(3, identity)
+        // iOS `connect`: Bluetooth first whenever the camera advertises (it wakes the camera AP, which the
+        // Luna turns off when idle); saved Wi-Fi is the fallback for a camera this run has not seen.
+        val network = savedWifi(id)?.takeIf { saved -> _found.value.none { it.id == id } }?.let { (ssid, password) ->
+            _phase.value = ConnectionPhase.JOINING_WIFI
+            try { joinRetrying(ssid, password, budgetMs = 20_000).also { _joinedSSID.value = ssid } }
+            catch (error: Exception) {
+                if (error is CancellationException && !isActive) throw error
+                android.util.Log.i("LunaBackend", "luna: saved Wi-Fi join failed, falling back to Bluetooth")
+                null
+            }
+        } ?: bootstrapOverBluetooth(id, authBody)
+        // Media HTTP (192.168.42.1:80) goes through the shared OkHttp client, as upstream binds for DJI.
+        boundNetwork = connectivity.bindProcessToNetwork(network)
+        _phase.value = ConnectionPhase.OPENING_DATALINK
+        val cameraSocket = withContext(Dispatchers.IO) {
+            network.socketFactory.createSocket().also { socket = it; it.tcpNoDelay = true; it.soTimeout = 10_000; it.connect(InetSocketAddress("192.168.42.1", 6666), 8_000) }
+        }
+        runLive(cameraSocket, authBody)
+    }
+
+    /** BLE approval and the encrypted Wi-Fi credential read, then the camera AP join (credentials saved). */
+    private suspend fun bootstrapOverBluetooth(id: String, authBody: ByteArray): Network {
         _phase.value = ConnectionPhase.CONNECTING_GATT
         val ble = LunaGatt(context); gatt = ble
         ble.connect(checkNotNull(bluetooth?.adapter).getRemoteDevice(id))
@@ -138,9 +171,6 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
         link.key = LunaWire.exchange(pair, link.request(241, LunaWire.integer(1, 3) + LunaWire.blob(2, LunaWire.publicBytes(pair))))
         val verified = LunaWire.bytes(link.request(8, LunaWire.options(48, 30), encrypted = true), 2)
         check(LunaWire.text(verified, 48) == "Insta360 Luna Ultra")
-        val identity = clientIdentity.toByteArray()
-        // Initiator 1 follows the hardware-verified bootstrap; IDs are this installation's own.
-        val authBody = LunaWire.blob(1, identity) + LunaWire.integer(2, 1) + LunaWire.blob(3, identity)
         when (LunaWire.number(link.request(39, authBody), 1)) {
             0L -> Unit
             1L -> {
@@ -161,15 +191,13 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
         val ssid = LunaWire.text(wifi, 1); val password = LunaWire.text(wifi, 2)
         check(ssid.isNotBlank() && password.length in 8..63)
         ble.close(); gatt = null
+        saveWifi(id, ssid, password)
         _phase.value = ConnectionPhase.JOINING_WIFI
-        val network = joinNetwork(ssid, password)
-        _joinedSSID.value = ssid
-        // Media HTTP (192.168.42.1:80) goes through the shared OkHttp client, as upstream binds for DJI.
-        boundNetwork = connectivity.bindProcessToNetwork(network)
-        _phase.value = ConnectionPhase.OPENING_DATALINK
-        val cameraSocket = withContext(Dispatchers.IO) {
-            network.socketFactory.createSocket().also { socket = it; it.tcpNoDelay = true; it.soTimeout = 10_000; it.connect(InetSocketAddress("192.168.42.1", 6666), 8_000) }
-        }
+        // iOS joins for up to 120 s after the BLE handoff: the AP can take most of a minute to come up.
+        return joinRetrying(ssid, password, budgetMs = 120_000).also { _joinedSSID.value = ssid }
+    }
+
+    private suspend fun runLive(cameraSocket: Socket, authBody: ByteArray): Unit = coroutineScope {
         lastVideoAt.set(android.os.SystemClock.elapsedRealtime())
         val channel = LunaChannel(
             send = { bytes -> withContext(Dispatchers.IO) { cameraSocket.getOutputStream().write(bytes); cameraSocket.getOutputStream().flush() } },
@@ -234,24 +262,62 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
             settings = null; device = null; capture = null; mode = LunaShootingMode.VIDEO; publish()
         }
     }
-    private suspend fun joinNetwork(ssid: String, password: String): Network {
-        val ready = CompletableDeferred<Network>()
-        val specifier = WifiNetworkSpecifier.Builder().setSsid(ssid).setWpa2Passphrase(password).build()
+    /**
+     * iOS `joinRetrying`: 35 s attempts until [budgetMs] runs out, 3 s apart, alternating two join
+     * configurations (plain, then a directed hidden-SSID probe for an AP that is not beaconing yet), and
+     * done as soon as the phone is on 192.168.42.x (auto-join, or the operator joined in Settings).
+     */
+    private suspend fun joinRetrying(ssid: String, password: String, budgetMs: Long): Network {
+        val deadline = android.os.SystemClock.elapsedRealtime() + budgetMs
+        var attempt = 0
+        while (true) {
+            attempt += 1
+            cameraSubnetNetwork()?.let { return watchCameraNetwork(it) }
+            joinNetwork(ssid, password, hidden = attempt % 2 == 0)?.let { return it }
+            cameraSubnetNetwork()?.let { return watchCameraNetwork(it) }
+            android.util.Log.i("LunaBackend", "luna: Wi-Fi join attempt $attempt failed")
+            check(android.os.SystemClock.elapsedRealtime() < deadline) { "Camera Wi-Fi did not come up" }
+            delay(3_000)
+        }
+    }
+    /** One specifier request; null (request released) when it does not connect within 35 s. */
+    private suspend fun joinNetwork(ssid: String, password: String, hidden: Boolean): Network? {
+        val ready = CompletableDeferred<Network?>()
+        val specifier = WifiNetworkSpecifier.Builder().setSsid(ssid).setWpa2Passphrase(password).setIsHiddenSsid(hidden).build()
         val request = NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).setNetworkSpecifier(specifier).build()
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) { ready.complete(network) }
-            override fun onUnavailable() { ready.completeExceptionally(IllegalStateException("Wi-Fi request unavailable")) }
+            override fun onUnavailable() { ready.complete(null) }
             override fun onLost(network: Network) { tcp?.fail(IllegalStateException("Camera Wi-Fi disconnected")) }
         }
+        releaseNetworkRequest()
         networkCallback = callback
-        connectivity.requestNetwork(request, callback, 90_000)
-        return withTimeout(95_000) { ready.await() }
+        connectivity.requestNetwork(request, callback, 35_000)
+        return withTimeoutOrNull(36_000) { ready.await() } ?: run { releaseNetworkRequest(); null }
+    }
+    /** A Wi-Fi network already carrying a 192.168.42.x address (the camera AP subnet). */
+    private fun cameraSubnetNetwork(): Network? = connectivity.allNetworks.firstOrNull { network ->
+        connectivity.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
+            connectivity.getLinkProperties(network)?.linkAddresses?.any { it.address.hostAddress?.startsWith("192.168.42.") == true } == true
+    }
+    /** A network we did not request still ends the live session when it goes away. */
+    private fun watchCameraNetwork(network: Network): Network {
+        releaseNetworkRequest()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onLost(lost: Network) { if (lost == network) tcp?.fail(IllegalStateException("Camera Wi-Fi disconnected")) }
+        }
+        networkCallback = callback
+        connectivity.registerNetworkCallback(NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), callback)
+        return network
+    }
+    private fun releaseNetworkRequest() {
+        networkCallback?.let { runCatching { connectivity.unregisterNetworkCallback(it) } }; networkCallback = null
     }
     private fun cleanup() {
         gatt?.close(); gatt = null
         runCatching { socket?.close() }; socket = null
         if (boundNetwork) { connectivity.bindProcessToNetwork(null); boundNetwork = false }
-        networkCallback?.let { runCatching { connectivity.unregisterNetworkCallback(it) } }; networkCallback = null
+        releaseNetworkRequest()
         _joinedSSID.value = null
     }
     override fun disconnect() { stopScan(); connectJob?.cancel(); runCatching { socket?.close() }; _phase.value = ConnectionPhase.IDLE; _failure.value = null }

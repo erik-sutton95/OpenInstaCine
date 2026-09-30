@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.TimeoutCancellationException
@@ -386,11 +387,12 @@ class PocketCameraSession(
                     }
                     ConnectionPhase.FAILED -> {
                         resetFrameClock(); stopGimbalAngle()
-                        if (holdsMonitor) _recoveryState.value = SessionRecoveryUi.WaitingForOperator(1)
+                        if (holdsMonitor) beginSessionRecovery()
                     }
                     ConnectionPhase.IDLE -> {
                         resetFrameClock(); stopGimbalAngle()
                         faceAFArmJob?.cancel(); faceAFArmJob = null; _faceAFArmed.value = false; publishFaceDetectWanted()
+                        recoveryJob?.cancel(); recoveryJob = null
                         holdsMonitor = false; _recoveryState.value = SessionRecoveryUi.Idle
                         pins.clear(); recordStartedAt = null; _controlBusy.value = false
                     }
@@ -455,7 +457,52 @@ class PocketCameraSession(
     fun noteSceneBecameInactive() = backend.sceneActive(false)
     fun noteSceneBecameActive() = backend.sceneActive(true)
     internal fun hasRecoveryPicture(startedAt: Long): Boolean = hasVideoFormat
-    fun retrySessionRecovery() { backend.connected.value?.let { backend.connect(it.id) } }
+    /** iOS `retrySessionRecovery`: the operator starts a fresh bounded run. */
+    fun retrySessionRecovery() {
+        dropGuard.reset()
+        recoveryJob?.cancel(); recoveryJob = null
+        _recoveryState.value = SessionRecoveryUi.Idle
+        beginSessionRecovery()
+    }
+    private val dropGuard = SessionDropStormGuard()
+    private var recoveryJob: Job? = null
+    /**
+     * iOS `beginSessionRecovery` + `runSessionRecoveryAttempts`: a live drop keeps the monitor on the last
+     * frame and reconnects through the backend's BLE-first path, retrying at once then 0.5 s to 8 s
+     * jittered, at most 8 attempts within 180 s; then the Recovery card waits for the operator.
+     */
+    private fun beginSessionRecovery() {
+        if (recoveryJob?.isActive == true) return
+        val state = _recoveryState.value
+        if (state is SessionRecoveryUi.WaitingForOperator || state is SessionRecoveryUi.PausedAfterDrops) return
+        val id = backend.connected.value?.id ?: return
+        if (dropGuard.noteDrop(SystemClock.elapsedRealtime())) {
+            _recoveryState.value = SessionRecoveryUi.PausedAfterDrops(dropGuard.dropsInWindow)
+            return
+        }
+        Log.i("OpenInstaCine", "session: drop, bounded recovery")
+        recoveryJob = scope.launch {
+            val policy = SessionRecoveryPolicy.monitor
+            var failures = 0
+            val ended = kotlinx.coroutines.withTimeoutOrNull(SessionRecoveryPolicy.AUTOMATIC_RECOVERY_BUDGET_MS) {
+                while (true) {
+                    val next = policy.state(failures)
+                    _recoveryState.value = next
+                    if (next !is SessionRecoveryUi.Retrying) break
+                    backend.connect(id)
+                    kotlinx.coroutines.withTimeoutOrNull(2_000) { backend.phase.first { it != ConnectionPhase.FAILED } }
+                    val outcome = backend.phase.first { it == ConnectionPhase.LIVE || it == ConnectionPhase.FAILED || it == ConnectionPhase.IDLE }
+                    if (outcome != ConnectionPhase.FAILED) { Log.i("OpenInstaCine", "session: recovered after $failures failed attempt(s)"); break }
+                    failures += 1
+                    val decision = policy.decision(failures, Math.random())
+                    if (decision !is SessionRecoveryDecision.Retry) { _recoveryState.value = policy.state(failures); break }
+                    delay(decision.afterMs)
+                }
+            }
+            // Budget spent: the attempt in flight may still land (LIVE clears the card); otherwise the operator decides.
+            if (ended == null) _recoveryState.value = SessionRecoveryUi.WaitingForOperator(failures + 1)
+        }
+    }
     fun abandonRecoveryToMenu() = disconnect()
 
     // Status mapping (Luna readout to the shared CameraStatus), iOS `applyDeviceStatus`/`applySettings`/`applyCapture`.
