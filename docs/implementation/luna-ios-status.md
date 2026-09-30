@@ -18,9 +18,9 @@ Parity values:
 
 | Feature | Parity with OpenPocketCine | Luna implementation (where) |
 | --- | --- | --- |
-| Connect / pairing | Luna-adapted | BLE scan, owner approval on the camera, encrypted Wi-Fi credential read, then camera AP join and TCP 6666. Bluetooth first whenever the camera advertises (it wakes the AP); saved Wi-Fi is the fallback. Join retries for 60 s, alternating persistent and join-once configs, and continues as soon as the phone is on 192.168.42.x (`LunaCameraBackend.swift`). Camera named "Luna Ultra XXXXXX" (`LunaCameraNames`). Android: BLE handshake and Wi-Fi credential read on every connect (`WifiNetworkSpecifier` join, 90 s), no saved Wi-Fi fallback or 60 s join retry |
+| Connect / pairing | Luna-adapted | BLE scan, owner approval on the camera, encrypted Wi-Fi credential read, then camera AP join and TCP 6666. Bluetooth first whenever the camera advertises (it wakes the AP); saved Wi-Fi is the fallback. Join retries for 60 s, alternating persistent and join-once configs, and continues as soon as the phone is on 192.168.42.x (`LunaCameraBackend.swift`). Camera named "Luna Ultra XXXXXX" (`LunaCameraNames`). Android: same order (BLE when the camera advertised this run, else saved Wi-Fi from the Keystore-sealed `CameraWifiCredentialStore` for 20 s, then BLE); `WifiNetworkSpecifier` join retried in 35 s attempts for 120 s after the BLE handoff, alternating a plain and a hidden-SSID specifier, and adopting any Wi-Fi network already on 192.168.42.x. Phone-verified 2026-09-30 (Bluetooth off: live over saved Wi-Fi in ~8 s) |
 | Live view | Luna-adapted | 1280x720 HEVC, 25 fps, 2 s keyframe interval, UCD2 subtype 0x20 over TCP. I-Log preview treated as flat log by default (`OperatorPrefs.lunaFlatPreview`, `previewColorMode`). Android: same stream, no flat-preview preference |
-| ISO | Luna-adapted | Auto plus 100, 160, 200, 400, 800, 1600, 3200, 6400 (`LunaShellMapping.isoValues`). No auto ISO ceiling or native-ISO hop (`supportsIsoLimit` false): the Auto tab shows a read-only Auto stop, holding the tile in Auto offers the manual ISO drum. Android: the ISO sheet still shows the DJI "Auto Native ISO" toggle |
+| ISO | Luna-adapted | Auto plus 100, 160, 200, 400, 800, 1600, 3200, 6400 (`LunaShellMapping.isoValues`). No auto ISO ceiling or native-ISO hop (`supportsIsoLimit` false): the Auto tab shows a read-only Auto stop, holding the tile in Auto offers the manual ISO drum. The DJI "Auto native ISO" toggle is hidden on both platforms by a capability, not a brand switch: iOS `supportsNativeIsoHop` false (overlay hunk on `CaptureControlSheets.swift`), Android `CameraCapability.NATIVE_ISO_HOP` absent |
 | Shutter | Same | 1/8000 to 1/5 (`shutterDenoms`); manual exposure sends program, ISO and shutter in one message |
 | White balance | Luna-adapted | Auto or kelvin 2000 to 10000; no tint (sent as 0). Camera applies kelvin 3.5 to 3.9 s after the SET, pinned for 5 s |
 | EV | Same | Exposure bias in thirds |
@@ -35,7 +35,7 @@ Parity values:
 | Gimbal Level (double tap) | Luna-adapted | SET_ANGLE to GET pitch minus IMU gravity pitch, yaw kept; one refine pass. Lands within 0.4° of world level. Hardware-verified 2026-09-29. Android: same, pitch from the IMU stream (0x30, `LunaImu`); phone-verified 2026-09-30 |
 | Programmed moves (A/B/C) | Luna-adapted | Waypoints from GET_ANGLE; the session interpolates legs (shell curve with smoothness) and streams SET_ANGLE at 30 Hz; countdown, loop, pause, stop. Zoom changes between points are refused. Hardware-verified 2026-09-29. Android: same (`LunaGimbalAim`, 100 ms GET_ANGLE poll); phone-verified 2026-09-30 |
 | Tap focus | Luna-adapted | ROI 0.15 x 0.27 of the preview centred on the tap (official app geometry). Long-press the focus box to lock it; the focus key recentres it. Android: same, phone-verified 2026-09-30 |
-| Deep Track | Luna-adapted | Drag a box, tap a face box, or double-tap the feed (a 0.2-wide box, square on the sensor, centred on the tap) opens Luna tracking (cmd 237); cancel supported. Double-tap hardware-verified 2026-09-30. Android: drag and double-tap, phone-verified 2026-09-30; no face boxes, and the 8315 cancel notice and no-lock timeout are not ported |
+| Deep Track | Luna-adapted | Drag a box, tap a face box, or double-tap the feed (a 0.2-wide box, square on the sensor, centred on the tap) opens Luna tracking (cmd 237); cancel supported. Double-tap hardware-verified 2026-09-30. Notice 8315 locks or ends tracking (cancelled on the camera); no no-lock timeout since `8d8a9eb`. Android: drag, double-tap (0.35 s window, as iOS) and face-box tap (on-phone face detection while AF-C), 8315 handled (`LunaTrackBoxes.notice`); double-tap phone-verified 2026-09-30, face-box tap not yet on hardware (no face in frame) |
 | Record + timer | Luna-adapted | Start/stop and photo; lamp waits for camera capture status. REC timer is elapsed time from capture status (no timecode) |
 | Lock | Same | Interface lock blocks every control |
 | DISP clean view | Same | DISP 1/2, clean mode, chrome editor |
@@ -60,7 +60,7 @@ Parity values:
 | Download | Same | Original over HTTP into the per-camera cache |
 | Delete | Same | Luna delete command; removes the MP4 and its LRV |
 | Favorites | Luna-adapted | Stored on the phone; Luna has no favorite write |
-| Disconnect / reconnect | Luna-adapted | Reconnect uses the BLE-first path above. Android: no automatic reconnect; a drop shows the Retry card at once, and the app retries on return to the foreground |
+| Disconnect / reconnect | Luna-adapted | Reconnect uses the BLE-first path above. Android: a live drop runs the shared bounded recovery (`SessionRecoveryPolicy.monitor`, 8 attempts, 180 s, drop-storm pause) behind the Recovery card through the same BLE-first path; phone-verified 2026-09-30 (phone Wi-Fi off and on: back to live in ~30 s without a tap) |
 | Recovery card | Same | Shared bounded session recovery after a drop |
 | Audio (setting, meters) | Hidden-not-supported | `supportsAudio` false: AUDIO tile, live AUDIO assist and meter overlay hidden (playback audio meters stay). fw 1.1.15 has no phone-protocol audio mode GET or SET and no levels (probed 2026-09-29, verification doc Audio section); Original Audio / Wind Reduction / Voice Enhancement are camera-screen only. `LunaFileMetadata.audioMode` decodes the mode a clip was recorded with (field 61), not yet shown in the UI. Android: same gate, phone-verified 2026-09-30 |
 | Timecode | Luna-adapted | Time-of-day timecode from the camera clock: the app sets the clock at live start (options 12/13/175, then cmd 214 to the millisecond) and times each live frame from its frame-clock stamp. Status bar, portrait bar and Apple Watch. No protocol field carries timecode ([luna-timecode.md](../research/luna-timecode.md)). Hardware-verified 2026-09-30. Android: same clock sync and frame stamps, status bar only; phone-verified 2026-09-30 |
@@ -261,22 +261,22 @@ live view. What the Android app does now, beyond the sync below:
   programmed A/B/C moves on SET_ANGLE (`LunaGimbalAim`, GET_ANGLE poll every 100 ms), with the
   shared Motion Control drawer.
 - Portrait link pill on the leading side, beside storage, as on iOS.
+- Reconnect as iOS: BLE first when advertising, saved Wi-Fi fallback, join retry, and the bounded
+  session recovery (Recovery card) after a drop.
+- Face boxes while AF-C; tapping one starts Deep Track on it. Notice 8315 locks or ends Deep
+  Track; 8201 re-reads capture state (REC clears) and notes a camera-side stop; an open album
+  re-lists after a photo, a stop or 8201.
+- The DJI "Auto Native ISO" toggle is gone (`CameraCapability.NATIVE_ISO_HOP` absent).
 - LUT Auto picks the official I-Log to Rec.709 cube in I-Log, live and in playback.
 
 Still missing on Android versus iOS:
 
-- Connect: no saved Wi-Fi fallback or 60 s join retry (BLE on every connect), and no automatic
-  reconnect after a drop (the Retry card shows at once).
 - Flat I-Log preview preference (`lunaFlatPreview`, `previewColorMode`).
-- Deep Track from a tapped face box (no face detection), the 8315 cancel notice and the no-lock
-  timeout.
 - Head tracking.
 - Gimbal: limit pulses (8302 / option 92, `gimbalLimitPulse` stays 0); Level uses the IMU pitch
   only (no fallback), and the gyro-drift learning pause is approximated as 500 ms after the last
   gimbal command.
-- The capture-stopped note (8201), re-listing media after a capture while the album is open,
-  and a decoder flush on album exit.
-- The ISO sheet still shows the DJI "Auto Native ISO" toggle.
+- A decoder flush on album exit.
 
 ### Upstream 9e306c91 sync (2026-09-29)
 
