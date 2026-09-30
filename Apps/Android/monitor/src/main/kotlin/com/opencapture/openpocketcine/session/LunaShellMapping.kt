@@ -333,4 +333,11 @@ data class LunaTrackBoxes(
             CameraTrackState.IDLE -> if (sawLock) LunaTrackBoxes() else null
         }
     }
+
+    /** iOS `applyTrackingState` for notice 8315: locked promotes the search box; ended (the camera cancelled) clears. */
+    fun notice(locked: Boolean): LunaTrackBoxes? = when {
+        locked -> search?.let { LunaTrackBoxes(subject = TrackingBox.subject(it), locked = true, sawLock = true) } ?: copy(locked = true, sawLock = true)
+        sawLock || search != null -> LunaTrackBoxes()
+        else -> null
+    }
 }

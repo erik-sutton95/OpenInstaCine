@@ -53,6 +53,8 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
     override val frames: Flow<EncodedVideoFrame> = video.asSharedFlow()
     private val trackFlow = MutableSharedFlow<CameraTrackFrame>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     override val trackFrames: Flow<CameraTrackFrame> = trackFlow.asSharedFlow()
+    private val noticeFlow = MutableSharedFlow<CameraNotice>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    override val notices: Flow<CameraNotice> = noticeFlow.asSharedFlow()
     /** Receive thread only. The camera repeats the frame with every video frame; only changes go out. */
     private var lastTrack: LunaTrackFrame? = null
     private var connectJob: Job? = null
@@ -307,6 +309,13 @@ class LunaBackend(context: Context) : CameraBackend, CameraControls, CameraMedia
     private suspend fun handle(note: LunaNotification) {
         when (note) {
             is LunaNotification.Capture -> applyCapture(note.status)
+            // iOS `applyTrackingState`: 1 / 2 locked, anything else ended (the camera cancelled it).
+            is LunaNotification.Tracking -> noticeFlow.tryEmit(CameraNotice.Tracking(note.state == 1L || note.state == 2L))
+            // Capture ended on the camera: re-read the capture state now so REC clears without waiting for the poll.
+            is LunaNotification.CaptureStopped -> {
+                noticeFlow.tryEmit(CameraNotice.CaptureStopped(note.errorCode))
+                call(LunaControl.captureStatus)?.let { runCatching { LunaCaptureStatus.fromResponse(it) }.getOrNull() }?.let(::applyCapture)
+            }
             is LunaNotification.PhotographyChanged -> applySettings(note.settings)
             // The notice carries a partial view; re-read the whole status.
             is LunaNotification.SubMode, is LunaNotification.Storage, is LunaNotification.Battery -> {

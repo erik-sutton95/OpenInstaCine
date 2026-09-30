@@ -88,6 +88,8 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
         controller.beginBrowse()
         onDispose { controller.release() }
     }
+    // iOS `refreshMediaAfterCapture`: a capture while the album is open re-lists the camera.
+    androidx.compose.runtime.LaunchedEffect(controller) { model.session.mediaCaptured.collect { controller.refreshAfterCapture() } }
 
     var category by remember { mutableStateOf(MediaLibraryTab.ALL) }
     var layout by remember { mutableStateOf(MediaBrowserLayout.GRID) }

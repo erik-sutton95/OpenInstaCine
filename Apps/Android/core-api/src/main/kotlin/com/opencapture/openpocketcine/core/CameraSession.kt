@@ -69,6 +69,8 @@ public interface CameraControls {
  public fun requestSettingsRefresh() {}
  /** The camera's own subject tracking, from the live stream; only changes are delivered. */
  public val trackFrames: Flow<CameraTrackFrame> get() = kotlinx.coroutines.flow.emptyFlow()
+ /** Camera-side notices (Luna 8315 Deep Track state, 8201 capture stopped). */
+ public val notices: Flow<CameraNotice> get() = kotlinx.coroutines.flow.emptyFlow()
  /** Absolute head angle in the handle frame (Luna GET_ANGLE), or null when unavailable. */
  public suspend fun gimbalAngle(): CameraGimbalAngle? = null
  /** Aim the head at an absolute handle-frame angle (Luna SET_ANGLE); the latest request wins. */
@@ -81,6 +83,12 @@ public interface CameraControls {
 public data class CameraGimbalAngle(public val pitch: Double, public val yaw: Double)
 
 public enum class CameraTrackState { TRACKING, LOST, IDLE }
+public sealed class CameraNotice {
+    /** The camera's Deep Track state notice: active (locked) or ended, e.g. cancelled on the camera. */
+    public data class Tracking(public val active: Boolean) : CameraNotice()
+    /** Capture stopped on the camera; a non-zero [errorCode] is a camera-side stop. */
+    public data class CaptureStopped(public val errorCode: Long) : CameraNotice()
+}
 /** Tracking state and the camera's box, top-left fractions of the preview. */
 public data class CameraTrackFrame(public val state: CameraTrackState, public val x: Double, public val y: Double, public val width: Double, public val height: Double)
 

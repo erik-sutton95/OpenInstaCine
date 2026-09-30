@@ -75,6 +75,7 @@ import java.util.Locale
 import com.opencapture.openpocketcine.MonitorConfiguration
 import com.opencapture.openpocketcine.core.CameraBackend
 import com.opencapture.openpocketcine.core.CameraCapability
+import com.opencapture.openpocketcine.core.CameraNotice
 import com.opencapture.openpocketcine.core.CameraControls
 import com.opencapture.openpocketcine.core.CameraGimbalAngle
 import com.opencapture.openpocketcine.core.CameraIdentity
@@ -294,15 +295,43 @@ class PocketCameraSession(
     private var zoomPinchBase = 1.0
     private var zoomTarget: Double? = null
     val zoomOptimistic: Double? get() = zoomTarget
-    val faceAFArmed: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
-    val wantsFaceDetect: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
+    // Face boxes (iOS `applyDetectedFaces`): on-phone detection while AF-C, dimmed boxes the operator taps to Deep Track.
+    private val faceDetector = LiveFaceDetector()
+    private val _faceAFArmed = MutableStateFlow(false)
+    val faceAFArmed: StateFlow<Boolean> = _faceAFArmed.asStateFlow()
+    private val _wantsFaceDetect = MutableStateFlow(false)
+    val wantsFaceDetect: StateFlow<Boolean> = _wantsFaceDetect.asStateFlow()
+    private var faceAFArmJob: Job? = null
+    private var faceTickJob: Job? = null
+    private var faceBox: TrackingBox? = null
+    private var sceneFaces: List<TrackingBox> = emptyList()
+    private var lastFaceHitAt: Long? = null
+    private var lastFaceAt: Long? = null
+    private var lastTapFocusAt: Long? = null
+    /** A capture finished (photo, stop, or stopped on the camera): an open album re-lists (iOS `refreshMediaAfterCapture`). */
+    private val _mediaCaptured = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val mediaCaptured: kotlinx.coroutines.flow.SharedFlow<Unit> = _mediaCaptured
     private val _zoomReadout = MutableStateFlow(1.0)
     val zoomReadout: StateFlow<Double> = _zoomReadout.asStateFlow()
     val zoomDialReadout: StateFlow<Double> = _zoomReadout.asStateFlow()
     private val _zoomPinching = MutableStateFlow(false)
     val zoomPinching: StateFlow<Boolean> = _zoomPinching.asStateFlow()
     private var trackBoxes = LunaTrackBoxes()
-    private fun showTrack(next: LunaTrackBoxes) { trackBoxes = next; _trackingHud.value = next.hud }
+    private fun showTrack(next: LunaTrackBoxes) { trackBoxes = next; refreshTrackingHud() }
+    /** Deep Track boxes plus the AF-C face box and the dimmed scene faces (upstream `refreshTrackingHud`). */
+    private fun refreshTrackingHud() {
+        val track = trackBoxes
+        val sinceTap = lastTapFocusAt?.let { (SystemClock.elapsedRealtime() - it) / 1000.0 }
+        val overlay = if (FaceAFPolicy.shouldHoldTapBox(sinceTap)) track.hud.overlay.takeUnless { it is FocusOverlay.Face } ?: FocusOverlay.Focus
+            else FaceAFPolicy.resolve(_status.value.focusMode, track.locked, track.search, track.subject, faceBox)
+        val hiding = (overlay as? FocusOverlay.Face)?.box
+        val occluder = when (overlay) {
+            is FocusOverlay.Subject -> overlay.box
+            is FocusOverlay.Search -> overlay.box
+            else -> track.subject
+        }
+        _trackingHud.value = TrackingHud(overlay, sceneFaces, SceneFacePolicy.dimmed(sceneFaces, hiding, occluder), isTracking = track.active)
+    }
     private val _trackingHud = MutableStateFlow(TrackingHud())
     val trackingHud: StateFlow<TrackingHud> = _trackingHud.asStateFlow()
     val isReconnecting: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
@@ -338,6 +367,7 @@ class PocketCameraSession(
         controls?.let { link ->
             scope.launch { link.readout.collect(::applyReadout) }
             scope.launch { link.trackFrames.collect { frame -> if (acceptsTrackFrame(frame)) trackBoxes.apply(frame)?.let(::showTrack) } }
+            scope.launch { link.notices.collect(::applyNotice) }
             // Re-apply every second: the REC timer ticks and settled pins fall back to the camera's value.
             scope.launch { while (isActive) { delay(1_000); applyReadout(lastReadout) } }
         }
@@ -360,6 +390,7 @@ class PocketCameraSession(
                     }
                     ConnectionPhase.IDLE -> {
                         resetFrameClock(); stopGimbalAngle()
+                        faceAFArmJob?.cancel(); faceAFArmJob = null; _faceAFArmed.value = false; publishFaceDetectWanted()
                         holdsMonitor = false; _recoveryState.value = SessionRecoveryUi.Idle
                         pins.clear(); recordStartedAt = null; _controlBusy.value = false
                     }
@@ -453,6 +484,7 @@ class PocketCameraSession(
         // The frame clock owns the timecode (set from the decode thread).
         _status.update { next.copy(timecode = it.timecode) }
         if (pins.recording == null && _controlBusy.value && !pins.photoInFlight) _controlBusy.value = false
+        publishFaceDetectWanted()
     }
 
     // Timecode, iOS `noteFrameClock`. Frame stamps run on a camera clock that does not follow its
@@ -527,7 +559,7 @@ class PocketCameraSession(
             onFail = { pins.recording = null; _controlBusy.value = false },
             onSuccess = {
                 if (starting) recordStartedAt = SystemClock.elapsedRealtime()
-                else recordStartedAt = null
+                else { recordStartedAt = null; _mediaCaptured.tryEmit(Unit) }
                 _status.value = _status.value.copy(isRecording = starting, recordElapsedSec = if (starting) _status.value.recordElapsedSec else 0)
                 _controlBusy.value = false
             },
@@ -544,7 +576,7 @@ class PocketCameraSession(
         sendControl(
             "Photo", refresh = false,
             onFail = { pins.photoInFlight = false; _controlBusy.value = false },
-            onSuccess = { pins.photoInFlight = false; _controlBusy.value = false },
+            onSuccess = { pins.photoInFlight = false; _controlBusy.value = false; _mediaCaptured.tryEmit(Unit) },
         ) { takePhoto() }
     }
 
@@ -905,21 +937,45 @@ class PocketCameraSession(
     }
 
     // Focus and Deep Track.
-    private val feedDoubleTap = FeedDoubleTapTrack()
+    /** Last feed tap (elapsed ms, x, y) for the Deep Track double tap. */
+    private var lastFeedTap: Triple<Long, Double, Double>? = null
     /** The operator's latest Deep Track box, until the camera reports it (core `TrackingStartPolicy`). */
     private var trackingRequest: TrackingBox? = null
     private var trackingRequestAt = 0L
 
-    /** Feed tap focuses; a second tap on the same spot starts Deep Track there (upstream double tap). */
+    /**
+     * iOS `handleFeedTap`: a second tap on the same spot within 0.35 s (`GimbalStick.doubleTapWindow`)
+     * Deep Tracks whatever is there; a tap inside a face box Deep Tracks that face; anything else focuses.
+     */
     fun handleFeedTap(x: Float, y: Float) {
         val nx = x.coerceIn(0f, 1f).toDouble()
         val ny = y.coerceIn(0f, 1f).toDouble()
         if (can(CameraCapability.TRACKING)) {
-            if (feedDoubleTap.register(nx, ny, SystemClock.elapsedRealtime() / 1000.0) != null) {
+            val now = SystemClock.elapsedRealtime()
+            val last = lastFeedTap
+            if (last != null && now - last.first <= DOUBLE_TAP_WINDOW_MS && hypot(nx - last.second, ny - last.third) <= 0.06) {
+                lastFeedTap = null
                 return startTracking(LunaShellMapping.doubleTapTrackBox(nx, ny))
             }
+            lastFeedTap = Triple(now, nx, ny)
+            val hud = _trackingHud.value
+            FaceTrackTap.boxIfTapped(hud.overlay, nx, ny, hud.dimmedFaces)?.let { return startTracking(it) }
         }
         tapFocus(x, y)
+    }
+
+    /** iOS `applyNotification`: 8315 Deep Track state (the camera ends tracking) and 8201 capture stopped. */
+    private fun applyNotice(notice: CameraNotice) {
+        when (notice) {
+            is CameraNotice.Tracking -> trackBoxes.notice(notice.active)?.let { next ->
+                if (!next.active) trackingRequest = null
+                showTrack(next)
+            }
+            is CameraNotice.CaptureStopped -> {
+                if (notice.errorCode != 0L) presentControlNote("Recording stopped by the camera (code ${notice.errorCode}).")
+                _mediaCaptured.tryEmit(Unit)
+            }
+        }
     }
 
     /** Drop the camera's previous subject until it reports a box near the operator's new one. */
@@ -936,6 +992,9 @@ class PocketCameraSession(
         if (!supportsTapFocus) return
         // iOS `markFocus`: a tap focus ends Deep Track.
         cancelTracking()
+        lastTapFocusAt = SystemClock.elapsedRealtime()
+        faceBox = null
+        refreshTrackingHud()
         _focusPoint.value = x to y
         // The backend centres its official ROI on the tap (iOS: 0.1545 x 0.2727).
         scope.launch { if (controls?.tapFocus(x.toDouble(), y.toDouble()) != true) presentControlNote("Focus did not reach the camera.") }
@@ -944,6 +1003,8 @@ class PocketCameraSession(
         startTracking(TrackingBox((x - width / 2).toDouble(), (y - height / 2).toDouble(), width.toDouble(), height.toDouble()))
     fun startTracking(box: TrackingBox) {
         if (!can(CameraCapability.TRACKING)) return unavailable("Deep Track")
+        if (box.isTooSmall) return presentControlNote("Frame Too Small")
+        faceBox = null
         showTrack(LunaTrackBoxes(search = box))
         trackingRequest = box
         trackingRequestAt = SystemClock.elapsedRealtime()
@@ -990,10 +1051,67 @@ class PocketCameraSession(
     fun handleGamepadTrackToggle() = if (isTrackingActive) cancelTracking() else startTracking(0.5f, 0.5f)
     /** iOS `resetFocusPoint`: `markFocus(0.5, 0.5)`, which also ends Deep Track. */
     fun resetFocusPoint() = tapFocus(0.5f, 0.5f)
-    fun applyDetectedFaces(faces: List<TrackingBox>) = Unit
-    fun wantsFaceFrame(): Boolean = false
-    fun considerFaceFrame(frame: LiveFaceDetector.Frame) = frame.release()
-    fun noteLiveFrame() = Unit
+    fun applyDetectedFaces(faces: List<TrackingBox>) {
+        if (!_wantsFaceDetect.value) return clearFaceAF()
+        val now = SystemClock.elapsedRealtime()
+        val dt = lastFaceAt?.let { (now - it) / 1000.0 } ?: 0.04
+        lastFaceAt = now
+        val moving = stickJob?.isActive == true
+        sceneFaces = faces.take(SceneFacePolicy.MAX_FACES)
+        if (isTrackingActive || !FaceAFPolicy.wantsFaceAF(_status.value.focusMode, _faceAFArmed.value)) {
+            faceBox = null
+            lastFaceHitAt = null
+            return refreshTrackingHud()
+        }
+        val sinceHit = FaceTrackHold.secondsSinceHit(lastFaceHitAt, now)
+        val hit = sceneFaces.filter { FaceTrackHold.shouldAccept(detected = it, last = faceBox, secondsSinceHit = sinceHit, sceneMoving = moving) }.maxByOrNull { it.area }
+        if (hit != null) {
+            lastFaceHitAt = now
+            faceBox = FaceTrackHold.follow(faceBox, hit, dt.coerceIn(1.0 / 120.0, 0.08), moving)
+            refreshTrackingHud()
+        } else {
+            tickFaceHold(now)
+        }
+    }
+    /** iOS `tickFaceBoxes`: drop the painted faces after the miss timeout. */
+    private fun tickFaceHold(now: Long = SystemClock.elapsedRealtime()) {
+        if (!FaceTrackHold.shouldDrop(FaceTrackHold.secondsSinceHit(lastFaceHitAt, now), stickJob?.isActive == true)) return
+        if (faceBox == null && sceneFaces.isEmpty()) return
+        faceBox = null
+        sceneFaces = emptyList()
+        lastFaceHitAt = null
+        refreshTrackingHud()
+    }
+    fun wantsFaceFrame(): Boolean = faceDetector.wantsFrame()
+    fun considerFaceFrame(frame: LiveFaceDetector.Frame) {
+        if (!_wantsFaceDetect.value) { frame.release(); return clearFaceAF() }
+        faceDetector.consider(frame) { hits -> applyDetectedFaces(hits) }
+    }
+    /** iOS `armFaceAFAfterFirstPicture`. */
+    fun noteLiveFrame() {
+        if (_faceAFArmed.value || faceAFArmJob != null) return
+        faceAFArmJob = scope.launch {
+            while (isActive && !_faceAFArmed.value) {
+                delay(100)
+                if (decoder.lastPresentedAt != null) { _faceAFArmed.value = true; publishFaceDetectWanted() }
+            }
+            faceAFArmJob = null
+        }
+    }
+    /** iOS `wantsFaceDetect`: AF-C once the picture is up. ponytail: no face-priority exposure term; the Luna meters faces itself (METER tile). */
+    private fun publishFaceDetectWanted() {
+        val next = FaceAFPolicy.wantsFaceDetect(_status.value.focusMode, _faceAFArmed.value, facePriority = false, expoAuto = false)
+        if (_wantsFaceDetect.value != next) _wantsFaceDetect.value = next
+        if (!next) { faceTickJob?.cancel(); faceTickJob = null; if (faceBox != null || sceneFaces.isNotEmpty()) clearFaceAF(); return }
+        if (faceTickJob == null) faceTickJob = scope.launch { while (isActive) { delay(50); tickFaceHold() } }
+    }
+    private fun clearFaceAF() {
+        faceBox = null
+        sceneFaces = emptyList()
+        lastFaceAt = null
+        lastFaceHitAt = null
+        refreshTrackingHud()
+    }
 
     // Camera media: MediaLibraryController drives [media]; these hold the browse state.
     private var mediaOwner = 0L
@@ -1106,6 +1224,8 @@ class PocketCameraSession(
         val LUNA_ZOOM_CHIPS = listOf(1.0, 2.0, 3.0, 6.0, 15.0)
         /** Capture to phone delay of a live frame at best (official-app captures: 90 to 200 ms after its stamp). */
         const val FRAME_LATENCY_MS = 90L
+        /** iOS `GimbalStick.doubleTapWindow` (0.35 s) for the feed double tap to Deep Track. */
+        const val DOUBLE_TAP_WINDOW_MS = 350L
     }
 }
 

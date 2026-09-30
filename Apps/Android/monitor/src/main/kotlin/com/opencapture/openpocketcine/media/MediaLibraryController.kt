@@ -154,6 +154,9 @@ class MediaLibraryController(
         scope.coroutineContext[Job]?.cancel()
     }
 
+    /** Re-list after a capture, only while browsing the camera store and not already listing. */
+    fun refreshAfterCapture() { if (browsing && store != null && !fetchInProgress) refresh() }
+
     fun refresh() {
         loadFavorites()
         if (!isLive) {

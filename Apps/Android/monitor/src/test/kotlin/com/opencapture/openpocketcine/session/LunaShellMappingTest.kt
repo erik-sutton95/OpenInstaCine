@@ -257,4 +257,14 @@ class LunaShellMappingTest {
         assertFalse(boxes.hud.isTracking, "idle after a lock ends tracking")
         assertEquals(FocusOverlay.Focus, boxes.hud.overlay)
     }
+
+    @Test fun deepTrackNoticeLocksOrEndsTracking() {
+        assertNull(LunaTrackBoxes().notice(false), "an end notice without tracking changes nothing")
+        val search = LunaTrackBoxes(search = TrackingBox(0.35, 0.3, 0.2, 0.2))
+        val locked = assertNotNull(search.notice(true))
+        assertIs<FocusOverlay.Subject>(locked.hud.overlay, "a lock notice promotes the search box")
+        assertTrue(locked.sawLock)
+        assertFalse(assertNotNull(locked.notice(false)).active, "8315 cancelled on the camera clears tracking")
+        assertFalse(assertNotNull(search.notice(false)).active, "an end before the lock drops the search box")
+    }
 }
