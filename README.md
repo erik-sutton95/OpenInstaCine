@@ -1,147 +1,176 @@
+<div align="center">
+
+<img src="ios/OpenInstaCine/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" alt="OpenInstaCine app icon" width="96" height="96">
+
 # OpenInstaCine
 
-Native iOS field monitor for the **Insta360 Luna Ultra**. The app is a 1:1 copy
-of the sister app OpenPocketCine (DJI Osmo monitor, sibling checkout
-`../OpenPocketCine`, synced
-from commit `c1e8f94`, see `docs/implementation/openpocketcine-sync-commit.txt`)
-with the same screens and UX, a yellow `#FFCF00` accent, and a Luna backend in
-place of the DJI link. Supported camera firmware: **Luna Ultra v1.1.15**
-([hardware verification](docs/research/luna-fw-1.1.15-verification.md)).
+**The open field monitor for the Insta360 Luna Ultra.**<br>
+Pro scopes, exposure assists, camera and gimbal control, and playback on your phone.
+Free and open source.
 
-Feature-by-feature status and parity with OpenPocketCine:
-[docs/implementation/luna-ios-status.md](docs/implementation/luna-ios-status.md).
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE) [![Firmware](https://img.shields.io/badge/Luna_Ultra_firmware-1.1.15-FFCF00)](docs/research/luna-fw-1.1.15-verification.md) [![Sister app](https://img.shields.io/badge/sister_app-OpenPocketCine-black)](https://openpocketcine.app/)
 
-OpenInstaCine is an independent project, unaffiliated with Insta360.
+[Feature status](docs/implementation/luna-ios-status.md) · [Develop](docs/DEVELOPMENT.md) · [Report a bug](https://github.com/erik-sutton95/OpenInstaCine/issues/new)
 
-## Layout
+</div>
 
-| Path | What |
-| --- | --- |
-| `ios/` | XcodeGen project (`ios/project.yml`), app `ios/OpenInstaCine`, tests, watch app |
-| `Sources/` | Shared OpenPocketCine core (`OpenPocketViewCore`, `MonitorContracts`, `MonitorUI`, ...) with small Luna hooks (I-Log color mode, Luna resolutions, `.lrv` proxy) |
-| `Adapters/Insta360Protocol` | Portable Luna codec: UCD2 framing, protobuf, status, settings, media and control messages |
-| `Adapters/Insta360Apple` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport |
-| `tools/LunaProbe` | Swift CLI that drives the camera from a Mac on its Wi-Fi (used for the fw 1.1.15 verification) |
-| `tools/` | Python lab tools: BLE capture, Mac preview, DEBUG remote client |
-| `Apps/Android` | Android app from the pre-rebase shell, **not yet synced** to the new iOS shell |
+<details>
+<summary><strong>Table of contents</strong></summary>
 
-Luna-specific app code lives in `ios/OpenInstaCine/CameraSession.swift`,
-`CameraSessionControls.swift`, `CameraMedia.swift` (Luna extension),
-`LunaShellMapping.swift`, `LunaThumbnailImage.swift`, `DebugRemote.swift`,
-`OpenInstaCineBrand.swift`, `OsmoCameraPageAdapter.swift` and
-`OsmoMonitorPresentation.swift` (the `Osmo*` names are kept so shared call sites
-bind unchanged). Everything else in `ios/OpenInstaCine` is the shared shell.
-`just sync-openpocketcine` re-copies the shell from the sibling checkout and
-leaves the Luna files alone.
+- [Supported cameras](#supported-cameras)
+- [Features](#features)
+- [Install](#install)
+- [Roadmap](#roadmap)
+- [Free. Open source. Yours](#free-open-source-yours)
+- [For developers](#for-developers)
+  - [Built with](#built-with)
+  - [Architecture](#architecture)
+  - [Build from source](#build-from-source)
+  - [Documentation](#documentation)
+- [Contributing](#contributing)
+- [Support](#support)
+- [Credits](#credits)
+- [License](#license)
 
-## Build and run
+</details>
 
-Needs Xcode 26, XcodeGen and `just`. Run from the repository root.
+## Supported cameras
 
-| Recipe | What it does |
-| --- | --- |
-| `just ios-generate` | `xcodegen generate` in `ios/` |
-| `just ios-build` | Simulator build, no signing, derived data in `.local/DD` |
-| `just ios-run [device]` | Development-signed build, install and launch on a USB iPhone (devicectl id) |
-| `just ios-test` | App unit tests on the first available iPhone simulator |
-| `just core-test` | `swift test` for the shared core and `Adapters/Insta360Protocol` |
-| `just oic-remote ...` | DEBUG remote client (see below) |
-| `just sync-openpocketcine` | Re-sync the shell from `../OpenPocketCine` |
-| `just luna-official-xc device` | XCUITest driver for the official Insta360 app (lab captures) |
-| `just lab-setup`, `just luna-view` | Python venv and the Mac live-view lab |
-| `just android-build`, `just android-check` | Android APK and checks (old shell) |
+| Camera | Live view | Camera control | Gimbal | Notes |
+| --- | :---: | :---: | :---: | --- |
+| **Insta360 Luna Ultra** | ✅ | ✅ | ✅ | Firmware 1.1.15. 720p HEVC live feed at 25 fps, I-Log and Dolby Vision, digital zoom to 15×. |
 
-## Simulator live testing rig
+✅ works on iOS. Android is not synced with the iOS app yet.
 
-The Simulator has no Bluetooth or hotspot API but shares the Mac's network. In
-the Simulator build the backend skips BLE and talks straight to a camera on the
-current network (`LunaSessionHub` in `CameraSession.swift`,
-`LunaCameraBackend(useExistingNetwork: true)`).
+> [!WARNING]
+> Camera control is reverse-engineered and can be incomplete. Check that recording starts and
+> stops on the camera body until you trust the link.
 
-1. Join the Mac's `en0` to the camera AP (camera `192.168.42.1`, Mac gets a
-   `192.168.42.x` address). `.local/wake-and-join.sh` wakes the camera Wi-Fi
-   over BLE with the lab identity and joins `en0` using the password in
-   `.local/luna-wifi.json`. Keep internet on another interface.
-2. `just ios-build`, then install the DEBUG app in a booted simulator:
-   `xcrun simctl install booted .local/DD/Build/Products/Debug-iphonesimulator/OpenInstaCine.app`
-3. Launch with the already approved client identity (Simulator builds only read
-   `LUNA_IDENTITY`, see `LunaSecureStore.swift`):
+## Features
 
-   ```sh
-   SIMCTL_CHILD_LUNA_IDENTITY="$(python3 -c "import json;print(json.load(open('.local/luna-client-identity.json'))['authorization_id'])")" \
-     xcrun simctl launch --terminate-running-process booted com.opencapture.openinstacine
-   ```
+- **Read the image like a colorist.** Waveform, RGB parade, histogram and vectorscope run live
+  beside the picture you are judging. Drag and resize them anywhere.
+- **Catch exposure and focus before the take.** False color (CineStop and IRE), zebras,
+  Traffic Lights, focus peaking, an EV meter and ND suggestions.
+- **See log as it will grade.** The official Insta360 I-Log to Rec.709 LUT is built in, next to
+  built-in and custom `.cube` looks.
+- **Frame once for every delivery.** Grids, aspect guides and a center crosshair, in landscape
+  and portrait.
+- **Run the camera from the phone.** Record, ISO, shutter, white balance, EV, zoom, FORMAT,
+  color mode, AF-S / AF-C / Product Showcase and face metering. Draw a box or tap a face to
+  start Deep Track.
+- **Fly the gimbal.** On-screen stick or a game controller, gimbal modes and speed, Double-tap
+  Level, Motion Control moves between A, B and C, and AirPods head tracking.
+- **Review before striking the set.** Browse clips and stills on the camera, star the keepers,
+  delete bad takes, and play the `.lrv` proxy back with the same scopes and assists as live view.
 
-   The identity value is private: it lives only in `.local/` (gitignored).
-   Never paste it into commits, docs or logs.
-4. Drive the app with the DEBUG remote: `scan`, then `connectFirst`.
-5. Optional scripted walkthrough with real taps (XCUITest, same Simulator):
+iPhone and iPad are the daily driver. Not on the Luna yet: timecode, live audio control and
+meters (the camera sets audio on its own screen), Multiview, and Wi-Fi or Hotspot setups (the
+Luna only connects over its own network).
 
-   ```sh
-   TEST_RUNNER_OIC_WALKTHROUGH_DIR=$PWD/.local/live-walkthrough/ui \
-   TEST_RUNNER_LUNA_IDENTITY=<identity> \
-   xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCineUIReview \
-     -destination "platform=iOS Simulator,id=<sim>" \
-     -only-testing:OpenInstaCineUITests/LunaLiveWalkthroughTests test
-   ```
+## Install
 
-   Screenshots land in the given folder. `testF_DeleteOwnClip` also needs
-   `TEST_RUNNER_OIC_DELETE_CLIP=<a clip you recorded>`.
+| Platform | How | Notes |
+| --- | --- | --- |
+| **iPhone and iPad** | [Build from source](#build-from-source) | One universal app. No TestFlight yet. |
+| **Android** | Not yet | `Apps/Android` still has the older shell. |
 
-## DEBUG remote
+Pairing and live view need a real camera nearby. The first connection asks you to approve the
+phone on the camera's touchscreen.
 
-DEBUG builds (never Release) run an HTTP listener on TCP 18780
-(`ios/OpenInstaCine/DebugRemote.swift`). In the Simulator it is on localhost;
-on a USB iPhone `tools/oic_remote.py` finds the CoreDevice tunnel itself when
-`OIC_URL` is unset.
+## Roadmap
 
-```sh
-export OIC_URL=http://127.0.0.1:18780
-python3 tools/oic_remote.py state          # JSON: phase, live stats, camera settings, panels, assists
-python3 tools/oic_remote.py log            # recent control log
-python3 tools/oic_remote.py do '{"action":"iso","value":400}'
-python3 tools/oic_remote.py shot out.png   # key window snapshot
-python3 tools/oic_remote.py frame out.jpg  # last decoded live frame
+What works, what is Luna-specific and what is still missing is tracked feature by feature in
+[`docs/implementation/luna-ios-status.md`](docs/implementation/luna-ios-status.md). Next up:
+syncing Android, showing a clip's audio mode, and Color Recovery for the detachable screen.
+
+## Free. Open source. Yours
+
+No subscriptions, no paywalls, no advertising, and no tracking. OpenInstaCine is Apache-2.0
+licensed and is a sister app of [OpenPocketCine](https://openpocketcine.app/): the same monitor,
+screens and UX with a yellow accent and a Luna backend in place of the DJI link. It is built with
+the latest frontier models, so filmmakers and developers can inspect, improve and adapt the tool
+they rely on.
+
+## For developers
+
+### Built with
+
+[![Swift](https://img.shields.io/badge/Swift-F05138?style=flat-square&logo=swift&logoColor=white)](https://www.swift.org/) [![SwiftUI](https://img.shields.io/badge/SwiftUI-0D96F6?style=flat-square&logo=swift&logoColor=white)](https://developer.apple.com/xcode/swiftui/) [![Metal](https://img.shields.io/badge/Metal-555555?style=flat-square&logo=apple&logoColor=white)](https://developer.apple.com/metal/) [![CoreBluetooth](https://img.shields.io/badge/CoreBluetooth-0D96F6?style=flat-square&logo=bluetooth&logoColor=white)](https://developer.apple.com/documentation/corebluetooth)
+
+### Architecture
+
+The shared OpenPocketCine core and iOS shell, with a Luna backend:
+
+| Layer | Path | Purpose |
+| --- | --- | --- |
+| **Shared core** | `Sources/` | OpenPocketCine monitor core (`OpenPocketViewCore`, `MonitorContracts`, `MonitorUI`, ...) with small Luna hooks |
+| **Luna protocol** | `Adapters/Insta360Protocol/` | Portable codec: UCD2 framing, protobuf, status, settings, media and control messages |
+| **Luna Apple adapter** | `Adapters/Insta360Apple/` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport |
+| **iOS app** | `ios/OpenInstaCine/` | The OpenPocketCine shell plus the Luna session (`CameraSession*.swift`, `LunaShellMapping.swift`) |
+| **Tests** | `Tests/`, `Adapters/Insta360Protocol/Tests/`, `ios/OpenInstaCineTests/` | Core, protocol and app tests |
+
+The shell is re-synced from OpenPocketCine with `just sync-openpocketcine`, which leaves the Luna
+files alone. The contract between the two apps is
+[`docs/SHARED-MONITOR-ENGINE.md`](docs/SHARED-MONITOR-ENGINE.md).
+
+### Build from source
+
+Tooling runs through [`just`](https://github.com/casey/just) and needs Xcode 26 and XcodeGen:
+
+```bash
+just                      # list all recipes
+just ios-generate         # generate the Xcode project
+just ios-build            # Simulator build, no signing
+just ios-run [device]     # signed build, install and launch on a USB iPhone
+just ios-test             # app unit tests
+just core-test            # shared core and Luna protocol tests
+just sync-openpocketcine  # re-sync the shell from ../OpenPocketCine
 ```
 
-Actions (`"action"` plus the keys shown; every action takes an optional
-`"pause"` in seconds):
+> [!TIP]
+> The Simulator has no Bluetooth or hotspot API. It can still reach a camera when the Mac joins
+> the camera's Wi-Fi; see the Simulator rig in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
-| Group | Actions |
-| --- | --- |
-| Connection | `scan`, `connectFirst`, `reconnect` (`id` optional), `disconnect`, `pairNew` (`value` bool) |
-| Capture | `record`, `mode` (`value` label, e.g. `"Timelapse"`), `format` (`value` chip label) |
-| Exposure | `iso` (`value` number or `"auto"`), `shutter` (`value` denominator), `expo` (`"auto"`/`"manual"`), `ev` (`value` stops), `wb` (`value` kelvin or `"auto"`), `color` (`value` label) |
-| Zoom | `zoom` (`value`), `pinch` (`value`, `steps`) |
-| Gimbal | `stick` (`x`, `y`, `seconds`), `recenter`, `flip`, `gimbalMode` (`value`), `gimbalSpeed` (`value`) |
-| Focus | `tap` (`x`, `y`), `track` (`x`, `y`, `w`, `h`), `cancelTrack` |
-| UI | `lock` (`value` bool), `clean` (`value` bool), `panel` (`settings`, `media`, `homeSettings`, `homeMedia`), `settingsTab` (`value`), `sheet` (`value`), `assist` (`value` tool, e.g. `"WAVE"`) |
-| Media | `mediaBrowse`, `mediaEnd`, `files`, `thumb`, `download`, `delete` (`value` filename) |
-| Lab | `refreshStatus`, `raw` (`code`, `hex` body), `wait` (`seconds`) |
+### Documentation
 
-## Mac live-view lab
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): layout, Simulator rig, DEBUG remote, Mac live-view lab
+- [`docs/implementation/luna-ios-status.md`](docs/implementation/luna-ios-status.md): feature status and parity with OpenPocketCine
+- [`docs/SHARED-MONITOR-ENGINE.md`](docs/SHARED-MONITOR-ENGINE.md): shared engine contract with OpenPocketCine
+- [`docs/research/luna-fw-1.1.15-verification.md`](docs/research/luna-fw-1.1.15-verification.md): hardware verification on firmware 1.1.15
+- [`docs/research/luna-command-catalog.md`](docs/research/luna-command-catalog.md): command catalog
+- [`docs/research/luna-head-tracker-and-gimbal-angle.md`](docs/research/luna-head-tracker-and-gimbal-angle.md): absolute gimbal angle and head tracking
 
-The Python viewer works independently of the app: `just lab-setup`, then
-`just luna-authorize 'EXACT_ADVERTISED_NAME'` once and `just luna-view`.
-It connects to the real camera and may change the Mac's Wi-Fi. Details:
-[docs/mac-preview.md](docs/mac-preview.md).
+Raw captures, camera footage, identities and Wi-Fi credentials stay in the gitignored `captures/`
+and `.local/` folders. The app keeps its approval identity and camera Wi-Fi password in the
+Keychain.
 
-## Protocol and research
+## Contributing
 
-- [fw 1.1.15 hardware verification](docs/research/luna-fw-1.1.15-verification.md)
-- [Command catalog](docs/research/luna-command-catalog.md)
-- [Public sources and command research](docs/research/insta360-protocol-sources.md)
-- [Verified BLE bootstrap](docs/research/luna-ble-bootstrap-2026-09-11.md)
-- [Own Wi-Fi handoff](docs/research/luna-own-network-2026-09-11.md)
-- [TCP reconnect and decoded HEVC](docs/research/luna-reconnect-2026-09-11.md)
-- [Portable Swift protocol](docs/implementation/luna-swift-protocol.md)
-- [I-Log color](docs/implementation/i-log.md) and [white paper notes](docs/research/luna-i-log-white-paper.md)
-- [Color Recovery (detachable screen link)](docs/implementation/luna-color-recovery.md)
-- [Passive BLE capture workflow](docs/capture-guide.md)
+Contributions are welcome. Bugs go in
+[GitHub issues](https://github.com/erik-sutton95/OpenInstaCine/issues/new). Never put camera Wi-Fi
+passwords, approval identities or captures in an issue.
 
-Raw captures, HCI logs, camera footage, identities and Wi-Fi credentials stay
-in gitignored `captures/` and `.local/`. The app keeps its approval identity and
-camera Wi-Fi password in the Keychain.
+## Support
 
-Licensed under [Apache 2.0](LICENSE). See [NOTICE](NOTICE) and
-[third-party notices](THIRD-PARTY-NOTICES.md).
+I truly appreciate everyone who uses this project, files an issue, or sends a patch. Optional
+[Buy Me a Coffee](https://buymeacoffee.com/eriksutton) contributions help keep the lights on. If
+you would rather give to a charity, especially one that helps animals, that is just as welcome.
+
+## Credits
+
+The Luna Bluetooth bootstrap was learned with the help of
+[luna-ai-cut](https://github.com/diamondfsd/luna-ai-cut) by diamondfsd (MIT), and hardware notes
+from [insta360-luna-ultra-desktop](https://github.com/Ripwords/insta360-luna-ultra-desktop) by
+Ripwords. I'm grateful to both. The rest of the protocol was mapped from our own Bluetooth and
+Wi-Fi captures. The monitor itself comes from [OpenPocketCine](https://openpocketcine.app/).
+
+## License
+
+[Apache 2.0](LICENSE). See [NOTICE](NOTICE); third-party licenses are listed in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+
+This project is not affiliated with, endorsed by, or supported by Insta360 (Arashi Vision Inc.).
+No Insta360 SDK or proprietary documentation is included in, distributed with, or required by
+this project. "Insta360" and "Luna" are trademarks of Arashi Vision Inc., used here for
+identification only.
