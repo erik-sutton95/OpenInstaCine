@@ -72,6 +72,7 @@ internal fun multiviewTileReadouts(
     }
     val resolution = VideoResolution.fromRaw(settings.resolutionCode)?.label ?: "—"
     val fps = if (settings.fps > 0) "${settings.fps}p" else "—"
+    // ponytail: DJI colour names; Luna has no Multiview (supportsMultiview false).
     val color = if (settings.colorMode < 0) "—" else CameraCommands.colorLabel(settings.colorMode, colorFamily)
     return MultiviewTileReadouts(
         letter = ('A' + index.coerceIn(0, 3)).toString(), name = name, model = model,

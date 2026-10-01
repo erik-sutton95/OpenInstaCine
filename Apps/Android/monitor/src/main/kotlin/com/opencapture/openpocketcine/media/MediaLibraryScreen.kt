@@ -145,7 +145,7 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
     val resolutionOptions = filterSource.mapNotNull { it.resolution }.filter { it.isNotEmpty() }.toSet().sorted()
     val colorOptions =
         shotColors.values.toSet().sorted().mapNotNull { mode ->
-            val label = com.opencapture.openpocketcine.session.CameraCommands.colorLabel(mode)
+            val label = com.opencapture.openpocketcine.session.CameraCommands.colorLabel(mode, profile = model.session.profile)
             if (label == "—") null else mode to label
         }
     val hasDates = filterSource.any { it.dateKey.isNotEmpty() }

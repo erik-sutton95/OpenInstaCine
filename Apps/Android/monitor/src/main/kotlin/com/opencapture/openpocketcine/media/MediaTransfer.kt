@@ -35,12 +35,13 @@ object MediaTransfer {
             .retryOnConnectionFailure(false)
             .build()
 
-    fun getBytes(storage: Int, path: String): ByteArray {
-        val (data, _) = performGet(storage, path)
+    fun getBytes(route: MediaRoute, storage: Int, path: String): ByteArray {
+        val (data, _) = performGet(route, storage, path)
         return data
     }
 
     fun downloadFile(
+        route: MediaRoute,
         storage: Int,
         path: String,
         dest: File,
@@ -51,7 +52,7 @@ object MediaTransfer {
         for (candidate in storageOrder(storage)) {
             try {
                 downloadOnce(
-                    url = MediaHTTP.pathUrlString(candidate, path),
+                    url = route.pathUrlString(candidate, path),
                     dest = dest,
                     expectedSize = expectedSize,
                     onProgress = onProgress,
@@ -69,14 +70,14 @@ object MediaTransfer {
     }
 
     /** In-memory GET for thumbs/SCR. Capped at [MAX_RAM_BYTES]. */
-    fun fetchBytes(storage: Int, path: String): Pair<ByteArray, Int> = performGet(storage, path)
+    fun fetchBytes(route: MediaRoute, storage: Int, path: String): Pair<ByteArray, Int> = performGet(route, storage, path)
 
     /** Last 2 MiB of the original take. Camera `/v2` already answers Range. */
-    fun fetchRange(storage: Int, path: String, range: String, maxBytes: Int): Pair<ByteArray, Int> {
+    fun fetchRange(route: MediaRoute, storage: Int, path: String, range: String, maxBytes: Int): Pair<ByteArray, Int> {
         var last: MediaTransferError = MediaTransferError.BadResponse
         for (candidate in storageOrder(storage)) {
             try {
-                val data = getOnceRange(MediaHTTP.pathUrlString(candidate, path), range, maxBytes)
+                val data = getOnceRange(route.pathUrlString(candidate, path), range, maxBytes)
                 if (data.isEmpty()) {
                     last = MediaTransferError.BadResponse
                     continue
@@ -93,11 +94,11 @@ object MediaTransfer {
         throw last
     }
 
-    private fun performGet(firstStorage: Int, path: String): Pair<ByteArray, Int> {
+    private fun performGet(route: MediaRoute, firstStorage: Int, path: String): Pair<ByteArray, Int> {
         var last: MediaTransferError = MediaTransferError.BadResponse
         for (storage in storageOrder(firstStorage)) {
             try {
-                val data = getOnce(MediaHTTP.pathUrlString(storage, path))
+                val data = getOnce(route.pathUrlString(storage, path))
                 if (data.isEmpty()) {
                     last = MediaTransferError.BadResponse
                     continue

@@ -199,12 +199,12 @@ fun LiveGimbalSheetHost(
                     when (selectedTab) {
                         GimbalSettingsTab.MODE ->
                             MonitorValueDrum(
-                                GimbalMode.pickerOrder.map { it.label }, mode.label,
+                                GimbalMode.pickerOrder.map { it.label(model.session.profile) }, mode.label(model.session.profile),
                                 interactive = canApply,
                                 onDetent = { haptics.confirm() },
                             ) { label ->
                                 applyIfCurrent {
-                                    GimbalMode.pickerOrder.firstOrNull { it.label == label }
+                                    GimbalMode.pickerOrder.firstOrNull { it.label(model.session.profile) == label }
                                         ?.let(model.session::setGimbalMode)
                                 }
                             }

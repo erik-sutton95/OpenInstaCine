@@ -736,10 +736,9 @@ fun LiveViewScreen(model: AppModel) {
             val evShown = assist.evMeter && model.currentDispMode == PocketDispMode.LIVE
             SideEffect { assist.evMeterFromPicture = !model.session.reportsMeteredEV }
             if (evShown) {
-                val evContext = LocalContext.current
                 LiveCameraExposureMeter(
                     // Read in the meter's own scope so the scope tap recomposes only the meter.
-                    raw = { status.meteredEv.takeIf { it >= 0 } ?: pictureMeteredEv(evContext, assist, status) },
+                    raw = { status.meteredEv.takeIf { it >= 0 } ?: pictureMeteredEv(model.session, assist, status) },
                     available = !recovery.isRecovering && !model.session.isFeedRecovering,
                     feed = meterFeed,
                     mode = model.currentDispMode,
@@ -1676,11 +1675,11 @@ private fun LiveTopDeck(
         if (model.chromeSectionMounts(PocketDispSection.COLOR) &&
             CaptureShutterPolicy.showsColorReadout(status.shootingMode)
         ) {
-            Text(CameraCommands.colorLabel(status.colorMode, family), style = LiveType.ui(topFont, FontWeight.Medium), maxLines = 1,
+            Text(CameraCommands.colorLabel(status.colorMode, family, model.session.profile), style = LiveType.ui(topFont, FontWeight.Medium), maxLines = 1,
                 modifier = chipMod(PocketDispSection.COLOR, LiveSheet.COLOR).topCapture(LiveSheet.COLOR))
         }
         if (model.chromeSectionMounts(PocketDispSection.FORMAT)) {
-            Text(CameraCommands.shootingModeLabel(status.shootingMode, model.session.connectedCamera?.model?.name) ?: "—",
+            Text(CameraCommands.shootingModeLabel(status.shootingMode, model.session.connectedCamera?.model?.name, model.session.profile) ?: "\u2014",
                 color = LiveDesign.accent, style = LiveType.ui(topFont, FontWeight.Medium), maxLines = 1,
                 modifier = Modifier.reportChromeFrame { onPickerFrame(LiveSheet.MODE, it) }.topCapture(LiveSheet.MODE))
         }

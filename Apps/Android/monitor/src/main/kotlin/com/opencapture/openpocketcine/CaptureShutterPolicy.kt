@@ -3,6 +3,7 @@ package com.opencapture.openpocketcine
 import com.opencapture.openpocketcine.core.ConnectionPhase
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraModel
+import com.opencapture.openpocketcine.session.CameraProfile
 import com.opencapture.openpocketcine.session.CameraStatus
 import com.opencapture.openpocketcine.session.VideoFormat
 
@@ -71,9 +72,9 @@ internal object CaptureShutterPolicy {
             ?.let { "${it.resolution.tabTitle}${it.frameRate.drumLabel}" } ?: "REC SETUP"
 
     /** iOS `recSetupColor`: color mode hanging under the format; none for stills or before `@2` arrives. */
-    fun portraitSetupCaption(status: CameraStatus, family: String): String? =
+    fun portraitSetupCaption(status: CameraStatus, family: String, profile: CameraProfile = CameraProfile.DJI): String? =
         if (portraitSetupOpensMode(status.shootingMode) || status.colorMode < 0) null
-        else CameraCommands.colorLabel(status.colorMode, family)
+        else CameraCommands.colorLabel(status.colorMode, family, profile)
 
     fun portraitSetupSheet(shootingMode: Int): LiveSheet =
         if (portraitSetupOpensMode(shootingMode)) LiveSheet.MODE else LiveSheet.FORMAT

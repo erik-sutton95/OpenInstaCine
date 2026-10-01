@@ -60,12 +60,13 @@ enum class GimbalMode(private val defaultLabel: String) {
     DIRECTION_LOCK("Direction Lock"),
     ;
 
-    val label: String get() = labelOverrides[this] ?: defaultLabel
+    val label: String get() = defaultLabel
+
+    /** The session's brand name for this mode (Insta360 Roll Lock / FPV-V). */
+    fun label(profile: CameraProfile): String = profile.gimbalLabels[this] ?: defaultLabel
 
     companion object {
         val pickerOrder = listOf(FOLLOW, TILT_LOCKED, FPV, DIRECTION_LOCK)
-        /** Brand storefronts may rename modes (Insta360 Roll Lock / FPV-V). Set once at launch. */
-        @Volatile var labelOverrides: Map<GimbalMode, String> = emptyMap()
     }
 }
 

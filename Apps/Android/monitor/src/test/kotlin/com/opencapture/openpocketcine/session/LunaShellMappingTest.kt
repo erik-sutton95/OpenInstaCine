@@ -13,7 +13,6 @@ import com.opencapture.openpocketcine.core.CameraTrackFrame
 import com.opencapture.openpocketcine.core.CameraTrackState
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.media.MediaFile
-import com.opencapture.openpocketcine.media.MediaHTTP
 import kotlin.test.*
 import org.junit.Test
 
@@ -181,25 +180,12 @@ class LunaShellMappingTest {
     }
 
     @Test fun lunaModeLabelsAndMediaAddressing() {
-        val saved = CameraCommands.shootingModeLabelOverrides
-        try {
-            CameraCommands.shootingModeLabelOverrides = m.shootingModeLabels
-            assertEquals("TimeShift", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_HYPERLAPSE))
-            assertEquals("PureVideo", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_SUPER_NIGHT))
-            assertEquals("Video", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_VIDEO))
-        } finally {
-            CameraCommands.shootingModeLabelOverrides = saved
-        }
-        val host = MediaHTTP.host
-        try {
-            MediaHTTP.host = "192.168.42.1"
-            MediaHTTP.directPath = true
-            val path = "/storage_internal/DCIM/Camera01/VID_20260916_124229_002.mp4"
-            assertEquals("http://192.168.42.1$path", MediaHTTP.pathUrlString(0, path))
-        } finally {
-            MediaHTTP.host = host
-            MediaHTTP.directPath = false
-        }
+        val luna = m.profile
+        assertEquals("TimeShift", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_HYPERLAPSE, profile = luna))
+        assertEquals("PureVideo", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_SUPER_NIGHT, profile = luna))
+        assertEquals("Video", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_VIDEO, profile = luna))
+        val path = "/storage_internal/DCIM/Camera01/VID_20260916_124229_002.mp4"
+        assertEquals("http://192.168.42.1$path", luna.media.pathUrlString(0, path))
         assertEquals("20260916124229", MediaFile("/DCIM/Camera01/VID_20260916_124229_002.mp4", "").filenameTimestamp)
         assertEquals("20260814125250", MediaFile("DJI_20260814125250_0034_D.MP4", "").filenameTimestamp)
     }

@@ -82,6 +82,7 @@ import com.opencapture.openpocketcine.assists.AssistLongPress
 import com.opencapture.openpocketcine.session.ApertureStrategy
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraModel
+import com.opencapture.openpocketcine.session.CameraProfile
 import com.opencapture.openpocketcine.settings.SettingsHelpBadge
 import com.opencapture.openpocketcine.session.CameraStatus
 import com.opencapture.openpocketcine.session.VideoAspect
@@ -207,12 +208,13 @@ private fun RecordingSetupPanel(
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SheetHeader("SHOOTING MODE", "Capture mode", onDismiss)
                 val bodyName = model.session.connectedCamera?.model?.name
-                val labels = CaptureLists.shootingModeLabels(bodyName, status.shootingMode)
-                CaptureDrumWheel(labels, CameraCommands.shootingModeLabel(status.shootingMode, bodyName).orEmpty()
+                val profile = model.session.profile
+                val labels = CaptureLists.shootingModeLabels(bodyName, status.shootingMode, profile)
+                CaptureDrumWheel(labels, CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile).orEmpty()
                     .takeIf { it in labels }.orEmpty(),
                     interactive = enabled && !status.isRecording) { label ->
                     applyCaptureShootingMode(label, model.session.status.value,
-                        model.session.connectedCamera?.model?.name, model::setShootingMode)
+                        model.session.connectedCamera?.model?.name, profile, model::setShootingMode)
                 }
                 if (tabNames.size > 1 &&
                     com.opencapture.monitorui.MonitorLayoutPolicy.showsRecordingCategoryTabs(viewportIsPortrait(), preview != null)
@@ -267,6 +269,7 @@ private fun LiveControlSheetContent(
     val tabs = CaptureLists.modeTabs(sheet, status, offersIsoAuto, selectedAspect)
     val bodyFamily = model.session.connectedCamera?.model?.family ?: "pocket"
     val bodyName = model.session.connectedCamera?.model?.name ?: ""
+    val profile = model.session.profile
 
     // The shared drum reports one settled value. Dispatch here, with no second
     // delayed closure that could outlive this source, frame rate, or option set.
@@ -343,8 +346,8 @@ private fun LiveControlSheetContent(
     }
 
     fun reseatColor() {
-        val labels = CaptureLists.colorWheelLabels(status, bodyFamily, bodyName)
-        val live = CameraCommands.colorLabel(status.colorMode, bodyFamily)
+        val labels = CaptureLists.colorWheelLabels(status, bodyFamily, bodyName, profile)
+        val live = CameraCommands.colorLabel(status.colorMode, bodyFamily, profile)
         val next = if (live in labels) live else labels.firstOrNull().orEmpty()
         drumSelection = next
         lastApplied = next
@@ -369,8 +372,8 @@ private fun LiveControlSheetContent(
             LiveSheet.FORMAT -> reseatResolution()
             LiveSheet.COLOR -> reseatColor()
             LiveSheet.MODE -> {
-                val live = CameraCommands.shootingModeLabel(status.shootingMode, bodyName).orEmpty()
-                val labels = CaptureLists.shootingModeLabels(bodyName, status.shootingMode)
+                val live = CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile).orEmpty()
+                val labels = CaptureLists.shootingModeLabels(bodyName, status.shootingMode, profile)
                 drumSelection = if (live in labels) live else ""
                 lastApplied = drumSelection
             }
@@ -414,6 +417,7 @@ private fun LiveControlSheetContent(
                 status = status,
                 hopEnabled = model.nativeISOHopEnabled,
                 name = bodyName,
+                profile = profile,
             )?.let { model.setColorMode(it.colorMode) }
             return
         }
@@ -467,6 +471,7 @@ private fun LiveControlSheetContent(
                         status = status,
                         hopEnabled = model.nativeISOHopEnabled,
                         name = bodyName,
+                        profile = profile,
                     ) ?: return
                 // Session.setColorMode hops native ISO — same as iOS CameraSession.
                 commitDrumValue { model.setColorMode(command.colorMode) }
@@ -474,7 +479,7 @@ private fun LiveControlSheetContent(
             LiveSheet.MODE -> {
                 commitDrumValue {
                     applyCaptureShootingMode(value, model.session.status.value,
-                        model.session.connectedCamera?.model?.name, model::setShootingMode)
+                        model.session.connectedCamera?.model?.name, profile, model::setShootingMode)
                 }
             }
             else -> Unit
@@ -722,6 +727,7 @@ private fun LiveControlSheetContent(
                     if (CaptureLists.supportsFocusModeOrDefault(model.session.connectedCamera?.model)) {
                         FocusBody(
                             status = status,
+                            labels = profile.focusLabels,
                             enabled = enabled,
                             onSelect = { applyCaptureFocusChoice(it, status, model) },
                         )
@@ -749,7 +755,7 @@ private fun LiveControlSheetContent(
                 LiveSheet.AUDIO -> AudioBody(status, enabled, selectedMode, model)
                 LiveSheet.COLOR ->
                     CaptureDrumWheel(
-                        options = CaptureLists.colorWheelLabels(status, bodyFamily, bodyName),
+                        options = CaptureLists.colorWheelLabels(status, bodyFamily, bodyName, profile),
                         selection = drumSelection,
                         interactive = enabled,
 
@@ -772,10 +778,10 @@ private fun LiveControlSheetContent(
                         )
                     }
                 LiveSheet.MODE -> {
-                    val labels = CaptureLists.shootingModeLabels(bodyName, status.shootingMode)
+                    val labels = CaptureLists.shootingModeLabels(bodyName, status.shootingMode, profile)
                     CaptureDrumWheel(
                         options = labels,
-                        selection = CameraCommands.shootingModeLabel(status.shootingMode, bodyName).orEmpty()
+                        selection = CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile).orEmpty()
                             .takeIf { it in labels }.orEmpty(),
                         interactive = enabled && !status.isRecording,
                         onSelect = {
@@ -976,9 +982,9 @@ private fun CheckedRows(
 
 
 @Composable
-private fun FocusBody(status: CameraStatus, enabled: Boolean, onSelect: (String) -> Unit) {
+private fun FocusBody(status: CameraStatus, labels: List<String>, enabled: Boolean, onSelect: (String) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CaptureDrumWheel(CaptureFocusChoices.labels, CaptureFocusChoices.selection(status), interactive = enabled, onSelect = onSelect)
+        CaptureDrumWheel(labels, CaptureFocusChoices.selection(status, labels), interactive = enabled, onSelect = onSelect)
         Text("AF-S focuses once. AF-C follows focus continuously; the other modes use the camera's supported tracking modes.",
             style = LiveType.ui(9.5f).copy(lineHeight = 13.3.sp), color = LiveDesign.faint)
     }
@@ -1943,29 +1949,30 @@ object CaptureLists {
         return denom.takeIf { it != currentDenom }
     }
 
-    fun colorWheelOrder(name: String, family: String): List<Pair<Int, String>> {
+    fun colorWheelOrder(name: String, family: String, profile: CameraProfile = CameraProfile.DJI): List<Pair<Int, String>> {
         val codes = CameraModel.colorModesFor(name, family)
-        return codes.map { it to CameraCommands.colorLabel(it, family) }
+        return codes.map { it to CameraCommands.colorLabel(it, family, profile) }
     }
 
     fun colorWheel(
         family: String,
         available: List<Int> = emptyList(),
         name: String = "",
+        profile: CameraProfile = CameraProfile.DJI,
     ): List<Pair<Int, String>> {
-        val order = colorWheelOrder(name, family)
+        val order = colorWheelOrder(name, family, profile)
         if (available.isEmpty()) return order
         val have = available.toSet()
         val ranked = order.filter { it.first in have }
         return ranked.ifEmpty { order }
     }
 
-    fun shootingModeLabels(name: String?, shootingMode: Int = -1): List<String> {
+    fun shootingModeLabels(name: String?, shootingMode: Int = -1, profile: CameraProfile = CameraProfile.DJI): List<String> {
         val labels =
             CameraCommands.shootingModeCarousel(name).map {
-                CameraCommands.shootingModeLabel(it, name).orEmpty()
+                CameraCommands.shootingModeLabel(it, name, profile).orEmpty()
             }
-        val live = CameraCommands.shootingModeLabel(shootingMode, name) ?: return labels
+        val live = CameraCommands.shootingModeLabel(shootingMode, name, profile) ?: return labels
         if (shootingMode != CameraCommands.SHOOT_LIVE_PHOTO || live in labels) return labels
         val photoIdx = labels.indexOf("Photo")
         return if (photoIdx >= 0) {
@@ -1975,10 +1982,10 @@ object CaptureLists {
         }
     }
 
-    fun shootingModeRaw(label: String, name: String?): Int? {
+    fun shootingModeRaw(label: String, name: String?, profile: CameraProfile = CameraProfile.DJI): Int? {
         if (label == "Live Photo") return null
         val modes = CameraCommands.shootingModeCarousel(name)
-        val labels = modes.map { CameraCommands.shootingModeLabel(it, name).orEmpty() }
+        val labels = modes.map { CameraCommands.shootingModeLabel(it, name, profile).orEmpty() }
         val index = labels.indexOf(label)
         if (index < 0) return null
         return modes.getOrNull(index)
@@ -1988,12 +1995,13 @@ object CaptureLists {
         status: CameraStatus,
         family: String = "pocket",
         name: String = "",
-    ): List<String> = colorWheel(family, status.availableColorModes, name).map { it.second }
+        profile: CameraProfile = CameraProfile.DJI,
+    ): List<String> = colorWheel(family, status.availableColorModes, name, profile).map { it.second }
 
-    fun colorModeFromLabel(label: String, family: String = "pocket", name: String = ""): Int? {
+    fun colorModeFromLabel(label: String, family: String = "pocket", name: String = "", profile: CameraProfile = CameraProfile.DJI): Int? {
         if (label == "Normal 8-bit") return CameraCommands.COLOR_NORMAL
         if (label == "D-Log M") return CameraCommands.COLOR_DLOG_M
-        return colorWheel(family, name = name).firstOrNull { it.second == label }?.first
+        return colorWheel(family, name = name, profile = profile).firstOrNull { it.second == label }?.first
             ?: colorWheelPocket.firstOrNull { it.second == label }?.first
             ?: colorWheelPocket4Pro.firstOrNull { it.second == label }?.first
             ?: colorWheelPocket3.firstOrNull { it.second == label }?.first
@@ -2010,9 +2018,10 @@ object CaptureLists {
         status: CameraStatus,
         hopEnabled: Boolean,
         name: String = "",
+        profile: CameraProfile = CameraProfile.DJI,
     ): ColorDrumCommand? {
-        val mode = colorModeFromLabel(label, family, name) ?: return null
-        val allowed = colorWheel(family, status.availableColorModes, name).map { it.first }
+        val mode = colorModeFromLabel(label, family, name, profile) ?: return null
+        val allowed = colorWheel(family, status.availableColorModes, name, profile).map { it.first }
         if (mode !in allowed) return null
         val hop =
             nativeIsoHop(

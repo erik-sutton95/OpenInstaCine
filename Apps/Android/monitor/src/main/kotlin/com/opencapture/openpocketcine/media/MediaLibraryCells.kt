@@ -140,7 +140,7 @@ object MediaThumbs {
             if (controller.isLive) {
                 runCatching {
                     val storage = file.storage
-                    val data = MediaTransfer.fetchBytes(storage, file.thumbPath).first
+                    val data = MediaTransfer.fetchBytes(controller.mediaRoute, storage, file.thumbPath).first
                     if (data.isNotEmpty()) {
                         controller.thumbnailFile(file)
                         decodeBytes(data, maxPx)

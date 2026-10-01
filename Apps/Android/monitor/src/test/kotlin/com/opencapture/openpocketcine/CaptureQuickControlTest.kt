@@ -75,18 +75,19 @@ class CaptureQuickControlTest {
     }
 
     @Test fun focusTapAndHoldOfferFiveNativeChoicesWithUnknownUnselected() {
-        assertEquals(listOf("AF-S", "AF-C", "Showcase", "Lock", "Priority"), CaptureFocusChoices.labels)
+        val labels = com.opencapture.openpocketcine.session.CameraProfile.DJI.focusLabels
+        assertEquals(listOf("AF-S", "AF-C", "Showcase", "Lock", "Priority"), labels)
         val statuses = listOf(CameraStatus(focusMode = CameraCommands.FOCUS_SINGLE)) +
             (0..3).map { CameraStatus(focusMode = CameraCommands.FOCUS_CONTINUOUS, focusTrack = it) }
         for ((index, status) in statuses.withIndex()) {
-            assertEquals(CaptureFocusChoices.labels, captureQuickFocusControl(status).options)
-            assertEquals(CaptureFocusChoices.labels[index], CaptureFocusChoices.selection(status))
-            assertEquals(CaptureFocusChoices.selection(status), captureQuickFocusControl(status).selection)
+            assertEquals(labels, captureQuickFocusControl(status).options)
+            assertEquals(labels[index], CaptureFocusChoices.selection(status, labels))
+            assertEquals(CaptureFocusChoices.selection(status, labels), captureQuickFocusControl(status).selection)
         }
         for (status in listOf(CameraStatus(),
             CameraStatus(focusMode = CameraCommands.FOCUS_CONTINUOUS, focusTrack = -1),
             CameraStatus(focusMode = CameraCommands.FOCUS_CONTINUOUS, focusTrack = 99))) {
-            assertEquals("", CaptureFocusChoices.selection(status))
+            assertEquals("", CaptureFocusChoices.selection(status, labels))
             assertEquals("", captureQuickFocusControl(status).selection)
         }
     }
@@ -95,7 +96,7 @@ class CaptureQuickControlTest {
         val single = CameraStatus(focusMode = CameraCommands.FOCUS_SINGLE, focusTrack = 0)
         val calls = mutableListOf<String>()
         fun apply(label: String, status: CameraStatus) = applyCaptureFocusChoice(label, status,
-            { calls += "mode:$it" }, { calls += "track:$it" })
+            com.opencapture.openpocketcine.session.CameraProfile.DJI.focusLabels, { calls += "mode:$it" }, { calls += "track:$it" })
         apply("Lock", single)
         assertEquals(listOf("mode:true", "track:2"), calls)
         calls.clear()

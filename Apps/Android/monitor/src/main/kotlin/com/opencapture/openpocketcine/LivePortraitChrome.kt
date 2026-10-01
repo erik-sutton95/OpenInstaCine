@@ -291,7 +291,7 @@ fun LivePortraitChrome(
                 val setupIsMode = CaptureShutterPolicy.portraitSetupOpensMode(status.shootingMode)
                 val setupValue = CaptureShutterPolicy.portraitSetupLabel(status)
                 val setupCaption = CaptureShutterPolicy.portraitSetupCaption(
-                    status, model.session.connectedCamera?.model?.family ?: "pocket")
+                    status, model.session.connectedCamera?.model?.family ?: "pocket", model.session.profile)
                 val setupTint =
                     if (sheet == setupSheet || recOwner.active == setupSheet.name) LiveDesign.accent else LiveDesign.text
                 // iOS: the format sits on the timecode line at its size; the color hangs smaller below.

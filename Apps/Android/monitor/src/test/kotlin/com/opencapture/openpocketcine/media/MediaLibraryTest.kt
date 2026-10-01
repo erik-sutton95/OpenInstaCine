@@ -116,12 +116,12 @@ class MediaLibraryTest {
                 singleSdStorage = false,
             ),
         )
-        val thumb = MediaHTTP.pathUrlString(storage, file.thumbPath)
+        val thumb = MediaRoute.DJI.pathUrlString(storage, file.thumbPath)
         assertEquals(
             "http://192.168.2.1/v2?storage=1&path=MISC/THM/DJI_001/DJI_20260814125250_0034_D.scr",
             thumb,
         )
-        val original = MediaHTTP.pathUrlString(storage, file.path)
+        val original = MediaRoute.DJI.pathUrlString(storage, file.path)
         assertTrue(original.contains("DCIM/DJI_001/DJI_20260814125250_0034_D.MP4"))
         assertTrue(MediaHTTP.previewPaths(file).any { it.endsWith(".LRF") })
         val proxy = MediaHTTP.previewPaths(file).first()
@@ -141,7 +141,7 @@ class MediaLibraryTest {
         assertEquals(MediaCacheGrade.PROXY, MediaCacheGrade.resolve(false, true))
         assertEquals(MediaCacheGrade.NONE, MediaCacheGrade.resolve(false, false))
         assertTrue(MediaCacheGrade.PROXY.isProxyOnly)
-        assertTrue(MediaHTTP.pathUrl(storage, file.thumbPath).encodedPath == "/v2")
+        assertTrue(MediaRoute.DJI.pathUrl(storage, file.thumbPath).encodedPath == "/v2")
     }
 
     @Test

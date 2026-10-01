@@ -74,6 +74,8 @@ class MediaLibraryController(
     var localFavorites by mutableStateOf<Set<String>>(emptySet())
         private set
 
+    /** This session's media host and path rules. */
+    val mediaRoute get() = session.profile.media
     val isLive: Boolean
         get() = session.phaseFlow.value == ConnectionPhase.LIVE && link.isLive
 
@@ -211,7 +213,7 @@ class MediaLibraryController(
             val range = ClipColorProfile.httpRange(file.sizeBytes)
             val cap = ClipColorProfile.FILE_TAIL_BYTES * 3
             val (data, storage) =
-                MediaTransfer.fetchRange(resolvedStorage(file), file.path, range, cap)
+                MediaTransfer.fetchRange(mediaRoute, resolvedStorage(file), file.path, range, cap)
             rememberStorage(storage, file.path)
             val mode = ClipColorProfile.colorModeFromMp4(data)
             if (mode >= 0) cache.rememberShotColor(file.path, mode, cameraId)
@@ -285,7 +287,7 @@ class MediaLibraryController(
             val storage = resolvedStorage(file)
             val data =
                 store?.thumbnailJpeg(file.path) ?: withContext(Dispatchers.IO) {
-                    MediaTransfer.fetchBytes(storage, MediaHTTP.thumbnailPath(file)).first
+                    MediaTransfer.fetchBytes(mediaRoute, storage, MediaHTTP.thumbnailPath(file)).first
                 }
             if (data.isEmpty()) throw MediaTransferError.BadResponse
             cache.writeAtomically(data, cache.thumbnailFile(cameraId, file))
@@ -312,6 +314,7 @@ class MediaLibraryController(
             val storage = resolvedStorage(file)
             withContext(Dispatchers.IO) {
                 MediaTransfer.downloadFile(
+                    route = mediaRoute,
                     storage = storage,
                     path = MediaHTTP.deliveryPath(file),
                     dest = dest,
@@ -352,6 +355,7 @@ class MediaLibraryController(
                     val storage = resolvedStorage(file)
                     withContext(Dispatchers.IO) {
                         MediaTransfer.downloadFile(
+                            route = mediaRoute,
                             storage = storage,
                             path = path,
                             dest = dest,
@@ -376,6 +380,7 @@ class MediaLibraryController(
             val storage = resolvedStorage(file)
             withContext(Dispatchers.IO) {
                 MediaTransfer.downloadFile(
+                    route = mediaRoute,
                     storage = storage,
                     path = original,
                     dest = dest,

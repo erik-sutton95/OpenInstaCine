@@ -195,6 +195,10 @@ class PocketCameraSession(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backend: CameraBackend = MonitorConfiguration.createBackend(appContext)
     private val controls: CameraControls? = backend as? CameraControls
+    /** This session's names and media host (STATE-01: per session, never a launch-time global). */
+    val profile: CameraProfile = LunaShellMapping.profile
+    /** This source's learned picture EV calibration (STATE-01: one meter per session, keyed by source). */
+    internal val pictureEV by lazy { com.opencapture.openpocketcine.PictureEVMeter.stored(appContext) }
     val capabilities: Set<CameraCapability> get() = backend.capabilities
     private fun can(capability: CameraCapability) = controls != null && capability in capabilities
 
@@ -298,6 +302,15 @@ class PocketCameraSession(
     /** iOS `faceMetering`: true Face Priority, false Matrix, null until the camera reports it (METER tile hidden). */
     private val _faceMetering = MutableStateFlow<Boolean?>(null)
     val faceMetering: StateFlow<Boolean?> = _faceMetering.asStateFlow()
+
+    /** The calibration context of the picture EV estimate: device, recording profile and curve, metering. */
+    internal fun pictureEVSource(transfer: com.opencapture.openpocketcine.feed.MonitorTransfer) =
+        com.opencapture.openpocketcine.PictureEVMeter.Source(
+            device = coreSnapshot?.device?.value ?: connectedCamera?.id ?: "unknown",
+            profile = _status.value.colorMode.toString(),
+            transfer = transfer,
+            metering = when (_faceMetering.value) { true -> "face"; false -> "matrix"; null -> "unknown" },
+        )
     var videoPackets = 0
     var accessUnits = 0
     var framesEnqueued = 0
@@ -375,13 +388,6 @@ class PocketCameraSession(
     fun lockAutoWhiteBalance() = Unit
 
     init {
-        // Luna vocabulary for the shared screens: mode names, and media served at its own path on the camera AP.
-        CameraCommands.shootingModeLabelOverrides = LunaShellMapping.shootingModeLabels
-        GimbalMode.labelOverrides = LunaShellMapping.gimbalModeLabels
-        CameraCommands.colorLabelOverrides = mapOf(CameraCommands.COLOR_NORMAL to "Standard")
-        com.opencapture.openpocketcine.CaptureFocusChoices.labels = LunaShellMapping.focusOptions.map { it.chip }
-        com.opencapture.openpocketcine.media.MediaHTTP.host = "192.168.42.1"
-        com.opencapture.openpocketcine.media.MediaHTTP.directPath = true
         scope.launch {
             backend.snapshot.collect { value ->
                 value.batteryPercent?.let { _status.value = _status.value.copy(batteryPercent = it) }
@@ -691,7 +697,7 @@ class PocketCameraSession(
         pins.format = null
         _status.value = if (previous.shootingMode != raw) previous.clearedModeDependentCapabilities().copy(shootingMode = raw) else previous
         sendControl(
-            CameraCommands.shootingModeLabel(raw).orEmpty(), refresh = false,
+            CameraCommands.shootingModeLabel(raw, profile = profile).orEmpty(), refresh = false,
             onFail = { pins.shootingMode = null; _status.value = _status.value.copy(shootingMode = previous.shootingMode) },
         ) { setShootingMode(mode) }
     }
@@ -923,7 +929,7 @@ class PocketCameraSession(
         val previous = _gimbalMode.value
         pins.gimbalMode = pin(mode, SystemClock.elapsedRealtime(), 3_000)
         _gimbalMode.value = mode
-        sendControl("Gimbal ${mode.label}", onFail = { pins.gimbalMode = null; _gimbalMode.value = previous }) {
+        sendControl("Gimbal ${mode.label(profile)}", onFail = { pins.gimbalMode = null; _gimbalMode.value = previous }) {
             setGimbalMode(LunaShellMapping.cameraGimbalMode(mode))
         }
     }
@@ -1277,7 +1283,7 @@ class PocketCameraSession(
         if (mode !in LunaShellMapping.colorModes) return
         pins.color = pin(mode, SystemClock.elapsedRealtime(), 3_000)
         _status.value = _status.value.copy(colorMode = mode)
-        sendControl(CameraCommands.colorLabel(mode), onFail = { pins.color = null; _status.value = _status.value.copy(colorMode = previous) }) {
+        sendControl(CameraCommands.colorLabel(mode, profile = profile), onFail = { pins.color = null; _status.value = _status.value.copy(colorMode = previous) }) {
             setColorProfile(LunaShellMapping.colorProfile(mode))
         }
     }

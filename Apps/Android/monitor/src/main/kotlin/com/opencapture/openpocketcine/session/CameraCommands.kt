@@ -337,11 +337,9 @@ object CameraCommands {
      * Both photo encodings read back as "Photo" — the body decides which it uses.
      * Pocket 3 presents `0x28` as Low-Light video; other bodies keep SuperNight.
      */
-    /** Brand storefronts may rename modes (Insta360 TimeShift / PureVideo). Set once at launch. */
-    @Volatile var shootingModeLabelOverrides: Map<Int, String> = emptyMap()
-
-    fun shootingModeLabel(raw: Int, cameraName: String? = null): String? =
-        shootingModeLabelOverrides[raw] ?: when (raw) {
+    /** [profile] carries a brand's names (Insta360 TimeShift / PureVideo) for this session. */
+    fun shootingModeLabel(raw: Int, cameraName: String? = null, profile: CameraProfile = CameraProfile.DJI): String? =
+        profile.shootingModeLabels[raw] ?: when (raw) {
             SHOOT_SLOWMO -> "SlowMo"
             SHOOT_VIDEO -> "Video"
             SHOOT_TIMELAPSE -> "TimeLapse"
@@ -828,11 +826,9 @@ object CameraCommands {
 
     fun resolutionLabel(code: Int): String = VideoResolution.fromRaw(code)?.label ?: "—"
 
-    /** Brand storefronts may rename modes (Insta360 calls Normal "Standard"). Set at session start. */
-    @Volatile var colorLabelOverrides: Map<Int, String> = emptyMap()
-
-    fun colorLabel(mode: Int, family: String = "pocket"): String =
-        colorLabelOverrides[mode] ?: when (mode) {
+    /** [profile] carries a brand's names (Insta360 calls Normal "Standard") for this session. */
+    fun colorLabel(mode: Int, family: String = "pocket", profile: CameraProfile = CameraProfile.DJI): String =
+        profile.colorLabels[mode] ?: when (mode) {
             COLOR_NORMAL -> if (family == "nano") "Normal 8-bit" else "Normal"
             COLOR_HDR -> "HDR"
             COLOR_DLOG -> "D-Log"

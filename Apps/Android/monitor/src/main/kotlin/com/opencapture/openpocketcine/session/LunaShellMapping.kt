@@ -60,7 +60,7 @@ internal object LunaShellMapping {
 
     val colorModes = listOf(CameraCommands.COLOR_NORMAL, CameraCommands.COLOR_ILOG, CameraCommands.COLOR_DOLBY_VISION)
 
-    /** Luna names for the shared mode drum (installed once at launch). */
+    /** Luna names for the shared mode drum (carried by [profile]). */
     val shootingModeLabels = mapOf(
         CameraCommands.SHOOT_SLOWMO to "Slow Motion", CameraCommands.SHOOT_TIMELAPSE to "Timelapse",
         CameraCommands.SHOOT_HYPERLAPSE to "TimeShift", CameraCommands.SHOOT_SUPER_NIGHT to "PureVideo",
@@ -137,6 +137,15 @@ internal object LunaShellMapping {
 
     /** The official app's three AF modes (option 93); the shared FOCUS drum and chip list only these. */
     val focusOptions = listOf(FocusOption.SINGLE, FocusOption.CONTINUOUS_DEFAULT, FocusOption.PRODUCT_SHOWCASE)
+
+    /** Luna vocabulary for the shared screens, and media served at its own path on the camera AP. */
+    val profile = CameraProfile(
+        shootingModeLabels = shootingModeLabels,
+        colorLabels = mapOf(CameraCommands.COLOR_NORMAL to "Standard"),
+        gimbalLabels = gimbalModeLabels,
+        focusLabels = focusOptions.map { it.chip },
+        media = com.opencapture.openpocketcine.media.MediaRoute(host = "192.168.42.1", directPath = true),
+    )
 
     fun focusOption(mode: CameraFocusMode): FocusOption = when (mode) {
         CameraFocusMode.SINGLE -> FocusOption.SINGLE

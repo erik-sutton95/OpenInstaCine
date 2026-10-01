@@ -96,20 +96,26 @@ enum class MediaCacheGrade {
     }
 }
 
-/** SoftAP HTTP `/v2` paths. Osmosis `PathAddressing` + `StorageRules`. */
-object MediaHTTP {
-    const val HOST = "192.168.2.1"
-    const val PORT = 80
-
-    /** Brand hook: DJI serves `/v2?storage=&path=`; Insta360 serves each file at its own path. Set at launch. */
-    @Volatile var host = HOST
-    @Volatile var directPath = false
-
+/**
+ * Where one camera serves its files: DJI serves `/v2?storage=&path=` on [MediaHTTP.HOST]; Insta360
+ * serves each file at its own path. Per session ([com.opencapture.openpocketcine.session.CameraProfile]).
+ */
+data class MediaRoute(val host: String = MediaHTTP.HOST, val directPath: Boolean = false) {
     fun pathUrlString(storage: Int, path: String): String =
         if (directPath) "http://$host${if (path.startsWith("/")) path else "/$path"}"
         else "http://$host/v2?storage=$storage&path=$path"
 
     fun pathUrl(storage: Int, path: String): HttpUrl = pathUrlString(storage, path).toHttpUrl()
+
+    companion object {
+        val DJI = MediaRoute()
+    }
+}
+
+/** SoftAP HTTP `/v2` paths. Osmosis `PathAddressing` + `StorageRules`. */
+object MediaHTTP {
+    const val HOST = "192.168.2.1"
+    const val PORT = 80
 
     /**
      * Guess `/v2?storage=` from the delete handle's `0x40000000` bit.
