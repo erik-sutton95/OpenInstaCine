@@ -146,6 +146,8 @@ The contract between the two apps is [`docs/SHARED-MONITOR-ENGINE.md`](docs/SHAR
 Tooling runs through [`just`](https://github.com/casey/just) and needs Xcode 26 and XcodeGen.
 Both apps also need the shared UI package OpenCineUI checked out next to this repository, at
 `../OpenCineUI`; `ios/project.yml` and `Apps/Android/settings.gradle.kts` reference it by path.
+`scripts/checkout-opencine.sh` clones it there at the commit pinned in `opencine-pins.txt`
+(CI and Xcode Cloud use the same script); an existing checkout is only compared, never moved.
 
 
 ```bash
