@@ -6,6 +6,21 @@ import Testing
 @Suite struct HeadTrackNativeTests {
     private let origin = GimbalWaypoint(yawDeg: -20, pitchDeg: -10, zoom: 1, nativePitchDeg: -171)
 
+    /// OPTIONAL-02 gate for Luna: shared head tracking and waypoint capture run on the shell
+    /// reach, which lies inside the reach Luna declares, so they never command Luna past it.
+    @Test func shellReachLiesInsideTheDeclaredLunaReach() {
+        #expect(HeadTrackNative().bounds == HeadTrack.Reach.bounds)
+        #expect(MotionCapabilities.lunaUltra.bounds.contains(HeadTrack.Reach.bounds))
+        #expect(MotionCapabilities.lunaUltra.bounds.tilt == -57...90)
+        #expect(!MotionCapabilities.lunaUltra.axes.contains(.zoom), "Luna moves keep one zoom")
+        var track = HeadTrackNative()
+        #expect(track.center(pose: origin) == .centered)
+        for look in stride(from: -400.0, through: 400, by: 37) {
+            let target = track.target(lookRightDeg: look, lookUpDeg: look / 2)
+            #expect(target.flatMap(MotionCapabilities.lunaUltra.target) != nil)
+        }
+    }
+
     @Test func capturedForwardMapsHeadAnglesWithoutRateCalibration() {
         var track = HeadTrackNative()
         #expect(track.center(pose: origin) == .centered)

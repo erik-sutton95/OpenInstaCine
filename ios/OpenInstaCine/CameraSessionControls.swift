@@ -560,8 +560,9 @@ extension CameraSession {
     static let gimbalSetInterval: Duration = .milliseconds(33)
     /// fw 1.1.15 reach: pitch -57.3...+90; yaw is one arc from about -125 through ±180
     /// to -58.5 (gap centred near -92, like the shell's `HeadTrack.Reach`), and SET_ANGLE
-    /// takes yaw in -180...180 and routes around the stop itself.
-    static let gimbalPitchRange = -57.0...90.0
+    /// takes yaw in -180...180 and routes around the stop itself. Declared once in
+    /// `MotionCapabilities.lunaUltra`.
+    static let gimbalPitchRange = MotionCapabilities.lunaUltra.bounds.tilt
 
     func startGimbalAnglePoll() {
         gimbalAnglePoll?.cancel()
