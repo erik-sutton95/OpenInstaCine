@@ -66,7 +66,7 @@ OSMO_ONLY=(
 # and Android monitor-ui from its included build. A sync never copies them, even from an upstream
 # commit that still has its own copies.
 
-# Moved to OpenCineCore's OpenCineMedia product (MEDIA-01). Both apps link the package, so a
+# Moved to OpenCineCore's OpenCineMedia product (MEDIA-01, MEDIA-02). Both apps link the package, so a
 # sync never copies these back, even from an upstream commit that predates the move.
 MOVED_TO_OPENCINE=(
   Sources/OpenPocketViewCore/CubeLUT.swift
@@ -78,6 +78,17 @@ MOVED_TO_OPENCINE=(
   Tests/OpenPocketViewCoreTests/CubeLUTTests.swift
   Tests/OpenPocketViewCoreTests/FrameRateSamplerTests.swift
   Tests/OpenPocketViewCoreTests/ShutterAngleTests.swift
+  # MEDIA-02 step 1: H.26x NAL math and present policy. The DJI remainder lives in
+  # Hevc+DJI.swift and EncoderPresentPath+DJI.swift, which a sync still copies.
+  Sources/OpenPocketViewCore/Hevc.swift
+  Sources/OpenPocketViewCore/Avc.swift
+  Sources/OpenPocketViewCore/EncoderPresentPath.swift
+  Sources/OpenPocketViewCore/FeedPresentPolicy.swift
+  Sources/OpenPocketViewCore/DeliveryCadence.swift
+  Sources/OpenPocketViewCore/LiveFrameTap.swift
+  Tests/OpenPocketViewCoreTests/FeedPresentPolicyTests.swift
+  Tests/OpenPocketViewCoreTests/LiveFrameTapTests.swift
+  Tests/OpenPocketViewCoreTests/DeliveryCadenceTests.swift
 )
 
 ENGINE=(OpenPocketViewCore CJNI OpenPocketCineAndroidFacade)
