@@ -341,7 +341,7 @@ extension LiveTopChrome {
     }
 
     private var colorLabel: String {
-        model.session.status.colorMode?.label ?? "—"
+        model.session.status.colorMode?.label(in: model.session.profile) ?? "\u{2014}"
     }
 
     private var storageLabel: String {

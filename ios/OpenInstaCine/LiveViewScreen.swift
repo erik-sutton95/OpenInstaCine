@@ -827,7 +827,7 @@ struct LiveViewScreen: View {
                     set: {
                         model.session.updateZoomPinch(magnification: $0 / max(1, zoomGestureAnchor))
                     }),
-                label: { CamFov.displayLabel(factor: $0) },
+                label: { CamFov.displayLabel(factor: $0, ceiling: model.session.zoomCeiling) },
                 onEditing: { editing in
                     if editing {
                         zoomGestureAnchor =

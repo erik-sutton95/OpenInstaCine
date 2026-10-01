@@ -428,15 +428,16 @@ struct CapturePickerPanel: View {
         case .mode:
             choiceDrum(
                 CaptureLists.operatorShootingModes(from: model.session.status, model: connectedBody)
-                    .map { $0.label(for: connectedBody) },
-                selected: model.session.currentShootingMode?.label(for: connectedBody),
+                    .map { $0.label(for: connectedBody, in: model.session.profile) },
+                selected: model.session.currentShootingMode?.label(
+                    for: connectedBody, in: model.session.profile),
                 isInteractive: !model.session.status.isRecording
             ) { label in
                 guard !model.session.status.isRecording else { return }
                 if let mode = CaptureLists.operatorShootingModes(
                     from: model.session.status, model: connectedBody
                 ).first(where: {
-                    $0.label(for: connectedBody) == label
+                    $0.label(for: connectedBody, in: model.session.profile) == label
                 }), mode != .livePhoto {
                     model.session.setShootingMode(mode)
                 }
@@ -660,7 +661,7 @@ struct CapturePickerPanel: View {
 
     private var colorWheelLabels: [String] {
         let family = model.session.bodyFamily
-        return model.session.colorModes.map { $0.label(for: family) }
+        return model.session.colorModes.map { $0.label(for: family, in: model.session.profile) }
     }
 
     private var connectedBody: CameraModel? { model.session.connectedCamera?.model }
@@ -731,7 +732,7 @@ struct CapturePickerPanel: View {
             selectedMode = 0
             let family = model.session.bodyFamily
             let live =
-                model.session.status.colorMode?.label(for: family)
+                model.session.status.colorMode?.label(for: family, in: model.session.profile)
                 ?? ""
             drumSelection = colorWheelLabels.contains(live) ? live : ""
             lastApplied = drumSelection
@@ -790,7 +791,7 @@ struct CapturePickerPanel: View {
     private func applyDrum(_ value: String) {
         guard canApplyDrum, !value.isEmpty, value != lastApplied else { return }
         if sheet == .color, model.session.status.isRecording {
-            if let mode = ColorMode(label: value) {
+            if let mode = ColorMode(label: value, in: model.session.profile) {
                 model.session.setColorMode(mode)
             }
             return
@@ -837,7 +838,7 @@ struct CapturePickerPanel: View {
             else { return }
             applyVideoFormat(resolution: resolutionForTab(selectedMode), frameRate: rate)
         case .color:
-            guard let mode = ColorMode(label: value) else { return }
+            guard let mode = ColorMode(label: value, in: model.session.profile) else { return }
             model.session.setColorMode(mode)
         default:
             break

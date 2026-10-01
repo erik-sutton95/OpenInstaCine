@@ -35,26 +35,29 @@ struct CameraEVMeterOverlay: View {
     let feed: CGRect
     var avoiding: CGRect?
 
-    /// Metered EV from the live picture, for cameras that report none.
+    /// Image-estimated EV from the live picture, for cameras that report none.
     private var pictureEV: EvComp? {
         guard model.assist.evMeterFromPicture else { return nil }
         let bundle = model.monitorSamples.bundle
         guard let picture = NDFilterRecommendation.pictureStops(
             lumaHistogram: bundle.samples.histogramLuma, transfer: bundle.transfer)
         else { return nil }
-        let status = model.session.status
-        let stops = PictureEVMeter.shared.stops(
-            picture: picture, transfer: bundle.transfer,
+        let session = model.session
+        let status = session.status
+        let stops = session.pictureEV.stops(
+            picture: picture, context: session.pictureEVContext(transfer: bundle.transfer),
             evComp: status.expoMode == .auto ? status.evComp.map { Double($0.thirds) / 3 } : nil,
             now: ProcessInfo.processInfo.systemUptime)
-        return EvComp(thirds: Int((stops * 3).rounded()))
+        return stops.value.map { EvComp(thirds: Int(($0 * 3).rounded())) }
     }
 
     var body: some View {
         let frame = CameraEVMeter.frame(in: feed, avoiding: avoiding)
         let recovering = model.session.sessionRecovery.isRecovering || model.session.feedRecovering
+        let reported = model.session.status.meteredEv
         let reading = ExposureMeterReading(
-            cameraValue: recovering ? nil : model.session.status.meteredEv ?? pictureEV)
+            cameraValue: recovering ? nil : reported ?? pictureEV,
+            imageEstimated: reported == nil)
         MonitorExposureGauge(value: reading.label, needleFraction: reading.needleFraction)
             .frame(width: frame.width, height: frame.height)
             .accessibilityElement(children: .ignore)

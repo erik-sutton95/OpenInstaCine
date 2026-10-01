@@ -1,4 +1,5 @@
 import CoreVideo
+import Insta360Apple
 import MonitorPresentation
 import Observation
 import OpenPocketViewCore
@@ -12,7 +13,18 @@ import UIKit
 final class AppModel {
     var session: CameraSession
     init(session: CameraSession? = nil) {
-        self.session = session ?? CameraSession()
+        self.session = session ?? CameraSession(backend: Self.makeBackend())
+    }
+
+    /// The composition root's one backend per camera connection. Simulator has no Bluetooth
+    /// or hotspot API but shares the Mac's network: with the Mac on the camera Wi-Fi, the
+    /// simulator app talks to the real camera.
+    static func makeBackend() -> LunaCameraBackend {
+        #if targetEnvironment(simulator)
+            LunaCameraBackend(useExistingNetwork: true)
+        #else
+            LunaCameraBackend()
+        #endif
     }
     @ObservationIgnored let watchRelay = WatchRelay()
     @ObservationIgnored private var watchRelayActivated = false
@@ -513,8 +525,8 @@ final class AppModel {
         let state = WatcherRelayState(
             isRecording: s.isRecording,
             format: s.videoResolution?.label ?? "",
-            color: (s.isPhoto ? ColorMode.normal : s.colorMode)?.label ?? "",
-            zoom: CamFov.displayLabel(factor: session.zoomReadout),
+            color: (s.isPhoto ? ColorMode.normal : s.colorMode)?.label(in: session.profile) ?? "",
+            zoom: CamFov.displayLabel(factor: session.zoomReadout, ceiling: session.zoomCeiling),
             liveFPS: session.liveFPS,
             batteryPercent: s.batteryPercent,
             cameraName: session.connectedCamera?.name ?? "",

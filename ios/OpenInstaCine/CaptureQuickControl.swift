@@ -100,14 +100,15 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
             shutterAngleDegrees: OperatorPrefs.shutterAngleDegrees,
             aeLocked: model.session.autoExposureLock != nil,
             awbLocked: model.session.autoWhiteBalanceLock != nil,
-            offersAwbLock: model.session.canLockAutoWhiteBalance)
+            offersAwbLock: model.session.canLockAutoWhiteBalance, profile: model.session.profile)
     }
 
     static func primary(
         _ sheet: CaptureSheet, status: CameraStatus, cameraModel: CameraModel? = nil,
         supportsFocusMode: Bool = false, facePriorityExposureEnabled: Bool = false,
         shutterUsesAngle: Bool = false, shutterAngleDegrees: Double = 180, aeLocked: Bool = false,
-        awbLocked: Bool = false, offersAwbLock: Bool = false
+        awbLocked: Bool = false, offersAwbLock: Bool = false,
+        profile: CameraProfile = LunaShellMapping.profile
     ) -> Self? {
         switch sheet {
         case .iso:
@@ -194,8 +195,9 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
             return formatSnapshot(status: status, cameraModel: cameraModel)
         case .color:
             guard !status.isPhoto else { return nil }
-            return colorSnapshot(status: status, cameraModel: cameraModel)
-        case .mode: return shootingModeSnapshot(status: status, cameraModel: cameraModel)
+            return colorSnapshot(status: status, cameraModel: cameraModel, profile: profile)
+        case .mode:
+            return shootingModeSnapshot(status: status, cameraModel: cameraModel, profile: profile)
         }
     }
 
@@ -222,29 +224,32 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
         )
     }
 
-    private static func colorSnapshot(status: CameraStatus, cameraModel: CameraModel?) -> Self? {
+    private static func colorSnapshot(
+        status: CameraStatus, cameraModel: CameraModel?, profile: CameraProfile
+    ) -> Self? {
         let family = cameraModel?.family ?? .other
         let modes =
             cameraModel.map {
                 CamCapColorMode.wheel(available: status.availableColorModes, model: $0)
             }
             ?? CamCapColorMode.wheel(available: status.availableColorModes, family: family)
-        let options = modes.map { $0.label(for: family) }
+        let options = modes.map { $0.label(for: family, in: profile) }
         guard !options.isEmpty else { return nil }
-        let live = status.colorMode?.label(for: family) ?? ""
+        let live = status.colorMode?.label(for: family, in: profile) ?? ""
         return Self(
             kind: .color, title: "COLOR", options: options,
             selection: options.contains(live) ? live : "",
             context: "\(family):\(options.joined(separator: ",")):\(status.isRecording)")
     }
 
-    private static func shootingModeSnapshot(status: CameraStatus, cameraModel: CameraModel?)
-        -> Self
-    {
+    private static func shootingModeSnapshot(
+        status: CameraStatus, cameraModel: CameraModel?, profile: CameraProfile
+    ) -> Self {
         let options = CaptureLists.operatorShootingModes(from: status, model: cameraModel).map {
-            $0.label(for: cameraModel)
+            $0.label(for: cameraModel, in: profile)
         }
-        let live = ShootingMode.fromStatus(status.shootingMode)?.label(for: cameraModel) ?? ""
+        let live =
+            ShootingMode.fromStatus(status.shootingMode)?.label(for: cameraModel, in: profile) ?? ""
         return Self(
             kind: .shootingMode, title: "MODE", options: options,
             selection: options.contains(live) ? live : "",
@@ -337,7 +342,7 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
                 model.session.setVideoFormat(resolution: current.resolution, frameRate: rate)
             }
         case .color:
-            if let mode = ColorMode(label: value) {
+            if let mode = ColorMode(label: value, in: model.session.profile) {
                 model.session.setColorMode(mode)
             }
         case .shootingMode:
@@ -345,7 +350,7 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
             if let mode = CaptureLists.operatorShootingModes(
                 from: status, model: model.session.connectedCamera?.model
             ).first(where: {
-                $0.label(for: model.session.connectedCamera?.model) == value
+                $0.label(for: model.session.connectedCamera?.model, in: model.session.profile) == value
             }), mode != .livePhoto {
                 model.session.setShootingMode(mode)
             }

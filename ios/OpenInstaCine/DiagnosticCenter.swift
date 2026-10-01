@@ -210,7 +210,7 @@ final class DiagnosticCenter: NSObject, MXMetricManagerSubscriber {
 
     @MainActor
     func copyCompactSummaryForTestFlight(session: CameraSession? = nil) {
-        let session = session ?? AppModelDiagnosticsAnchor.session
+        guard let session = session ?? AppModelDiagnosticsAnchor.session else { return }
         let text = compactSummary(session: session)
         lastCompactSummary = text
         UIPasteboard.general.string = text
@@ -370,9 +370,8 @@ final class DiagnosticCenter: NSObject, MXMetricManagerSubscriber {
 /// without a DiagnosticCenter ↔ AppModel import cycle at init.
 enum AppModelDiagnosticsAnchor {
     @MainActor static weak var model: AppModel?
-    @MainActor static var session: CameraSession {
-        model?.session ?? CameraSession()
-    }
+    /// The live session, or nil before the app model exists. Never a stand-in session.
+    @MainActor static var session: CameraSession? { model?.session }
 }
 
 struct DiagnosticSharePayload: Identifiable {

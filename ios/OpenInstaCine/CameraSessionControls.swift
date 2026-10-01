@@ -95,7 +95,7 @@ extension CameraSession {
 
     /// One settings read shortly after a burst of writes (drums send many).
     func scheduleSettingsRefresh() {
-        LunaRefreshDebounce.shared.schedule { [weak self] in
+        refreshDebounce.schedule { [weak self] in
             await self?.backend.refreshSettings()
         }
     }
@@ -146,7 +146,7 @@ extension CameraSession {
         formatTable = [:]
         pins.format = nil
         sendControl(
-            mode.label, { try luna.request() },
+            mode.label(in: profile), { try luna.request() },
             onFail: { [weak self] in
                 guard let self else { return }
                 self.pins.shootingMode = nil
@@ -164,7 +164,7 @@ extension CameraSession {
         pins.ev = CameraValuePin(ev, now: pinNow)
         status.evComp = ev
         let mode = backend.functionMode
-        LunaExposureCoalescer.shared.submit(key: "ev") { [weak self] in
+        exposureCoalescer.submit(key: "ev") { [weak self] in
             self?.sendControl(
                 "EV \(ev.label)", { try LunaProtocol.setExposureBias(Double(ev.thirds) / 3, functionMode: mode) },
                 onFail: { [weak self] in self?.pins.ev = nil })
@@ -341,7 +341,7 @@ extension CameraSession {
         let luna = LunaShellMapping.lunaColorMode(mode)
         let functionMode = backend.functionMode
         sendControl(
-            mode.label, { try LunaProtocol.setColorMode(luna, functionMode: functionMode) },
+            mode.label(in: profile), { try LunaProtocol.setColorMode(luna, functionMode: functionMode) },
             onFail: { [weak self] in
                 self?.pins.color = nil
                 self?.status.colorMode = previous
@@ -361,13 +361,13 @@ extension CameraSession {
     var zoomReadout: Double {
         CamFov.readout(
             live: status.zoomFactor, preview: zoomPinchPreview, fallback: zoomStop,
-            optimistic: zoomOptimistic)
+            optimistic: zoomOptimistic, ceiling: zoomCeiling)
     }
 
     var zoomDialReadout: Double {
         CamFov.continuousReadout(
             live: status.zoomFactor, preview: zoomPinchPreview, fallback: zoomStop,
-            optimistic: zoomOptimistic)
+            optimistic: zoomOptimistic, ceiling: zoomCeiling)
     }
 
     func updateZoomPinch(magnification: Double) {
@@ -400,7 +400,7 @@ extension CameraSession {
         zoomPinchPreview = nil
         zoomPin = CameraValuePin(target, now: Date.timeIntervalSinceReferenceDate)
         zoomStop = target
-        controlNote = "Zoom \(CamFov.displayLabel(factor: target))"
+        controlNote = "Zoom \(CamFov.displayLabel(factor: target, ceiling: zoomCeiling))"
         queueZoomWrite(target)
     }
 
@@ -823,7 +823,7 @@ extension CameraSession {
         let luna = LunaShellMapping.lunaGimbalMode(mode)
         let functionMode = backend.functionMode
         sendControl(
-            "Gimbal \(mode.label)", { try LunaProtocol.setGimbalMode(luna, functionMode: functionMode) },
+            "Gimbal \(mode.label(in: profile))", { try LunaProtocol.setGimbalMode(luna, functionMode: functionMode) },
             onFail: { [weak self] in
                 self?.pins.gimbalMode = nil
                 self?.gimbalMode = previous
@@ -1290,10 +1290,9 @@ extension CameraSession {
     }
 }
 
-/// Coalesces rapid drum edits into one send per key per ~120 ms (latest wins).
+/// Coalesces rapid drum edits into one send per key per ~120 ms (latest wins). One per session.
 @MainActor
 final class LunaExposureCoalescer {
-    static let shared = LunaExposureCoalescer()
     private var pending: [String: () -> Void] = [:]
     private var scheduled: Set<String> = []
 
@@ -1311,7 +1310,6 @@ final class LunaExposureCoalescer {
 
 @MainActor
 final class LunaRefreshDebounce {
-    static let shared = LunaRefreshDebounce()
     private var task: Task<Void, Never>?
 
     func schedule(_ work: @escaping @MainActor () async -> Void) {

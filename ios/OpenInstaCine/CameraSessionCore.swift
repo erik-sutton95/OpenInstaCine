@@ -165,7 +165,7 @@ extension CameraSession {
         var next = status
         applyCorePresentation(to: &next)
         status = next
-        LunaExposureCoalescer.shared.submit(key: value.key.rawValue) { [weak self] in
+        exposureCoalescer.submit(key: value.key.rawValue) { [weak self] in
             self?.submitPending(value.key, label)
         }
     }

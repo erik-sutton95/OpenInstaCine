@@ -198,17 +198,29 @@ public enum MediaCacheGrade: String, Sendable, Equatable {
 
 /// SoftAP HTTP `/v2` paths. Osmosis `PathAddressing` + `StorageRules`.
 public enum MediaHTTP {
-    /// Brand hook: DJI serves `/v2?storage=&path=`; Insta360 serves each file at its own path.
+    /// DJI serves `/v2?storage=&path=`; Insta360 serves each file at its own path.
     public enum Addressing: Sendable { case djiV2, directPath }
-    nonisolated(unsafe) public static var addressing: Addressing = .djiV2
-    nonisolated(unsafe) public static var host = CameraSoftAP.host
+
+    /// Where one camera serves its media. Per session, never process-wide.
+    public struct Route: Sendable, Equatable {
+        public var host: String
+        public var addressing: Addressing
+
+        public init(host: String, addressing: Addressing) {
+            self.host = host
+            self.addressing = addressing
+        }
+
+        public static let dji = Route(host: CameraSoftAP.host, addressing: .djiV2)
+    }
+
     public static let port = 80
 
-    public static func pathURL(storage: Int, path: String) -> URL? {
+    public static func pathURL(storage: Int, path: String, route: Route = .dji) -> URL? {
         var components = URLComponents()
         components.scheme = "http"
-        components.host = host
-        if addressing == .directPath {
+        components.host = route.host
+        if route.addressing == .directPath {
             components.path = path.hasPrefix("/") ? path : "/" + path
             return components.url
         }

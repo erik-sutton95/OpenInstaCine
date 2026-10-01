@@ -285,7 +285,11 @@ struct WatcherLiveView: View {
             if !options.zoomHundredths.isEmpty {
                 Menu(client.state.zoom.isEmpty ? "Zoom" : client.state.zoom) {
                     ForEach(options.zoomHundredths, id: \.self) { zoom in
-                        Button(CamFov.displayLabel(factor: Double(zoom) / 100)) {
+                        Button(
+                            CamFov.displayLabel(
+                                factor: Double(zoom) / 100,
+                                ceiling: Double(options.zoomHundredths.max() ?? 1_200) / 100)
+                        ) {
                             client.sendCommand(.setZoom(zoom))
                         }
                     }

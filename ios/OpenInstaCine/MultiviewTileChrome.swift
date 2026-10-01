@@ -29,7 +29,7 @@ struct MultiviewTelemetryPresentation {
     var format: String {
         let resolution = settings.videoResolution?.label ?? "—"
         let rate = settings.fps > 0 ? "\(settings.fps)p" : "—"
-        return "\(resolution) \(rate) · \(settings.colorMode?.label ?? "—")"
+        return "\(resolution) \(rate) · \(settings.colorMode?.label(in: LunaShellMapping.profile) ?? "\u{2014}")"
     }
     static func letter(_ index: Int) -> String { ["A", "B", "C", "D"][min(3, max(0, index))] }
 

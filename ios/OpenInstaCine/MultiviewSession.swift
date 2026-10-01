@@ -1,4 +1,5 @@
 import Foundation
+import Insta360Apple
 import Observation
 import OpenPocketViewCore
 import UIKit
@@ -9,6 +10,8 @@ final class MultiviewSession {
     @MainActor @Observable final class Tile: Identifiable {
         let id = UUID()
         let decoder = HevcDecoder()
+        /// The tile owns its camera connection; Live View and the settings editor lease it.
+        @ObservationIgnored let backend = AppModel.makeBackend()
         var liveModel: AppModel?
         // A settings editor borrows only the command/status path. It never owns the feed.
         var controlsModel: AppModel?
@@ -367,8 +370,7 @@ final class MultiviewSession {
     func openLiveView(_ tile: Tile) {
         closeCameraSettings()
         guard let camera = tile.camera, tile.controlHost != nil, !tile.recovering else { return }
-        let model = AppModel()
-        model.session = CameraSession(borrowing: tile.decoder)
+        let model = AppModel(session: CameraSession(backend: tile.backend, borrowing: tile.decoder))
         model.session.updateMultiview(
             camera: camera, driver: tile.driver, status: tile.latestSettings)
         model.session.adoptMultiviewPose(tile.pose)

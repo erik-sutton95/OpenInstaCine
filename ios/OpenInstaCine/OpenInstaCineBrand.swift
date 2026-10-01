@@ -9,13 +9,7 @@ enum OpenInstaCineBrand {
 
     @MainActor static func apply() {
         MonitorTheme.accentRGB = accentRGB
-        // Luna serves every file at its own path on 192.168.42.1.
-        MediaHTTP.addressing = .directPath
-        MediaHTTP.host = "192.168.42.1"
-        ShootingMode.labelOverrides = LunaShellMapping.shootingModeLabels
-        GimbalMode.labelOverrides = LunaShellMapping.gimbalModeLabels
-        ColorMode.labelOverrides = [.normal: "Standard"]
-        CamFov.maxFactor = LunaShellMapping.defaultZoomCeiling
+        // Camera labels, media route and zoom ceiling are per session (`LunaShellMapping.profile`).
         #if DEBUG
             DebugRemote.start()
         #endif

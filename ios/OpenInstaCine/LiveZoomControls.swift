@@ -385,7 +385,7 @@ struct LiveZoomChip: View {
             ?? model.session.status.zoomFactor
             ?? model.session.zoomStop
     }
-    private var title: String { CamFov.displayLabel(factor: displayFactor) }
+    private var title: String { CamFov.displayLabel(factor: displayFactor, ceiling: model.session.zoomCeiling) }
     private var opticalStops: [Double] {
         let stops = tapStops.singleTap
         return stops.isEmpty ? [1] : stops

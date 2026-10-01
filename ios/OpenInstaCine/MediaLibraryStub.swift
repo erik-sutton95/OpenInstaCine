@@ -433,7 +433,7 @@ struct MediaLibraryView: View {
     private var catalogItems: [MonitorMediaItem] {
         displayedFiles.map { file in
             let grade = cachedGrade(file)
-            let color = session.shotColor(for: file)?.label ?? ""
+            let color = session.shotColor(for: file)?.label(in: session.profile) ?? ""
             let metadata = MediaClipPresentation.metadataLine(
                 file: file, durationOverride: resolvedDurations[file.id])
             return MonitorMediaItem(
@@ -691,7 +691,8 @@ struct MediaLibraryView: View {
                         MonitorMediaFilterForm(
                             formats: formatOptions, resolutions: resolutionOptions,
                             colors: colorOptions.map {
-                                MonitorMediaFilterForm.ColorOption(id: $0.rawValue, label: $0.label)
+                                MonitorMediaFilterForm.ColorOption(
+                                    id: $0.rawValue, label: $0.label(in: session.profile))
                             },
                             formatSelection: formatFilters, resolutionSelection: resolutionFilters,
                             colorSelection: colorFilters,
@@ -957,7 +958,8 @@ private struct MediaCatalogThumbnail: View {
             present(image)
             return
         }
-        if let remote = MediaHTTP.pathURL(storage: file.storage, path: file.thumbPath),
+        if let remote = MediaHTTP.pathURL(
+                storage: file.storage, path: file.thumbPath, route: model.session.profile.media),
             let (data, _) = try? await URLSession.shared.data(from: remote),
             let image = await MediaCellImageLoader.shared.downsampled(data: data, maxPixelSize: 640)
         {

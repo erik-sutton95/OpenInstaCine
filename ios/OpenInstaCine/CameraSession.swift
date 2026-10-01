@@ -103,6 +103,23 @@ final class CameraSession {
     @ObservationIgnored private var lastIFrameRequestAt = Date.distantPast
 
     @ObservationIgnored let backend: LunaCameraBackend
+    /// False for a lease (borrowed decoder or controls-only editor) on another session's backend.
+    @ObservationIgnored let ownsBackend: Bool
+    /// Per-integration labels and media addressing for this camera (STATE-01: no launch globals).
+    @ObservationIgnored let profile: CameraProfile
+    /// This session's own drum coalescing and settings-read debounce (never shared).
+    @ObservationIgnored let exposureCoalescer = LunaExposureCoalescer()
+    @ObservationIgnored let refreshDebounce = LunaRefreshDebounce()
+    /// Learned picture EV for this source only.
+    @ObservationIgnored var pictureEV = PictureEVMeter()
+
+    /// The assumptions behind this source's picture EV: camera, recording profile, metering.
+    func pictureEVContext(transfer: MonitorTransfer) -> PictureEVContext {
+        PictureEVContext(
+            device: connectedCamera?.id.uuidString ?? "unknown", transfer: transfer,
+            profile: status.colorMode.map { String($0.rawValue) } ?? "unknown",
+            metering: faceMetering.map { $0 ? "face" : "matrix" } ?? "unknown")
+    }
     /// Osmo multiview borrows a DUML driver. Luna has no multiview; kept nil for the
     /// shared Multiview files that still compile against it.
     @ObservationIgnored var datalink: DatalinkDriver?
@@ -314,14 +331,20 @@ final class CameraSession {
     @ObservationIgnored let decoder: HevcDecoder
     var videoLayer: AVSampleBufferDisplayLayer { decoder.displayLayer }
 
+    /// `backend` is the one owner of its camera connection, created by the composition root
+    /// (`AppModel.makeBackend()`). A session that borrows a decoder or only edits controls is a
+    /// lease on it: it never rebinds the backend's callbacks and never connects.
     init(
+        backend: LunaCameraBackend, profile: CameraProfile = LunaShellMapping.profile,
         borrowing sharedDecoder: HevcDecoder? = nil, cameraMedia: CameraMedia? = nil,
         controlsOnly: Bool = false
     ) {
         isMultiviewControlsOnly = controlsOnly
+        ownsBackend = sharedDecoder == nil && !controlsOnly
+        self.profile = profile
         self.cameraMedia = cameraMedia ?? CameraMedia()
         self.decoder = sharedDecoder ?? HevcDecoder()
-        self.backend = LunaSessionHub.backend
+        self.backend = backend
         decoder.onPresentedFrame = { [weak self] in self?.noteLiveFrame() }
         decoder.onPictureSizeChanged = { [weak self] in
             guard let self else { return }
@@ -341,9 +364,9 @@ final class CameraSession {
         }
     }
 
-    /// Only the app's live session owns backend callbacks. SwiftUI may build extra
-    /// `CameraSession` values (diagnostics); binding at scan/connect keeps ownership.
+    /// Only the backend's owner binds its callbacks (at scan/connect). A lease never does.
     func activateBackend() {
+        guard ownsBackend else { return }
         backend.eventHandler = { [weak self] in self?.receiveBackend($0) }
         backend.onDeviceStatus = { [weak self] in self?.applyDeviceStatus($0) }
         backend.onSettings = { [weak self] in self?.applySettings($0) }
@@ -368,6 +391,7 @@ final class CameraSession {
 
     /// Scan for Luna cameras (BLE BE80). If `id` is set, connect as soon as it appears.
     func startScan(reconnect id: UUID?) {
+        guard ownsBackend else { return }
         activateBackend()
         connectGeneration += 1
         runTask?.cancel()
@@ -444,6 +468,7 @@ final class CameraSession {
         if case .live = phase, connectedCamera?.id == camera.id, !sessionRecovery.isRecovering {
             return
         }
+        guard ownsBackend else { return }
         activateBackend()
         ReliabilityReporting.setCameraSessionActive(true)
         connectGeneration += 1
@@ -1349,17 +1374,4 @@ final class CameraSession {
             onChromePublished?()
         }
     }
-}
-
-/// One Luna backend per process. SwiftUI may build and discard `CameraSession`
-/// values; they must share the single BLE central and TCP socket.
-@MainActor
-enum LunaSessionHub {
-    /// Simulator has no Bluetooth or hotspot API, but shares the Mac's network: with the
-    /// Mac joined to the camera Wi-Fi, the simulator app talks to the real camera.
-    #if targetEnvironment(simulator)
-        static let backend = LunaCameraBackend(useExistingNetwork: true)
-    #else
-        static let backend = LunaCameraBackend()
-    #endif
 }

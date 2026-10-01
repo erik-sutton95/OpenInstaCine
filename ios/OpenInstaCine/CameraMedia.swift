@@ -974,7 +974,7 @@ extension CameraSession {
     }
 
     func remotePlaybackURL(for file: MediaFile) -> URL? {
-        MediaHTTP.previewPaths(file).lazy.compactMap { MediaHTTP.pathURL(storage: 0, path: $0) }
+        MediaHTTP.previewPaths(file).lazy.compactMap { MediaHTTP.pathURL(storage: 0, path: $0, route: self.profile.media) }
             .first
     }
 
@@ -1017,7 +1017,7 @@ extension CameraSession {
         for file: MediaFile, after source: MediaPlaybackSource
     ) -> [MediaPlaybackSource] {
         MediaHTTP.previewPaths(file).filter { $0 != source.path }.compactMap { path in
-            MediaHTTP.pathURL(storage: 0, path: path).map {
+            MediaHTTP.pathURL(storage: 0, path: path, route: profile.media).map {
                 MediaPlaybackSource(
                     url: $0, mimeType: MediaHTTP.playbackMIMEType(for: path), isRemote: true,
                     path: path)
@@ -1178,7 +1178,7 @@ extension CameraSession {
     }
 
     private func fetchMediaFile(file: MediaFile, path: String, to dest: URL) async throws {
-        guard let url = MediaHTTP.pathURL(storage: 0, path: path) else {
+        guard let url = MediaHTTP.pathURL(storage: 0, path: path, route: profile.media) else {
             throw MediaTransferError.badResponse
         }
         try await cameraMedia.downloadFile(

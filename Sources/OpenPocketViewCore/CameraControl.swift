@@ -41,15 +41,13 @@ public enum ShootingMode: UInt8, CaseIterable, Sendable {
     /// Pocket 4 / 4 Pro Photo `0x02/0xE1` byte (`mimo-settings-1`).
     public static let photoRawPocket4: UInt8 = 0x17
 
-    /// Brand storefronts may rename modes (Insta360 TimeShift / PureVideo). Set once at launch.
-    nonisolated(unsafe) public static var labelOverrides: [ShootingMode: String] = [:]
-
-    public var label: String {
-        if let override = Self.labelOverrides[self] { return override }
-        return defaultLabel
+    /// The camera's own name for the mode (Insta360 TimeShift / PureVideo), else DJI's.
+    public func label(in profile: CameraProfile) -> String {
+        profile.shootingModeLabels[self] ?? label
     }
 
-    private var defaultLabel: String {
+    /// DJI's name for the mode.
+    public var label: String {
         switch self {
         case .slowMo: "SlowMo"
         case .video: "Video"
@@ -61,8 +59,8 @@ public enum ShootingMode: UInt8, CaseIterable, Sendable {
         }
     }
 
-    public func label(for model: CameraModel?) -> String {
-        self == .superNight && model?.isPocket3 == true ? "Low-Light" : label
+    public func label(for model: CameraModel?, in profile: CameraProfile = .dji) -> String {
+        self == .superNight && model?.isPocket3 == true ? "Low-Light" : label(in: profile)
     }
 
     /// Stills only. SuperNight / Low-Light is video (`0x28`).
@@ -535,15 +533,13 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
     /// Insta360 Dolby Vision. Not a DJI SET byte.
     case dolbyVision = 0xE5
 
-    /// Brand storefronts may rename modes (Insta360 calls Normal "Standard"). Set once at launch.
-    nonisolated(unsafe) public static var labelOverrides: [ColorMode: String] = [:]
-
-    public var label: String {
-        if let override = Self.labelOverrides[self] { return override }
-        return defaultLabel
+    /// The camera's own name for the mode (Insta360 calls Normal "Standard"), else DJI's.
+    public func label(in profile: CameraProfile) -> String {
+        profile.colorModeLabels[self] ?? label
     }
 
-    private var defaultLabel: String {
+    /// DJI's name for the mode.
+    public var label: String {
         switch self {
         case .normal: "Normal"
         case .hdr: "HDR"
@@ -564,18 +560,20 @@ public enum ColorMode: UInt8, CaseIterable, Sendable {
         }
     }
 
-    public func label(for family: CameraBodyFamily) -> String {
+    public func label(for family: CameraBodyFamily, in profile: CameraProfile = .dji) -> String {
         if family == .nano, self == .normal { return "Normal 8-bit" }
         if family == .pocket, self == .dLogM { return "D-Log M" }
-        return label
+        return label(in: profile)
     }
 
-    public init?(label: String) {
+    public init?(label: String, in profile: CameraProfile = .dji) {
         switch label {
         case "Normal 8-bit": self = .normal
         case "D-Log M": self = .dLogM
         default:
-            guard let match = Self.allCases.first(where: { $0.label == label }) else { return nil }
+            guard let match = Self.allCases.first(where: { $0.label(in: profile) == label }) else {
+                return nil
+            }
             self = match
         }
     }
@@ -1512,15 +1510,13 @@ public enum GimbalMode: String, CaseIterable, Sendable, Hashable {
     case fpv
     case directionLock
 
-    /// Brand storefronts may rename modes (Insta360 Roll Lock / FPV-V). Set once at launch.
-    nonisolated(unsafe) public static var labelOverrides: [GimbalMode: String] = [:]
-
-    public var label: String {
-        if let override = Self.labelOverrides[self] { return override }
-        return defaultLabel
+    /// The camera's own name for the mode (Insta360 Roll Lock / FPV-V), else DJI's.
+    public func label(in profile: CameraProfile) -> String {
+        profile.gimbalModeLabels[self] ?? label
     }
 
-    private var defaultLabel: String {
+    /// DJI's name for the mode.
+    public var label: String {
         switch self {
         case .follow: "Follow"
         case .tiltLocked: "Tilt locked"
@@ -2495,8 +2491,8 @@ public struct GimbalLimitWatch: Equatable, Sendable {
 public enum CamFov {
     public static let unit: UInt32 = 1024
     public static let minFactor = 1.0
-    /// Zoom ceiling for readouts and pinch. DJI Pocket 4 Pro is 12×; brands may raise it at launch.
-    nonisolated(unsafe) public static var maxFactor = 12.0
+    /// DJI Pocket 4 Pro zoom ceiling. Other cameras pass their session's ceiling instead.
+    public static let maxFactor = 12.0
     /// Operator jump stops. Mimo chips 1× / 3×; 6× and 12× are pinch detents.
     public static let jumps: [Double] = [1, 3, 6, 12]
     /// `cam_fov` `@0` at operator 1× (Mimo 1× → 12× take, start).
@@ -2642,9 +2638,9 @@ public enum CamFov {
         displayLabel(factor: factor(raw: raw))
     }
 
-    public static func displayLabel(factor: Double) -> String {
-        let shown = displayTenths(factor)
-        if abs(shown - maxFactor) < 0.05 { return "\(Int(maxFactor.rounded()))×" }
+    public static func displayLabel(factor: Double, ceiling: Double = maxFactor) -> String {
+        let shown = displayTenths(factor, ceiling: ceiling)
+        if abs(shown - ceiling) < 0.05 { return "\(Int(ceiling.rounded()))×" }
         let nearest = shown.rounded()
         if abs(shown - nearest) < 0.05, (1...12).contains(Int(nearest)) {
             return "\(Int(nearest))×"
@@ -2693,8 +2689,8 @@ public enum CamFov {
     public static let teleEngage = 3.0
 
     /// Mimo-style 0.1× steps (1.0, 1.1, … 3.0, 3.1, … 12.0).
-    public static func displayTenths(_ factor: Double) -> Double {
-        (clamp(factor) * 10).rounded() / 10
+    public static func displayTenths(_ factor: Double, ceiling: Double = maxFactor) -> Double {
+        (clamp(factor, max: ceiling) * 10).rounded() / 10
     }
 
     /// Unquantized pinch target. The chip still shows `displayTenths`.
@@ -2733,21 +2729,22 @@ public enum CamFov {
     /// Chip number: pinch preview while fingers are down, else live hybrid,
     /// else the last 1× / 3× / 6× / 12× stop.
     public static func readout(
-        live: Double?, preview: Double?, fallback: Double, optimistic: Double? = nil
+        live: Double?, preview: Double?, fallback: Double, optimistic: Double? = nil,
+        ceiling: Double = maxFactor
     ) -> Double {
         displayTenths(
             continuousReadout(
-                live: live, preview: preview, fallback: fallback, optimistic: optimistic))
+                live: live, preview: preview, fallback: fallback, optimistic: optimistic,
+                ceiling: ceiling),
+            ceiling: ceiling)
     }
 
     /// Unrounded lens factor for the zoom disc. The chip still uses `readout`.
     public static func continuousReadout(
-        live: Double?, preview: Double?, fallback: Double, optimistic: Double? = nil
+        live: Double?, preview: Double?, fallback: Double, optimistic: Double? = nil,
+        ceiling: Double = maxFactor
     ) -> Double {
-        if let preview { return clamp(preview) }
-        if let optimistic { return clamp(optimistic) }
-        if let live { return clamp(live) }
-        return clamp(fallback)
+        clamp(preview ?? optimistic ?? live ?? fallback, max: ceiling)
     }
 
     /// Lens is monotonic with the 1× → 12× pinch. `cam_fov` jumps at the 3× hop.

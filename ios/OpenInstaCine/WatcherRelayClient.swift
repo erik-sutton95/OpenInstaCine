@@ -45,7 +45,7 @@ final class WatcherRelayClient {
     var controlRequested = false
     @ObservationIgnored private var controlRequestedAt: TimeInterval?
     var colorMode: ColorMode? {
-        ColorMode(label: state.color)
+        ColorMode(label: state.color, in: LunaShellMapping.profile)
     }
     var transfer: MonitorTransfer? { colorMode.map(MonitorTransfer.init) }
     var canControl: Bool { status == .live && token.holderIsRecipient }

@@ -61,7 +61,9 @@ struct FieldMonitorStatusChrome: View {
                         }
                     }
                     if model.chromeSectionMounts(.color), !model.session.status.isPhoto {
-                        topButton(.color, value: model.session.status.colorMode?.label ?? "—")
+                        topButton(
+                            .color,
+                            value: model.session.status.colorMode?.label(in: model.session.profile) ?? "\u{2014}")
                     }
                     if layout.viewport.width >= 800, !model.session.status.isPhoto {
                         topReadout(
@@ -187,7 +189,8 @@ struct FieldMonitorStatusChrome: View {
     }
 
     private var recSetupColor: String? {
-        model.session.status.colorMode?.label(for: model.session.bodyFamily)
+        model.session.status.colorMode?.label(
+            for: model.session.bodyFamily, in: model.session.profile)
     }
 
     private func topReadout(

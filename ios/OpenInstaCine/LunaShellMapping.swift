@@ -30,6 +30,12 @@ enum LunaShellMapping {
     /// fw 1.1.15 official presets.
     static let zoomChips: [Double] = [1, 2, 3, 6, 15]
 
+    /// Luna names and media addressing for a session: every file at its own path on the camera AP.
+    static let profile = CameraProfile(
+        shootingModeLabels: shootingModeLabels, colorModeLabels: [.normal: "Standard"],
+        gimbalModeLabels: gimbalModeLabels,
+        media: MediaHTTP.Route(host: "192.168.42.1", addressing: .directPath))
+
     // MARK: Shooting mode
 
     static func shootingMode(_ mode: LunaShootingMode) -> ShootingMode {

@@ -72,7 +72,7 @@ struct LiveGimbalSheetHost: View {
                     case .mode:
                         drum(
                             GimbalMode.pickerOrder, selected: model.session.gimbalMode,
-                            title: { $0.label }, select: model.setGimbalMode)
+                            title: { $0.label(in: model.session.profile) }, select: model.setGimbalMode)
                     case .speed:
                         drum(
                             GimbalSpeed.pickerOrder, selected: model.session.gimbalSpeed,

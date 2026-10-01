@@ -15,7 +15,7 @@ extension MultiviewSession {
     func openCameraSettings(_ tile: Tile) -> AppModel? {
         closeCameraSettings()
         guard let camera = tile.camera else { return nil }
-        let editor = CameraSession(borrowing: tile.decoder, controlsOnly: true)
+        let editor = CameraSession(backend: tile.backend, borrowing: tile.decoder, controlsOnly: true)
         let model = AppModel(session: editor)
         editor.updateMultiview(camera: camera, driver: tile.driver, status: tile.settings)
         model.frameSamples = tile.sampleBus

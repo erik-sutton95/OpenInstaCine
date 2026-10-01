@@ -360,7 +360,8 @@ struct MediaPhotoViewer: View {
 
         guard session.canReachCameraMedia else { return }
 
-        if let remote = MediaHTTP.pathURL(storage: file.storage, path: file.path) {
+        if let remote = MediaHTTP.pathURL(
+            storage: file.storage, path: file.path, route: session.profile.media) {
             if let (data, _) = try? await URLSession.shared.data(from: remote),
                 let loaded = await MediaCellImageLoader.shared.downsampled(
                     data: data, maxPixelSize: 4096)
@@ -839,7 +840,7 @@ struct MediaPlayerView: View {
 
     private var clipMetadata: String {
         [
-            active.resolution, active.fps.map { "\($0)p" }, session.shotColor(for: active)?.label,
+            active.resolution, active.fps.map { "\($0)p" }, session.shotColor(for: active)?.label(in: session.profile),
             MediaClipFormatting.byteLabel(active.sizeBytes),
         ].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
@@ -869,7 +870,7 @@ struct MediaPlayerView: View {
         }
         if let fps = active.fps { rows.append(MonitorMetadataRow("Frame rate", "\(fps) fps")) }
         if let color = session.shotColor(for: active) {
-            rows.append(MonitorMetadataRow("Colour", color.label))
+            rows.append(MonitorMetadataRow("Colour", color.label(in: session.profile)))
         }
         rows.append(MonitorMetadataRow("Duration", conformedLabel(duration)))
         rows.append(MonitorMetadataRow("Size", MediaClipFormatting.byteLabel(active.sizeBytes)))
@@ -1555,10 +1556,10 @@ struct MediaPlayerView: View {
                 ? session.bodyFamily : model.assist.monitorFamily,
             cameraName: session.connectedCamera?.model.name)
         if let clip {
-            ControlLiveLog.line("media: clip color \(clip.label)")
+            ControlLiveLog.line("media: clip color \(clip.label(in: session.profile))")
         } else {
             ControlLiveLog.line(
-                "media: clip color fallback \(color.label) (proxy Keys ignored)")
+                "media: clip color fallback \(color.label(in: session.profile)) (proxy Keys ignored)")
         }
     }
 

@@ -119,20 +119,20 @@
                 "timecode": st.timecode ?? "",
                 "frameClock": model.session.lastFrameClock,
                 "frameClockOffset": model.session.frameClockOffset ?? 0,
-                "shootingMode": s.currentShootingMode?.label ?? "\(st.shootingMode)",
+                "shootingMode": s.currentShootingMode?.label(in: s.profile) ?? "\(st.shootingMode)",
                 "expoMode": st.expoMode.map { "\($0)" } ?? "?",
                 "iso": st.isoIndex?.label ?? "?",
                 "shutter": st.shutterDenom,
                 "ev": st.evComp?.label ?? "?",
                 "wb": st.whiteBalance.map { $0.mode == .auto ? "auto" : "\($0.kelvin)K" } ?? "?",
-                "color": st.colorMode?.label ?? "?",
+                "color": st.colorMode?.label(in: s.profile) ?? "?",
                 "focusMode": CaptureLists.focusOption(from: st)?.chip ?? "?",
                 "metering": s.faceMetering.map { $0 ? "face" : "matrix" } ?? "?",
                 "format": st.videoFormat?.chipLabel ?? "?",
                 "formats": st.availableVideoFormats.map(\.chipLabel),
                 "zoom": s.zoomReadout,
                 "zoomStops": s.zoomStops,
-                "gimbalMode": s.gimbalMode.label,
+                "gimbalMode": s.gimbalMode.label(in: s.profile),
                 "pose": s.freshGimbalWaypoint.map { ["yaw": ($0.yawDeg * 10).rounded() / 10, "pitch": ($0.pitchDeg * 10).rounded() / 10] } ?? [:],
                 "gimbalSpeed": s.gimbalSpeed.label,
                 "angle": s.gimbalAngle.map { ["yaw": Double($0.angle.yaw), "pitch": Double($0.angle.pitch), "roll": Double($0.angle.roll), "age": ProcessInfo.processInfo.systemUptime - $0.at] } ?? [:],
@@ -171,7 +171,7 @@
             case "disconnect": model.disconnect()
             case "record": s.pressShutter()
             case "mode":
-                if let mode = ShootingMode.allCases.first(where: { $0.label == str("value") || "\($0)" == str("value") }) {
+                if let mode = ShootingMode.allCases.first(where: { $0.label(in: s.profile) == str("value") || "\($0)" == str("value") }) {
                     s.setShootingMode(mode)
                 }
             case "iso":
@@ -186,7 +186,7 @@
                     s.setWhiteBalanceCustom(kelvin: Int(k), tint: 0)
                 }
             case "color":
-                if let mode = ColorMode.allCases.first(where: { $0.label == str("value") || "\($0)" == str("value") }) {
+                if let mode = ColorMode.allCases.first(where: { $0.label(in: s.profile) == str("value") || "\($0)" == str("value") }) {
                     s.setColorMode(mode)
                 }
             case "format":
