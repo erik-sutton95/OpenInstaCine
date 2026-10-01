@@ -190,6 +190,30 @@ class LunaShellMappingTest {
         assertEquals("20260814125250", MediaFile("DJI_20260814125250_0034_D.MP4", "").filenameTimestamp)
     }
 
+    /**
+     * STATE-01 gate (plan 11.2 case 12): two sessions' profiles in one process. Names, focus lists and
+     * media hosts come from each session's own profile; nothing is installed globally, so using one
+     * never changes what the other shows or fetches.
+     */
+    @Test fun twoProfilesInOneProcessKeepTheirOwnNamesAndHosts() {
+        val luna = m.profile
+        val dji = CameraProfile.DJI
+        repeat(2) {
+            assertTrue("TimeShift" in com.opencapture.openpocketcine.CaptureLists.shootingModeLabels(null, profile = luna))
+            assertTrue("HyperLapse" in com.opencapture.openpocketcine.CaptureLists.shootingModeLabels(null, profile = dji))
+            assertEquals(CameraCommands.SHOOT_HYPERLAPSE, com.opencapture.openpocketcine.CaptureLists.shootingModeRaw("TimeShift", null, luna))
+            assertNull(com.opencapture.openpocketcine.CaptureLists.shootingModeRaw("TimeShift", null, dji))
+            assertEquals("Standard", CameraCommands.colorLabel(CameraCommands.COLOR_NORMAL, profile = luna))
+            assertEquals("Normal", CameraCommands.colorLabel(CameraCommands.COLOR_NORMAL, profile = dji))
+            assertEquals("Roll Lock", GimbalMode.FOLLOW.label(luna))
+            assertEquals("Follow", GimbalMode.FOLLOW.label(dji))
+            assertEquals(listOf("AF-S", "AF-C", "Showcase"), com.opencapture.openpocketcine.captureQuickFocusControl(CameraStatus(), luna.focusLabels).options)
+            assertEquals(5, com.opencapture.openpocketcine.captureQuickFocusControl(CameraStatus(), dji.focusLabels).options.size)
+            assertEquals("http://192.168.42.1/DCIM/a.mp4", luna.media.pathUrlString(1, "/DCIM/a.mp4"))
+            assertEquals("http://192.168.2.1/v2?storage=1&path=/DCIM/a.mp4", dji.media.pathUrlString(1, "/DCIM/a.mp4"))
+        }
+    }
+
     @Test fun timeOfDayTimecode() {
         val m = LunaShellMapping
         // 2026-09-30 08:51:10.54 UTC, Stockholm (UTC+2).

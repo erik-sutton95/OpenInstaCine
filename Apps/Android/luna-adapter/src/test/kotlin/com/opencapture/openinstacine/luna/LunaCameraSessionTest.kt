@@ -23,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -72,14 +73,14 @@ private class FakeLuna(private val scope: CoroutineScope) {
     }
 
     /** A live session that has heard every report once. */
-    fun connectedSession(settle: Duration = 5.seconds): LunaCameraSession {
+    fun connectedSession(settle: Duration = 5.seconds, serial: String = "LUNA-TEST"): LunaCameraSession {
         makeSession(settle)
-        session.linkChanged(LinkPhase.LIVE, "LUNA-TEST")
+        session.linkChanged(LinkPhase.LIVE, serial)
         reportDevice(); reportSettings(); reportCapture()
         return session
     }
 
-    private suspend fun receive(request: LunaControl.Request): ByteArray {
+    suspend fun receive(request: LunaControl.Request): ByteArray {
         synchronized(lock) { sent += request }
         if (refuses) throw LunaRefused(request.code)
         if (ignoresWrites) return ByteArray(0)
@@ -328,6 +329,70 @@ class LunaCameraSessionTest {
             CommandPreconditions(session.id, epoch, session.snapshots.value.capabilities.revision),
         )
         assertEquals(CommandStage.Rejected(CommandRejection.StaleEpoch), session.submit(stale).stage, "an edit from the old link is refused")
+    }
+
+    /**
+     * STATE-01 gate (plan 11.2 cases 1, 11, 12): two cameras, each with its own session and link, in
+     * one process. Commands, reports, identity and teardown never cross; closing one leaves the
+     * other working.
+     */
+    @Test fun twoSessionsRunConcurrentlyWithoutCrossover() = runBlocking {
+        val a = FakeLuna(scope)
+        val b = FakeLuna(scope)
+        val sa = a.connectedSession(serial = "LUNA-A")
+        val sb = b.connectedSession(serial = "LUNA-B")
+        assertEquals("LUNA-A", sa.snapshots.value.device?.value)
+        assertEquals("LUNA-B", sb.snapshots.value.device?.value)
+        assertTrue(sa.id != sb.id)
+        a.applyDelay = 200.milliseconds
+        b.applyDelay = 300.milliseconds
+        val iso = async { sa.run(CameraCommandIntent.Set(SettingValue.Iso(ISOValue.Manual(800)))).second }
+        val wb = async { sb.run(CameraCommandIntent.Set(SettingValue.WhiteBalance(WhiteBalanceValue.Kelvin(3200)))).second }
+        assertEquals(CommandStage.Confirmed, iso.await().stage)
+        assertEquals(CommandStage.Confirmed, wb.await().stage)
+        // Each command reached only its own camera.
+        assertEquals(listOf(800L), a.sent.map { LunaPhotographySettings.parse(it.body).videoExposure?.iso })
+        assertEquals(listOf(3200L), b.sent.map { LunaPhotographySettings.parse(it.body).whiteBalanceKelvin })
+        // Each report updated only its own session.
+        assertEquals(SettingValue.Iso(ISOValue.Manual(800)), sa.snapshots.value.value(SettingKey.ISO).value)
+        assertEquals(SettingValue.Iso(ISOValue.Auto), sb.snapshots.value.value(SettingKey.ISO).value)
+        assertEquals(SettingValue.WhiteBalance(WhiteBalanceValue.Kelvin(5600)), sa.snapshots.value.value(SettingKey.WHITE_BALANCE).value)
+        assertEquals(SettingValue.WhiteBalance(WhiteBalanceValue.Kelvin(3200)), sb.snapshots.value.value(SettingKey.WHITE_BALANCE).value)
+        val revisionB = sb.snapshots.value.revision
+        a.reportSettings(); a.reportCapture(); a.reportDevice()
+        assertEquals(revisionB, sb.snapshots.value.revision, "A's reports never reach B")
+        // Teardown of A: B keeps its link, its state and its controls.
+        val sentA = a.sentCount()
+        sa.close(SessionCloseReason.REQUESTED)
+        assertEquals(ConnectionState.Disconnected(SessionCloseReason.REQUESTED), sa.snapshots.value.connection)
+        assertEquals(ConnectionState.Ready, sb.snapshots.value.connection)
+        assertEquals(CommandStage.Confirmed, sb.run(CameraCommandIntent.StartRecording).second.stage)
+        assertEquals(RecordingState.RECORDING, sb.snapshots.value.recording.value)
+        assertEquals(RecordingState.IDLE, sa.snapshots.value.recording.value)
+        assertEquals(sentA, a.sentCount(), "closing A sent nothing, and B's record went to B")
+        assertEquals(CommandStage.Rejected(CommandRejection.SessionClosed), sa.run(CameraCommandIntent.StartRecording).second.stage)
+    }
+
+    /**
+     * Plan 5.2 / STATE-01: the control epoch changes only with the control link. A stream-only
+     * restart (the backend's `pauseLive`/`resumeLive`: stop and start live on the open socket, no
+     * link phase change) leaves an in-flight write valid and confirmable.
+     */
+    @Test fun streamRestartKeepsTheControlEpoch() = runBlocking {
+        val camera = FakeLuna(scope)
+        val session = camera.connectedSession()
+        camera.applyDelay = 300.milliseconds
+        val before = session.snapshots.value
+        val command = CameraCommand(CameraCommandIntent.Set(SettingValue.Iso(ISOValue.Manual(400))), CommandPreconditions(before))
+        assertEquals(CommandStage.AwaitingObservation, session.submit(command).stage)
+        camera.receive(LunaControl.stopLive)
+        camera.receive(LunaControl.startLive)
+        assertEquals(before.epoch, session.snapshots.value.epoch)
+        assertEquals(ConnectionState.Ready, session.snapshots.value.connection)
+        assertEquals(CommandStage.Confirmed, session.outcome(command.operation)?.stage)
+        // An edit built before the restart is still admitted.
+        val later = CameraCommand(CameraCommandIntent.Set(SettingValue.Iso(ISOValue.Manual(800))), CommandPreconditions(before))
+        assertEquals(CommandStage.Confirmed, (session.submit(later).let { session.outcome(later.operation) ?: it }).stage)
     }
 
     @Test fun closeNeverSends() = runBlocking {
