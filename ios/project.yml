@@ -159,6 +159,8 @@ targets:
         product: Insta360Protocol
       - package: OpenCineCore
         product: OpenCineCore
+      - package: OpenPocketViewCore
+        product: MonitorContracts
     settings:
       base:
         SWIFT_VERSION: "5.0"

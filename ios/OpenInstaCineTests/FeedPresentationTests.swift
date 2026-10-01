@@ -14,7 +14,7 @@ final class FeedPresentationTests: XCTestCase {
         let decoder = HevcDecoder()
         decoder.effects.desqueezeFactor = 1.33
         decoder.processedFeed = feed
-        let session = CameraSession(borrowing: decoder)
+        let session = CameraSession(backend: AppModel.makeBackend(), borrowing: decoder)
         defer { decoder.reset() }
         let drawable = try TestFeedDrawable(layer: feed.layer as! CAMetalLayer)
         feed.presentOperations.acquire = { _ in drawable }

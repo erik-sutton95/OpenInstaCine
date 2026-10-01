@@ -1,4 +1,5 @@
 import Insta360Protocol
+import OpenCineCore
 import OpenPocketViewCore
 import XCTest
 
@@ -55,7 +56,7 @@ final class LunaShellMappingTests: XCTestCase {
             box += Data([0x25]) + withUnsafeBytes(of: Float(0.27).bitPattern.littleEndian) { Data($0) }
             return try LunaTrackFrame(Data([0x10, state, 0x22, UInt8(box.count)]) + box)
         }
-        let session = CameraSession(borrowing: HevcDecoder())
+        let session = CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
         session.applyTrackFrame(try frame(state: 5, x: 0.4))
         XCTAssertFalse(session.isTrackingActive, "idle before any lock is ignored")
         session.applyTrackFrame(try frame(state: 2, x: 0.4))
@@ -176,24 +177,95 @@ final class LunaShellMappingTests: XCTestCase {
 
 @MainActor
 final class PictureEVMeterTests: XCTestCase {
+    private static let ilog = PictureEVContext(
+        device: "CAM-1", transfer: .ilog, profile: "i-log", metering: "matrix")
+
+    private func freshDefaults(_ name: String) -> UserDefaults {
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+
     func testLearnsTheAutoExposurePlacementAndReadsManualAgainstIt() {
-        let defaults = UserDefaults(suiteName: "PictureEVMeterTests")!
-        defaults.removePersistentDomain(forName: "PictureEVMeterTests")
-        let meter = PictureEVMeter(defaults: defaults)
+        let meter = PictureEVMeter(defaults: freshDefaults("PictureEVMeterTests"))
+        let ilog = Self.ilog
         // Seeded: auto at EV 0 with the I-Log median 1.3 stops under grey reads 0.
-        XCTAssertEqual(meter.stops(picture: -1.3, transfer: .ilog, evComp: nil, now: 0), 0, accuracy: 1e-9)
+        let first = meter.stops(picture: -1.3, context: ilog, evComp: nil, now: 0)
+        XCTAssertEqual(try XCTUnwrap(first.value), 0, accuracy: 1e-9)
+        XCTAssertEqual(first.origin, .imageEstimated)
         // Auto at EV 0 in a scene the camera places at -0.8: the offset follows.
         var t = 0.0
         while t < 20 {
             t += 0.04
-            _ = meter.stops(picture: -0.8, transfer: .ilog, evComp: 0, now: t)
+            _ = meter.stops(picture: -0.8, context: ilog, evComp: 0, now: t)
         }
-        XCTAssertEqual(meter.offset(for: .ilog), -0.8, accuracy: 0.01)
+        XCTAssertEqual(meter.offset(for: ilog), -0.8, accuracy: 0.01)
         // Manual, one stop darker than auto chose: reads -1.0; the offset holds.
-        XCTAssertEqual(meter.stops(picture: -1.8, transfer: .ilog, evComp: nil, now: t + 1), -1.0, accuracy: 0.01)
-        XCTAssertEqual(meter.offset(for: .ilog), -0.8, accuracy: 0.01)
+        let manual = meter.stops(picture: -1.8, context: ilog, evComp: nil, now: t + 1)
+        XCTAssertEqual(try XCTUnwrap(manual.value), -1.0, accuracy: 0.01)
+        XCTAssertEqual(meter.offset(for: ilog), -0.8, accuracy: 0.01)
         // Rec.709 has no seed.
-        XCTAssertEqual(meter.stops(picture: 0.4, transfer: .rec709, evComp: nil, now: t + 2), 0.4, accuracy: 1e-9)
+        var rec709 = ilog
+        rec709.transfer = .rec709
+        let plain = meter.stops(picture: 0.4, context: rec709, evComp: nil, now: t + 2)
+        XCTAssertEqual(try XCTUnwrap(plain.value), 0.4, accuracy: 1e-9)
+    }
+
+    /// Existing installs keep their v1 per-transfer offsets: they seed every new v2 key of the
+    /// same transfer, v1 is never written or removed, and running it again changes nothing.
+    func testV1OffsetsSeedNewKeysIdempotentlyAndSurvive() {
+        let defaults = freshDefaults("PictureEVMeterMigrationTests")
+        let legacy: [String: Double] = [MonitorTransfer.ilog.rawValue: -0.6]
+        defaults.set(legacy, forKey: PictureEVMeter.legacyDefaultsKey)
+        var otherCamera = Self.ilog
+        otherCamera.device = "CAM-2"
+        var faceMetering = Self.ilog
+        faceMetering.metering = "face"
+
+        for run in 0..<2 {
+            let meter = PictureEVMeter(defaults: defaults)
+            XCTAssertEqual(meter.offset(for: otherCamera), -0.6, accuracy: 1e-9, "run \(run)")
+            XCTAssertEqual(meter.offset(for: faceMetering), -0.6, accuracy: 1e-9, "run \(run)")
+            meter.save()
+            XCTAssertEqual(
+                defaults.dictionary(forKey: PictureEVMeter.legacyDefaultsKey) as? [String: Double], legacy)
+        }
+
+        // Learning one context writes only its v2 key; the others still read v1.
+        let learner = PictureEVMeter(defaults: defaults)
+        var t = 0.0
+        while t < 20 {
+            t += 0.04
+            _ = learner.stops(picture: -1.0, context: Self.ilog, evComp: 0, now: t)
+        }
+        learner.save()
+        let stored = defaults.dictionary(forKey: PictureEVMeter.defaultsKey) as? [String: Double] ?? [:]
+        XCTAssertEqual(Set(stored.keys), [Self.ilog.key])
+        let reread = PictureEVMeter(defaults: defaults)
+        XCTAssertEqual(reread.offset(for: Self.ilog), -1.0, accuracy: 0.01)
+        XCTAssertEqual(reread.offset(for: otherCamera), -0.6, accuracy: 1e-9)
+        XCTAssertEqual(defaults.dictionary(forKey: PictureEVMeter.legacyDefaultsKey) as? [String: Double], legacy)
+    }
+
+    /// A source saves only its own keys, so a second source's learning is never overwritten.
+    func testTwoSourcesSharingStorageKeepTheirOwnOffsets() {
+        let defaults = freshDefaults("PictureEVMeterSourcesTests")
+        var second = Self.ilog
+        second.device = "CAM-2"
+        let a = PictureEVMeter(defaults: defaults)
+        let b = PictureEVMeter(defaults: defaults)
+        var t = 0.0
+        while t < 20 {
+            t += 0.04
+            _ = a.stops(picture: -0.4, context: Self.ilog, evComp: 0, now: t)
+            _ = b.stops(picture: -2.2, context: second, evComp: 0, now: t)
+        }
+        a.save()
+        b.save()
+        a.save()
+        let reread = PictureEVMeter(defaults: defaults)
+        XCTAssertEqual(reread.offset(for: Self.ilog), -0.4, accuracy: 0.01)
+        XCTAssertEqual(reread.offset(for: second), -2.2, accuracy: 0.01)
     }
 }
 

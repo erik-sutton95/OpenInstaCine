@@ -234,11 +234,11 @@ final class CaptureQuickSnapshotTests: XCTestCase {
         status.shootingMode = Int(ShootingMode.video.rawValue)
         let mode = try XCTUnwrap(CaptureQuickSnapshot.primary(.mode, status: status))
         XCTAssertEqual(
-            mode.options, CaptureLists.operatorShootingModes(from: status).map(\.label))
-        XCTAssertFalse(mode.options.contains(ShootingMode.livePhoto.label))
+            mode.options, CaptureLists.operatorShootingModes(from: status).map { $0.label(in: LunaShellMapping.profile) })
+        XCTAssertFalse(mode.options.contains(ShootingMode.livePhoto.label(in: LunaShellMapping.profile)))
         XCTAssertEqual(mode.selection, "Video")
         XCTAssertNil(mode.changedValue(translation: 0, current: mode))
-        XCTAssertEqual(mode.changedValue(translation: -56, current: mode), ShootingMode.timeLapse.label)
+        XCTAssertEqual(mode.changedValue(translation: -56, current: mode), ShootingMode.timeLapse.label(in: LunaShellMapping.profile))
 
         status.shootingMode = Int(ShootingMode.photo.rawValue)
         let photo = CaptureQuickSnapshot.primary(.mode, status: status)
@@ -306,12 +306,12 @@ final class CaptureQuickSnapshotTests: XCTestCase {
         XCTAssertEqual(format.selection, "Photo")
         XCTAssertFalse(format.enabled)
         let mode = try XCTUnwrap(CaptureQuickSnapshot.primary(.mode, status: status))
-        XCTAssertTrue(mode.options.contains(ShootingMode.livePhoto.label))
-        XCTAssertEqual(mode.selection, ShootingMode.livePhoto.label)
+        XCTAssertTrue(mode.options.contains(ShootingMode.livePhoto.label(in: LunaShellMapping.profile)))
+        XCTAssertEqual(mode.selection, ShootingMode.livePhoto.label(in: LunaShellMapping.profile))
         XCTAssertNil(mode.changedValue(translation: 0, current: mode))
         status.shootingMode = Int(ShootingMode.video.rawValue)
         let videoMode = try XCTUnwrap(CaptureQuickSnapshot.primary(.mode, status: status))
-        XCTAssertFalse(videoMode.options.contains(ShootingMode.livePhoto.label))
+        XCTAssertFalse(videoMode.options.contains(ShootingMode.livePhoto.label(in: LunaShellMapping.profile)))
     }
 
     func testSlowMo200UsesAdvertisedCapabilityNotInvented240() throws {

@@ -11,7 +11,7 @@ final class CapturePanelRenderComparisonTests: XCTestCase {
     /// is the compact dial at the same bottom-center well.
     func testTappedISOWhiteBalanceAndFocusKeepFullDetailsWhileHoldIsCompact() async throws {
         let model = AppModel()
-        model.session = CameraSession(borrowing: HevcDecoder())
+        model.session = CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
         var status = CameraStatus()
         status.expoMode = .manual
         status.colorMode = .normal
