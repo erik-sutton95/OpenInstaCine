@@ -16,4 +16,6 @@ kotlin {
 
 dependencies {
     api(libs.kotlinx.coroutines.core)
+    // Commands and reported camera state (CoreSessionSource) use the common contracts.
+    api("com.opencapture.opencine:core:0.1.0-SNAPSHOT")
 }

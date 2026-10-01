@@ -175,6 +175,11 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      # OpenCineCore candidate wiring (CORE-02). Apps/Android/settings.gradle.kts includes
+      # ../../../OpenCineCore/Android, a sibling checkout pinned by SHA in opencine-pins.txt.
+      # Works only once the OpenCineCore remote exists (owner/URL not final).
+      - name: Check out pinned OpenCine packages next to the repository
+        run: scripts/checkout-opencine.sh
       # The install script needs NDK 27 for the Swift Android SDK sysroot.
       - name: Set up Android NDK 27
         uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
