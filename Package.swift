@@ -22,7 +22,8 @@ let package = Package(
             name: "OpenPocketCineAndroid", type: .dynamic, targets: ["OpenPocketCineAndroidFacade"]),
     ],
     dependencies: [
-        // Portable media math (OpenCineMedia) and shared gimbal motion (OpenCineMotion).
+        // Portable media math (OpenCineMedia), shared gimbal motion (OpenCineMotion) and the
+        // second-screen relay wire (OpenCineRelay).
         // Sibling checkout until OpenCineCore is published.
         .package(path: "../OpenCineCore")
     ],
@@ -32,6 +33,7 @@ let package = Package(
             dependencies: [
                 .product(name: "OpenCineMedia", package: "OpenCineCore"),
                 .product(name: "OpenCineMotion", package: "OpenCineCore"),
+                .product(name: "OpenCineRelay", package: "OpenCineCore"),
             ]
         ),
         .testTarget(
