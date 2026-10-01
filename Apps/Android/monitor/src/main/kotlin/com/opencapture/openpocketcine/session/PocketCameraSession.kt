@@ -12,6 +12,22 @@ import com.opencapture.openpocketcine.EvComp
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.openpocketcine.core.CameraSession as CameraSessionSeam
+import com.opencapture.openpocketcine.core.CoreSessionSource
+import com.opencapture.opencine.core.CameraCommand
+import com.opencapture.opencine.core.CameraCommandIntent
+import com.opencapture.opencine.core.CameraSession as CoreCameraSession
+import com.opencapture.opencine.core.CameraSnapshot as CoreSnapshot
+import com.opencapture.opencine.core.CommandPreconditions
+import com.opencapture.opencine.core.CommandReceipt
+import com.opencapture.opencine.core.CommandStage
+import com.opencapture.opencine.core.ISOValue
+import com.opencapture.opencine.core.OperationID
+import com.opencapture.opencine.core.Rational
+import com.opencapture.opencine.core.SessionCloseReason
+import com.opencapture.opencine.core.SettingKey
+import com.opencapture.opencine.core.SettingValue
+import com.opencapture.opencine.core.ShutterValue
+import com.opencapture.opencine.core.WhiteBalanceValue
 import com.opencapture.openpocketcine.core.ConnectionPhase
 import com.opencapture.openpocketcine.feed.FacePriorityExposure
 import com.opencapture.openpocketcine.feed.SerialSessionGate
@@ -215,6 +231,12 @@ class PocketCameraSession(
     /** Camera media over the control link, when the backend offers it (Luna: UCD2 list + HTTP). */
     val media: CameraMediaStore? get() = (backend as? CameraMediaStore)?.takeIf { CameraCapability.CAMERA_MEDIA in capabilities }
     private val pins = LunaControlPins()
+    // OpenCineCore (CORE-02): ISO, shutter, white balance and record go only through [core].
+    private var core: CoreCameraSession? = null
+    private var coreFeed: Job? = null
+    private var coreSnapshot: CoreSnapshot? = null
+    private val pendingSettings = mutableMapOf<SettingKey, PendingSetting>()
+    private var recordOperation: OperationID? = null
     private var formatTable: Map<VideoFormat, Long> = emptyMap()
     private var lastReadout = CameraReadout()
     private var recordStartedAt: Long? = null
@@ -434,11 +456,39 @@ class PocketCameraSession(
     // Connection.
     override fun startScan() = backend.startScan()
     fun startScan(reconnect: String?) { if (reconnect == null) startScan() else reconnect(reconnect) }
-    fun reconnect(id: String) { _connectionTargetId.value = id; backend.connect(id) }
+    fun reconnect(id: String) { _connectionTargetId.value = id; openCore(); backend.connect(id) }
     fun connect(camera: FoundCamera) {
         decoder.reset(); videoPackets = 0; hasVideoFormat = false
         _connectionTargetId.value = camera.id
+        openCore()
         backend.connect(camera.id)
+    }
+
+    /** A fresh Core session per connection; recovery keeps it (its epoch advances on LIVE). */
+    private fun openCore() {
+        closeCore()
+        val session = (backend as? CoreSessionSource)?.openSession() ?: return
+        core = session
+        coreFeed = scope.launch { session.snapshots.collect(::applyCoreSnapshot) }
+    }
+
+    /** Closing never sends a camera command; in particular it never stops a recording. */
+    private fun closeCore() {
+        coreFeed?.cancel(); coreFeed = null
+        core?.let { session -> scope.launch { session.close(SessionCloseReason.REQUESTED) } }
+        core = null; coreSnapshot = null; pendingSettings.clear()
+        if (recordOperation != null) { recordOperation = null; _controlBusy.value = false }
+    }
+
+    private fun applyCoreSnapshot(snapshot: CoreSnapshot) {
+        coreSnapshot = snapshot
+        _status.update { CorePresentation.apply(snapshot, pendingSettings, it) }
+    }
+
+    private suspend fun finished(session: CoreCameraSession, command: CameraCommand): CommandReceipt {
+        val receipt = session.submit(command)
+        if (receipt.isFinished) return receipt
+        return session.outcome(command.operation) ?: receipt
     }
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     // Multiview needs a second DUML datalink; the Luna shell never offers it.
@@ -448,12 +498,13 @@ class PocketCameraSession(
     fun receiveMultiview(frame: DumlFrame) = Unit
     fun releaseMultiview() = Unit
     override fun disconnect() {
+        closeCore()
         backend.disconnect(); decoder.reset()
         holdsMonitor = false; hasVideoFormat = false
         _connectionTargetId.value = null
         showTrack(LunaTrackBoxes())
     }
-    fun close() { backend.close(); decoder.reset(); scope.cancel() }
+    fun close() { closeCore(); backend.close(); decoder.reset(); scope.cancel() }
     fun noteSceneBecameInactive() = backend.sceneActive(false)
     fun noteSceneBecameActive() = backend.sceneActive(true)
     internal fun hasRecoveryPicture(startedAt: Long): Boolean = hasVideoFormat
@@ -521,16 +572,16 @@ class PocketCameraSession(
         }
         _faceMetering.value = readout.faceMetering?.let { pins::faceMetering.hold(it, now) ?: it }
         readout.zoom?.let { if (zoomTarget == null && zoomPinchPreview == null) _zoomReadout.value = it }
-        // Capture: the REC lamp holds its pin until capture status confirms.
-        val recording = readout.recording
+        // ISO, shutter, WB and recording itself come from the Core session; the readout keeps the REC timer.
+        coreSnapshot?.let { next = CorePresentation.apply(it, pendingSettings, next) }
+        val recording = readout.recording == true
         if (recording && recordStartedAt == null) recordStartedAt = now - readout.captureSeconds * 1_000L
         if (!recording) recordStartedAt = null
-        if (pins::recording.hold(recording, now) == null) next = next.copy(isRecording = recording)
         val elapsed = if (recording) maxOf(readout.captureSeconds, recordStartedAt?.let { ((now - it) / 1_000).toInt() } ?: 0) else 0
         next = next.copy(recordElapsedSec = elapsed)
         // The frame clock owns the timecode (set from the decode thread).
         _status.update { next.copy(timecode = it.timecode) }
-        if (pins.recording == null && _controlBusy.value && !pins.photoInFlight) _controlBusy.value = false
+        if (recordOperation == null && _controlBusy.value && !pins.photoInFlight) _controlBusy.value = false
         publishFaceDetectWanted()
     }
 
@@ -595,22 +646,26 @@ class PocketCameraSession(
         scope.launch { delay(120); coalesced.remove(key)?.invoke() }
     }
 
-    // Record and photo. Record never lies: the lamp holds controlBusy until capture status confirms.
+    // Record and photo. Record never lies: the lamp holds controlBusy until the Core session reports
+    // the outcome. Start or stop is resolved from the session's current snapshot; unknown sends nothing.
     fun pressRecord() {
-        if (!canSendControl()) return
-        val starting = !_status.value.isRecording
+        if (!canSendControl() || recordOperation != null) return
+        val session = core ?: return presentControlNote("Connect the camera to use its controls.")
+        val snapshot = session.snapshots.value
+        val intent = CorePresentation.recordIntent(snapshot.recording.value)
+            ?: return presentControlNote("Recording state is not known yet. Try again in a moment.")
+        val command = CameraCommand(intent, CommandPreconditions(snapshot))
+        recordOperation = command.operation
         _controlBusy.value = true
-        pins.recording = pin(starting, SystemClock.elapsedRealtime(), 4_000)
-        sendControl(
-            if (starting) "Record" else "Stop", refresh = false,
-            onFail = { pins.recording = null; _controlBusy.value = false },
-            onSuccess = {
-                if (starting) recordStartedAt = SystemClock.elapsedRealtime()
-                else { recordStartedAt = null; _mediaCaptured.tryEmit(Unit) }
-                _status.value = _status.value.copy(isRecording = starting, recordElapsedSec = if (starting) _status.value.recordElapsedSec else 0)
-                _controlBusy.value = false
-            },
-        ) { if (starting) startRecording() else stopRecording() }
+        scope.launch {
+            val receipt = finished(session, command)
+            if (recordOperation != command.operation) return@launch
+            recordOperation = null
+            _controlBusy.value = false
+            val stop = intent == CameraCommandIntent.StopRecording
+            CorePresentation.note(receipt.stage, if (stop) "Stop" else "Record")?.let(::presentControlNote)
+            if (stop && receipt.stage == CommandStage.Confirmed) _mediaCaptured.tryEmit(Unit)
+        }
     }
 
     /** Rec lamp: a still in Photo, otherwise start/stop video (timelapse modes record too). */
@@ -641,37 +696,40 @@ class PocketCameraSession(
         ) { setShootingMode(mode) }
     }
 
-    // Exposure. Luna has one exposure message (program + ISO + shutter); the shell's ISO and
-    // shutter drums map onto its four programs.
-    private val currentIso: Int?
-        get() = _status.value.isoIndex.takeIf { it > 0 }?.let(CameraCommands::isoValue)
-    private val currentShutterSeconds: Double?
-        get() = _status.value.shutterDenom.takeIf { it > 0 }?.let { 1.0 / it }
-
-    private fun sendExposure(iso: Int?, shutterSeconds: Double?, name: String) = sendControl(
-        name, onFail = { pins.isoIndex = null; pins.shutterDenom = null; pins.expoMode = null },
-    ) { setExposure(iso, shutterSeconds) }
-
+    // Exposure: ISO and shutter go to the Core session, which owns Luna's one exposure message.
     fun setIsoIndex(index: Int) {
         if (!canSendControl()) return
-        val now = SystemClock.elapsedRealtime()
-        val iso = if (index == 0) null else CameraCommands.isoValue(index) ?: return
-        val shutter = if (_status.value.expoMode == CameraCommands.EXPO_MANUAL) currentShutterSeconds else null
-        val mode = if (iso == null && shutter == null) CameraCommands.EXPO_AUTO else CameraCommands.EXPO_MANUAL
-        pins.isoIndex = pin(index, now)
-        pins.expoMode = pin(mode, now)
-        _status.value = _status.value.copy(isoIndex = index, iso = iso ?: _status.value.iso, expoMode = mode)
-        coalesce("exposure") { sendExposure(iso, shutter, "ISO ${CameraCommands.isoLabel(index)}") }
+        val iso = if (index == 0) ISOValue.Auto else ISOValue.Manual(CameraCommands.isoValue(index) ?: return)
+        submitSetting(SettingValue.Iso(iso), "ISO ${CameraCommands.isoLabel(index)}")
     }
 
     fun setShutterDenom(denom: Int) {
         if (!canSendControl() || denom <= 0) return
-        val now = SystemClock.elapsedRealtime()
-        pins.shutterDenom = pin(denom, now)
-        pins.expoMode = pin(CameraCommands.EXPO_MANUAL, now)
-        _status.value = _status.value.copy(shutterDenom = denom, expoMode = CameraCommands.EXPO_MANUAL)
-        val iso = currentIso
-        coalesce("exposure") { sendExposure(iso, 1.0 / denom, "1/$denom") }
+        submitSetting(SettingValue.Shutter(ShutterValue.Duration(Rational(1, denom))), "1/$denom")
+    }
+
+    /** Shows [value] at once; submits it after the coalescing window (latest per setting wins). */
+    private fun submitSetting(value: SettingValue, label: String) {
+        pendingSettings[value.key] = PendingSetting(OperationID(), value)
+        coreSnapshot?.let { snapshot -> _status.update { CorePresentation.apply(snapshot, pendingSettings, it) } }
+        coalesce(value.key.name) { submitPending(value.key, label) }
+    }
+
+    private fun submitPending(key: SettingKey, label: String) {
+        val pending = pendingSettings[key] ?: return
+        val session = core
+        val snapshot = coreSnapshot
+        if (session == null || snapshot == null) return finishSetting(key, pending.operation, "Connect the camera to use its controls.")
+        val command = CameraCommand(CameraCommandIntent.Set(pending.value), CommandPreconditions(snapshot), pending.operation)
+        scope.launch { finishSetting(key, pending.operation, CorePresentation.note(finished(session, command).stage, label)) }
+    }
+
+    private fun finishSetting(key: SettingKey, operation: OperationID, note: String?) {
+        // A newer edit of the same setting owns the drum now.
+        if (pendingSettings[key]?.operation != operation) return
+        pendingSettings.remove(key)
+        note?.let(::presentControlNote)
+        applyReadout(lastReadout)
     }
 
     /** Only explicit angle choices write the saved intent; delayed telemetry never does. */
@@ -685,18 +743,15 @@ class PocketCameraSession(
 
     fun setExpoMode(mode: Int) {
         if (!canSendControl()) return
-        val now = SystemClock.elapsedRealtime()
-        pins.expoMode = pin(mode, now)
         if (mode == CameraCommands.EXPO_AUTO) {
-            pins.isoIndex = pin(0, now)
-            _status.value = _status.value.copy(expoMode = mode, isoIndex = 0)
-            return sendExposure(null, null, "Auto exposure")
+            submitSetting(SettingValue.Iso(ISOValue.Auto), "Auto exposure")
+            return submitSetting(SettingValue.Shutter(ShutterValue.Auto), "Auto exposure")
         }
-        // Manual needs a shutter: keep the current one, else the 180 degree default.
-        val denom = _status.value.shutterDenom.takeIf { it > 0 } ?: (maxOf(_status.value.fps, 25) * 2)
-        pins.shutterDenom = pin(denom, now)
-        _status.value = _status.value.copy(expoMode = CameraCommands.EXPO_MANUAL, shutterDenom = denom)
-        sendExposure(currentIso, 1.0 / denom, "Manual exposure")
+        // Manual needs a shutter: keep the current one, else the nearest offered 180 degrees.
+        val status = _status.value
+        val wanted = status.shutterDenom.takeIf { it > 0 } ?: (maxOf(status.fps, 25) * 2)
+        val denom = status.availableShutterDenoms.minByOrNull { abs(it - wanted) } ?: wanted
+        submitSetting(SettingValue.Shutter(ShutterValue.Duration(Rational(1, denom))), "Manual exposure")
     }
 
     fun setEv(thirds: Int) {
@@ -1181,18 +1236,14 @@ class PocketCameraSession(
     fun setMediaFavorite(handle: Int, favorite: Boolean) = Unit
 
     // White balance: kelvin 2000...10000 or auto; the Luna has no tint.
-    fun setWhiteBalanceAuto(tint: Int? = null) = fireWhiteBalance(CameraCommands.WB_AUTO, 0)
-    fun setWhiteBalance(kelvin: Int, tint: Int) = fireWhiteBalance(CameraCommands.WB_CUSTOM, kelvin.coerceIn(2_000, 10_000))
-    private fun fireWhiteBalance(mode: Int, kelvin: Int) {
+    fun setWhiteBalanceAuto(tint: Int? = null) {
+        if (canSendControl()) submitSetting(SettingValue.WhiteBalance(WhiteBalanceValue.Auto), "WB Auto")
+    }
+    fun setWhiteBalance(kelvin: Int, tint: Int) {
         if (!canSendControl()) return
-        // fw 1.1.15 applies kelvin 3.5 to 3.9 s after the SET.
-        pins.whiteBalance = pin(mode to kelvin, SystemClock.elapsedRealtime(), 5_000)
-        _status.value = _status.value.copy(wbMode = mode, wbKelvin = if (kelvin > 0) kelvin else _status.value.wbKelvin, wbTint = 0)
-        coalesce("wb") {
-            sendControl(if (mode == CameraCommands.WB_AUTO) "WB Auto" else "WB ${kelvin}K", onFail = { pins.whiteBalance = null }) {
-                setWhiteBalance(kelvin.takeIf { mode == CameraCommands.WB_CUSTOM })
-            }
-        }
+        // fw 1.1.15 applies kelvin 3.5 to 3.9 s after the SET; the session waits for the readback.
+        val clamped = kelvin.coerceIn(2_000, 10_000)
+        submitSetting(SettingValue.WhiteBalance(WhiteBalanceValue.Kelvin(clamped)), "WB ${clamped}K")
     }
     // AF-S, AF-C and Product Showcase (iOS `setFocusOption`); the shared drum sends AF-C then a track, so the last wins.
     fun setFocusMode(continuous: Boolean) = setFocusOption(if (continuous) FocusOption.CONTINUOUS_DEFAULT else FocusOption.SINGLE)

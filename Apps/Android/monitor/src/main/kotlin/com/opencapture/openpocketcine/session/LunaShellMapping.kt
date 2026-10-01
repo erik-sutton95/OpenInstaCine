@@ -15,17 +15,12 @@ import kotlin.math.roundToInt
 import kotlin.reflect.KMutableProperty0
 
 /** Optimistic values the operator asked for, held until the camera reports them (iOS `LunaControlPins`). */
+/** ISO, shutter, white balance and record are not here: their pending state is the Core operation (CoreControl.kt). */
 internal class LunaControlPins {
-    var isoIndex: CameraValuePin<Int>? = null
-    var shutterDenom: CameraValuePin<Int>? = null
-    var expoMode: CameraValuePin<Int>? = null
     var ev: CameraValuePin<Int>? = null
-    /** (wbMode, kelvin); kelvin 0 for auto. */
-    var whiteBalance: CameraValuePin<Pair<Int, Int>>? = null
     var color: CameraValuePin<Int>? = null
     var format: CameraValuePin<VideoFormat>? = null
     var shootingMode: CameraValuePin<Int>? = null
-    var recording: CameraValuePin<Boolean>? = null
     var gimbalMode: CameraValuePin<GimbalMode>? = null
     var gimbalSpeed: CameraValuePin<GimbalSpeed>? = null
     var focus: CameraValuePin<FocusOption>? = null
@@ -33,8 +28,8 @@ internal class LunaControlPins {
     var photoInFlight = false
 
     fun clear() {
-        isoIndex = null; shutterDenom = null; expoMode = null; ev = null; whiteBalance = null; color = null
-        format = null; shootingMode = null; recording = null; gimbalMode = null; gimbalSpeed = null; focus = null; faceMetering = null
+        ev = null; color = null
+        format = null; shootingMode = null; gimbalMode = null; gimbalSpeed = null; focus = null; faceMetering = null
         photoInFlight = false
     }
 }
@@ -228,7 +223,7 @@ internal object LunaShellMapping {
     /** Battery, storage and shooting mode (iOS `apply(device:)` + `applyDeviceStatus`). */
     fun applyDevice(readout: CameraReadout, status: CameraStatus, pins: LunaControlPins, now: Long): CameraStatus {
         var next = status
-        readout.batteryPercent?.let { next = next.copy(batteryPercent = it, charging = readout.charging) }
+        readout.batteryPercent?.let { next = next.copy(batteryPercent = it, charging = readout.charging == true) }
         val storages = readout.storages
         (storages.firstOrNull { it.location == 2 } ?: storages.firstOrNull())?.let {
             next = next.copy(internalTotalMb = (it.totalBytes / 1_000_000).toInt(), internalFreeMb = (it.freeBytes / 1_000_000).toInt())
@@ -253,34 +248,24 @@ internal object LunaShellMapping {
         return next
     }
 
-    /** Exposure, EV, WB, color, format and focus (iOS `apply(settings:)`). Returns the status and the format table. */
+    /** Live exposure readouts, EV, color, format and focus (iOS `apply(settings:)`). Returns the status and the format table. */
     fun applySettings(readout: CameraReadout, status: CameraStatus, pins: LunaControlPins, now: Long): Pair<CameraStatus, LinkedHashMap<VideoFormat, Long>> {
         val table = formatTable(readout.recordFormats)
         // Nothing read yet: leave the shared "unknown" state alone.
         if (readout.recordFormats.isEmpty()) return status to table
         var next = status
         val exposure = if (status.isPhoto) readout.stillExposure ?: readout.videoExposure else readout.videoExposure ?: readout.stillExposure
+        // Live readouts only (Auto may report what it chose). The ISO, shutter and WB settings and
+        // the exposure mode come from the Core session (CorePresentation).
         if (exposure != null) {
-            // Stills report adaptive/full-auto programs (4, 5); only 1...3 fix a value.
-            val mode = if (exposure.program in 1..3) CameraCommands.EXPO_MANUAL else CameraCommands.EXPO_AUTO
-            val reportedIso = if (exposure.iso == 0) 0 else CameraCommands.isoIndexFromValue(exposure.iso)
-            val isoIndex = pins::isoIndex.hold(reportedIso, now) ?: reportedIso ?: -1
-            val denom = if (exposure.shutterSeconds > 0) (1 / exposure.shutterSeconds).roundToInt() else -1
             next = next.copy(
-                expoMode = pins::expoMode.hold(mode, now) ?: mode,
-                isoIndex = isoIndex,
-                iso = CameraCommands.isoValue(isoIndex) ?: if (exposure.iso > 0) exposure.iso else -1,
-                shutterDenom = pins::shutterDenom.hold(denom, now) ?: denom,
+                iso = if (exposure.iso > 0) exposure.iso else -1,
+                shutterDenom = if (exposure.shutterSeconds > 0) (1 / exposure.shutterSeconds).roundToInt() else -1,
             )
         }
         readout.exposureBiasTenths?.let { tenths ->
             val ev = EvComp.fromThirds((tenths / 10.0 * 3).roundToInt()).rawValue
             next = next.copy(evComp = pins::ev.hold(ev, now) ?: ev)
-        }
-        readout.whiteBalanceKelvin?.let { kelvin ->
-            val reported = if (kelvin == 0) CameraCommands.WB_AUTO to 0 else CameraCommands.WB_CUSTOM to kelvin
-            val (mode, shownKelvin) = pins::whiteBalance.hold(reported, now) ?: reported
-            next = next.copy(wbMode = mode, wbKelvin = if (shownKelvin > 0) shownKelvin else if (kelvin > 0) kelvin else next.wbKelvin)
         }
         readout.color?.let { profile ->
             val color = colorMode(profile)

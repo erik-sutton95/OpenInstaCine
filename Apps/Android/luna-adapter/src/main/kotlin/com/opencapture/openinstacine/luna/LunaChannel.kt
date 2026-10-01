@@ -77,7 +77,7 @@ internal class LunaChannel(
             val encryptionKey = if (encrypted) checkNotNull(key) else null
             raw(LunaWire.encode(sequence.incrementAndGet() and 255, payload, encryptionKey))
             val reply = withTimeout(10_000) { future.await() }
-            check(reply.code == 200) { "Camera rejected command $code" }
+            if (reply.code != 200) throw LunaRefused(code)
             return reply.body
         } finally { pending.remove(id); future.cancel() }
     }

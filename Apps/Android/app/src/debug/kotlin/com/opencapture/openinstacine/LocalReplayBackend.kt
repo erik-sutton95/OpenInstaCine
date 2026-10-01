@@ -27,6 +27,22 @@ class LocalReplayBackend(context: Context) : CameraBackend, CameraControls {
     override suspend fun tapFocus(x: Double, y: Double) = false
     override suspend fun startTracking(x: Double, y: Double, width: Double, height: Double) = false
     override suspend fun stopTracking() = false
+    // No camera answers a command here; the replay advertises none of these capabilities.
+    override suspend fun takePhoto() = false
+    override suspend fun setExposureBias(thirds: Int) = false
+    override suspend fun setColorProfile(profile: CameraColorProfile) = false
+    override suspend fun setRecordFormat(id: Long) = false
+    override suspend fun setShootingMode(mode: CameraShootingMode) = false
+    override suspend fun setGimbalMode(mode: CameraGimbalMode) = false
+    override suspend fun setGimbalSpeed(speed: CameraGimbalSpeed) = false
+    override suspend fun setFocusMode(mode: CameraFocusMode) = false
+    override suspend fun setFaceMetering(on: Boolean) = false
+    override fun requestSettingsRefresh() = Unit
+    override val trackFrames: Flow<CameraTrackFrame> = emptyFlow()
+    override val notices: Flow<CameraNotice> = emptyFlow()
+    override suspend fun gimbalAngle(): CameraGimbalAngle? = null
+    override suspend fun gimbalSetAngle(pitch: Double, yaw: Double) = false
+    override val gimbalHeadPitch: Double? = null
     // A fixed Luna-shaped readout so the live chrome shows mapped values; no camera answers the setters.
     override val readout = MutableStateFlow(
         CameraReadout(

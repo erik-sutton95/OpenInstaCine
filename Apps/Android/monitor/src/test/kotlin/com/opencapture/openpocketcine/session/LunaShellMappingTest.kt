@@ -135,11 +135,10 @@ class LunaShellMappingTest {
     @Test fun settingsMapOntoSharedStatus() {
         val pins = LunaControlPins()
         val (s, table) = m.applySettings(readout, CameraStatus(shootingMode = CameraCommands.SHOOT_VIDEO), pins, now = 0)
-        assertEquals(CameraCommands.EXPO_MANUAL, s.expoMode)
-        assertEquals("400", s.isoLabel)
+        // ISO, WB and the exposure mode are the Core session's (CorePresentationTest); these are readouts.
+        assertEquals(400, s.iso)
         assertEquals("1/50", s.shutterLabel)
         assertEquals(-1, com.opencapture.openpocketcine.EvComp.fromRaw(s.evComp)?.thirds)
-        assertEquals("5600K", s.wbLabel)
         assertEquals("I-Log", s.colorLabel)
         assertEquals("4K · 25p", s.recFormatLabel)
         assertEquals(25, s.fps)
@@ -152,31 +151,12 @@ class LunaShellMappingTest {
         assertEquals(CameraCommands.ISO_160, CameraCommands.isoIndexFromValue(160))
         assertEquals(listOf("Normal", "I-Log", "Dolby Vision"), m.colorModes.map { CameraCommands.colorLabel(it) })
         assertEquals(m.colorModes, CameraModel.colorModesFor("Insta360 Luna Ultra", "generic"))
-        // Auto: ISO 0 and shutter 0 are the camera's choice; WB 0 is auto.
+        // Auto: ISO 0 and shutter 0 are the camera's choice, so no live readout.
         val auto = m.applySettings(readout.copy(videoExposure = CameraExposure(0, 0, 0.0), whiteBalanceKelvin = 0), s, pins, 0).first
-        assertEquals(CameraCommands.EXPO_AUTO, auto.expoMode)
-        assertEquals("Auto", auto.isoLabel)
+        assertEquals(-1, auto.iso)
         assertEquals(-1, auto.shutterDenom)
-        assertEquals("Auto", auto.wbLabel)
-        assertEquals(5600, auto.wbKelvin) // Auto keeps the last custom kelvin.
         // Nothing read yet leaves the shared unknown state alone.
         assertEquals(CameraStatus(), m.applySettings(CameraReadout(), CameraStatus(), pins, 0).first)
-    }
-
-    @Test fun pinsHoldTheOperatorChoiceUntilReportedOrExpired() {
-        val pins = LunaControlPins()
-        pins.whiteBalance = pin(CameraCommands.WB_CUSTOM to 3200, now = 0, settleMs = 5_000)
-        pins.isoIndex = pin(CameraCommands.ISO_160, now = 0)
-        val held = m.applySettings(readout, CameraStatus(), pins, now = 1_000).first
-        assertEquals(3200, held.wbKelvin)
-        assertEquals("160", held.isoLabel)
-        // The camera reports the new ISO: that pin releases, WB (5 s settle) still holds.
-        m.applySettings(readout.copy(videoExposure = CameraExposure(3, 160, 0.02)), held, pins, now = 1_500)
-        assertNull(pins.isoIndex)
-        assertNotNull(pins.whiteBalance)
-        val expired = m.applySettings(readout, held, pins, now = 5_000).first
-        assertEquals(5600, expired.wbKelvin)
-        assertNull(pins.whiteBalance)
     }
 
     @Test fun deviceStatusBatteryStorageAndMode() {

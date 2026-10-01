@@ -25,8 +25,8 @@ read as references and were not modified by this extraction.
 | `Adapters/Insta360Apple` | CoreBluetooth, CryptoKit, Keychain, hotspot join, Network.framework TCP and Luna session lifetime. `LunaCameraSession` implements OpenCineCore `CameraSession` for ISO, shutter, white balance and record (settle and readback included). Depends on `MonitorContracts`, `Insta360Protocol` and OpenCineCore |
 | `Apps/Android/app` | Thin branded activity, app manifest and DEBUG replay selection. Installs the brand identity and Luna backend factory |
 | `Apps/Android/monitor` | Shared Compose shell, MediaCodec, Vulkan/GLES, assists, library/player, local delivery and Android integration. Depends on `:core-api` and staged native libraries |
-| `Apps/Android/core-api` | Kotlin/JVM backend discovery/lifecycle/state/capability/frame contract. Uses coroutines/flows; no Compose or Android platform types |
-| `Apps/Android/luna-adapter` | Android GATT, JCA cryptography, Wi-Fi/network-bound socket lifecycle and a Kotlin UCD2 implementation; depends on `:core-api` |
+| `Apps/Android/core-api` | Kotlin/JVM backend discovery/lifecycle/state/capability/frame contract. Uses coroutines/flows; no Compose or Android platform types. Recording, ISO, shutter and WB are not on `CameraControls`: a `CoreSessionSource` backend opens an OpenCineCore `CameraSession` for them |
+| `Apps/Android/luna-adapter` | Android GATT, JCA cryptography, Wi-Fi/network-bound socket lifecycle and a Kotlin UCD2 implementation; `LunaCameraSession` is the OpenCineCore session (port of the Apple one). Depends on `:core-api` |
 | `Sources/OpenPocketCineAndroidFacade`, `Sources/CJNI` | Existing Swift JNI exports and Android header shim. Dynamic product `OpenPocketCineAndroid` still imports the compatibility module, which supplies the single extracted `MonitorCore` implementation |
 
 ```mermaid

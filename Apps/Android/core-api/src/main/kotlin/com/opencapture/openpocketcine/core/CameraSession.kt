@@ -29,10 +29,21 @@ public interface CameraBackend {
 }
 
 /**
+ * A backend whose camera commands and reported camera state go through OpenCineCore. Recording,
+ * ISO, shutter and white balance are not on [CameraControls]: they are common intents submitted
+ * to the session, which reports their outcome honestly (CORE-02).
+ */
+public interface CoreSessionSource {
+ /** A new session for the next connection; the previous one closes as replaced. */
+ public fun openSession(): com.opencapture.opencine.core.CameraSession
+}
+
+/**
  * Optional live camera controls. A backend implements this only for commands it has verified;
  * the shared session gates each control on [CameraBackend.capabilities]. Coordinates are
  * normalized 0..1 in the displayed live frame. Each call returns false when the camera rejected
- * the command or no control link is up.
+ * the command or no control link is up. Members have no defaults: an implementation states what
+ * it does not support instead of inheriting a silent `false`.
  */
 public interface CameraControls {
  public val zoomRange: ClosedFloatingPointRange<Double>
@@ -46,37 +57,31 @@ public interface CameraControls {
  public suspend fun startTracking(x: Double, y: Double, width: Double, height: Double): Boolean
  public suspend fun stopTracking(): Boolean
 
- // Capture, exposure and settings. Defaults mean "not supported"; readout stays empty.
- public val readout: StateFlow<CameraReadout> get() = CameraReadout.NONE
- public suspend fun startRecording(): Boolean = false
- public suspend fun stopRecording(): Boolean = false
- public suspend fun takePhoto(): Boolean = false
- /** Null ISO / shutter means the camera chooses that value; the backend picks its program. */
- public suspend fun setExposure(iso: Int?, shutterSeconds: Double?): Boolean = false
- public suspend fun setExposureBias(thirds: Int): Boolean = false
- /** Null kelvin is auto white balance. */
- public suspend fun setWhiteBalance(kelvin: Int?): Boolean = false
- public suspend fun setColorProfile(profile: CameraColorProfile): Boolean = false
+ // Capture and settings outside the CORE-02 slice. Readout fields not reported stay null.
+ public val readout: StateFlow<CameraReadout>
+ public suspend fun takePhoto(): Boolean
+ public suspend fun setExposureBias(thirds: Int): Boolean
+ public suspend fun setColorProfile(profile: CameraColorProfile): Boolean
  /** [id] is a [CameraRecordFormat.id] from the readout. */
- public suspend fun setRecordFormat(id: Long): Boolean = false
- public suspend fun setShootingMode(mode: CameraShootingMode): Boolean = false
- public suspend fun setGimbalMode(mode: CameraGimbalMode): Boolean = false
- public suspend fun setGimbalSpeed(speed: CameraGimbalSpeed): Boolean = false
- public suspend fun setFocusMode(mode: CameraFocusMode): Boolean = false
+ public suspend fun setRecordFormat(id: Long): Boolean
+ public suspend fun setShootingMode(mode: CameraShootingMode): Boolean
+ public suspend fun setGimbalMode(mode: CameraGimbalMode): Boolean
+ public suspend fun setGimbalSpeed(speed: CameraGimbalSpeed): Boolean
+ public suspend fun setFocusMode(mode: CameraFocusMode): Boolean
  /** True Face Priority metering, false Matrix. */
- public suspend fun setFaceMetering(on: Boolean): Boolean = false
+ public suspend fun setFaceMetering(on: Boolean): Boolean
  /** Re-read settings shortly after a burst of writes. */
- public fun requestSettingsRefresh() {}
+ public fun requestSettingsRefresh()
  /** The camera's own subject tracking, from the live stream; only changes are delivered. */
- public val trackFrames: Flow<CameraTrackFrame> get() = kotlinx.coroutines.flow.emptyFlow()
+ public val trackFrames: Flow<CameraTrackFrame>
  /** Camera-side notices (Luna 8315 Deep Track state, 8201 capture stopped). */
- public val notices: Flow<CameraNotice> get() = kotlinx.coroutines.flow.emptyFlow()
+ public val notices: Flow<CameraNotice>
  /** Absolute head angle in the handle frame (Luna GET_ANGLE), or null when unavailable. */
- public suspend fun gimbalAngle(): CameraGimbalAngle? = null
+ public suspend fun gimbalAngle(): CameraGimbalAngle?
  /** Aim the head at an absolute handle-frame angle (Luna SET_ANGLE); the latest request wins. */
- public suspend fun gimbalSetAngle(pitch: Double, yaw: Double): Boolean = false
+ public suspend fun gimbalSetAngle(pitch: Double, yaw: Double): Boolean
  /** Head world pitch from the camera IMU in degrees (up positive), or null without a sample in the last 0.3 s. */
- public val gimbalHeadPitch: Double? get() = null
+ public val gimbalHeadPitch: Double?
 }
 
 /** Degrees: pitch up positive, yaw as the camera reports it (-180..180). */
@@ -105,13 +110,14 @@ public data class CameraRecordFormat(public val id: Long, public val width: Int,
 /** [location] 2 camera inner storage, 3 SD card. */
 public data class CameraStorage(public val location: Int, public val usable: Boolean, public val freeBytes: Long, public val totalBytes: Long)
 
-/** What the camera last reported. Null fields have not been reported yet. */
+/** What the camera last reported. Null fields have not been reported yet (unknown, not false). */
 public data class CameraReadout(
  public val batteryPercent: Int? = null,
- public val charging: Boolean = false,
+ public val charging: Boolean? = null,
  public val storages: List<CameraStorage> = emptyList(),
  public val shootingMode: CameraShootingMode? = null,
- public val recording: Boolean = false,
+ /** Video recording; null while no capture state was reported or the state is not a video one. */
+ public val recording: Boolean? = null,
  public val captureSeconds: Int = 0,
  public val videoExposure: CameraExposure? = null,
  public val stillExposure: CameraExposure? = null,
@@ -130,7 +136,6 @@ public data class CameraReadout(
  /** True Face Priority metering, false Matrix. */
  public val faceMetering: Boolean? = null,
 ) {
- public companion object { public val NONE: StateFlow<CameraReadout> = kotlinx.coroutines.flow.MutableStateFlow(CameraReadout()) }
 }
 
 /** One camera file. [path] addresses it for thumbnail, delete and HTTP. */

@@ -30,7 +30,7 @@ class LunaBackend(
     context: Context,
     private val savedWifi: (cameraId: String) -> Pair<String, String>? = { null },
     private val saveWifi: (cameraId: String, ssid: String, password: String) -> Unit = { _, _, _ -> },
-) : CameraBackend, CameraControls, CameraMediaStore {
+) : CameraBackend, CameraControls, CameraMediaStore, CoreSessionSource {
     private val context = context.applicationContext
     private val bluetooth = context.getSystemService(BluetoothManager::class.java)
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
@@ -82,6 +82,8 @@ class LunaBackend(
     private var settingsRefresh: Job? = null
     private val _readout = MutableStateFlow(CameraReadout())
     override val readout = _readout.asStateFlow()
+    /** OpenCineCore session for the current camera: recording, ISO, shutter and WB go through it. */
+    private var session: LunaCameraSession? = null
     private val lastVideoAt = java.util.concurrent.atomic.AtomicLong()
     /** Live video is stopped on purpose while the album is open; the watchdog must not fire. */
     @Volatile private var livePaused = false
@@ -93,18 +95,18 @@ class LunaBackend(
             val identity = CameraIdentity(result.device.address, name, "Insta360 Luna Ultra")
             _found.update { cameras -> (cameras.filterNot { it.id == identity.id } + identity).sortedBy { it.advertisedName } }
         }
-        override fun onScanFailed(code: Int) { scanActive = false; _failure.value = "Bluetooth scanning could not start ($code). Check Nearby devices permission."; _phase.value = ConnectionPhase.FAILED }
+        override fun onScanFailed(code: Int) { scanActive = false; _failure.value = "Bluetooth scanning could not start ($code). Check Nearby devices permission."; setPhase(ConnectionPhase.FAILED) }
     }
     override fun startScan() {
         if (connectJob?.isActive == true) return
         _radioOn.value = bluetooth?.adapter?.isEnabled == true
-        if (!_radioOn.value) { _phase.value = ConnectionPhase.IDLE; return }
+        if (!_radioOn.value) { setPhase(ConnectionPhase.IDLE); return }
         _failure.value = null
         stopScan()
         try {
             bluetooth.adapter.bluetoothLeScanner.startScan(listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(LunaGatt.SERVICE)).build()), ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(), scanner)
-            scanActive = true; _phase.value = ConnectionPhase.SCANNING
-        } catch (_: SecurityException) { _failure.value = "Allow Nearby devices and location access to discover your camera."; _phase.value = ConnectionPhase.FAILED }
+            scanActive = true; setPhase(ConnectionPhase.SCANNING)
+        } catch (_: SecurityException) { _failure.value = "Allow Nearby devices and location access to discover your camera."; setPhase(ConnectionPhase.FAILED) }
     }
     private fun stopScan() { if (scanActive) runCatching { bluetooth?.adapter?.bluetoothLeScanner?.stopScan(scanner) }; scanActive = false }
     override fun connect(id: String) {
@@ -127,7 +129,7 @@ class LunaBackend(
                     ConnectionPhase.OPENING_DATALINK -> "The camera Wi-Fi connected, but live view did not start. Close the Insta360 app and try again."
                     else -> "Could not connect to Luna. Keep it awake, close the Insta360 app, and try again."
                 }
-                _phase.value = ConnectionPhase.FAILED
+                setPhase(ConnectionPhase.FAILED)
             } finally { cleanup() }
         }
     }
@@ -138,7 +140,7 @@ class LunaBackend(
         // iOS `connect`: Bluetooth first whenever the camera advertises (it wakes the camera AP, which the
         // Luna turns off when idle); saved Wi-Fi is the fallback for a camera this run has not seen.
         val network = savedWifi(id)?.takeIf { saved -> _found.value.none { it.id == id } }?.let { (ssid, password) ->
-            _phase.value = ConnectionPhase.JOINING_WIFI
+            setPhase(ConnectionPhase.JOINING_WIFI)
             try { joinRetrying(ssid, password, budgetMs = 20_000).also { _joinedSSID.value = ssid } }
             catch (error: Exception) {
                 if (error is CancellationException && !isActive) throw error
@@ -148,7 +150,7 @@ class LunaBackend(
         } ?: bootstrapOverBluetooth(id, authBody)
         // Media HTTP (192.168.42.1:80) goes through the shared OkHttp client, as upstream binds for DJI.
         boundNetwork = connectivity.bindProcessToNetwork(network)
-        _phase.value = ConnectionPhase.OPENING_DATALINK
+        setPhase(ConnectionPhase.OPENING_DATALINK)
         val cameraSocket = withContext(Dispatchers.IO) {
             network.socketFactory.createSocket().also { socket = it; it.tcpNoDelay = true; it.soTimeout = 10_000; it.connect(InetSocketAddress("192.168.42.1", 6666), 8_000) }
         }
@@ -157,14 +159,14 @@ class LunaBackend(
 
     /** BLE approval and the encrypted Wi-Fi credential read, then the camera AP join (credentials saved). */
     private suspend fun bootstrapOverBluetooth(id: String, authBody: ByteArray): Network {
-        _phase.value = ConnectionPhase.CONNECTING_GATT
+        setPhase(ConnectionPhase.CONNECTING_GATT)
         val ble = LunaGatt(context); gatt = ble
         ble.connect(checkNotNull(bluetooth?.adapter).getRemoteDevice(id))
         val link = ble.channel
         val initial = LunaWire.bytes(link.request(8, LunaWire.options(48, 30)), 2)
         check(LunaWire.text(initial, 48) == "Insta360 Luna Ultra") { "Unexpected camera model" }
         _snapshot.value = CameraSnapshot(firmware = LunaWire.text(initial, 30))
-        _phase.value = ConnectionPhase.PAIRING
+        setPhase(ConnectionPhase.PAIRING)
         val schemes = LunaWire.schemes(link.request(240))
         check(3L in schemes) { "AES-GCM is not supported" }
         val pair = LunaWire.keyPair()
@@ -174,7 +176,7 @@ class LunaBackend(
         when (LunaWire.number(link.request(39, authBody), 1)) {
             0L -> Unit
             1L -> {
-                _phase.value = ConnectionPhase.AWAITING_APPROVAL
+                setPhase(ConnectionPhase.AWAITING_APPROVAL)
                 link.request(86, LunaWire.integer(1, 1))
                 withTimeout(120_000) {
                     while (true) {
@@ -186,13 +188,13 @@ class LunaBackend(
             }
             else -> error("Unknown camera authorization result")
         }
-        _phase.value = ConnectionPhase.READING_WIFI_CREDS
+        setPhase(ConnectionPhase.READING_WIFI_CREDS)
         val wifi = LunaWire.bytes(LunaWire.bytes(link.request(8, LunaWire.options(36, 37, 43), encrypted = true), 2), 36)
         val ssid = LunaWire.text(wifi, 1); val password = LunaWire.text(wifi, 2)
         check(ssid.isNotBlank() && password.length in 8..63)
         ble.close(); gatt = null
         saveWifi(id, ssid, password)
-        _phase.value = ConnectionPhase.JOINING_WIFI
+        setPhase(ConnectionPhase.JOINING_WIFI)
         // iOS joins for up to 120 s after the BLE handoff: the AP can take most of a minute to come up.
         return joinRetrying(ssid, password, budgetMs = 120_000).also { _joinedSSID.value = ssid }
     }
@@ -233,7 +235,7 @@ class LunaBackend(
             check(LunaWire.text(tcpInfo, 48) == "Insta360 Luna Ultra")
             check(LunaWire.number(channel.request(39, authBody), 1) == 0L) { "TCP identity was not authorized" }
             channel.request(15)
-            _phase.value = ConnectionPhase.LIVE
+            setPhase(ConnectionPhase.LIVE)
             // Mount the inherited decoder/render host before asking for the first keyframe.
             delay(350)
             // Shooting view first: without it the gimbal stays asleep pointing down.
@@ -250,7 +252,7 @@ class LunaBackend(
                 while (isActive) {
                     delay(1_000)
                     tick += 1
-                    call(LunaControl.captureStatus)?.let { runCatching { LunaCaptureStatus.fromResponse(it) }.getOrNull() }?.let(::applyCapture)
+                    refreshCapture()
                     if (tick % 5 == 0) refreshDevice(LunaControl.statusRequest)
                 }
             }
@@ -320,7 +322,7 @@ class LunaBackend(
         releaseNetworkRequest()
         _joinedSSID.value = null
     }
-    override fun disconnect() { stopScan(); connectJob?.cancel(); runCatching { socket?.close() }; _phase.value = ConnectionPhase.IDLE; _failure.value = null }
+    override fun disconnect() { stopScan(); connectJob?.cancel(); runCatching { socket?.close() }; setPhase(ConnectionPhase.IDLE); _failure.value = null }
     override fun close() { disconnect(); cleanup(); scope.cancel() }
     override fun sceneActive(active: Boolean) {
         if (!active) { wasInactive = true; return }
@@ -349,15 +351,40 @@ class LunaBackend(
     private fun applyDevice(status: LunaDeviceStatus) {
         device = device?.merge(status) ?: status
         status.shootingMode?.let { mode = it }
+        session?.ingest(status)
         publish()
     }
     private fun applySettings(update: LunaPhotographySettings) {
         // A reply for another bank (a mode change in flight) is not this mode's settings.
         if (update.functionMode != null && update.functionMode != functionMode) return
         settings = settings?.merge(update) ?: update
+        session?.ingest(update)
         publish()
     }
-    private fun applyCapture(status: LunaCaptureStatus) { capture = status; publish() }
+    private fun applyCapture(status: LunaCaptureStatus) { capture = status; session?.ingest(status); publish() }
+    private suspend fun refreshCapture() {
+        call(LunaControl.captureStatus)?.let { runCatching { LunaCaptureStatus.fromResponse(it) }.getOrNull() }?.let(::applyCapture)
+    }
+    /** Every phase change also tells the session; LIVE is a new control epoch. */
+    private fun setPhase(phase: ConnectionPhase) {
+        _phase.value = phase
+        session?.linkChanged(phase)
+    }
+
+    override fun openSession(): LunaCameraSession {
+        val previous = session
+        val next = LunaCameraSession(
+            send = { request -> (tcp ?: throw IllegalStateException("The camera connection is not open.")).request(request.code, request.body) },
+            functionMode = { functionMode },
+            readSettings = ::refreshSettings,
+            readCapture = ::refreshCapture,
+            scope = scope,
+        )
+        session = next
+        previous?.closeNow(com.opencapture.opencine.core.SessionCloseReason.REPLACED)
+        if (_phase.value == ConnectionPhase.LIVE) next.linkChanged(ConnectionPhase.LIVE)
+        return next
+    }
     private suspend fun refreshDevice(request: LunaControl.Request) {
         call(request)?.let { runCatching { LunaDeviceStatus.parse(it) }.getOrNull() }?.let(::applyDevice)
     }
@@ -370,7 +397,7 @@ class LunaBackend(
         refreshDevice(LunaControl.statusRequest)
         refreshDevice(LunaControl.shootingModeRequest)
         refreshSettings()
-        call(LunaControl.captureStatus)?.let { runCatching { LunaCaptureStatus.fromResponse(it) }.getOrNull() }?.let(::applyCapture)
+        refreshCapture()
     }
     private suspend fun handle(note: LunaNotification) {
         when (note) {
@@ -380,7 +407,7 @@ class LunaBackend(
             // Capture ended on the camera: re-read the capture state now so REC clears without waiting for the poll.
             is LunaNotification.CaptureStopped -> {
                 noticeFlow.tryEmit(CameraNotice.CaptureStopped(note.errorCode))
-                call(LunaControl.captureStatus)?.let { runCatching { LunaCaptureStatus.fromResponse(it) }.getOrNull() }?.let(::applyCapture)
+                refreshCapture()
             }
             is LunaNotification.PhotographyChanged -> applySettings(note.settings)
             // The notice carries a partial view; re-read the whole status.
@@ -439,16 +466,8 @@ class LunaBackend(
     override suspend fun startTracking(x: Double, y: Double, width: Double, height: Double) =
         send { LunaControl.openTracking(x.coerceIn(0.0, 1.0), y.coerceIn(0.0, 1.0), width.coerceIn(0.0, 1.0), height.coerceIn(0.0, 1.0)) }
     override suspend fun stopTracking() = send { LunaControl.cancelTracking }
-    override suspend fun startRecording() = send { LunaControl.startCapture(mode) }
-    override suspend fun stopRecording() = send { LunaControl.stopCapture(mode) }
     override suspend fun takePhoto() = send { LunaControl.takePicture() }
-    override suspend fun setExposure(iso: Int?, shutterSeconds: Double?) = send {
-        val isoValue = iso?.toLong()
-        LunaControl.videoExposure(LunaControl.exposureProgram(isoValue, shutterSeconds), isoValue, shutterSeconds, functionMode)
-    }
     override suspend fun setExposureBias(thirds: Int) = send { LunaControl.exposureBias(thirds / 3.0, functionMode) }
-    override suspend fun setWhiteBalance(kelvin: Int?) =
-        send { kelvin?.let { LunaControl.whiteBalanceKelvin(it.toLong(), functionMode) } ?: LunaControl.whiteBalanceAuto(functionMode) }
     override suspend fun setColorProfile(profile: CameraColorProfile) = with(LunaReadout) { send { LunaControl.colorMode(colors.key(profile), functionMode) } }
     override suspend fun setRecordFormat(id: Long) = send { LunaControl.recordResolution(id, functionMode) }
     override suspend fun setShootingMode(mode: CameraShootingMode): Boolean {

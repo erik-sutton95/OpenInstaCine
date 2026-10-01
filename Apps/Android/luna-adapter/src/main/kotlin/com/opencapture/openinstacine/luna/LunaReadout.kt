@@ -57,10 +57,11 @@ internal object LunaReadout {
         val storages = device?.let { d -> d.storageList.ifEmpty { listOfNotNull(d.storage) } }.orEmpty()
         return CameraReadout(
             batteryPercent = device?.battery?.percent?.toInt(),
-            charging = device?.battery?.isCharging == true,
+            charging = device?.battery?.isCharging,
             storages = storages.map { CameraStorage(it.location.toInt(), it.isUsable, it.freeBytes, it.totalBytes) },
             shootingMode = device?.shootingMode?.let(shootingModes::get),
-            recording = capture?.isRecording == true,
+            // Photo and pano capture states say nothing about video recording: unknown.
+            recording = capture?.let { if (it.isRecording) true else if (it.isIdle) false else null },
             captureSeconds = capture?.captureSeconds?.toInt() ?: 0,
             videoExposure = exposure(settings?.videoExposure),
             stillExposure = exposure(settings?.stillExposure),
