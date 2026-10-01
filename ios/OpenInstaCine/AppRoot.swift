@@ -21,11 +21,17 @@ final class AppModel {
     /// simulator app talks to the real camera.
     static func makeBackend() -> LunaCameraBackend {
         #if targetEnvironment(simulator)
-            LunaCameraBackend(useExistingNetwork: true)
+            LunaCameraBackend(useExistingNetwork: true, configuration: lunaConfiguration)
         #else
-            LunaCameraBackend()
+            LunaCameraBackend(configuration: lunaConfiguration)
         #endif
     }
+
+    /// The app's names for the Luna integration. The keychain service is the one OpenInstaCine
+    /// has always used: changing it would orphan saved camera authorizations and Wi-Fi.
+    static let lunaConfiguration = LunaIntegrationConfiguration(
+        keychainService: "org.opencine.openinstacine.camera", appName: "OpenInstaCine",
+        logPrefix: "OpenInstaCine")
     @ObservationIgnored let watchRelay = WatchRelay()
     @ObservationIgnored private var watchRelayActivated = false
     var multiviewExit: (() -> Void)?

@@ -15,8 +15,6 @@ let package = Package(
     platforms: [.iOS(.v17), .macOS(.v13), .watchOS(.v10)],
     products: [
         .library(name: "OpenPocketViewCore", targets: ["OpenPocketViewCore"]),
-        // Brand-neutral CameraBackend seam; Luna implements it in Adapters/Insta360Apple.
-        .library(name: "MonitorContracts", targets: ["MonitorContracts"]),
         // JNI facade consumed by the Android app (`just android-core`). The JNI
         // shims are `#if os(Android)`-gated; on Darwin only the wire helpers
         // compile, so iOS/macOS behavior is unchanged.
@@ -28,7 +26,6 @@ let package = Package(
         .package(path: "../OpenCineCore")
     ],
     targets: [
-        .target(name: "MonitorContracts"),
         .target(
             name: "OpenPocketViewCore",
             dependencies: [.product(name: "OpenCineMedia", package: "OpenCineCore")]

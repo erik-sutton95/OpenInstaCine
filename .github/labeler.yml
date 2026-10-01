@@ -10,7 +10,7 @@
 "area:protocol":
   - changed-files:
       - any-glob-to-any-file:
-          - "Adapters/**/*"
+          - "opencine-pins.txt"
           - "Apps/Android/luna-adapter/**/*"
           - "docs/protocol-notes.md"
           - "docs/research/**/*"
@@ -50,7 +50,6 @@
 "area:control":
   - changed-files:
       - any-glob-to-any-file:
-          - "Adapters/Insta360Protocol/Sources/Insta360Protocol/LunaControl.swift"
           - "Apps/Android/luna-adapter/src/main/kotlin/**/LunaControl.kt"
           - "Sources/OpenPocketViewCore/CameraControl.swift"
           - "ios/OpenInstaCine/CameraSession*.swift"

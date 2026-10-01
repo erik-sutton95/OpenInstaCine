@@ -3,7 +3,6 @@ import CoreGraphics
 import Foundation
 import Insta360Apple
 import Insta360Protocol
-import MonitorContracts
 import Observation
 import OpenPocketViewCore
 import UIKit
@@ -69,7 +68,7 @@ final class CameraSession {
 
     /// Only for the host's explicit Show Wi-Fi code sheet. Never advertised or logged.
     var watcherWiFiJoinCode: String? {
-        guard let id = connectedCamera?.id, let wifi = LunaCameraBackend.storedWiFi(cameraID: id)
+        guard let id = connectedCamera?.id, let wifi = backend.storedWiFi(cameraID: id)
         else { return nil }
         return CameraWiFiQRCode.payload(ssid: wifi.ssid, password: wifi.password)
     }
@@ -419,7 +418,7 @@ final class CameraSession {
             } catch {
                 guard token == self.connectGeneration, !Task.isCancelled else { return }
                 // A saved camera can still reconnect over its saved Wi-Fi without BLE.
-                if let id, LunaCameraBackend.storedWiFi(cameraID: id) != nil,
+                if let id, backend.storedWiFi(cameraID: id) != nil,
                     let saved = SavedCameraStore.load().first(where: { $0.id == id })
                 {
                     self.connect(Self.foundCamera(saved: saved))
@@ -432,7 +431,7 @@ final class CameraSession {
         }
         // Give Bluetooth a few seconds (it wakes the camera Wi-Fi); a camera that never
         // advertises can still come back over its saved Wi-Fi.
-        if let id, LunaCameraBackend.storedWiFi(cameraID: id) != nil,
+        if let id, backend.storedWiFi(cameraID: id) != nil,
             let saved = SavedCameraStore.load().first(where: { $0.id == id })
         {
             Task { [weak self] in

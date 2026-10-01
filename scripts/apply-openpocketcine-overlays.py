@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Brand hunks applied after every OpenPocketCine sync (see sync-openpocketcine.sh).
 
-Keep these patches tiny and exact. Camera protocol lives in Adapters/ and in the
+Keep these patches tiny and exact. Camera protocol lives in the sibling OpenCineInsta360
+package and in the
 Luna-owned shell files listed in sync-openpocketcine.sh. If a hunk stops matching,
 the sync fails instead of silently shipping a blue OpenPocketCine clone.
 """
@@ -60,46 +61,9 @@ def main() -> None:
         project,
         "  OpenPocketViewCore:\n    path: ..\n",
         "  OpenPocketViewCore:\n    path: ..\n"
-        "  Insta360Protocol:\n    path: ../Adapters/Insta360Protocol\n",
+        "  OpenCineInsta360:\n    path: ../../OpenCineInsta360\n",
     )
-    # External adapter sources get their own group, not a repo-root "OpenInstaCine" folder.
     replace_once(project, "  createIntermediateGroups: true\n", "  createIntermediateGroups: false\n")
-    replace_once(
-        project,
-        "targets:\n  OpenInstaCine:\n",
-        "targets:\n"
-        "  # Luna wire I/O: CoreBluetooth, camera Wi-Fi, TCP 6666, screen KCP.\n"
-        "  Insta360Apple:\n"
-        "    type: framework\n"
-        "    platform: iOS\n"
-        "    configFiles:\n"
-        "      Debug: Config/Version.xcconfig\n"
-        "      Release: Config/Version.xcconfig\n"
-        "    sources:\n"
-        "      - path: ../Adapters/Insta360Apple/Sources/Insta360Apple\n"
-        "        group: Insta360Apple\n"
-        "      - path: ../Adapters/Insta360Apple/Sources/CKcp\n"
-        "        group: Insta360Apple\n"
-        "        excludes:\n"
-        "          - module.modulemap\n"
-        "          - LICENSE\n"
-        "    dependencies:\n"
-        "      - package: OpenPocketViewCore\n"
-        "        product: MonitorContracts\n"
-        "      - package: Insta360Protocol\n"
-        "        product: Insta360Protocol\n"
-        "    settings:\n"
-        "      base:\n"
-        '        SWIFT_VERSION: "5.0"\n'
-        "        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.insta360apple\n"
-        "        CLANG_ENABLE_MODULES: YES\n"
-        "        GENERATE_INFOPLIST_FILE: YES\n"
-        '        DEVELOPMENT_TEAM: "4V4EGQ6LZA"\n'
-        "        CODE_SIGN_STYLE: Automatic\n"
-        "        SKIP_INSTALL: YES\n"
-        "\n"
-        "  OpenInstaCine:\n",
-    )
     replace_once(
         project,
         # Anchored below the package line: upstream takes MonitorPresentation from
@@ -107,9 +71,8 @@ def main() -> None:
         "        product: MonitorPresentation\n"
         "      - target: OpenInstaCineWatch\n",
         "        product: MonitorPresentation\n"
-        "      - package: OpenPocketViewCore\n        product: MonitorContracts\n"
-        "      - package: Insta360Protocol\n        product: Insta360Protocol\n"
-        "      - target: Insta360Apple\n"
+        "      - package: OpenCineInsta360\n        product: Insta360Protocol\n"
+        "      - package: OpenCineInsta360\n        product: Insta360Apple\n"
         "      - target: OpenInstaCineWatch\n",
     )
     replace_once(
@@ -124,7 +87,7 @@ def main() -> None:
     replace_once(
         project,
         "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n" + media + "    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
-        "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n" + media + "      - package: Insta360Protocol\n        product: Insta360Protocol\n    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
+        "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n" + media + "      - package: OpenCineInsta360\n        product: Insta360Protocol\n      - package: OpenCineInsta360\n        product: Insta360AppleTestSupport\n    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
     )
 
     startup = APP / "StartupChrome.swift"
@@ -244,11 +207,12 @@ def main() -> None:
     ):
         for old_phrase, new_phrase in pairs:
             replace_phrase(APP / name, old_phrase, new_phrase)
-    # Synced verbatim (not renamed): hash the OpenInstaCine app and the Luna adapters.
+    # Synced verbatim (not renamed): hash the OpenInstaCine app (Luna code is the sibling
+    # OpenCineInsta360 package, hashed through SIBLING_PACKAGES).
     replace_once(
         ROOT / "tools/build-identity.py",
         '        paths += ["ios/OpenPocketCine", ',
-        '        paths += ["ios/OpenInstaCine", "Adapters", ',
+        '        paths += ["ios/OpenInstaCine", ',
     )
 
     # --- Launch wiring + gates that assumed a DJI datalink. ---

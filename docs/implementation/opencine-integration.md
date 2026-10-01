@@ -72,9 +72,26 @@ so EV keys use the connected camera id.
   them into OpenCineCore/OpenCineUI before the next sync.
 - Kotlin `ScopeExposureCeiling` is still a process-wide object on Android (MEDIA-01 remaining).
 
+## VENDOR-03: Luna integration package
+
+Branch `opencine/vendor-03-luna` (on this candidate) takes `Adapters/Insta360Protocol`,
+`Adapters/Insta360Apple` and `Sources/MonitorContracts` (folded into `Insta360Apple`) from the sibling
+package OpenCineInsta360 (pinned in `opencine-pins.txt`). The XcodeGen `Insta360Apple` framework
+target is gone; the app links the package products. `AppModel.lunaConfiguration` keeps the keychain
+service `org.opencine.openinstacine.camera` (saved camera authorization and Wi-Fi stay readable)
+and the account names are unchanged. Device check: a phone with a camera saved by the previous
+build reconnects over its saved Wi-Fi without new Bluetooth approval.
+
+The Kotlin `luna-adapter` stays in `Apps/Android`: it implements this app's shell contract
+(`:core-api`: `CameraBackend`, `CameraControls`, `CameraMediaStore`, `CoreSessionSource`, `CameraReadout`
+and about fifteen value types), which `:app` and `:monitor` also use and which has no OpenCineCore
+equivalent. Moving it first needs that shell contract in a shared module (OpenCineCore or a shared
+app-shell package), not in the Luna package. Its SharedPreferences name
+(`openinstacine.client-identity`) and the SDK 36/37 metadata exemption are unchanged.
+
 ## Publishing prerequisite
 
-The OpenCineUI and OpenCineCore repositories must exist before CI, Xcode Cloud or another
+The OpenCineUI, OpenCineCore and OpenCineInsta360 repositories must exist before CI, Xcode Cloud or another
 machine can build this branch: `scripts/checkout-opencine.sh` fetches the pinned SHAs from them.
 Follow `opencapture-atlas/docs/PUBLISH.md`, then replace the path packages and included builds
 with url + version pins and Maven coordinates.

@@ -58,7 +58,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           changed_files="$(git log --diff-merges=combined --format= --name-only "$BASE_SHA..HEAD" | sort -u)"
-          production_files="$(grep -E '^(Sources/|Adapters/|ios/|Package\.swift$|scripts/ios-)' <<< "$changed_files" | grep -vE '^(scripts/ios-release-notes|Adapters/[^/]+/Tests/|ios/OpenInstaCine(UI)?Tests/|ios/LunaOfficialUITests/|ios/ci_scripts/)' || true)"
+          production_files="$(grep -E '^(Sources/|ios/|Package\.swift$|opencine-pins\.txt$|scripts/ios-)' <<< "$changed_files" | grep -vE '^(scripts/ios-release-notes|ios/OpenInstaCine(UI)?Tests/|ios/LunaOfficialUITests/|ios/ci_scripts/)' || true)"
           if [[ -n "$production_files" ]]; then
             if ! grep -Fxq 'ios/TestFlight/WhatToTest.en-US.txt' <<< "$changed_files"; then
               echo "Update ios/TestFlight/WhatToTest.en-US.txt with the this-build window." >&2
@@ -116,7 +116,6 @@ jobs:
             code:
               - 'Sources/**'
               - 'Tests/**'
-              - 'Adapters/**'
               - 'ios/**'
               - 'Package.swift'
               - 'opencine-pins.txt'
@@ -155,9 +154,10 @@ jobs:
           xcode-version: latest-stable
       - name: Install native tooling
         run: brew install just xcodegen || true
-      # Candidate (OpenCineUI UI-03, OpenCineCore CORE-02 and MEDIA-01): ios/project.yml takes
-      # MonitorUI and MonitorPresentation from ../OpenCineUI, and OpenCineCore plus OpenCineMedia
-      # (also Package.swift) from ../OpenCineCore, sibling checkouts pinned by SHA in
+      # Candidate (OpenCineUI UI-03, OpenCineCore CORE-02 and MEDIA-01, OpenCineInsta360 VENDOR-03):
+      # ios/project.yml takes MonitorUI and MonitorPresentation from ../OpenCineUI, OpenCineCore plus
+      # OpenCineMedia (also Package.swift) from ../OpenCineCore, and Insta360Protocol plus
+      # Insta360Apple from ../OpenCineInsta360 (`just core-test` tests it), sibling checkouts pinned by SHA in
       # opencine-pins.txt. Works only once those repositories are published. Delete when the app
       # pins them by url + version.
       - name: Check out pinned OpenCine packages next to the repository

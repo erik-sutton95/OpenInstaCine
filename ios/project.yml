@@ -15,8 +15,11 @@ packages:
     exactVersion: 9.24.0
   OpenPocketViewCore:
     path: ..
-  Insta360Protocol:
-    path: ../Adapters/Insta360Protocol
+  # Insta360 Luna integration (Insta360Protocol, Insta360Apple). Candidate: a sibling checkout of
+  # OpenCineInsta360 next to this repository, pinned in opencine-pins.txt. Switch to
+  # url + exactVersion once it is published.
+  OpenCineInsta360:
+    path: ../../OpenCineInsta360
   # Shared UI 2.0 (MonitorUI, MonitorPresentation). Candidate: a sibling checkout of
   # OpenCineUI next to this repository. Switch to url + exactVersion once it is published.
   OpenCineUI:
@@ -30,38 +33,6 @@ packages:
     path: ../../OpenCineCore
 
 targets:
-  # Luna wire I/O: CoreBluetooth, camera Wi-Fi, TCP 6666, screen KCP.
-  Insta360Apple:
-    type: framework
-    platform: iOS
-    configFiles:
-      Debug: Config/Version.xcconfig
-      Release: Config/Version.xcconfig
-    sources:
-      - path: ../Adapters/Insta360Apple/Sources/Insta360Apple
-        group: Insta360Apple
-      - path: ../Adapters/Insta360Apple/Sources/CKcp
-        group: Insta360Apple
-        excludes:
-          - module.modulemap
-          - LICENSE
-    dependencies:
-      - package: OpenPocketViewCore
-        product: MonitorContracts
-      - package: Insta360Protocol
-        product: Insta360Protocol
-      - package: OpenCineCore
-        product: OpenCineCore
-    settings:
-      base:
-        SWIFT_VERSION: "5.0"
-        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.insta360apple
-        CLANG_ENABLE_MODULES: YES
-        GENERATE_INFOPLIST_FILE: YES
-        DEVELOPMENT_TEAM: "4V4EGQ6LZA"
-        CODE_SIGN_STYLE: Automatic
-        SKIP_INSTALL: YES
-
   OpenInstaCine:
     type: application
     platform: iOS
@@ -82,13 +53,12 @@ targets:
         product: MonitorUI
       - package: OpenCineUI
         product: MonitorPresentation
-      - package: OpenPocketViewCore
-        product: MonitorContracts
-      - package: Insta360Protocol
+      - package: OpenCineInsta360
         product: Insta360Protocol
+      - package: OpenCineInsta360
+        product: Insta360Apple
       - package: OpenCineCore
         product: OpenCineCore
-      - target: Insta360Apple
       - target: OpenInstaCineWatch
         embed: true
         codeSign: true
@@ -160,18 +130,18 @@ targets:
       - OpenInstaCineTests
     dependencies:
       - target: OpenInstaCine
-      - target: Insta360Apple
-        embed: false
       - package: OpenPocketViewCore
         product: OpenPocketViewCore
       - package: OpenCineCore
         product: OpenCineMedia
-      - package: Insta360Protocol
+      - package: OpenCineInsta360
         product: Insta360Protocol
+      # Also provides the Insta360Apple module; Xcode then shares one Insta360Apple
+      # framework between the app and this bundle instead of a second static copy.
+      - package: OpenCineInsta360
+        product: Insta360AppleTestSupport
       - package: OpenCineCore
         product: OpenCineCore
-      - package: OpenPocketViewCore
-        product: MonitorContracts
     settings:
       base:
         SWIFT_VERSION: "5.0"

@@ -9,7 +9,7 @@ import subprocess
 def identity(root: Path, platform: str, configuration: str) -> str:
     paths = ["Sources", "Package.swift", "Package.resolved", "tools/build-identity.py"]
     if platform == "ios":
-        paths += ["ios/OpenInstaCine", "Adapters", "ios/Config", "ios/project.yml", "ios/ci_scripts", "tools/stamp-source-revision.sh"]
+        paths += ["ios/OpenInstaCine", "ios/Config", "ios/project.yml", "ios/ci_scripts", "tools/stamp-source-revision.sh"]
     else:
         paths += ["Apps/Android", "scripts/android-stage-swift-core.sh"]
     digest = hashlib.sha256()
@@ -28,7 +28,12 @@ def identity(root: Path, platform: str, configuration: str) -> str:
 SIBLING_PACKAGES = {
     # OpenCineCore: Swift contracts and OpenCineMedia (iOS app and the Swift Android core)
     # plus the Kotlin core included by Apps/Android/settings.gradle.kts.
-    "ios": [("OpenCineUI", ["Package.swift", "Sources"]), ("OpenCineCore", ["Package.swift", "Sources"])],
+    # OpenCineInsta360: the Luna protocol and Apple adapter (iOS only; Kotlin stays in Apps/Android).
+    "ios": [
+        ("OpenCineUI", ["Package.swift", "Sources"]),
+        ("OpenCineCore", ["Package.swift", "Sources"]),
+        ("OpenCineInsta360", ["Package.swift", "Sources"]),
+    ],
     "android": [("OpenCineUI", ["Android"]), ("OpenCineCore", ["Package.swift", "Sources", "Android"])],
 }
 

@@ -12,11 +12,10 @@ same change when protocol, app behavior or setup changes.
 | Path | What |
 | --- | --- |
 | `ios/` | XcodeGen project (`ios/project.yml`), app `ios/OpenInstaCine`, tests, watch app |
-| `Sources/` | Shared OpenPocketCine core (`OpenPocketViewCore`, `MonitorContracts`, ...) with small Luna hooks (I-Log color mode, Luna resolutions, `.lrv` proxy) |
+| `Sources/` | Shared OpenPocketCine core (`OpenPocketViewCore`, ...) with small Luna hooks (I-Log color mode, Luna resolutions, `.lrv` proxy) |
 | `../OpenCineUI` | Sibling checkout of the shared design system OpenCineUI (`MonitorUI`, `MonitorPresentation`, Android `monitor-ui`); `ios/project.yml` and `Apps/Android/settings.gradle.kts` reference it by path |
 | `../OpenCineCore` (sibling) | `OpenCineCore`: common camera contracts (`CameraSession`, command outcomes; Android `:core` via the included build named `opencinecore`). `OpenCineMedia`: LUT, curve (incl. I-Log), scope and false-colour math, shutter angle, frame timing, framing. Re-exported by `OpenPocketViewCore`; pinned in `opencine-pins.txt`, check out with `scripts/checkout-opencine.sh` |
-| `Adapters/Insta360Protocol` | Portable Luna codec: UCD2 framing, protobuf, status, settings, media and control messages |
-| `Adapters/Insta360Apple` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport |
+| `../OpenCineInsta360` (sibling) | Luna integration package: `Insta360Protocol` (portable codec) and `Insta360Apple` (CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport, `LunaCameraSession`), plus `Insta360AppleTestSupport` (FakeLuna) for app tests. iOS only; pinned in `opencine-pins.txt`. The app passes its names (keychain service, app name, log prefix) in `AppModel.lunaConfiguration` |
 | `tools/LunaProbe` | Swift CLI that drives the camera from a Mac on its Wi-Fi (used for the fw 1.1.15 verification) |
 | `tools/` | Python lab tools: BLE capture, Mac preview, DEBUG remote client |
 | `Apps/Android` | Android app on the OpenPocketCine Android shell (synced to upstream `9e306c91`); builds, not yet verified on a physical Luna |

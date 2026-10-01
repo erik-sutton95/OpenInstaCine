@@ -93,7 +93,7 @@ luna-lab-bridge *args:
 
 core-test:
     swift test
-    swift test --package-path Adapters/Insta360Protocol
+    swift test --package-path ../OpenCineInsta360
 
 android-build:
     cd Apps/Android && JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk}" ./gradlew :app:assembleDebug

@@ -26,7 +26,7 @@ OLD="$(git -C "$SRC" rev-parse --verify "${OLD_COMMIT:-$(cat "$COMMIT_FILE")}^{c
 NEW="$(git -C "$SRC" rev-parse --verify "${NEW_COMMIT:-HEAD}^{commit}")"
 
 # Files OpenInstaCine owns inside ios/ (Luna seams and brand assets). Never touched by a sync.
-# Adapters/ and our own Sources/MonitorContracts are outside the upstream tree entirely.
+# Luna protocol and Apple adapter code lives in the sibling OpenCineInsta360 package.
 LUNA_OWNED=(
   OpenInstaCine/CameraSession.swift
   OpenInstaCine/CameraSessionControls.swift
