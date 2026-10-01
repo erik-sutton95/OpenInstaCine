@@ -138,10 +138,14 @@ def main() -> None:
         '"OpenInstaCine uses Bluetooth to find and pair with your DJI Osmo Pocket and hand off Wi-Fi."',
         '"OpenInstaCine uses Bluetooth to find your Insta360 Luna, ask it for approval, and hand off to its Wi-Fi."',
     )
+    # Upstream test target before and after it linked OpenCineMedia (MEDIA-01).
+    media = "      - package: OpenCineCore\n        product: OpenCineMedia\n"
+    if "OpenCineCore:\n" not in project.read_text():
+        media = ""
     replace_once(
         project,
-        "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
-        "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n      - package: Insta360Protocol\n        product: Insta360Protocol\n    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
+        "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n" + media + "    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
+        "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n" + media + "      - package: Insta360Protocol\n        product: Insta360Protocol\n    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
     )
 
     startup = APP / "StartupChrome.swift"
