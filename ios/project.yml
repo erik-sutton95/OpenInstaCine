@@ -21,8 +21,11 @@ packages:
   # OpenCineUI next to this repository. Switch to url + exactVersion once it is published.
   OpenCineUI:
     path: ../../OpenCineUI
-  # Common camera contracts. Candidate: a sibling checkout of OpenCineCore next to this
-  # repository. Switch to url + exactVersion once it is published.
+  # Common camera contracts (OpenCineCore) and portable media math (OpenCineMedia, also
+  # re-exported by OpenPocketViewCore, which depends on the same ../OpenCineCore checkout).
+  # Candidate: a sibling checkout of OpenCineCore next to this repository. Switch to
+  # url + exactVersion once it is published. The app and tests call OpenCineMedia directly,
+  # so they link the product themselves.
   OpenCineCore:
     path: ../../OpenCineCore
 
@@ -73,6 +76,8 @@ targets:
         product: Sentry
       - package: OpenPocketViewCore
         product: OpenPocketViewCore
+      - package: OpenCineCore
+        product: OpenCineMedia
       - package: OpenCineUI
         product: MonitorUI
       - package: OpenCineUI
@@ -159,6 +164,8 @@ targets:
         embed: false
       - package: OpenPocketViewCore
         product: OpenPocketViewCore
+      - package: OpenCineCore
+        product: OpenCineMedia
       - package: Insta360Protocol
         product: Insta360Protocol
       - package: OpenCineCore

@@ -230,9 +230,8 @@ final class LiveAssistState {
     var falseColorScale: FalseColorScaleKind = .sceneStops
     var falseColorReference = true
     /// Video / IRE read log through the official Rec.709 look (709) or the signal (LOG).
-    var falseColorRec709 = false {
-        didSet { FalseColorLogReading.set(rec709: falseColorRec709) }
-    }
+    /// Per assist state: renderers read it from the effects, never from a global.
+    var falseColorRec709 = false
     var zebraHighlight = true
     var zebraMidtone = true
     var zebraHighlightIRE: Double = LiveZebra.highlightIRE
@@ -466,6 +465,7 @@ final class LiveAssistState {
             PocketFalseColorMap.warm(
                 scale: falseColorScale,
                 mode: monitorColorMode ?? .normal,
+                rec709: falseColorRec709, clipByte: nil,
                 hasLUT: lutEnabled && lutDimension >= 2)
         }
     }
@@ -487,6 +487,7 @@ final class LiveAssistState {
                 PocketFalseColorMap.warm(
                     scale: falseColorScale,
                     mode: monitorColorMode ?? .normal,
+                    rec709: falseColorRec709, clipByte: nil,
                     hasLUT: lutEnabled && lutDimension >= 2)
             }
         case .waveform: waveform.toggle()
@@ -632,7 +633,8 @@ final class LiveAssistState {
             return (cached.dimension, cached.rgba)
         }
         guard let cube = resolvedLUTCube() else { return (0, Data()) }
-        let gpu = cube.colorCube.compensatingExposure(stops: lutExposureStops, transfer: transfer)
+        let gpu = cube.colorCube.compensatingExposure(
+            stops: lutExposureStops, transfer: transfer.lutExposureTransfer)
         let rgba = gpu.rgbaComponents.withUnsafeBytes { Data($0) }
         inspectorLUTCache = InspectorLUTCache(
             selection: lutSelection, stops: lutExposureStops, transfer: transfer,
@@ -745,14 +747,14 @@ final class LiveAssistState {
         return cube.preparedForExport(
             bakeExposure: bakeExposure,
             stops: lutExposureStops,
-            transfer: MonitorTransfer(color ?? .normal))
+            transfer: MonitorTransfer(color ?? .normal).lutExposureTransfer)
     }
 
     private func cache(_ cube: CubeLUT) {
         lutCube = cube
         let transfer = MonitorTransfer(monitorColorMode ?? .normal)
         let gpu = cube.colorCube.compensatingExposure(
-            stops: lutExposureStops, transfer: transfer)
+            stops: lutExposureStops, transfer: transfer.lutExposureTransfer)
         lutDimension = gpu.size
         lutRGBA = gpu.rgbaComponents.withUnsafeBytes { Data($0) }
     }
@@ -1794,10 +1796,14 @@ private struct LevelCaption: View {
 struct FalseColorLegend: View {
     var scale: FalseColorScaleKind
     var colorMode: ColorMode = .normal
+    var rec709: Bool
+    var clipByte: Int
 
     var body: some View {
-        FalseColorAssist.referenceDisplay(scale: scale, colorMode: colorMode)
-            .allowsHitTesting(false)
+        FalseColorAssist.referenceDisplay(
+            scale: scale, colorMode: colorMode, rec709: rec709, clipByte: clipByte
+        )
+        .allowsHitTesting(false)
     }
 }
 

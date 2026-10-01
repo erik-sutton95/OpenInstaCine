@@ -11,7 +11,8 @@ import PackageDescription
 // consumed by ios/project.yml, not from this manifest.
 let package = Package(
     name: "OpenPocketViewCore",
-    platforms: [.iOS(.v17), .macOS(.v12), .watchOS(.v10)],
+    // macOS 13: OpenCineCore's minimum (host `swift test` only; no macOS app ships).
+    platforms: [.iOS(.v17), .macOS(.v13), .watchOS(.v10)],
     products: [
         .library(name: "OpenPocketViewCore", targets: ["OpenPocketViewCore"]),
         // Brand-neutral CameraBackend seam; Luna implements it in Adapters/Insta360Apple.
@@ -22,9 +23,16 @@ let package = Package(
         .library(
             name: "OpenPocketCineAndroid", type: .dynamic, targets: ["OpenPocketCineAndroidFacade"]),
     ],
+    dependencies: [
+        // Portable media math (OpenCineMedia). Sibling checkout until OpenCineCore is published.
+        .package(path: "../OpenCineCore")
+    ],
     targets: [
         .target(name: "MonitorContracts"),
-        .target(name: "OpenPocketViewCore"),
+        .target(
+            name: "OpenPocketViewCore",
+            dependencies: [.product(name: "OpenCineMedia", package: "OpenCineCore")]
+        ),
         .testTarget(
             name: "OpenPocketViewCoreTests",
             dependencies: ["OpenPocketViewCore"],

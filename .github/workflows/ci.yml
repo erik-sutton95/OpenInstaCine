@@ -119,6 +119,8 @@ jobs:
               - 'Adapters/**'
               - 'ios/**'
               - 'Package.swift'
+              - 'opencine-pins.txt'
+              - 'scripts/checkout-opencine.sh'
               - 'justfile'
               - '.github/workflows/ci.yml'
             android:
@@ -127,6 +129,8 @@ jobs:
               - 'Sources/OpenPocketCineAndroidFacade/**'
               - 'Sources/CJNI/**'
               - 'Package.swift'
+              - 'opencine-pins.txt'
+              - 'scripts/checkout-opencine.sh'
               - 'scripts/android-*.sh'
               - 'scripts/ci-install-swift-android.sh'
               - 'justfile'
@@ -151,10 +155,11 @@ jobs:
           xcode-version: latest-stable
       - name: Install native tooling
         run: brew install just xcodegen || true
-      # Candidate (OpenCineUI UI-03, OpenCineCore CORE-02): ios/project.yml takes MonitorUI and
-      # MonitorPresentation from ../OpenCineUI and OpenCineCore from ../OpenCineCore, sibling
-      # checkouts pinned by SHA in opencine-pins.txt. Works only once those repositories are
-      # published. Delete when the app pins them by url + version.
+      # Candidate (OpenCineUI UI-03, OpenCineCore CORE-02 and MEDIA-01): ios/project.yml takes
+      # MonitorUI and MonitorPresentation from ../OpenCineUI, and OpenCineCore plus OpenCineMedia
+      # (also Package.swift) from ../OpenCineCore, sibling checkouts pinned by SHA in
+      # opencine-pins.txt. Works only once those repositories are published. Delete when the app
+      # pins them by url + version.
       - name: Check out pinned OpenCine packages next to the repository
         run: scripts/checkout-opencine.sh
       - name: Swift packages
@@ -176,9 +181,11 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
-      # OpenCineUI (UI-03) and OpenCineCore (CORE-02) candidate wiring. Apps/Android/settings.gradle.kts
-      # includes ../../../OpenCineUI/Android and ../../../OpenCineCore/Android, sibling checkouts
-      # pinned by SHA in opencine-pins.txt. Works only once those remotes exist (owner/URL not final).
+      # OpenCineUI (UI-03) and OpenCineCore (CORE-02, MEDIA-01) candidate wiring.
+      # Apps/Android/settings.gradle.kts includes ../../../OpenCineUI/Android and
+      # ../../../OpenCineCore/Android, and the Swift Android core links OpenCineMedia from
+      # ../OpenCineCore: sibling checkouts pinned by SHA in opencine-pins.txt. Works only once
+      # those remotes exist (owner/URL not final).
       - name: Check out pinned OpenCine packages next to the repository
         run: scripts/checkout-opencine.sh
       # The install script needs NDK 27 for the Swift Android SDK sysroot.

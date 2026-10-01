@@ -26,8 +26,10 @@ def identity(root: Path, platform: str, configuration: str) -> str:
 
 
 SIBLING_PACKAGES = {
-    "ios": [("OpenCineUI", ["Package.swift", "Sources"])],
-    "android": [("OpenCineUI", ["Android"])],
+    # OpenCineCore: Swift contracts and OpenCineMedia (iOS app and the Swift Android core)
+    # plus the Kotlin core included by Apps/Android/settings.gradle.kts.
+    "ios": [("OpenCineUI", ["Package.swift", "Sources"]), ("OpenCineCore", ["Package.swift", "Sources"])],
+    "android": [("OpenCineUI", ["Android"]), ("OpenCineCore", ["Package.swift", "Sources", "Android"])],
 }
 
 

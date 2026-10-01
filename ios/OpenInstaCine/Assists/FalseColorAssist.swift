@@ -76,9 +76,9 @@ enum FalseColorAssist {
     }
 
     static func legendBands(
-        scale: FalseColorScaleKind, transfer: MonitorTransfer
+        scale: FalseColorScaleKind, transfer: MonitorTransfer, rec709: Bool, clipByte: Int
     ) -> [LiveFalseColorBand] {
-        scale.legendStops(transfer: transfer)
+        scale.legendStops(transfer: transfer, rec709: rec709, clipByte: clipByte)
     }
 
     /// OpenZCine `AssistQuickSettingsContent.falseColorRows`.
@@ -86,6 +86,7 @@ enum FalseColorAssist {
         options: Binding<Options>,
         compact: Bool = false,
         transfer: MonitorTransfer = .rec709,
+        clipByte: Int,
         rec709: Binding<Bool>? = nil,
         onReferenceEnabled: (() -> Void)? = nil
     ) -> FalseColorLongPressMenu {
@@ -93,6 +94,7 @@ enum FalseColorAssist {
             options: options,
             compact: compact,
             transfer: transfer,
+            clipByte: clipByte,
             rec709: rec709,
             onReferenceEnabled: onReferenceEnabled
         )
@@ -112,9 +114,9 @@ enum FalseColorAssist {
 
     /// OpenZCine `FalseColorReference` — 264×52 glass ruler with sparse zone chips.
     static func referenceDisplay(
-        scale: FalseColorScaleKind, colorMode: ColorMode = .normal
+        scale: FalseColorScaleKind, colorMode: ColorMode = .normal, rec709: Bool, clipByte: Int
     ) -> FalseColorReference {
-        FalseColorReference(scale: scale, colorMode: colorMode)
+        FalseColorReference(scale: scale, colorMode: colorMode, rec709: rec709, clipByte: clipByte)
     }
 
     @MainActor
@@ -125,6 +127,7 @@ enum FalseColorAssist {
             PocketFalseColorMap.warm(
                 scale: assist.falseColorScale,
                 mode: assist.monitorColorMode ?? .normal,
+                rec709: assist.falseColorRec709, clipByte: nil,
                 hasLUT: assist.effects.lutDimension >= 2)
         }
     }
@@ -170,6 +173,8 @@ private struct FalseColorAssistMenuHost: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        let transfer =
+            model.monitorTransfer ?? model.monitorColorMode.map(MonitorTransfer.init) ?? .rec709
         FalseColorAssist.longPressMenu(
             options: Binding(
                 get: { assist.falseColorOptions },
@@ -179,8 +184,8 @@ private struct FalseColorAssistMenuHost: View {
                 }
             ),
             compact: compact,
-            transfer: model.monitorTransfer ?? model.monitorColorMode.map(MonitorTransfer.init)
-                ?? .rec709,
+            transfer: transfer,
+            clipByte: model.monitorSamples.exposureCeiling.clipByte(transfer: transfer),
             rec709: Binding(
                 get: { assist.falseColorRec709 },
                 set: {
@@ -197,6 +202,8 @@ struct FalseColorLongPressMenu: View {
     @Binding var options: FalseColorAssist.Options
     var compact: Bool = false
     var transfer: MonitorTransfer = .rec709
+    /// The monitored source's live ceiling for `transfer`.
+    var clipByte: Int
     var rec709: Binding<Bool>? = nil
     var onReferenceEnabled: (() -> Void)? = nil
 
@@ -237,8 +244,9 @@ struct FalseColorLongPressMenu: View {
             SettingsInlineRow(title: "Reference key", stacked: true) {
                 FalseColorReference(
                     scale: options.scale, transfer: transfer, inspector: true,
-                    rec709: rec709?.wrappedValue ?? FalseColorLogReading.rec709)
-                    .accessibilityLabel("False color reference key")
+                    rec709: rec709?.wrappedValue ?? false, clipByte: clipByte
+                )
+                .accessibilityLabel("False color reference key")
             }
 
             SettingsSwitchInlineRow(
@@ -286,21 +294,26 @@ struct FalseColorReference: View {
     var scale: FalseColorScaleKind
     var transfer: MonitorTransfer
     /// Read: 709 / LOG. A view input so flipping it redraws the key.
-    var rec709 = FalseColorLogReading.rec709
+    var rec709: Bool
+    /// The monitored source's live ceiling for `transfer` (STATE-01: per source).
+    var clipByte: Int
 
-    init(scale: FalseColorScaleKind, colorMode: ColorMode = .normal) {
+    init(scale: FalseColorScaleKind, colorMode: ColorMode = .normal, rec709: Bool, clipByte: Int) {
         self.scale = scale
         self.transfer = MonitorTransfer(colorMode)
+        self.rec709 = rec709
+        self.clipByte = clipByte
     }
 
     init(
         scale: FalseColorScaleKind, transfer: MonitorTransfer, inspector: Bool = false,
-        rec709: Bool = FalseColorLogReading.rec709
+        rec709: Bool, clipByte: Int
     ) {
         self.scale = scale
         self.transfer = transfer
         self.inspector = inspector
         self.rec709 = rec709
+        self.clipByte = clipByte
     }
 
     /// OpenZCine `FalseColorReference.curveKeyLabel` — Pocket transfers, compact keys.
@@ -364,7 +377,10 @@ struct FalseColorReference: View {
                         colors: neutralGradientColors,
                         startPoint: .leading,
                         endPoint: .trailing)
-                    MonitorSnapshotRows(Self.segments(scale: scale, transfer: transfer, rec709: rec709)) {
+                    MonitorSnapshotRows(
+                        Self.segments(
+                            scale: scale, transfer: transfer, rec709: rec709, clipByte: clipByte)
+                    ) {
                         segment in
                         Rectangle()
                             .fill(
@@ -390,29 +406,30 @@ struct FalseColorReference: View {
     }
 
     static func segments(
-        scale: FalseColorScaleKind, transfer: MonitorTransfer,
-        rec709: Bool = FalseColorLogReading.rec709
+        scale: FalseColorScaleKind, transfer: MonitorTransfer, rec709: Bool, clipByte: Int
     ) -> [Segment] {
-        PocketFalseColorMap.bands(scale: scale, transfer: transfer, rec709: rec709).enumerated().map {
+        PocketFalseColorMap.bands(
+            scale: scale, transfer: transfer, rec709: rec709, clipByte: clipByte
+        ).enumerated().map {
             index, band in
             Segment(
                 id: index,
                 lowerFraction: fraction(
                     band.lowerBound, scale: scale, transfer: transfer, rec709: rec709,
-                    infiniteFallback: 0),
+                    clipByte: clipByte, infiniteFallback: 0),
                 upperFraction: fraction(
                     band.upperBound, scale: scale, transfer: transfer, rec709: rec709,
-                    infiniteFallback: 1),
+                    clipByte: clipByte, infiniteFallback: 1),
                 band: band)
         }
     }
 
     /// Scene stops at this curve's clip shelf, where CineStop's clip band starts.
     static func sceneStopClip(
-        transfer: MonitorTransfer, rec709: Bool = FalseColorLogReading.rec709
+        transfer: MonitorTransfer, rec709: Bool, clipByte: Int
     ) -> Double {
         let clip = LiveColorScience.falseColorClip(
-            scale: .sceneStops, transfer: transfer, rec709: rec709)
+            scale: .sceneStops, transfer: transfer, rec709: rec709, clipByte: clipByte)
         let ceiling = LiveColorScience.stops(
             encoded: LiveColorScience.clipShelf(ceiling: clip.ceiling), transfer: clip.transfer)
         return ceiling.isFinite ? ceiling : LiveColorScience.sceneStopDefaultClip
@@ -421,17 +438,17 @@ struct FalseColorReference: View {
     /// CineStop ruler span in scene stops: crush on the left, one stop past this
     /// curve's clip on the right, so every stop the camera records gets room.
     static func sceneStopDomain(
-        transfer: MonitorTransfer, rec709: Bool = FalseColorLogReading.rec709
+        transfer: MonitorTransfer, rec709: Bool, clipByte: Int
     ) -> ClosedRange<Double> {
-        -8.5...(max(2.5, sceneStopClip(transfer: transfer, rec709: rec709)) + 1)
+        -8.5...(max(2.5, sceneStopClip(transfer: transfer, rec709: rec709, clipByte: clipByte)) + 1)
     }
 
     /// CineStop axis: every second stop from −6, stopping 1½ stops short of this
     /// curve's clip so no label collides with the clip mark, then clip.
     static func sceneStopMarkers(
-        transfer: MonitorTransfer, rec709: Bool = FalseColorLogReading.rec709
+        transfer: MonitorTransfer, rec709: Bool, clipByte: Int
     ) -> [AxisMarker] {
-        let clip = sceneStopClip(transfer: transfer, rec709: rec709)
+        let clip = sceneStopClip(transfer: transfer, rec709: rec709, clipByte: clipByte)
         var marks: [(String, Double)] = []
         for stop in stride(from: -6, to: clip - 1.5, by: 2) {
             marks.append((stopLabel(Int(stop)), stop))
@@ -442,7 +459,7 @@ struct FalseColorReference: View {
                 id: index, label: mark.0,
                 fraction: fraction(
                     mark.1, scale: .sceneStops, transfer: transfer, rec709: rec709,
-                    infiniteFallback: 1))
+                    clipByte: clipByte, infiniteFallback: 1))
         }
     }
 
@@ -453,11 +470,11 @@ struct FalseColorReference: View {
 
     private static func fraction(
         _ value: Double, scale: FalseColorScaleKind, transfer: MonitorTransfer,
-        rec709: Bool = FalseColorLogReading.rec709, infiniteFallback: Double
+        rec709: Bool, clipByte: Int, infiniteFallback: Double
     ) -> Double {
         guard value.isFinite else { return infiniteFallback }
         guard scale.liveScale.usesSceneStops else { return min(1, max(0, value / 100)) }
-        let domain = sceneStopDomain(transfer: transfer, rec709: rec709)
+        let domain = sceneStopDomain(transfer: transfer, rec709: rec709, clipByte: clipByte)
         return min(
             1, max(0, (value - domain.lowerBound) / (domain.upperBound - domain.lowerBound)))
     }
@@ -465,7 +482,9 @@ struct FalseColorReference: View {
     @ViewBuilder private var axisView: some View {
         if scale.liveScale.usesSceneStops {
             GeometryReader { geometry in
-                MonitorSnapshotRows(Self.sceneStopMarkers(transfer: transfer, rec709: rec709)) {
+                MonitorSnapshotRows(
+                    Self.sceneStopMarkers(transfer: transfer, rec709: rec709, clipByte: clipByte)
+                ) {
                     marker in
                     Text(marker.label)
                         .font(
