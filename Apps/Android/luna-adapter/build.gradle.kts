@@ -17,5 +17,6 @@ listOf("Debug", "Release").forEach { variant ->
         outputs.dir(marker)
         doLast { marker.get().asFile.mkdirs() }
     }
-    tasks.matching { it.name == "bundle${variant}LocalLintAar" }.configureEach { dependsOn(prepare) }
+    tasks.matching { it.name == "bundle${variant}LocalLintAar" || it.name == "bundle${variant}Aar" }
+        .configureEach { dependsOn(prepare) }
 }
