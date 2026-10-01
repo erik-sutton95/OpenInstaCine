@@ -354,7 +354,9 @@ final class CameraSession {
                 self.isVerticalPicture = self.decoder.isVerticalPicture
             }
         }
-        decoder.onSourceFrame = { [weak self] buffer in self?.considerFaceAF(buffer) }
+        decoder.onSourceFrame = { [weak self] lease in
+            if let buffer = lease.pixelBuffer { self?.considerFaceAF(buffer) }
+        }
         // A decoder handoff (look/scope toggle) needs an IDR. Luna sends a GOP every
         // ~2 s; ask once for an I-frame so the switch is not a two-second hold.
         decoder.onHandoffNeedsIDR = { [weak self] in self?.requestKeyframe(reason: "assist VT start") }

@@ -14,6 +14,7 @@ CI until the shared repositories are published (see the end of this page).
 | MEDIA-01: LUT, curve, scope, shutter angle and frame timing math from OpenCineMedia | `opencine/media-01` | f579e8f |
 | OPTIONAL-02: gimbal programs and head-track math from OpenCineMotion (`MotionCapabilities.lunaUltra`) | `opencine/motion` | 1b67ba7 |
 | OPTIONAL-02: watcher relay wire v1, control lease and pacing from OpenCineRelay | `opencine/relay` | 0aaac91 |
+| MEDIA-02 step 4: VideoToolbox decoder runtime and decoded-frame leases from OpenCineApple (stacked) | `opencine/apple` | see `git log` |
 
 ### Merged branches
 
@@ -79,10 +80,23 @@ Nothing below has run on hardware.
 12. OPTIONAL-02 relay: a watcher on the previous build watches this build and the reverse, on two
     iPhones; a version mismatch is denied with the usual copy. Wire bytes are unchanged (golden v1
     tests).
+13. MEDIA-02 step 4 (iPhone): first connect shows a picture; LUT, scopes, zebra, false colour,
+    HDR panel and upscaler toggles never black the well; background return keeps the picture;
+    Face AF tracks. Compare glass-to-glass latency, memory over 30 min live with LUT and WAVE, and
+    thermal state after 20 min against `opencine/integration` without this branch.
 
 Known limits: two Luna cameras at once cannot be tested (LunaWiFi joins one camera access point,
 192.168.42.x); the two-session gate is simulated only. Android reports no serial on this path,
 so EV keys use the connected camera id.
+
+## MEDIA-02 step 4: Apple runtime
+
+Branch `opencine/apple` (on this candidate) runs `HevcDecoder` on OpenCineCore's `OpenCineApple`
+`VideoToolboxDecoder` (display layer, format, VT session, sample buffers, error ledger, generation
+fence). `HevcDecoder` keeps the presentation policy; its only API change is `onSourceFrame`, which
+lends a `DecodedFrameLease`. The refactor is identical to OpenPocketCine's, so the sync script
+carries it. App-side: the log subsystem, `SimulatorLiveFeed.isConfigured` and the watch preview guard.
+Pins OpenCineCore on its `apple` branch until that merges to Core main.
 
 ## Risks before merging
 

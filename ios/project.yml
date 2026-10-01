@@ -63,6 +63,10 @@ targets:
         product: Insta360Apple
       - package: OpenCineCore
         product: OpenCineCore
+      # Apple media runtime (OpenCine plan MEDIA-02): the VideoToolbox decoder runtime under
+      # HevcDecoder and decoded-frame leases. iOS app only; the watch never decodes live video.
+      - package: OpenCineCore
+        product: OpenCineApple
       - target: OpenInstaCineWatch
         embed: true
         codeSign: true
@@ -150,6 +154,8 @@ targets:
         product: Insta360AppleTestSupport
       - package: OpenCineCore
         product: OpenCineCore
+      - package: OpenCineCore
+        product: OpenCineApple
     settings:
       base:
         SWIFT_VERSION: "5.0"

@@ -26,7 +26,7 @@ def identity(root: Path, platform: str, configuration: str) -> str:
 
 
 SIBLING_PACKAGES = {
-    # OpenCineCore: Swift contracts and OpenCineMedia (iOS app and the Swift Android core)
+    # OpenCineCore: Swift contracts, OpenCineMedia (iOS app and the Swift Android core) and OpenCineApple (iOS app)
     # plus the Kotlin core included by Apps/Android/settings.gradle.kts.
     # OpenCineInsta360: the Luna protocol and Apple adapter (iOS only; Kotlin stays in Apps/Android).
     "ios": [
