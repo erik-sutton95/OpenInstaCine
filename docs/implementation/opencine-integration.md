@@ -12,6 +12,21 @@ CI until the shared repositories are published (see the end of this page).
 | STATE-01 Luna: per-session ownership, profile, zoom ceiling and EV calibration; CORE-01b adoption | `opencine/state-01-luna` (contains core-02-luna) | 7353aa7 |
 | UI-03: design system from OpenCineUI (`MonitorUI`, `MonitorPresentation`, Android `monitor-ui`) | `opencine/ui-03-shared-ui` | ede16d7 |
 | MEDIA-01: LUT, curve, scope, shutter angle and frame timing math from OpenCineMedia | `opencine/media-01` | f579e8f |
+| OPTIONAL-02: gimbal programs and head-track math from OpenCineMotion (`MotionCapabilities.lunaUltra`) | `opencine/motion` | 1b67ba7 |
+| OPTIONAL-02: watcher relay wire v1, control lease and pacing from OpenCineRelay | `opencine/relay` | 0aaac91 |
+
+### Merged branches
+
+Merged into `opencine/integration` with `--no-ff` on 2026-10-02, in this order:
+
+- `opencine/motion` 1b67ba7 (merge c5c70da)
+- `opencine/relay` 0aaac91 (merge 32aef1b; `Package.swift`, the Android Swift staging inputs,
+  `ios/project.yml` and pins merged as a union)
+
+Not merged: `opencine/core-api-shared` (still in progress). Pins after these merges:
+OpenCineUI 54bcbb3, OpenCineCore 6f578ce (main, contains motion and relay), OpenCineInsta360
+11ee621 (main; adds the Kotlin Luna adapter under `Android/`, which this branch does not include
+yet, so the Swift package is unchanged from 807a4be).
 
 Base is `opencine/state-01-luna`; the other two are merged with `--no-ff`. Pinned siblings
 (`opencine-pins.txt`): OpenCineUI 54bcbb3, OpenCineCore 28a0196 (contains the MEDIA-01
@@ -59,6 +74,11 @@ Nothing below has run on hardware.
 9. Media album thumbnails, playback and download from 192.168.42.1; LUT preview, false colour,
    waveform/parade and I-Log display match the previous build.
 10. Live View diagnostics copy works before and after connect.
+11. OPTIONAL-02 motion: gimbal programs, head tracking and joystick moves behave as on the
+    previous build (head tracking keeps the inherited reach, pan -48 to 225, tilt -44 to 70).
+12. OPTIONAL-02 relay: a watcher on the previous build watches this build and the reverse, on two
+    iPhones; a version mismatch is denied with the usual copy. Wire bytes are unchanged (golden v1
+    tests).
 
 Known limits: two Luna cameras at once cannot be tested (LunaWiFi joins one camera access point,
 192.168.42.x); the two-session gate is simulated only. Android reports no serial on this path,
