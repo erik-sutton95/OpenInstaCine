@@ -112,6 +112,25 @@ inventory is preserved in [iOS parity](ios-parity-inventory.md) and
 itself certify every interaction on every device; test and visual review
 evidence must be reported separately.
 
+## Session ownership and per-session configuration
+
+Each camera connection has exactly one owner. On iOS the composition root
+(`AppModel.makeBackend()`) creates one `LunaCameraBackend` per owner and injects
+it with `CameraSession(backend:)`; a borrowed or controls-only session is a
+lease that never rebinds the owner's callbacks or connects. On Android each
+`PocketCameraSession` creates its own backend. Mode, colour, gimbal and focus
+labels, the camera media route (host and path rules) and the zoom ceiling are
+per-session values (`CameraProfile`, `zoomCeiling`), not launch-time globals.
+The learned picture EV calibration is one meter per session, keyed by device,
+recording profile/transfer and metering, and is always image-estimated; a
+camera-reported EV wins. Its v1 per-transfer values are read only and seed new
+keys of the same transfer. The control epoch moves only when the control link
+is (re)established; a stream restart or picture format change does not touch it.
+
+Qualification limit: `LunaWiFi` assumes one joined camera access point
+(192.168.42.x) per phone. Two simultaneous Luna connections are not supported
+until that is lifted and qualified on hardware.
+
 ## What remains staged
 
 1. **Sibling adoption:** OpenPocketCine/OpenZCine still use their original

@@ -8,6 +8,9 @@ private func luna_add_ipv4_alias(
     _ ifname: UnsafePointer<CChar>?, _ ip: UnsafePointer<CChar>?, _ mask: UnsafePointer<CChar>?
 ) -> Int32
 
+/// Qualification limit (STATE-01): one joined camera access point (192.168.42.x) per phone, so
+/// these addresses are process-wide. Sessions own everything else; two simultaneous Luna
+/// connections stay unsupported until this is lifted and qualified on hardware.
 @MainActor
 enum LunaWiFi {
     static var localAddress: String? {
