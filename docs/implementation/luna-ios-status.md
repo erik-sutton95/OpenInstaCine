@@ -437,6 +437,8 @@ Depends on the parallel engine sync (outside `Apps/Android`): the Swift facade m
   in this run (the 2026-09-11 review got a moving picture); needs a real device.
 - There is no Android equivalent of `scripts/sync-openpocketcine.sh`; both resyncs were manual
   (upstream `app/src` mapped onto `monitor/src` and three-way merged, then the session by hand).
+  Since UI-03 (2026-10-01) `monitor-ui` is not resynced at all: it comes from the OpenCineUI
+  included build.
 - Needs a real device after the `9e306c91` sync: CineStop and the 709 read over live I-Log, feed
   double tap to Deep Track and the 1.5 s start filter against the real 0x85 stream, shutter angle
   writes, and the Vulkan crash guard and `ImageReader` sampling on real GPUs.

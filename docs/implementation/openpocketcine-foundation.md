@@ -10,6 +10,14 @@ Until the two products share a monorepo, OpenInstaCine **vendors** the current
 OpenPocketCine shared engine and native shells, then overlays brand identity and
 the Luna adapter.
 
+The design system is not vendored. Since 2026-10-01 (UI-03) `MonitorUI`,
+`MonitorPresentation` (and `MonitorPresentationTests`) and the Android `monitor-ui`
+module come from the OpenCineUI repository, a sibling checkout at `../OpenCineUI`:
+`ios/project.yml` names it as a path package, and `Apps/Android/settings.gradle.kts`
+includes `../../../OpenCineUI/Android` and substitutes
+`com.opencapture.opencine:monitor-ui`. The sync never copies those paths, even
+from an upstream commit that still has them. Change shared UI in OpenCineUI.
+
 ```sh
 just sync-openpocketcine
 # or: OPENPOCKETCINE_PATH=/path/to/OpenPocketCine bash scripts/sync-openpocketcine.sh [--dry-run]
@@ -20,8 +28,8 @@ just sync-openpocketcine
 1. Builds the "renamed upstream" tree twice, in temp dirs: at the last synced
    commit (`docs/implementation/openpocketcine-sync-commit.txt`, override with
    `OLD_COMMIT=`) and at OpenPocketCine `HEAD` (override with `NEW_COMMIT=`).
-   Each tree is `Sources/{MonitorPresentation,MonitorUI,OpenPocketViewCore,CJNI,OpenPocketCineAndroidFacade}`,
-   `Tests/*`, four build-phase `tools/`, and `ios/` renamed to OpenInstaCine,
+   Each tree is `Sources/{OpenPocketViewCore,CJNI,OpenPocketCineAndroidFacade}`,
+   `Tests/*` except `Tests/MonitorPresentationTests`, four build-phase `tools/`, and `ios/` renamed to OpenInstaCine,
    minus the `LUNA_OWNED` and `OSMO_ONLY` lists in the script, with
    `scripts/apply-openpocketcine-overlays.py` applied.
 2. Diffs old to new (`git diff --no-index --binary`) and applies it with
@@ -41,8 +49,8 @@ just sync-openpocketcine
 
 These make `Sources/OpenPocketViewCore` (and one facade file) differ from
 upstream, so the sync takes the three-way path for them. Upstream them when
-possible. `Sources/MonitorUI` matches upstream plus the overlay script
-(`MonitorTheme.accentRGB` / `onAccent`), so it still rsyncs.
+possible. The brand accent is not an engine hook: OpenCineUI's `MonitorTheme`
+already has a settable `accentRGB` and `onAccent`.
 
 | File | Hook |
 | --- | --- |
@@ -60,7 +68,7 @@ re-sync. OpenInstaCine-owned code is:
 
 | Owner | Path |
 | --- | --- |
-| Brand storefront | `Apps/Apple/OpenInstaCine`, `Apps/Android/app` |
+| Brand storefront | `LUNA_OWNED` files in `ios/OpenInstaCine`, `Apps/Android/app` |
 | Luna protocol | `Adapters/Insta360Protocol` |
 | Luna Apple I/O | `Adapters/Insta360Apple` |
 | Luna Android I/O | `Apps/Android/luna-adapter` |
@@ -68,8 +76,10 @@ re-sync. OpenInstaCine-owned code is:
 | Overlays / sync | `scripts/sync-openpocketcine.sh`, `scripts/apply-openpocketcine-overlays.py` |
 | Protocol research | `docs/research`, `tools/luna_*` |
 
-Accent is `MonitorTheme.accentRGB = 0xFFCF00`, set once in
-`OpenInstaCineBrand.apply()` before any view is built. Record red, false color,
+Accent is `MonitorTheme.accentRGB = 0xFFCF00` (OpenCineUI theme, default
+OpenPocketCine blue), set once in `OpenInstaCineBrand.apply()` before any view is
+built. Android sets `MonitorPalette.accent` from `BrandIdentity` in
+`MonitorConfiguration.install` before the first screen. Record red, false color,
 and zebra keep their semantic colors.
 
 ## Camera seam
@@ -99,8 +109,8 @@ Not wired (uncaptured or proven no-op):
 ## Verification
 
 - `swift test --package-path Adapters/Insta360Protocol`
-- `swift test --filter MonitorPresentationTests`
-- `just apple-generate && just apple-build`
+- `swift test` in OpenCineUI (`MonitorPresentationTests`; its CI also runs the Android `monitor-ui` tests and lint)
+- `just ios-generate && just ios-build`
 
 Physical Luna connect, first picture, and control readback still require a
 phone on the camera AP.

@@ -82,7 +82,7 @@ bytes are pinned to the same captured fixtures as the Swift package
 | --- | --- |
 | `:app` | Thin launcher `com.opencapture.openinstacine`: installs the brand, the I-Log camera look and `LunaBackend` |
 | `:monitor` | Shared Compose shell, MediaCodec, Vulkan/GLES, assists, library and player (OpenPocketCine `app/src` as a library) |
-| `:monitor-ui` | Shared Compose design language; the accent is brand-assigned |
+| OpenCineUI `monitor-ui` | Shared Compose design language from the sibling OpenCineUI checkout (included build); the accent is brand-assigned |
 | `:core-api` | Kotlin backend contract: discovery, lifecycle, state, capabilities, frames, optional camera controls |
 | `:luna-adapter` | Android GATT, crypto, Wi-Fi and TCP, UCD2 and Luna messages |
 
