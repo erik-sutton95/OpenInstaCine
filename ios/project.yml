@@ -17,6 +17,10 @@ packages:
     path: ..
   Insta360Protocol:
     path: ../Adapters/Insta360Protocol
+  # Common camera contracts. Candidate: a sibling checkout of OpenCineCore next to this
+  # repository. Switch to url + exactVersion once it is published.
+  OpenCineCore:
+    path: ../../OpenCineCore
 
 targets:
   # Luna wire I/O: CoreBluetooth, camera Wi-Fi, TCP 6666, screen KCP.
@@ -39,6 +43,8 @@ targets:
         product: MonitorContracts
       - package: Insta360Protocol
         product: Insta360Protocol
+      - package: OpenCineCore
+        product: OpenCineCore
     settings:
       base:
         SWIFT_VERSION: "5.0"
@@ -71,6 +77,8 @@ targets:
         product: MonitorContracts
       - package: Insta360Protocol
         product: Insta360Protocol
+      - package: OpenCineCore
+        product: OpenCineCore
       - target: Insta360Apple
       - target: OpenInstaCineWatch
         embed: true
@@ -143,10 +151,14 @@ targets:
       - OpenInstaCineTests
     dependencies:
       - target: OpenInstaCine
+      - target: Insta360Apple
+        embed: false
       - package: OpenPocketViewCore
         product: OpenPocketViewCore
       - package: Insta360Protocol
         product: Insta360Protocol
+      - package: OpenCineCore
+        product: OpenCineCore
     settings:
       base:
         SWIFT_VERSION: "5.0"
