@@ -84,8 +84,12 @@ internal object CorePresentation {
                 if (rejection.reason == UnavailableReason.Mode) "$label is not available in this mode." else "$label is not available right now."
             else -> "Connect the camera to use its controls."
         }
-        is CommandStage.Failed ->
-            if (stage.failure == CommandFailure.NOT_APPLIED) "$label was not applied by the camera." else "$label was not sent."
+        is CommandStage.Failed -> when (stage.failure) {
+            CommandFailure.NOT_APPLIED -> "$label was not applied by the camera."
+            CommandFailure.NOT_SENT -> "$label was not sent."
+            // A newer write to the same setting replaced it; that receipt carries the outcome.
+            CommandFailure.SUPERSEDED -> null
+        }
         CommandStage.OutcomeUnknown -> "$label: the camera link dropped before it confirmed."
         else -> "The camera did not confirm $label."
     }

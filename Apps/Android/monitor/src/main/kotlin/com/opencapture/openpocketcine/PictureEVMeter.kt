@@ -1,7 +1,7 @@
 package com.opencapture.openpocketcine
 
 import android.content.Context
-import com.opencapture.opencine.core.Observation
+import com.opencapture.opencine.core.ObservedValue
 import com.opencapture.opencine.core.ObservationOrigin
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import kotlin.math.exp
@@ -40,7 +40,7 @@ internal class PictureEVMeter(
      * Metered EV in stops, estimated from the picture (never a camera report). [evComp] is the
      * camera's compensation while it exposes in auto, null in manual.
      */
-    fun stops(picture: Double, source: Source, evComp: Double?, now: Double): Observation<Double> {
+    fun stops(picture: Double, source: Source, evComp: Double?, now: Double): ObservedValue<Double> {
         var offset = offset(source)
         if (evComp != null) {
             val dt = lastAt?.let { (now - it).coerceIn(0.0, 0.5) } ?: 0.0
@@ -50,7 +50,7 @@ internal class PictureEVMeter(
             if (now - savedAt > 5) save(now)
         }
         lastAt = now
-        return Observation(picture - offset, ObservationOrigin.IMAGE_ESTIMATED, at = null)
+        return ObservedValue(picture - offset, ObservationOrigin.IMAGE_ESTIMATED, at = null)
     }
 
     private fun save(now: Double) {

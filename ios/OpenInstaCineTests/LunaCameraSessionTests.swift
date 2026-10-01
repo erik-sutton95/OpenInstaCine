@@ -303,6 +303,19 @@ final class LunaCameraSessionTests: XCTestCase {
         XCTAssertEqual(session.current.mode.value?.role, .video)
     }
 
+    func testANewerWriteToTheSameSettingSupersedesTheOlder() async {
+        let camera = FakeLuna()
+        let session = camera.connectedSession(settle: .seconds(5))
+        camera.applyDelay = .seconds(10)
+        let older = await session.submit(
+            CameraCommand(.set(.iso(.manual(400))), preconditions: CommandPreconditions(session.current)))
+        XCTAssertEqual(session.receipt(of: older.operation)?.stage, .awaitingObservation)
+        _ = await session.submit(
+            CameraCommand(.set(.iso(.manual(1600))), preconditions: CommandPreconditions(session.current)))
+        XCTAssertEqual(session.receipt(of: older.operation)?.stage, .failed(.superseded))
+        session.close(.requested)
+    }
+
     func testLinkLossEndsInFlightWritesAsUnknownAndANewLinkIsANewEpoch() async {
         let camera = FakeLuna()
         let session = camera.connectedSession(settle: .seconds(5))

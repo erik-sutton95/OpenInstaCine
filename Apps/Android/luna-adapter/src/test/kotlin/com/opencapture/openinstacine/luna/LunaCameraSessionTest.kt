@@ -312,6 +312,21 @@ class LunaCameraSessionTest {
         assertEquals(ObservationOrigin.CAMERA_REPORTED, session.recordingProfile.origin)
     }
 
+    @Test fun aNewerWriteToTheSameSettingSupersedesTheOlder() = runBlocking {
+        val camera = FakeLuna(scope)
+        val session = camera.connectedSession()
+        camera.applyDelay = 10.seconds
+        val older = session.submit(
+            CameraCommand(CameraCommandIntent.Set(SettingValue.Iso(ISOValue.Manual(400))), CommandPreconditions(session.snapshots.value)),
+        )
+        assertEquals(CommandStage.AwaitingObservation, session.receipt(older.operation)?.stage)
+        session.submit(
+            CameraCommand(CameraCommandIntent.Set(SettingValue.Iso(ISOValue.Manual(1600))), CommandPreconditions(session.snapshots.value)),
+        )
+        assertEquals(CommandStage.Failed(CommandFailure.SUPERSEDED), session.receipt(older.operation)?.stage)
+        session.closeNow(SessionCloseReason.REQUESTED)
+    }
+
     @Test fun linkLossEndsInFlightWritesAsUnknownAndANewLinkIsANewEpoch() = runBlocking {
         val camera = FakeLuna(scope)
         val session = camera.connectedSession()

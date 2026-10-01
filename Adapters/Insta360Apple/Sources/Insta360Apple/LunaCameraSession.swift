@@ -51,7 +51,7 @@ public final class LunaCameraSession: OpenCineCore.CameraSession {
     public private(set) var current: CameraSnapshot
     /// Recording colour profile (photography option 35) as a namespaced id. Camera-reported or
     /// unknown; never inferred from the preview. Lives here until `CameraSnapshot` has a slot.
-    public private(set) var recordingProfile: Observation<String> = .unknown
+    public private(set) var recordingProfile: ObservedValue<String> = .unknown
 
     private struct Awaiting {
         var intent: CameraCommandIntent
@@ -129,19 +129,19 @@ public final class LunaCameraSession: OpenCineCore.CameraSession {
         let at = now()
         if let mode = device.shootingMode {
             shootingMode = mode
-            current.mode = Observation(Self.captureMode(mode), origin: .cameraReported, at: at)
+            current.mode = ObservedValue(Self.captureMode(mode), origin: .cameraReported, at: at)
         }
         if let battery = device.battery {
-            current.power.battery = Observation(
+            current.power.battery = ObservedValue(
                 Double(min(battery.percent, 100)) / 100, origin: .cameraReported, at: at,
                 precision: .quantized(step: 0.01))
             // Power type names the adapter; "charging" itself is not reported.
-            current.power.externalPower = Observation(
+            current.power.externalPower = ObservedValue(
                 battery.powerType != 0, origin: .protocolDerived, at: at)
         }
         let volumes = device.storageList.isEmpty ? device.storage.map { [$0] } ?? [] : device.storageList
         if !volumes.isEmpty {
-            current.storage = Observation(
+            current.storage = ObservedValue(
                 volumes.map { Self.volume($0, at: at) }, origin: .cameraReported, at: at)
         }
         refreshCapabilities()
@@ -160,8 +160,8 @@ public final class LunaCameraSession: OpenCineCore.CameraSession {
             ? (carries(20) ? settings.stillExposure : nil) ?? (carries(21) ? settings.videoExposure : nil)
             : (carries(21) ? settings.videoExposure : nil) ?? (carries(20) ? settings.stillExposure : nil)
         if let exposure {
-            current.settings[.iso] = Observation(.iso(Self.iso(exposure)), origin: .cameraReported, at: at)
-            current.settings[.shutter] = Observation(
+            current.settings[.iso] = ObservedValue(.iso(Self.iso(exposure)), origin: .cameraReported, at: at)
+            current.settings[.shutter] = ObservedValue(
                 .shutter(Self.shutter(exposure)), origin: .cameraReported, at: at)
             reportedAt[.iso] = at
             reportedAt[.shutter] = at
@@ -170,14 +170,14 @@ public final class LunaCameraSession: OpenCineCore.CameraSession {
             // proto3 may omit a zero: a requested type 39 without a value is Auto.
             let kelvin = settings.whiteBalanceKelvin
             if let reported = kelvin ?? (settings.types.contains(39) ? 0 : nil) {
-                current.settings[.whiteBalance] = Observation(
+                current.settings[.whiteBalance] = ObservedValue(
                     .whiteBalance(reported == 0 ? .auto : .kelvin(Int(reported))),
                     origin: kelvin == nil ? .protocolDerived : .cameraReported, at: at)
                 reportedAt[.whiteBalance] = at
             }
         }
         if carries(35), let color = settings.color {
-            recordingProfile = Observation(Self.profileID(color), origin: .cameraReported, at: at)
+            recordingProfile = ObservedValue(Self.profileID(color), origin: .cameraReported, at: at)
         }
         refreshCapabilities()
         settle()
@@ -190,7 +190,7 @@ public final class LunaCameraSession: OpenCineCore.CameraSession {
         // Photo and pano capture states say nothing about video recording: unknown.
         let state: RecordingState? = capture.isRecording ? .recording : capture.isIdle ? .idle : nil
         if let state {
-            current.recording = Observation(state, origin: .cameraReported, at: at)
+            current.recording = ObservedValue(state, origin: .cameraReported, at: at)
             reportedAt[.recording] = at
         } else {
             current.recording = .unknown
@@ -240,9 +240,9 @@ public final class LunaCameraSession: OpenCineCore.CameraSession {
             return transition(operation, .rejected(.outOfDomain))
         }
         if case .set(let value) = command.intent {
-            // ponytail: Core has no "superseded" outcome; an older unfinished write to the same
-            // setting may or may not have landed before this one, so it ends outcomeUnknown.
-            if let older = targets[key]?.operation { transition(older, .outcomeUnknown) }
+            // An older unfinished write to the same setting may or may not have landed before
+            // this one; only the newest receipt can confirm.
+            if let older = targets[key]?.operation { transition(older, .failed(.superseded)) }
             targets[key] = (operation, value)
         }
         transition(operation, .sent)
@@ -279,6 +279,8 @@ public final class LunaCameraSession: OpenCineCore.CameraSession {
             Task { @MainActor in self.stopWaiting(operation, token) }
         }
     }
+
+    public func receipt(of operation: OperationID) -> CommandReceipt? { receipts[operation] }
 
     /// Never sends a camera command; in particular it never stops a recording.
     public func close(_ reason: SessionCloseReason) {
@@ -537,9 +539,9 @@ public final class LunaCameraSession: OpenCineCore.CameraSession {
             }
         return StorageVolume(
             id: "location-\(storage.location)",
-            media: media.map { Observation($0, origin: .cameraReported, at: at) } ?? .unknown,
+            media: media.map { ObservedValue($0, origin: .cameraReported, at: at) } ?? .unknown,
             // Free space only means something on a usable card.
             freeBytes: storage.isUsable
-                ? Observation(storage.freeBytes, origin: .cameraReported, at: at) : .unknown)
+                ? ObservedValue(storage.freeBytes, origin: .cameraReported, at: at) : .unknown)
     }
 }

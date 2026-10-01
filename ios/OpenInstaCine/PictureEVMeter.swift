@@ -61,7 +61,7 @@ final class PictureEVMeter {
     /// nil in manual.
     func stops(
         picture: Double, context: PictureEVContext, evComp: Double?, now: TimeInterval
-    ) -> OpenCineCore.Observation<Double> {
+    ) -> ObservedValue<Double> {
         // New assumptions start a new learning clock.
         if context != lastContext {
             lastContext = context
@@ -79,7 +79,7 @@ final class PictureEVMeter {
             }
         }
         lastAt = now
-        return OpenCineCore.Observation(
+        return ObservedValue(
             picture - offset, origin: .imageEstimated, at: MonotonicInstant(.seconds(now)))
     }
 

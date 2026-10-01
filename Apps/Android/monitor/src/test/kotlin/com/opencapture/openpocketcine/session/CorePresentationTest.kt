@@ -7,7 +7,7 @@ import com.opencapture.opencine.core.CommandFailure
 import com.opencapture.opencine.core.CommandStage
 import com.opencapture.opencine.core.ISOValue
 import com.opencapture.opencine.core.MonotonicInstant
-import com.opencapture.opencine.core.Observation
+import com.opencapture.opencine.core.ObservedValue
 import com.opencapture.opencine.core.ObservationOrigin
 import com.opencapture.opencine.core.OperationID
 import com.opencapture.opencine.core.Rational
@@ -24,7 +24,7 @@ import org.junit.Test
 
 /** The shared status shows reported Core values, with a pending target only while it is unfinished. */
 class CorePresentationTest {
-    private fun reported(value: SettingValue) = Observation(value, ObservationOrigin.CAMERA_REPORTED, MonotonicInstant.ZERO)
+    private fun reported(value: SettingValue) = ObservedValue(value, ObservationOrigin.CAMERA_REPORTED, MonotonicInstant.ZERO)
 
     private val snapshot = CameraSnapshot(
         CameraSessionID(),
@@ -33,7 +33,7 @@ class CorePresentationTest {
             SettingKey.SHUTTER to reported(SettingValue.Shutter(ShutterValue.Duration(Rational(1, 50)))),
             SettingKey.WHITE_BALANCE to reported(SettingValue.WhiteBalance(WhiteBalanceValue.Kelvin(5600))),
         ),
-        recording = Observation(RecordingState.IDLE, ObservationOrigin.CAMERA_REPORTED, MonotonicInstant.ZERO),
+        recording = ObservedValue(RecordingState.IDLE, ObservationOrigin.CAMERA_REPORTED, MonotonicInstant.ZERO),
     )
 
     @Test fun reportedValuesMapOntoTheSharedStatus() {
@@ -72,14 +72,14 @@ class CorePresentationTest {
     }
 
     @Test fun unknownRecordingIsNeitherShownNorToggled() {
-        val unknown = snapshot.copy(recording = Observation.unknown)
+        val unknown = snapshot.copy(recording = ObservedValue.unknown)
         assertFalse(CorePresentation.apply(unknown, emptyMap(), CameraStatus(isRecording = true)).isRecording)
         assertNull(CorePresentation.recordIntent(unknown.recording.value), "no blind toggle")
         assertEquals(CameraCommandIntent.StopRecording, CorePresentation.recordIntent(RecordingState.RECORDING))
         assertEquals(CameraCommandIntent.StartRecording, CorePresentation.recordIntent(RecordingState.IDLE))
         assertTrue(
             CorePresentation.apply(
-                snapshot.copy(recording = Observation(RecordingState.RECORDING, ObservationOrigin.CAMERA_REPORTED, null)),
+                snapshot.copy(recording = ObservedValue(RecordingState.RECORDING, ObservationOrigin.CAMERA_REPORTED, null)),
                 emptyMap(), CameraStatus(),
             ).isRecording,
         )

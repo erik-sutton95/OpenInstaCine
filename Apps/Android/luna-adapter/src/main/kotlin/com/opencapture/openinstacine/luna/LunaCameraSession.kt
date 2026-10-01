@@ -21,7 +21,7 @@ import com.opencapture.opencine.core.ISOValue
 import com.opencapture.opencine.core.IntegrationID
 import com.opencapture.opencine.core.MediaState
 import com.opencapture.opencine.core.MonotonicInstant
-import com.opencapture.opencine.core.Observation
+import com.opencapture.opencine.core.ObservedValue
 import com.opencapture.opencine.core.ObservationOrigin
 import com.opencapture.opencine.core.ObservationPrecision
 import com.opencapture.opencine.core.OperationID
@@ -104,7 +104,7 @@ class LunaCameraSession internal constructor(
     override val snapshots: StateFlow<CameraSnapshot> = feed.asStateFlow()
 
     /** Recording colour profile (option 35) as a namespaced id; camera-reported or unknown. */
-    @Volatile var recordingProfile: Observation<String> = Observation.unknown
+    @Volatile var recordingProfile: ObservedValue<String> = ObservedValue.unknown
         private set
 
     private var shootingMode: LunaShootingMode? = null
@@ -158,23 +158,23 @@ class LunaCameraSession internal constructor(
             val at = now()
             device.shootingMode?.let {
                 shootingMode = it
-                current = current.copy(mode = Observation(captureMode(it), ObservationOrigin.CAMERA_REPORTED, at))
+                current = current.copy(mode = ObservedValue(captureMode(it), ObservationOrigin.CAMERA_REPORTED, at))
             }
             device.battery?.let { battery ->
                 current = current.copy(
                     power = current.power.copy(
-                        battery = Observation(
+                        battery = ObservedValue(
                             minOf(battery.percent, 100L) / 100.0, ObservationOrigin.CAMERA_REPORTED, at,
                             precision = ObservationPrecision.Quantized(0.01),
                         ),
                         // Power type names the adapter; "charging" itself is not reported.
-                        externalPower = Observation(battery.powerType != 0L, ObservationOrigin.PROTOCOL_DERIVED, at),
+                        externalPower = ObservedValue(battery.powerType != 0L, ObservationOrigin.PROTOCOL_DERIVED, at),
                     ),
                 )
             }
             val volumes = device.storageList.ifEmpty { listOfNotNull(device.storage) }
             if (volumes.isNotEmpty()) {
-                current = current.copy(storage = Observation(volumes.map { volume(it, at) }, ObservationOrigin.CAMERA_REPORTED, at))
+                current = current.copy(storage = ObservedValue(volumes.map { volume(it, at) }, ObservationOrigin.CAMERA_REPORTED, at))
             }
             refreshCapabilities()
             publish()
@@ -193,8 +193,8 @@ class LunaCameraSession internal constructor(
             val exposure = if (shootingMode?.isPhoto == true) still ?: video else video ?: still
             val values = current.settings.toMutableMap()
             if (exposure != null) {
-                values[SettingKey.ISO] = Observation(SettingValue.Iso(iso(exposure)), ObservationOrigin.CAMERA_REPORTED, at)
-                values[SettingKey.SHUTTER] = Observation(SettingValue.Shutter(shutter(exposure)), ObservationOrigin.CAMERA_REPORTED, at)
+                values[SettingKey.ISO] = ObservedValue(SettingValue.Iso(iso(exposure)), ObservationOrigin.CAMERA_REPORTED, at)
+                values[SettingKey.SHUTTER] = ObservedValue(SettingValue.Shutter(shutter(exposure)), ObservationOrigin.CAMERA_REPORTED, at)
                 reportedAt[SettingKey.ISO] = at
                 reportedAt[SettingKey.SHUTTER] = at
             }
@@ -204,12 +204,12 @@ class LunaCameraSession internal constructor(
                 (kelvin ?: if (39 in settings.types) 0L else null)?.let { reported ->
                     val value = if (reported == 0L) WhiteBalanceValue.Auto else WhiteBalanceValue.Kelvin(reported.toInt())
                     val origin = if (kelvin == null) ObservationOrigin.PROTOCOL_DERIVED else ObservationOrigin.CAMERA_REPORTED
-                    values[SettingKey.WHITE_BALANCE] = Observation(SettingValue.WhiteBalance(value), origin, at)
+                    values[SettingKey.WHITE_BALANCE] = ObservedValue(SettingValue.WhiteBalance(value), origin, at)
                     reportedAt[SettingKey.WHITE_BALANCE] = at
                 }
             }
             if (carries(35)) {
-                settings.colorMode?.let(::profileID)?.let { recordingProfile = Observation(it, ObservationOrigin.CAMERA_REPORTED, at) }
+                settings.colorMode?.let(::profileID)?.let { recordingProfile = ObservedValue(it, ObservationOrigin.CAMERA_REPORTED, at) }
             }
             current = current.copy(settings = values)
             refreshCapabilities()
@@ -228,7 +228,7 @@ class LunaCameraSession internal constructor(
                 capture.isIdle -> RecordingState.IDLE
                 else -> null
             }
-            current = current.copy(recording = state?.let { Observation(it, ObservationOrigin.CAMERA_REPORTED, at) } ?: Observation.unknown)
+            current = current.copy(recording = state?.let { ObservedValue(it, ObservationOrigin.CAMERA_REPORTED, at) } ?: ObservedValue.unknown)
             if (state != null) reportedAt[SettingKey.RECORDING] = at
             settle()
             publish()
@@ -261,9 +261,9 @@ class LunaCameraSession internal constructor(
                 return transition(operation, CommandStage.Rejected(CommandRejection.OutOfDomain))
             }
             (command.intent as? CameraCommandIntent.Set)?.let { set ->
-                // ponytail: Core has no "superseded" outcome; an older unfinished write to the
-                // same setting may or may not have landed before this one, so it ends unknown.
-                targets[key]?.first?.let { transition(it, CommandStage.OutcomeUnknown) }
+                // An older unfinished write to the same setting may or may not have landed
+                // before this one; only the newest receipt can confirm.
+                targets[key]?.first?.let { transition(it, CommandStage.Failed(CommandFailure.SUPERSEDED)) }
                 targets[key] = operation to set.value
             }
             transition(operation, CommandStage.Sent)
@@ -306,10 +306,12 @@ class LunaCameraSession internal constructor(
         return waiter.await()
     }
 
+    override fun receipt(operation: OperationID): CommandReceipt? = synchronized(lock) { receipts[operation] }
+
     /** Never sends a camera command; in particular it never stops a recording. */
     override suspend fun close(reason: SessionCloseReason): Unit = closeNow(reason)
 
-    internal fun closeNow(reason: SessionCloseReason) {
+    override fun closeNow(reason: SessionCloseReason) {
         synchronized(lock) {
             if (closed) return
             endInFlight()
@@ -527,9 +529,9 @@ class LunaCameraSession internal constructor(
             }
             return StorageVolume(
                 "location-${storage.location}",
-                media = media?.let { Observation(it, ObservationOrigin.CAMERA_REPORTED, at) } ?: Observation.unknown,
+                media = media?.let { ObservedValue(it, ObservationOrigin.CAMERA_REPORTED, at) } ?: ObservedValue.unknown,
                 // Free space only means something on a usable card.
-                freeBytes = if (storage.isUsable) Observation(storage.freeBytes, ObservationOrigin.CAMERA_REPORTED, at) else Observation.unknown,
+                freeBytes = if (storage.isUsable) ObservedValue(storage.freeBytes, ObservationOrigin.CAMERA_REPORTED, at) else ObservedValue.unknown,
             )
         }
     }

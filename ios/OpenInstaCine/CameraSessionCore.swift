@@ -284,6 +284,9 @@ extension CameraSession {
             return "\(label) was not applied by the camera."
         case .failed(.notSent):
             return "\(label) was not sent."
+        case .failed(.superseded):
+            // A newer write to the same setting replaced it; that receipt carries the outcome.
+            return nil
         case .timedOut:
             return "The camera did not confirm \(label)."
         case .outcomeUnknown:
