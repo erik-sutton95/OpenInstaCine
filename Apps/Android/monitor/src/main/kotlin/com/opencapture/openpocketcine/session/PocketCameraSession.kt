@@ -30,7 +30,7 @@ import com.opencapture.opencine.core.ShutterValue
 import com.opencapture.opencine.core.WhiteBalanceValue
 import com.opencapture.openpocketcine.core.ConnectionPhase
 import com.opencapture.openpocketcine.feed.FacePriorityExposure
-import com.opencapture.openpocketcine.feed.SerialSessionGate
+import com.opencapture.opencine.media.SerialSessionGate
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.openpocketcine.diagnostics.FeedDecoderErrorOrigin
 import com.opencapture.openpocketcine.diagnostics.FeedIncidentAges
@@ -103,6 +103,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import com.opencapture.opencine.media.LivePipelineCadence
 
 /** Main-thread admission closes before negotiation is dispatched to the IO worker. */
 internal class EndpointCommandAdmission {
