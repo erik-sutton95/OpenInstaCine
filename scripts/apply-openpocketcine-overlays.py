@@ -35,31 +35,8 @@ def replace_phrase(path: Path, old: str, new: str) -> None:
 
 
 def main() -> None:
-    # --- Brand accent: one engine token, assigned once at launch. ---
-    theme = ROOT / "Sources/MonitorUI/MonitorTheme.swift"
-    replace_once(
-        theme,
-        "        public static var accent: Color { edrAccent(gain: hdrGain) }\n",
-        "        /// Brand storefronts assign this once at launch, before any view is built.\n"
-        "        nonisolated(unsafe) public static var accentRGB: UInt32 = 0x00A3E0\n"
-        "        public static var accent: Color { edrAccent(gain: hdrGain) }\n"
-        "        /// Ink for text/icons drawn ON an accent fill. Light accents (yellow) need dark ink.\n"
-        "        public static var onAccent: Color { accentIsLight ? color(0x111213) : .white }\n"
-        "        public static var accentIsLight: Bool {\n"
-        "            let r = Double((accentRGB >> 16) & 255), g = Double((accentRGB >> 8) & 255)\n"
-        "            let b = Double(accentRGB & 255)\n"
-        "            return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.6\n"
-        "        }\n",
-    )
-    replace_once(
-        theme,
-        "            edrSRGB(red: 0, green: 163 / 255, blue: 230 / 255, gain: gain)\n",
-        "            edrSRGB(\n"
-        "                red: CGFloat((accentRGB >> 16) & 255) / 255,\n"
-        "                green: CGFloat((accentRGB >> 8) & 255) / 255,\n"
-        "                blue: CGFloat(accentRGB & 255) / 255, gain: gain)\n",
-    )
-
+    # --- Brand accent: OpenCineUI's settable MonitorTheme.accentRGB, assigned once at launch
+    # (OpenInstaCineBrand.apply). The theme itself is no longer synced. ---
     branding = APP / "Branding.swift"
     replace_once(
         branding,
@@ -125,9 +102,11 @@ def main() -> None:
     )
     replace_once(
         project,
-        "      - package: OpenPocketViewCore\n        product: MonitorPresentation\n"
+        # Anchored below the package line: upstream takes MonitorPresentation from
+        # OpenPocketViewCore before the OpenCineUI extraction and from OpenCineUI after it.
+        "        product: MonitorPresentation\n"
         "      - target: OpenInstaCineWatch\n",
-        "      - package: OpenPocketViewCore\n        product: MonitorPresentation\n"
+        "        product: MonitorPresentation\n"
         "      - package: OpenPocketViewCore\n        product: MonitorContracts\n"
         "      - package: Insta360Protocol\n        product: Insta360Protocol\n"
         "      - target: Insta360Apple\n"
