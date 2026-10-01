@@ -1,0 +1,72 @@
+import Foundation
+
+// Shared gimbal trajectory math (waypoints, A·B·C programs, the smoothed curve, head-look math,
+// bounded head tracking) and the typed motion seam live in OpenCineCore's OpenCineMotion.
+// Re-exported so app and facade call sites keep importing only this module.
+@_exported import OpenCineMotion
+
+extension HeadTrack {
+    /// The shell's head-track and waypoint reach, inherited from the Pocket shell (display
+    /// `0x04/0x05` degrees). Pan 0 is front; the positive arc passes selfie to raw −135°
+    /// (= +225°). The other endpoint is −48°; the intervening negative arc is unreachable.
+    /// Luna's own reach (`MotionCapabilities.lunaUltra`) contains it, so shared motion bound to
+    /// it never commands Luna outside what Luna declares.
+    public enum Reach {
+        public static let panMinDeg = -48.0
+        public static let panMaxDeg = 225.0
+        public static let tiltMinDeg = -44.0
+        public static let tiltMaxDeg = 70.0
+
+        public static let bounds = MotionBounds(
+            pan: panMinDeg...panMaxDeg, tilt: tiltMinDeg...tiltMaxDeg)
+
+        /// Middle of the unreachable arc in raw yaw. Raw yaw below it is the long side,
+        /// reached by panning positive past selfie.
+        public static var gapMidDeg: Double { bounds.gapMidDeg }
+
+        public static func clampPan(_ deg: Double) -> Double { bounds.clampPan(deg) }
+
+        public static func clampTilt(_ deg: Double) -> Double { bounds.clampTilt(deg) }
+
+        /// Unbounded SET-relative look → nearest reachable yaw/pitch.
+        public static func project(
+            lookRight: Double, lookUp: Double, yaw0: Double, pitch0: Double
+        ) -> (yaw: Double, pitch: Double) {
+            bounds.project(lookRight: lookRight, lookUp: lookUp, yaw0: yaw0, pitch0: pitch0)
+        }
+    }
+}
+
+extension MotionCapabilities {
+    /// What Luna Ultra (fw 1.1.15) declares to shared motion: handle-frame pan and tilt
+    /// (cmd 226 SET_ANGLE), pitch -57...90, yaw one arc from about -125 through ±180 to -58.5
+    /// (unwrapped -58.5...235), no zoom in moves, no client rate cap (each SET re-plans), a
+    /// GET_ANGLE older than 0.3 s is not feedback, aim ends within 0.5°.
+    public static let lunaUltra = MotionCapabilities(
+        axes: [.pan, .tilt], frame: .handle,
+        bounds: MotionBounds(pan: -58.5...235, tilt: -57...90),
+        maxRateDegPerSec: nil, feedbackMaxAge: .milliseconds(300), arrivalToleranceDeg: 0.5)
+}
+
+// Call sites from before the move, bound to the shell reach.
+extension GimbalWaypoint {
+    public static func unwrapYaw(_ rawDeg: Double) -> Double {
+        unwrapYaw(rawDeg, in: HeadTrack.Reach.bounds)
+    }
+
+    public func clamped() -> GimbalWaypoint { clamped(to: HeadTrack.Reach.bounds) }
+
+    /// Live `0x04/0x05` yaw/pitch in tenths of a degree; native pitch from attitude i16 @0.
+    public static func from(yawTenth: Int16?, pitchTenth: Int16?, zoom: Double,
+        nativePitchTenth: Int16? = nil) -> GimbalWaypoint? {
+        guard let yawTenth, let pitchTenth else { return nil }
+        return GimbalWaypoint(
+            yawDeg: unwrapYaw(Double(yawTenth) / 10),
+            pitchDeg: Double(pitchTenth) / 10,
+            zoom: zoom, nativePitchDeg: nativePitchTenth.map { Double($0) / 10 })
+    }
+}
+
+extension HeadTrackNative {
+    public init() { self.init(bounds: HeadTrack.Reach.bounds) }
+}
