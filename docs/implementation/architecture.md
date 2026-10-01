@@ -18,11 +18,11 @@ read as references and were not modified by this extraction.
 | --- | --- |
 | `Apps/Apple/OpenInstaCine` | App identity, yellow palette, assets, entitlements, configuration and backend construction. Instantiates `MonitorAppRoot` with `LunaCameraBackend` |
 | `Shared/Apple/MonitorUI` | SwiftUI screens, shared presentation `CameraSession`, VideoToolbox/Metal processing, scopes/assists, settings, local cache/player, delivery and diagnostics. Depends on `MonitorContracts` and the `OpenPocketViewCore` compatibility product |
-| `Sources/MonitorContracts` | Foundation-only Apple backend seam: capabilities, discovery, phases, information/status, encoded frames, semantic control intents, media descriptors and network handoff |
+| `Sources/MonitorContracts` | Foundation-only Apple backend seam: capabilities, discovery, phases, information, encoded frames, media descriptors and network handoff. Camera commands and reported camera state are not here: they go through the integration's OpenCineCore `CameraSession` |
 | `Sources/MonitorCore` | Foundation-only shared math/policies: transfer/scopes, cube processing, layout, presentation gates, standardized NAL helpers, cache/conform and recovery policies. No wire codec or OS I/O |
 | `Adapters/OsmoCompatibility` | Legacy `OpenPocketViewCore` module. Reexports `MonitorCore` and retains Osmo models, DUML codecs/control values and mixed compatibility helpers |
 | `Adapters/Insta360Protocol` | Independent Swift package for UCD2, bounded reassembly/checksum, protobuf, scheme-3 envelopes and verified Luna read/live commands. Foundation only, no network/BLE/crypto implementation |
-| `Adapters/Insta360Apple` | CoreBluetooth, CryptoKit, Keychain, hotspot join, Network.framework TCP and Luna session lifetime. Depends only on `MonitorContracts` and `Insta360Protocol` |
+| `Adapters/Insta360Apple` | CoreBluetooth, CryptoKit, Keychain, hotspot join, Network.framework TCP and Luna session lifetime. `LunaCameraSession` implements OpenCineCore `CameraSession` for ISO, shutter, white balance and record (settle and readback included). Depends on `MonitorContracts`, `Insta360Protocol` and OpenCineCore |
 | `Apps/Android/app` | Thin branded activity, app manifest and DEBUG replay selection. Installs the brand identity and Luna backend factory |
 | `Apps/Android/monitor` | Shared Compose shell, MediaCodec, Vulkan/GLES, assists, library/player, local delivery and Android integration. Depends on `:core-api` and staged native libraries |
 | `Apps/Android/core-api` | Kotlin/JVM backend discovery/lifecycle/state/capability/frame contract. Uses coroutines/flows; no Compose or Android platform types |
@@ -35,6 +35,7 @@ flowchart TD
     Apple --> LunaApple[Insta360Apple adapter]
     UI --> Contracts[MonitorContracts]
     LunaApple --> Contracts
+    LunaApple --> OCCore[OpenCineCore]
     LunaApple --> Protocol[Insta360Protocol]
     UI --> Compat[OpenPocketViewCore compatibility]
     Compat --> Core[MonitorCore]

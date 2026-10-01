@@ -619,8 +619,6 @@ final class CameraSession {
             }
         case .information(let info):
             status.firmware = info.firmware
-        case .status:
-            break
         case .joinedWiFi(let ssid):
             joinedSSID = ssid
         case .videoAccessUnit(let data, let milliseconds):

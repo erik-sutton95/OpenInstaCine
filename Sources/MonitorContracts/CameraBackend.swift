@@ -59,16 +59,20 @@ public enum CameraBackendEvent: Sendable {
     case discovered(MonitorCamera)
     case phase(CameraConnectionPhase)
     case information(CameraInformation)
-    case status(CameraStatusSnapshot)
     case joinedWiFi(ssid: String)
     case videoAccessUnit(Data, timestampMilliseconds: UInt64)
     case disconnected(reason: String)
     case note(String)
 }
 
-/// The complete wire seam used by the shared Apple presentation facade.
+/// Discovery, connection, picture and media seam used by the shared Apple presentation facade.
 /// Backends own authorization, credentials, network association and transport lifetime.
 /// The UI owns decode/render, monitor assists, layout, library cache and operator preferences.
+///
+/// Camera commands and camera-reported state are not part of this protocol: they go through the
+/// integration's OpenCineCore `CameraSession` (explicit intents, receipts, observations). The
+/// former `apply(_:)` intent path and `.status` event were never implemented and were removed
+/// so there is one command contract.
 @MainActor
 public protocol CameraBackend: AnyObject {
     var capabilities: CameraCapabilities { get }
@@ -80,7 +84,6 @@ public protocol CameraBackend: AnyObject {
     func forget(cameraID: UUID)
     func leaveCameraNetwork()
     func rejoinCameraNetwork() async throws
-    func apply(_ intent: CameraControlIntent) async throws
     func refreshStatus() async throws
     func listMedia() async throws -> [CameraMediaAsset]
     func downloadMedia(
@@ -119,89 +122,6 @@ public enum CameraBackendError: LocalizedError, Sendable {
     }
 }
 
-/// Stable semantic option identifier: for example "auto", "manual", "continuous".
-/// It is never a camera opcode or an encoded numeric enum.
-public struct CameraOption: RawRepresentable, Hashable, Sendable, Codable {
-    public let rawValue: String
-    public init(rawValue: String) { self.rawValue = rawValue }
-}
-
-public enum CameraParameter: String, Sendable, Codable {
-    case shootingMode, exposureMode, iso, isoCeiling, exposureCompensationStops, shutterSeconds
-    case whiteBalanceMode, whiteBalanceKelvin, whiteBalanceTint, focusMode, focusTracking,
-        focusOption
-    case audioChannels, vocalBoost, windReduction, audioDirection, colorProfile, fieldOfView,
-        facePriorityExposure, colorRecovery
-}
-public enum CameraParameterValue: Sendable, Equatable {
-    case automatic
-    case boolean(Bool)
-    case number(Double)
-    case option(CameraOption)
-}
-public enum CameraControlIntent: Sendable, Equatable {
-    case record(start: Bool)
-    case takePhoto
-    case parameter(CameraParameter, CameraParameterValue)
-    case videoFormat(resolution: String, aspect: String, framesPerSecond: Double)
-    case zoom(factor: Double)
-    case gimbal(pan: Double, tilt: Double)
-    case recenterGimbal, flipGimbal, stopGimbal
-    case focus(x: Double, y: Double)
-    case track(x: Double, y: Double, width: Double, height: Double)
-    case stopTracking
-    public var requiredCapability: CameraCapabilities {
-        switch self {
-        case .record, .takePhoto: .recording
-        case .videoFormat: .captureFormat
-        case .zoom: .zoom
-        case .gimbal, .recenterGimbal, .flipGimbal, .stopGimbal: .gimbal
-        case .focus, .track, .stopTracking: .focus
-        case .parameter(let key, _):
-            switch key {
-            case .shootingMode, .colorProfile, .fieldOfView, .colorRecovery: .captureFormat
-            case .whiteBalanceMode, .whiteBalanceKelvin, .whiteBalanceTint: .whiteBalance
-            case .focusMode, .focusTracking, .focusOption: .focus
-            case .audioChannels, .vocalBoost, .windReduction, .audioDirection: .liveAudio
-            default: .exposure
-            }
-        }
-    }
-}
-
-/// A snapshot is camera-reported state. Missing values remain unknown; applying a
-/// user intent must not optimistically invent a recording state or capture format.
-public struct CameraStatusSnapshot: Sendable, Equatable {
-    public var batteryPercent: Int?
-    public var charging: Bool?
-    public var recording: Bool?
-    public var recordedSeconds: Int?
-    public var storageFreeBytes: UInt64?
-    public var storageTotalBytes: UInt64?
-    public var timecode: String?
-    public var captureFramesPerSecond: Double?
-    public var captureResolution: String?
-    public var parameters: [CameraParameter: CameraParameterValue]
-    public init(
-        batteryPercent: Int? = nil, charging: Bool? = nil, recording: Bool? = nil,
-        recordedSeconds: Int? = nil, storageFreeBytes: UInt64? = nil,
-        storageTotalBytes: UInt64? = nil, timecode: String? = nil,
-        captureFramesPerSecond: Double? = nil, captureResolution: String? = nil,
-        parameters: [CameraParameter: CameraParameterValue] = [:]
-    ) {
-        self.batteryPercent = batteryPercent
-        self.charging = charging
-        self.recording = recording
-        self.recordedSeconds = recordedSeconds
-        self.storageFreeBytes = storageFreeBytes
-        self.storageTotalBytes = storageTotalBytes
-        self.timecode = timecode
-        self.captureFramesPerSecond = captureFramesPerSecond
-        self.captureResolution = captureResolution
-        self.parameters = parameters
-    }
-}
-
 public struct CameraMediaAsset: Identifiable, Sendable, Codable, Equatable {
     public let id: String
     public let filename: String
@@ -230,9 +150,6 @@ public struct CameraMediaAsset: Identifiable, Sendable, Codable, Equatable {
 }
 public enum CameraMediaRepresentation: Sendable, Equatable { case thumbnail, proxy, original }
 extension CameraBackend {
-    public func apply(_ intent: CameraControlIntent) async throws {
-        throw CameraBackendError.unavailable("This camera control is not connected yet.")
-    }
     public func refreshStatus() async throws {}
     public func listMedia() async throws -> [CameraMediaAsset] {
         throw CameraBackendError.unavailable("Camera media access is not connected yet.")
