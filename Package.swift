@@ -22,13 +22,17 @@ let package = Package(
             name: "OpenPocketCineAndroid", type: .dynamic, targets: ["OpenPocketCineAndroidFacade"]),
     ],
     dependencies: [
-        // Portable media math (OpenCineMedia). Sibling checkout until OpenCineCore is published.
+        // Portable media math (OpenCineMedia) and the second-screen relay wire (OpenCineRelay).
+        // Sibling checkout until OpenCineCore is published.
         .package(path: "../OpenCineCore")
     ],
     targets: [
         .target(
             name: "OpenPocketViewCore",
-            dependencies: [.product(name: "OpenCineMedia", package: "OpenCineCore")]
+            dependencies: [
+                .product(name: "OpenCineMedia", package: "OpenCineCore"),
+                .product(name: "OpenCineRelay", package: "OpenCineCore"),
+            ]
         ),
         .testTarget(
             name: "OpenPocketViewCoreTests",
