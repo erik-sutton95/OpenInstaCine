@@ -43,7 +43,7 @@ install_xcodegen() {
 if ! command -v xcodegen >/dev/null 2>&1; then
   install_xcodegen
 fi
-# Candidate (OpenCineUI UI-03): ios/project.yml takes MonitorUI from ../OpenCineUI.
+# Candidate (OpenCineUI UI-01): ios/project.yml takes MonitorUI from ../OpenCineUI.
 # Works only once that repository is published and Xcode Cloud may read it. Delete when
 # the app pins OpenCineUI by url + version.
 if [ ! -d ../OpenCineUI ]; then
