@@ -62,7 +62,11 @@ OSMO_ONLY=(
   OpenInstaCineTests/CameraDialReconciliationTests.swift
 )
 
-ENGINE=(MonitorPresentation MonitorUI OpenPocketViewCore CJNI OpenPocketCineAndroidFacade)
+# MonitorPresentation, MonitorUI and their tests come from the OpenCineUI package (ios/project.yml),
+# and Android monitor-ui from its included build. A sync never copies them, even from an upstream
+# commit that still has its own copies.
+ENGINE=(OpenPocketViewCore CJNI OpenPocketCineAndroidFacade)
+SHARED_UI_TESTS=(Tests/MonitorPresentationTests)
 TOOLS=(stamp-source-revision.sh build-identity.py pull-control-log.sh analyze-live-log.py)
 # Release tooling copied once and retargeted (openinstacine-* Sentry projects, OpenInstaCine and
 # :monitor paths). OpenInstaCine owns these copies; a sync never writes them. Port upstream fixes by hand.
@@ -93,6 +97,7 @@ build_tree() {
   git -C "$SRC" archive "$1" Sources Tests ios tools | tar -x -C "$raw"
   for d in "${ENGINE[@]}"; do cp -R "$raw/Sources/$d" "$out/Sources/"; done
   cp -R "$raw/Tests" "$out/Tests"
+  for d in "${SHARED_UI_TESTS[@]}"; do rm -rf "${out:?}/$d"; done
   for d in "${TOOLS[@]}"; do cp "$raw/tools/$d" "$out/tools/"; done
   rsync -a --exclude '*.xcodeproj' --exclude xcuserdata --exclude '*.local.xcconfig' \
     "$raw/ios/" "$out/ios/"

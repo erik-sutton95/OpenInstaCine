@@ -75,9 +75,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
-      # OpenCineCore candidate wiring (CORE-02). Apps/Android/settings.gradle.kts includes
-      # ../../../OpenCineCore/Android, a sibling checkout pinned by SHA in opencine-pins.txt.
-      # Works only once the OpenCineCore remote exists (owner/URL not final).
+      # OpenCineUI (UI-03) and OpenCineCore (CORE-02) candidate wiring. Apps/Android/settings.gradle.kts
+      # includes ../../../OpenCineUI/Android and ../../../OpenCineCore/Android, sibling checkouts
+      # pinned by SHA in opencine-pins.txt. Works only once those remotes exist (owner/URL not final).
       - name: Check out pinned OpenCine packages next to the repository
         run: scripts/checkout-opencine.sh
 

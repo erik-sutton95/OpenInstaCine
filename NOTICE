@@ -10,17 +10,21 @@ This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 Third-party software distributed with this product is listed in THIRD-PARTY-NOTICES.md.
 The portable .cube parser (`CubeLUT`) is adapted from OpenZCine (Apache 2.0).
 
-Bundled UI typefaces (SIL Open Font License 1.1; copies in
-Shared/Apple/MonitorUI/Resources/Fonts/ and Apps/Android/monitor/src/main/assets/):
+Bundled UI typefaces (SIL Open Font License 1.1; Sora in OpenCineUI
+Sources/MonitorUI/Resources/Fonts/ and Android/monitor-ui/; IBM Plex Sans in
+Apps/Android/monitor/):
 - Sora, Copyright 2019 The Sora Project Authors (https://github.com/sora-xor/sora-font)
 - IBM Plex Sans, Copyright 2017 IBM Corp. with Reserved Font Name "Plex"
 
 Bundled HUD icons from Lucide (ISC; Feather-derived glyphs also MIT; copies in
-Shared/Apple/MonitorUI/Resources/Icons/lucide/ and
-Apps/Android/monitor/src/main/assets/icons/lucide/):
+OpenCineUI Sources/MonitorUI/Resources/Icons/lucide/ and
+OpenCineUI Android/monitor-ui/src/main/assets/icons/lucide/):
 - Lucide, Copyright 2026 Lucide Icons and Contributors
   (https://github.com/lucide-icons/lucide)
 - Feather-derived icons, Copyright 2013-present Cole Bemis (MIT)
+
+Tabler-derived paths (MIT; LICENSE-Tabler.txt in the shared assist icon folders):
+- Copyright (c) 2020-2026 Paweł Kuna (https://github.com/tabler/tabler-icons)
 
 Luna protocol implementation reference:
 - luna-ai-cut, Copyright 2026 diamondfsd (MIT)

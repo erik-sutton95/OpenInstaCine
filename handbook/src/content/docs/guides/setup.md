@@ -12,6 +12,9 @@ just check        # hygiene: lab parser tests, release-note checks, whitespace
 just core-test    # shared core and Luna protocol package (swift test)
 ```
 
+Both apps also need the shared UI package
+OpenCineUI checked out next to this repository, at `../OpenCineUI`.
+
 Shared protocol logic is tested without a camera. Pairing and live view need a
 **physical** phone and an **Insta360 Luna Ultra on firmware 1.1.15**. The
 first connection asks you to approve the phone on the camera's touchscreen.

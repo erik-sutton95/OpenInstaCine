@@ -197,7 +197,7 @@ afterEvaluate {
 
 dependencies {
     api(project(":core-api"))
-    api(project(":monitor-ui"))
+    api(libs.opencine.monitor.ui)
 
     implementation(platform(libs.compose.bom))
     api(libs.androidx.activity.compose)

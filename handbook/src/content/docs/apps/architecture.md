@@ -10,12 +10,13 @@ sockets.
 
 | Layer | Path | Role |
 | --- | --- | --- |
-| Shared core | `Sources/` | OpenPocketCine monitor core (`OpenPocketViewCore`, `MonitorContracts`, `MonitorPresentation`, `MonitorUI`) with small Luna hooks: I-Log color mode, Luna resolutions, `.lrv` proxy. |
+| Shared core | `Sources/` | OpenPocketCine monitor core (`OpenPocketViewCore`, `MonitorContracts`) with small Luna hooks: I-Log color mode, Luna resolutions, `.lrv` proxy. |
+| Shared UI | OpenCineUI `MonitorPresentation`, `MonitorUI`, `Android/monitor-ui/` | The shared design system, in its own repository (sibling checkout `../OpenCineUI`). The app assigns the yellow accent at launch. |
 | Luna protocol | `Adapters/Insta360Protocol/` | Portable codec: UCD2 framing and checksum, bounded reassembly, protobuf, scheme-3 envelopes, status, settings, media and control messages. Foundation only: no Bluetooth, network or crypto implementation. |
 | Luna Apple adapter | `Adapters/Insta360Apple/` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, Network.framework TCP and session lifetime. |
 | iOS app | `ios/OpenInstaCine/` | The OpenPocketCine shell plus the Luna session (`CameraSession*.swift`, `LunaShellMapping.swift`). |
 | Watch companion | `ios/OpenInstaCineWatch/` | watchOS remote; the phone stays the radio. |
-| Android app | `Apps/Android/` | OpenPocketCine's Compose shell (`:monitor`, `:monitor-ui`) with `:core-api` and a Kotlin `:luna-adapter`. |
+| Android app | `Apps/Android/` | OpenPocketCine's Compose shell (`:monitor`) on OpenCineUI `monitor-ui`, with `:core-api` and a Kotlin `:luna-adapter`. |
 | Android facade | `Sources/OpenPocketCineAndroidFacade/`, `Sources/CJNI/` | JNI exports for the shared decoder, LUT and assist code. |
 | Lab tools | `tools/` | Python BLE and TCP research clients, the Mac live-view lab, `tools/LunaProbe` (Swift CLI) and the DEBUG remote client. |
 | Tests | `Tests/`, `Adapters/Insta360Protocol/Tests/`, `ios/OpenInstaCineTests/` | Core, protocol and app tests. |
