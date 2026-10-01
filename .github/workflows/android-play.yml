@@ -42,6 +42,7 @@ on:
       - "Sources/OpenPocketCineAndroidFacade/**"
       - "Sources/CJNI/**"
       - "Package.swift"
+      - "opencine-pins.txt"
       - "scripts/android-*.sh"
       - "scripts/ci-install-swift-android.sh"
       - "justfile"
@@ -74,6 +75,11 @@ jobs:
           java-version: "21"
 
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      # The Swift Android core links OpenCineMedia from ../OpenCineCore, a sibling checkout
+      # pinned by SHA in opencine-pins.txt. Works only once that repository is published.
+      - name: Check out pinned OpenCine packages next to the repository
+        run: scripts/checkout-opencine.sh
 
       - name: Set up Android NDK 27
         uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0

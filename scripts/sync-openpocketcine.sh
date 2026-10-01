@@ -62,6 +62,20 @@ OSMO_ONLY=(
   OpenInstaCineTests/CameraDialReconciliationTests.swift
 )
 
+# Moved to OpenCineCore's OpenCineMedia product (MEDIA-01). Both apps link the package, so a
+# sync never copies these back, even from an upstream commit that predates the move.
+MOVED_TO_OPENCINE=(
+  Sources/OpenPocketViewCore/CubeLUT.swift
+  Sources/OpenPocketViewCore/CustomLUTIndex.swift
+  Sources/OpenPocketViewCore/LUTExposureCompensation.swift
+  Sources/OpenPocketViewCore/ShutterAngle.swift
+  Sources/OpenPocketViewCore/FrameRateSampler.swift
+  Sources/OpenPocketViewCore/PortraitFeedAspect.swift
+  Tests/OpenPocketViewCoreTests/CubeLUTTests.swift
+  Tests/OpenPocketViewCoreTests/FrameRateSamplerTests.swift
+  Tests/OpenPocketViewCoreTests/ShutterAngleTests.swift
+)
+
 ENGINE=(MonitorPresentation MonitorUI OpenPocketViewCore CJNI OpenPocketCineAndroidFacade)
 TOOLS=(stamp-source-revision.sh build-identity.py pull-control-log.sh analyze-live-log.py)
 # Release tooling copied once and retargeted (openinstacine-* Sentry projects, OpenInstaCine and
@@ -93,6 +107,7 @@ build_tree() {
   git -C "$SRC" archive "$1" Sources Tests ios tools | tar -x -C "$raw"
   for d in "${ENGINE[@]}"; do cp -R "$raw/Sources/$d" "$out/Sources/"; done
   cp -R "$raw/Tests" "$out/Tests"
+  for d in "${MOVED_TO_OPENCINE[@]}"; do rm -f "${out:?}/$d"; done
   for d in "${TOOLS[@]}"; do cp "$raw/tools/$d" "$out/tools/"; done
   rsync -a --exclude '*.xcodeproj' --exclude xcuserdata --exclude '*.local.xcconfig' \
     "$raw/ios/" "$out/ios/"

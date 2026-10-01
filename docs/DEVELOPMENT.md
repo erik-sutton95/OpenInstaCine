@@ -13,6 +13,7 @@ same change when protocol, app behavior or setup changes.
 | --- | --- |
 | `ios/` | XcodeGen project (`ios/project.yml`), app `ios/OpenInstaCine`, tests, watch app |
 | `Sources/` | Shared OpenPocketCine core (`OpenPocketViewCore`, `MonitorContracts`, `MonitorUI`, ...) with small Luna hooks (I-Log color mode, Luna resolutions, `.lrv` proxy) |
+| `../OpenCineCore` (sibling) | `OpenCineMedia`: LUT, curve (incl. I-Log), scope and false-colour math, shutter angle, frame timing, framing. Re-exported by `OpenPocketViewCore`; pinned in `opencine-pins.txt`, check out with `scripts/checkout-opencine.sh` |
 | `Adapters/Insta360Protocol` | Portable Luna codec: UCD2 framing, protobuf, status, settings, media and control messages |
 | `Adapters/Insta360Apple` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport |
 | `tools/LunaProbe` | Swift CLI that drives the camera from a Mac on its Wi-Fi (used for the fw 1.1.15 verification) |

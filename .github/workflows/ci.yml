@@ -119,6 +119,8 @@ jobs:
               - 'Adapters/**'
               - 'ios/**'
               - 'Package.swift'
+              - 'opencine-pins.txt'
+              - 'scripts/checkout-opencine.sh'
               - 'justfile'
               - '.github/workflows/ci.yml'
             android:
@@ -127,6 +129,8 @@ jobs:
               - 'Sources/OpenPocketCineAndroidFacade/**'
               - 'Sources/CJNI/**'
               - 'Package.swift'
+              - 'opencine-pins.txt'
+              - 'scripts/checkout-opencine.sh'
               - 'scripts/android-*.sh'
               - 'scripts/ci-install-swift-android.sh'
               - 'justfile'
@@ -151,6 +155,11 @@ jobs:
           xcode-version: latest-stable
       - name: Install native tooling
         run: brew install just xcodegen || true
+      # Candidate (OpenCineCore MEDIA-01): Package.swift and ios/project.yml take OpenCineMedia
+      # from a sibling checkout at ../OpenCineCore, pinned by SHA in opencine-pins.txt. Works only
+      # once that repository is published. Delete when the app pins OpenCineCore by url + version.
+      - name: Check out pinned OpenCine packages next to the repository
+        run: scripts/checkout-opencine.sh
       - name: Swift packages
         run: just core-test
       - name: iOS unit tests
@@ -170,6 +179,10 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      # The Swift Android core links OpenCineMedia from ../OpenCineCore, a sibling checkout
+      # pinned by SHA in opencine-pins.txt. Works only once that repository is published.
+      - name: Check out pinned OpenCine packages next to the repository
+        run: scripts/checkout-opencine.sh
       # The install script needs NDK 27 for the Swift Android SDK sysroot.
       - name: Set up Android NDK 27
         uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
