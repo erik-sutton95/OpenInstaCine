@@ -1,19 +1,17 @@
 import Foundation
+import Insta360Apple
 import Insta360Protocol
 import OpenPocketViewCore
 
 /// Optimistic values the operator just asked for, held until the camera reports
 /// them or the settle window runs out (same `CameraValuePin` rule as the Osmo shell).
+/// ISO, shutter, white balance and record are not here: their pending state is the Core
+/// operation (CameraSessionCore.swift).
 struct LunaControlPins {
-    var isoIndex: CameraValuePin<IsoIndex>?
-    var shutterDenom: CameraValuePin<Int>?
-    var expoMode: CameraValuePin<ExpoMode>?
     var ev: CameraValuePin<EvComp>?
-    var whiteBalance: CameraValuePin<WhiteBalance>?
     var color: CameraValuePin<ColorMode>?
     var format: CameraValuePin<VideoFormat>?
     var shootingMode: CameraValuePin<Int>?
-    var recording: CameraValuePin<Bool>?
     var gimbalMode: CameraValuePin<GimbalMode>?
     var gimbalSpeed: CameraValuePin<GimbalSpeed>?
     var focus: CameraValuePin<FocusOption>?
@@ -95,7 +93,7 @@ enum LunaShellMapping {
     // MARK: Exposure
 
     /// Luna ISO stops offered by the official wheel.
-    static let isoValues = [100, 160, 200, 400, 800, 1600, 3200, 6400]
+    static let isoValues = LunaCameraSession.isoValues
     static let isoIndices: [IsoIndex] = [.auto] + isoValues.compactMap(isoIndex)
 
     static func isoIndex(_ iso: Int) -> IsoIndex? {
@@ -103,10 +101,7 @@ enum LunaShellMapping {
     }
 
     /// Official Video wheel, slowest last. fw 1.1.15 adds 1/15…1/5.
-    static let shutterDenoms = [
-        8000, 6400, 5000, 4000, 3200, 2500, 2000, 1600, 1250, 1000, 800, 640, 500, 400, 320, 250,
-        200, 160, 125, 100, 80, 60, 50, 40, 30, 25, 15, 10, 5,
-    ]
+    static let shutterDenoms = LunaCameraSession.shutterDenominators
 
     // MARK: Format
 
@@ -264,36 +259,16 @@ enum LunaShellMapping {
             status.isPhoto
             ? settings.stillExposure ?? settings.videoExposure
             : settings.videoExposure ?? settings.stillExposure
+        // Live readouts only (Auto may report what it chose; AE Lock reads them). The ISO,
+        // shutter and WB settings and the exposure mode come from the Core session.
         if let exposure {
-            // Stills report adaptive/full-auto programs (4, 5); only 1...3 fix a value.
-            let mode: ExpoMode =
-                switch exposure.exposureProgram {
-                case .isoPriority, .shutterPriority, .manual: .manual
-                default: .auto
-                }
-            status.expoMode = CameraValuePin.reconcile(&pins.expoMode, reported: mode, now: now) ?? mode
-            let reportedISO: IsoIndex? = exposure.iso == 0 ? .auto : isoIndex(Int(exposure.iso))
-            if let held = CameraValuePin.reconcile(&pins.isoIndex, reported: reportedISO, now: now) {
-                status.isoIndex = held
-            } else {
-                status.isoIndex = reportedISO
-            }
-            status.iso = status.isoIndex?.isoValue ?? (exposure.iso > 0 ? Int(exposure.iso) : -1)
-            let denom = exposure.shutterSeconds > 0 ? Int((1 / exposure.shutterSeconds).rounded()) : -1
+            status.iso = exposure.iso > 0 ? Int(exposure.iso) : -1
             status.shutterDenom =
-                CameraValuePin.reconcile(&pins.shutterDenom, reported: denom, now: now) ?? denom
+                exposure.shutterSeconds > 0 ? Int((1 / exposure.shutterSeconds).rounded()) : -1
         }
         if let stops = settings.exposureBiasStops {
             let ev = EvComp(thirds: Int((stops * 3).rounded()))
             status.evComp = CameraValuePin.reconcile(&pins.ev, reported: ev, now: now) ?? ev
-        }
-        if let kelvin = settings.whiteBalanceKelvin {
-            let tint = status.whiteBalanceTint ?? 0
-            let wb: WhiteBalance = kelvin == 0 ? .auto(tint: tint) : .custom(kelvin: Int(kelvin), tint: tint)
-            if kelvin > 0 { status.whiteBalanceKelvin = Int(kelvin) }
-            status.whiteBalance =
-                CameraValuePin.reconcile(&pins.whiteBalance, reported: wb, now: now) ?? wb
-            status.whiteBalanceTint = status.whiteBalance?.tint ?? tint
         }
         if let luna = settings.color {
             let color = colorMode(luna)

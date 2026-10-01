@@ -13,16 +13,20 @@ enum LiveRecordChromeState: Equatable {
     }
 }
 
-/// A confirmation authorizes the capture state visible when it was opened.
+/// A confirmation authorizes the capture state visible when it was opened. Its target is
+/// explicit (start when the camera reported idle, stop when it reported recording); unknown
+/// recording cannot be confirmed.
 struct RecordConfirmationContext: Equatable {
     let mode: Int
-    let recording: Bool
+    /// Camera-reported recording; nil while unknown.
+    let recording: Bool?
     let locked: Bool
     let busy: Bool
     let phase: ConnectionPhase
 
     var canConfirm: Bool {
-        !locked && !busy && phase == .live && ShootingMode.fromStatus(mode)?.isPhoto != true
+        recording != nil && !locked && !busy && phase == .live
+            && ShootingMode.fromStatus(mode)?.isPhoto != true
     }
 }
 
@@ -46,7 +50,7 @@ struct LiveRecordButton: View {
     private var confirmationContext: RecordConfirmationContext {
         RecordConfirmationContext(
             mode: model.session.status.shootingMode,
-            recording: model.session.status.isRecording,
+            recording: model.session.reportedRecording,
             locked: locked || model.session.isLocked,
             busy: model.session.controlBusy, phase: model.session.phase)
     }
@@ -84,11 +88,11 @@ struct LiveRecordButton: View {
                 state.isRecordingLook ? "Stop" : "Start",
                 role: state.isRecordingLook ? .destructive : nil
             ) {
-                guard pendingRecord == confirmationContext, confirmationContext.canConfirm else {
-                    return
-                }
+                guard let approved = pendingRecord, approved == confirmationContext,
+                    approved.canConfirm, let recording = approved.recording
+                else { return }
                 pendingRecord = nil
-                model.session.pressShutter()
+                model.session.setRecording(start: !recording)
             }
             Button("Cancel", role: .cancel) {}
         }

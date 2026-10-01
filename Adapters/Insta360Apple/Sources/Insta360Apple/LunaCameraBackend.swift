@@ -2,14 +2,15 @@ import CryptoKit
 import Foundation
 import Insta360Protocol
 import MonitorContracts
+import OpenCineCore
 import os
 
 /// Insta360 Luna adapter: BLE consent + encrypted Wi-Fi credential bootstrap, then
 /// plaintext UCD2 on TCP 6666 for control, status and HEVC preview.
 ///
-/// The shell drives controls through `send(_:)` with `LunaProtocol` encoders and
-/// consumes typed Luna status through the `on…` callbacks. Wire bytes live in
-/// `Insta360Protocol`; presentation mapping lives in the app.
+/// ISO, shutter, white balance and record go through `session` (OpenCineCore), which owns
+/// their requests and reported state. Other controls still use `send(_:)` with `LunaProtocol`
+/// encoders and the typed `on…` callbacks. Wire bytes live in `Insta360Protocol`.
 @MainActor
 public final class LunaCameraBackend: CameraBackend {
     public let capabilities: CameraCapabilities = [
@@ -35,8 +36,10 @@ public final class LunaCameraBackend: CameraBackend {
 
     public var isOnCameraNetwork: Bool { LunaWiFi.localAddress != nil }
     public var isControlReady: Bool { handshakeComplete && isTCP }
-    /// Settings bank the shell last read or wrote (video 7 until a mode says otherwise).
-    public var functionMode: UInt32 = LunaFunctionMode.normalVideo.rawValue
+    /// Settings bank of the camera's reported shooting mode (video 7 until one is reported).
+    public private(set) var functionMode: UInt32 = LunaFunctionMode.normalVideo.rawValue
+    /// The OpenCineCore session for the camera being connected; `openSession()` replaces it.
+    public private(set) var session: LunaCameraSession?
     public private(set) var credentials: LunaStoredWiFi?
     public private(set) var deviceInformation: LunaDeviceInformation?
 
@@ -99,7 +102,7 @@ public final class LunaCameraBackend: CameraBackend {
 
     public func startScan() async throws {
         try Task.checkCancellation()
-        eventHandler?(.phase(.scanning))
+        emit(.scanning)
         if existingNetwork {
             guard isOnCameraNetwork else {
                 throw CameraBackendError.unavailable(
@@ -146,7 +149,7 @@ public final class LunaCameraBackend: CameraBackend {
                 }
             }
             try validate(token)
-            eventHandler?(.phase(.openingVideo))
+            emit(.openingVideo)
             try await openControl(token: token, identity: identity, expectedSerial: expectedSerial)
             liveStartAttempted = true
             _ = try? await send(
@@ -154,7 +157,7 @@ public final class LunaCameraBackend: CameraBackend {
             _ = try await send(LunaProtocol.startLiveRequest)
             try validate(token)
             handshakeComplete = true
-            eventHandler?(.phase(.streaming))
+            emit(.streaming)
             startStatusPoll(token: token)
         } catch {
             if token == generation { disconnect() }
@@ -164,7 +167,7 @@ public final class LunaCameraBackend: CameraBackend {
 
     /// Joins saved Wi-Fi and proves TCP 6666 answers. False sends the caller to BLE.
     private func quickJoin(_ stored: LunaStoredWiFi, token: Int) async -> Bool {
-        eventHandler?(.phase(.joiningWiFi))
+        emit(.joiningWiFi)
         do {
             try await joinRetrying(stored, token: token, budget: .seconds(20))
             try validate(token)
@@ -234,7 +237,7 @@ public final class LunaCameraBackend: CameraBackend {
     private func bootstrapOverBluetooth(camera: MonitorCamera, identity: UUID, token: Int)
         async throws -> String
     {
-        eventHandler?(.phase(.connecting))
+        emit(.connecting)
         onLog?("luna: BLE connect \(camera.name)")
         try await bluetooth.connect(id: camera.id)
         try validate(token)
@@ -244,7 +247,7 @@ public final class LunaCameraBackend: CameraBackend {
             try await Task.sleep(for: .milliseconds(50))
         }
         try validate(token)
-        eventHandler?(.phase(.negotiating))
+        emit(.negotiating)
         let info = try LunaProtocol.deviceInformation(
             response: await send(LunaProtocol.deviceInformationRequest(includeSerial: true)))
         // BE80 is shared by more Insta360 cameras. Only apply the verified Luna profile.
@@ -281,7 +284,7 @@ public final class LunaCameraBackend: CameraBackend {
             throw CameraBackendError.unavailable(
                 "The encrypted camera identity did not match the selected device.")
         }
-        eventHandler?(.phase(.awaitingApproval))
+        emit(.awaitingApproval)
         let authorization = try LunaProtocol.authorizationStatus(
             response: await send(LunaProtocol.authorizationCheck(identity: identity)))
         if authorization == .approvalRequired {
@@ -292,7 +295,7 @@ public final class LunaCameraBackend: CameraBackend {
                 "The camera is connected to another phone. Close the Insta360 app on the other device, then connect again."
             )
         }
-        eventHandler?(.phase(.readingWiFi))
+        emit(.readingWiFi)
         let wifi = try LunaProtocol.wifiCredentials(
             response: await send(LunaProtocol.wifiCredentialsRequest))
         let saved = LunaStoredWiFi(ssid: wifi.ssid, password: wifi.password)
@@ -302,7 +305,7 @@ public final class LunaCameraBackend: CameraBackend {
         sessionKey = nil
         receivedNonces.removeAll()
         try validate(token)
-        eventHandler?(.phase(.joiningWiFi))
+        emit(.joiningWiFi)
         try await joinRetrying(saved, token: token, budget: .seconds(120))
         eventHandler?(.joinedWiFi(ssid: saved.ssid))
         return serial
@@ -372,7 +375,7 @@ public final class LunaCameraBackend: CameraBackend {
         counter = LunaRequestCounter()
         approval = nil
         lastVideoAt = nil
-        eventHandler?(.phase(.idle))
+        emit(.idle)
     }
 
     public func forget(cameraID: UUID) {
@@ -408,6 +411,50 @@ public final class LunaCameraBackend: CameraBackend {
         lastVideoAt.map { Date().timeIntervalSince($0) }
     }
 
+    // MARK: - Session
+
+    /// A new OpenCineCore session for the next connection. The previous one closes as replaced.
+    public func openSession() -> LunaCameraSession {
+        let previous = session
+        let next = LunaCameraSession(
+            send: { [weak self] request in
+                guard let self else {
+                    throw CameraBackendError.unavailable("The camera connection is not open.")
+                }
+                return try await self.send(request)
+            },
+            functionMode: { [weak self] in
+                self?.functionMode ?? LunaFunctionMode.normalVideo.rawValue
+            },
+            readSettings: { [weak self] in await self?.refreshSettings() },
+            readCapture: { [weak self] in await self?.refreshCapture() })
+        session = next
+        previous?.close(.replaced)
+        if isControlReady { next.linkChanged(.streaming, serial: deviceInformation?.serial) }
+        return next
+    }
+
+    private func emit(_ phase: CameraConnectionPhase) {
+        session?.linkChanged(phase, serial: deviceInformation?.serial)
+        eventHandler?(.phase(phase))
+    }
+
+    private func deliver(_ status: LunaDeviceStatus) {
+        if let mode = status.shootingMode?.functionMode { functionMode = mode.rawValue }
+        session?.ingest(device: status)
+        onDeviceStatus?(status)
+    }
+
+    private func deliver(_ settings: LunaPhotographySettings) {
+        session?.ingest(settings: settings)
+        onSettings?(settings)
+    }
+
+    private func deliver(_ capture: LunaCaptureStatus) {
+        session?.ingest(capture: capture)
+        onCapture?(capture)
+    }
+
     // MARK: - Status
 
     /// One full read: device status, video settings for the active mode, capture state.
@@ -416,16 +463,11 @@ public final class LunaCameraBackend: CameraBackend {
         if let body = try? await send(LunaProtocol.statusRequest()),
             let status = try? LunaDeviceStatus(response: body)
         {
-            if let mode = status.shootingMode?.functionMode { functionMode = mode.rawValue }
-            onDeviceStatus?(status)
+            deliver(status)
         }
         await refreshShootingMode()
         await refreshSettings()
-        if let body = try? await send(LunaProtocol.captureStatusRequest),
-            let capture = try? LunaCaptureStatus(captureStatusResponse: body)
-        {
-            onCapture?(capture)
-        }
+        await refreshCapture()
     }
 
     /// Device options 40/41: which shooting mode (and so which settings bank) is active.
@@ -433,8 +475,7 @@ public final class LunaCameraBackend: CameraBackend {
         guard isTCP, let body = try? await send(LunaProtocol.shootingModeRequest()),
             let status = try? LunaDeviceStatus(response: body)
         else { return }
-        if let mode = status.shootingMode?.functionMode { functionMode = mode.rawValue }
-        onDeviceStatus?(status)
+        deliver(status)
     }
 
     public func refreshSettings() async {
@@ -443,8 +484,16 @@ public final class LunaCameraBackend: CameraBackend {
             LunaProtocol.getPhotographyOptions(Self.settingTypes, mode: functionMode)),
             let settings = try? LunaPhotographySettings(response: body)
         {
-            onSettings?(settings)
+            deliver(settings)
         }
+    }
+
+    /// Capture state (cmd 15): recording and the record timer.
+    public func refreshCapture() async {
+        guard isTCP, let body = try? await send(LunaProtocol.captureStatusRequest),
+            let capture = try? LunaCaptureStatus(captureStatusResponse: body)
+        else { return }
+        deliver(capture)
     }
 
     /// Every photography type the monitor shows.
@@ -461,19 +510,12 @@ public final class LunaCameraBackend: CameraBackend {
                 guard let self, token == self.generation, self.isTCP else { return }
                 tick += 1
                 // Capture state every second (record timer); battery/storage every 5 s.
-                if let body = try? await self.send(LunaProtocol.captureStatusRequest),
-                    let capture = try? LunaCaptureStatus(captureStatusResponse: body)
-                {
-                    self.onCapture?(capture)
-                }
+                await self.refreshCapture()
                 if tick % 5 == 0,
                     let body = try? await self.send(LunaProtocol.statusRequest()),
                     let status = try? LunaDeviceStatus(response: body)
                 {
-                    if let mode = status.shootingMode?.functionMode {
-                        self.functionMode = mode.rawValue
-                    }
-                    self.onDeviceStatus?(status)
+                    self.deliver(status)
                 }
             }
         }
@@ -678,9 +720,9 @@ public final class LunaCameraBackend: CameraBackend {
         guard let note = try? LunaNotification(message: message) else { return }
         switch note {
         case .captureStatus(let capture):
-            onCapture?(capture)
+            deliver(capture)
         case .photographyChanged(let settings):
-            onSettings?(settings)
+            deliver(settings)
         case .subMode, .storage, .battery, .batteryLow:
             // The notice carries a partial view; re-read the whole status.
             Task { [weak self] in
@@ -688,10 +730,7 @@ public final class LunaCameraBackend: CameraBackend {
                     let body = try? await self.send(LunaProtocol.statusRequest()),
                     let status = try? LunaDeviceStatus(response: body)
                 else { return }
-                if let mode = status.shootingMode?.functionMode {
-                    self.functionMode = mode.rawValue
-                }
-                self.onDeviceStatus?(status)
+                self.deliver(status)
                 await self.refreshShootingMode()
                 await self.refreshSettings()
             }

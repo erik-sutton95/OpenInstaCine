@@ -31,6 +31,10 @@ final class CaptureQuickSnapshotTests: XCTestCase {
                 changed, request, "every captured field must bind the confirmation: \(changed)")
             XCTAssertFalse(confirms(changed), "stale confirmation must not fire after \(changed)")
         }
+        XCTAssertFalse(
+            RecordConfirmationContext(
+                mode: 1, recording: nil, locked: false, busy: false, phase: .live
+            ).canConfirm, "unknown recording has no explicit target to confirm")
         for photo in [0x05, 0x17] {
             XCTAssertFalse(
                 RecordConfirmationContext(

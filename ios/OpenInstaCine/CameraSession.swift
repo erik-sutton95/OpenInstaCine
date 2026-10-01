@@ -141,6 +141,12 @@ final class CameraSession {
     @ObservationIgnored var multiviewControlAdmission: (() -> Bool)?
     var multiviewPose: GimbalStickMapping { GimbalStickMapping() }
 
+    /// ISO, shutter, white balance and record go through OpenCineCore (CameraSessionCore.swift).
+    @ObservationIgnored var core = CoreControl()
+    /// Camera-reported recording: nil while unknown. `status.isRecording` shows unknown as idle;
+    /// confirmations need a known value.
+    var reportedRecording: Bool?
+
     // Luna settings bookkeeping (see LunaShellMapping).
     @ObservationIgnored var lunaSettings = LunaPhotographySettings.empty
     @ObservationIgnored var lunaDevice: LunaDeviceStatus?
@@ -456,6 +462,7 @@ final class CameraSession {
             publishStatusNow()
             resetLinkHealthMeasurements()
             decoder.reset()
+            attachCore(backend.openSession())
         } else {
             decoder.flushForRecovery()
         }
@@ -501,6 +508,7 @@ final class CameraSession {
         scanTask?.cancel()
         runTask?.cancel()
         runTask = nil
+        detachCore()
         expectedDisconnect = true
         backend.stopScan()
         backend.disconnect()
@@ -694,8 +702,19 @@ final class CameraSession {
             if faceMetering != shown { faceMetering = shown }
         }
         if let limits = settings.gimbalStatus { applyGimbalLimits(limits) }
+        applyCorePresentation(to: &next)
         status = next
         applyDecoderColorScience()
+    }
+
+    /// After a pending ISO, shutter or WB edit ends: the last Luna readouts plus the Core overlay.
+    func refreshShownSettings() {
+        var next = status
+        if !lunaSettings.types.isEmpty {
+            LunaShellMapping.apply(settings: lunaSettings, to: &next, pins: &pins, table: &formatTable)
+        }
+        applyCorePresentation(to: &next)
+        status = next
     }
 
     private func reconcileZoom(_ zoom: Double, into next: inout CameraStatus) {
@@ -713,6 +732,7 @@ final class CameraSession {
         }
     }
 
+    /// Record timer only. Recording itself is reported through the Core session.
     private func applyCapture(_ capture: LunaCaptureStatus) {
         var next = status
         let recording = capture.isRecording
@@ -720,18 +740,12 @@ final class CameraSession {
             recordStartedAt = Date().addingTimeInterval(-Double(capture.captureSeconds))
         }
         if !recording { recordStartedAt = nil }
-        if CameraValuePin.reconcile(
-            &pins.recording, reported: recording, now: Date.timeIntervalSinceReferenceDate,
-            confirms: { $0 == $1 }) == nil
-        {
-            next.isRecording = recording
-        }
         next.recordElapsedSec =
             recording
             ? max(Int(capture.captureSeconds), recordStartedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0)
             : 0
         status = next
-        if pins.recording == nil, controlBusy, !pins.photoInFlight { controlBusy = false }
+        if core.recordOperation == nil, controlBusy, !pins.photoInFlight { controlBusy = false }
     }
 
     private func applyNotification(_ note: LunaNotification) {

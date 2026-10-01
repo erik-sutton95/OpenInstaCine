@@ -243,7 +243,7 @@ final class AppModel {
     var watcherRecordRequest: RecordConfirmationContext?
     var watcherRecordContext: RecordConfirmationContext {
         RecordConfirmationContext(
-            mode: session.status.shootingMode, recording: session.status.isRecording,
+            mode: session.status.shootingMode, recording: session.reportedRecording,
             locked: session.isLocked, busy: session.controlBusy, phase: session.phase)
     }
     var internetHopActive = false
@@ -969,11 +969,12 @@ private struct WatcherRecordConfirmation: ViewModifier {
                     model.session.status.isRecording ? "Stop" : "Start",
                     role: model.session.status.isRecording ? .destructive : nil
                 ) {
-                    guard model.watcherRecordRequest == model.watcherRecordContext,
-                        model.watcherRecordContext.canConfirm
+                    guard let request = model.watcherRecordRequest,
+                        request == model.watcherRecordContext, request.canConfirm,
+                        let recording = request.recording
                     else { return }
                     model.watcherRecordRequest = nil
-                    model.session.pressShutter()
+                    model.session.setRecording(start: !recording)
                 }
                 Button("Cancel", role: .cancel) {}
             }

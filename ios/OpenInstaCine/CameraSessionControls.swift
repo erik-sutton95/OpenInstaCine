@@ -54,7 +54,7 @@ extension CameraSession {
 
     var currentShootingMode: ShootingMode? { ShootingMode.fromStatus(status.shootingMode) }
 
-    private var canSendControl: Bool {
+    var canSendControl: Bool {
         guard case .live = phase, backend.isControlReady else {
             controlNote = "Connect the camera to use its controls."
             return false
@@ -105,52 +105,26 @@ extension CameraSession {
     // MARK: - Record / photo
 
     /// Rec lamp: start/stop video, or take a still in Photo. Record never lies: the
-    /// lamp holds `controlBusy` until capture status confirms.
+    /// lamp holds `controlBusy` until the Core session reports the outcome.
     func pressShutter() {
         guard canSendControl else { return }
-        let photo = currentShootingMode?.isPhoto == true
-        controlBusy = true
-        if photo {
-            pins.photoInFlight = true
-            controlNote = "Photo"
-            sendControl(
-                "Photo", { try LunaProtocol.takePicture(mode: .normal) }, refresh: false,
-                onFail: { [weak self] in
-                    self?.pins.photoInFlight = false
-                    self?.controlBusy = false
-                },
-                onSuccess: { [weak self] _ in
-                    self?.pins.photoInFlight = false
-                    self?.controlBusy = false
-                    Task { await self?.refreshMediaAfterCapture() }
-                })
+        guard currentShootingMode?.isPhoto == true else {
+            toggleRecording()
             return
         }
-        let starting = !status.isRecording
-        let luna = currentShootingMode.flatMap(LunaShellMapping.lunaShootingMode) ?? .video
-        pins.recording = CameraValuePin(starting, now: pinNow, settle: 4)
+        controlBusy = true
+        pins.photoInFlight = true
+        controlNote = "Photo"
         sendControl(
-            starting ? "Record" : "Stop",
-            {
-                starting
-                    ? try LunaProtocol.startCaptureRequest(for: luna)
-                    : try LunaProtocol.stopCaptureRequest(for: luna)
-            },
-            refresh: false,
+            "Photo", { try LunaProtocol.takePicture(mode: .normal) }, refresh: false,
             onFail: { [weak self] in
-                self?.pins.recording = nil
+                self?.pins.photoInFlight = false
                 self?.controlBusy = false
             },
             onSuccess: { [weak self] _ in
-                guard let self else { return }
-                if starting { self.recordStartedAt = Date() }
-                self.status.isRecording = starting
-                if !starting {
-                    self.recordStartedAt = nil
-                    self.status.recordElapsedSec = 0
-                    Task { await self.refreshMediaAfterCapture() }
-                }
-                self.controlBusy = false
+                self?.pins.photoInFlight = false
+                self?.controlBusy = false
+                Task { await self?.refreshMediaAfterCapture() }
             })
     }
 
@@ -168,7 +142,7 @@ extension CameraSession {
         if previous != wire { next.clearModeDependentCapabilities() }
         next.shootingMode = wire
         status = next
-        backend.functionMode = luna.functionMode.rawValue
+        // The backend's settings bank follows the camera's reported mode, not this request.
         formatTable = [:]
         pins.format = nil
         sendControl(
@@ -184,87 +158,6 @@ extension CameraSession {
     }
 
     // MARK: - Exposure
-
-    private var currentISO: Int? {
-        guard let index = status.isoIndex, index != .auto else { return nil }
-        return index.isoValue
-    }
-
-    private var currentShutterSeconds: Double? {
-        status.shutterDenom > 0 ? 1 / Double(status.shutterDenom) : nil
-    }
-
-    /// Luna has one exposure message: program + ISO + shutter. The shell's
-    /// independent ISO / shutter drums map onto its four programs.
-    private func sendExposure(iso: Int?, shutterSeconds: Double?, name: String) {
-        let program: LunaExposureProgram
-        switch (iso, shutterSeconds) {
-        case (nil, nil): program = .automatic
-        case (.some, nil): program = .isoPriority
-        case (nil, .some): program = .shutterPriority
-        case (.some, .some): program = .manual
-        }
-        let mode = backend.functionMode
-        sendControl(
-            name,
-            {
-                try LunaProtocol.setVideoExposure(
-                    program: program, iso: iso.map(UInt64.init), shutterSeconds: shutterSeconds,
-                    functionMode: mode)
-            },
-            onFail: { [weak self] in
-                self?.pins.isoIndex = nil
-                self?.pins.shutterDenom = nil
-                self?.pins.expoMode = nil
-            })
-    }
-
-    func setISO(_ index: IsoIndex) {
-        guard canSendControl else { return }
-        pins.isoIndex = CameraValuePin(index, now: pinNow)
-        status.isoIndex = index
-        status.iso = index.isoValue ?? status.iso
-        let iso = index == .auto ? nil : index.isoValue
-        let shutter = status.expoMode == .manual ? currentShutterSeconds : nil
-        let mode: ExpoMode = (iso == nil && shutter == nil) ? .auto : .manual
-        pins.expoMode = CameraValuePin(mode, now: pinNow)
-        status.expoMode = mode
-        LunaExposureCoalescer.shared.submit(key: "exposure") { [weak self] in
-            self?.sendExposure(iso: iso, shutterSeconds: shutter, name: "ISO \(index.label)")
-        }
-    }
-
-    func setShutterDenom(_ denom: Int) {
-        guard canSendControl else { return }
-        pins.shutterDenom = CameraValuePin(denom, now: pinNow)
-        status.shutterDenom = denom
-        pins.expoMode = CameraValuePin(.manual, now: pinNow)
-        status.expoMode = .manual
-        let iso = currentISO
-        LunaExposureCoalescer.shared.submit(key: "exposure") { [weak self] in
-            self?.sendExposure(
-                iso: iso, shutterSeconds: 1 / Double(max(1, denom)), name: "1/\(denom)")
-        }
-    }
-
-    func setExpoMode(_ mode: ExpoMode) {
-        guard canSendControl else { return }
-        autoExposureLock = nil
-        pins.expoMode = CameraValuePin(mode, now: pinNow)
-        status.expoMode = mode
-        if mode == .auto {
-            pins.isoIndex = CameraValuePin(.auto, now: pinNow)
-            status.isoIndex = .auto
-            sendExposure(iso: nil, shutterSeconds: nil, name: "Auto exposure")
-            return
-        }
-        // Manual needs a shutter: keep the current one, else the 180° default.
-        let fps = max(status.fps, 25)
-        let denom = status.shutterDenom > 0 ? status.shutterDenom : fps * 2
-        pins.shutterDenom = CameraValuePin(denom, now: pinNow)
-        status.shutterDenom = denom
-        sendExposure(iso: currentISO, shutterSeconds: 1 / Double(denom), name: "Manual exposure")
-    }
 
     func setEv(_ ev: EvComp) {
         guard canSendControl else { return }
@@ -343,42 +236,6 @@ extension CameraSession {
     }
 
     // MARK: - White balance
-
-    func setWhiteBalanceAuto(tint: Int? = nil) {
-        autoWhiteBalanceLock = nil
-        fireWhiteBalance(.auto(tint: 0))
-    }
-
-    func setWhiteBalanceCustom(kelvin: Int, tint: Int) {
-        let wb = WhiteBalance.custom(kelvin: min(max(kelvin, 2_000), 10_000), tint: 0)
-        // Custom from AWB Lock keeps the locked value; the camera is already there.
-        if autoWhiteBalanceLock != nil, status.whiteBalance == wb {
-            autoWhiteBalanceLock = nil
-            return
-        }
-        autoWhiteBalanceLock = nil
-        fireWhiteBalance(wb)
-    }
-
-    private func fireWhiteBalance(_ wb: WhiteBalance) {
-        guard canSendControl else { return }
-        // fw 1.1.15 applies kelvin 3.5 to 3.9 s after the SET.
-        pins.whiteBalance = CameraValuePin(wb, now: pinNow, settle: 5)
-        status.whiteBalance = wb
-        if wb.mode == .custom { status.whiteBalanceKelvin = wb.kelvin }
-        status.whiteBalanceTint = 0
-        let mode = backend.functionMode
-        LunaExposureCoalescer.shared.submit(key: "wb") { [weak self] in
-            self?.sendControl(
-                wb.mode == .auto ? "WB Auto" : "WB \(wb.kelvin)K",
-                {
-                    wb.mode == .auto
-                        ? try LunaProtocol.setWhiteBalanceAuto(functionMode: mode)
-                        : try LunaProtocol.setWhiteBalanceKelvin(UInt64(wb.kelvin), functionMode: mode)
-                },
-                onFail: { [weak self] in self?.pins.whiteBalance = nil })
-        }
-    }
 
     // MARK: - Focus mode and metering
 
