@@ -7,12 +7,12 @@ import PackageDescription
 // without a device. The iOS app (ios/) imports this and supplies CoreBluetooth /
 // Network / Hotspot I/O. Android consumes the same target via a JNI facade
 // (`just android-core`) — keep this module UI-free and platform-agnostic.
+// Shared UI (MonitorPresentation, MonitorUI) comes from the OpenCineUI package,
+// consumed by ios/project.yml, not from this manifest.
 let package = Package(
     name: "OpenPocketViewCore",
     platforms: [.iOS(.v17), .macOS(.v12), .watchOS(.v10)],
     products: [
-        .library(name: "MonitorPresentation", targets: ["MonitorPresentation"]),
-        .library(name: "MonitorUI", targets: ["MonitorUI"]),
         .library(name: "OpenPocketViewCore", targets: ["OpenPocketViewCore"]),
         // Brand-neutral CameraBackend seam; Luna implements it in Adapters/Insta360Apple.
         .library(name: "MonitorContracts", targets: ["MonitorContracts"]),
@@ -23,14 +23,6 @@ let package = Package(
             name: "OpenPocketCineAndroid", type: .dynamic, targets: ["OpenPocketCineAndroidFacade"]),
     ],
     targets: [
-        // Brand-neutral presentation policy and native screens. Neither target
-        // depends on the Osmo protocol core or a camera session implementation.
-        .target(name: "MonitorPresentation"),
-        .target(
-            name: "MonitorUI", dependencies: ["MonitorPresentation"],
-            resources: [.process("Resources/Fonts"), .copy("Resources/Icons")]
-        ),
-        .testTarget(name: "MonitorPresentationTests", dependencies: ["MonitorPresentation"]),
         .target(name: "MonitorContracts"),
         .target(name: "OpenPocketViewCore"),
         .testTarget(
