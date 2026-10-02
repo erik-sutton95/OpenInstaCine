@@ -15,7 +15,7 @@ pinned in `opencine-pins.txt`, never from a copy:
 | --- | --- | --- |
 | Design system (`MonitorUI`, `MonitorPresentation`, Android `monitor-ui`) | OpenCine | `ios/project.yml` path package `OpenCine`; Android `monitor-ui` from the included build `../../../OpenCine/Android` (named `opencine`) |
 | Camera contracts, media math, motion, relay, Apple decode runtime | OpenCine (`OpenCineCore`, `OpenCineMedia`, `OpenCineMotion`, `OpenCineRelay`, `OpenCineApple`) | root `Package.swift` and `ios/project.yml` path package |
-| Android core, media and the native Vulkan renderer (`libopc_vulkan.so`, `feed.OpcVulkan`) | OpenCine `Android/` (`:core`, `:media`, `:vulkan`) | the same `opencine` included build |
+| Android core, media, the live-view MediaCodec decoder (`HevcDecoder`) and the native Vulkan renderer (`libopc_vulkan.so`, `feed.OpcVulkan`) | OpenCine `Android/` (`:core`, `:media`, `:decoder`, `:vulkan`) | the same `opencine` included build |
 | Luna protocol, Apple I/O, Kotlin shell contract and Luna adapter | OpenCine (Swift products, `Android/` `insta360-shell`, `insta360-luna`) | path package; the same `opencine` included build |
 | DJI protocol and session | OpenCine (`OpenCineDJI`) | not linked: the Luna build never needs it |
 
