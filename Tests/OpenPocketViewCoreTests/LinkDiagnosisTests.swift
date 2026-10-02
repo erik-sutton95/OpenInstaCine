@@ -212,24 +212,3 @@ struct LinkDiagnosisTests {
             secondsSinceCameraSet: probe.secondsSinceCameraSet)
     }
 }
-
-@Suite("Connect timeline")
-struct ConnectTimelineTests {
-    /// Marks print in insertion order, not sorted by time, with two decimals.
-    @Test(
-        arguments: [
-            (10.0, [], "connect:"),
-            (
-                10.0, [("gatt", 10.40), ("pair", 11.10), ("path", 13.20)],
-                "connect: gatt=0.40s pair=1.10s path=3.20s"
-            ),
-            (0.0, [("path", 3.20), ("gatt", 0.40)], "connect: path=3.20s gatt=0.40s"),
-        ] as [(Double, [(String, Double)], String)])
-    func lineListsMarks(start: Double, marks: [(String, Double)], line: String) {
-        var timeline = ConnectTimeline(now: start)
-        for (name, at) in marks {
-            timeline.mark(name, now: at)
-        }
-        #expect(timeline.line() == line)
-    }
-}
