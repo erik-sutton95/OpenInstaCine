@@ -31,8 +31,8 @@ Merged into `opencine/integration` with `--no-ff` on 2026-10-02, in this order:
   to each sibling's current main; `settings.gradle.kts` includes `opencinecore`,
   `opencineinsta360` and OpenCineUI once each; build identity hashes the union)
 
-Pins now (`opencine-pins.txt`, each sibling's `main`): OpenCineUI 54bcbb3, OpenCineCore 1c648a6
-(motion, relay, Apple runtime, harness fixes, `:vulkan`), OpenCineInsta360 e90a11a (Swift
+Pins now (`opencine-pins.txt`, each sibling's `main`): OpenCineUI 54bcbb3, OpenCineCore 4a421fe
+(motion, relay, Apple runtime, harness fixes, `:vulkan`; README-only on top of 1c648a6), OpenCineInsta360 e90a11a (Swift
 products plus `Android/` shell contract and Luna adapter, harness fixes).
 
 Base is `opencine/state-01-luna`; the other two are merged with `--no-ff`. Pinned siblings
