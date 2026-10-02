@@ -25,6 +25,10 @@
         /// The shared cameras model's inputs for a review: a scripted Luna backend and a private
         /// defaults domain holding the two saved cameras as the shipping app stored them.
         static func cameras() -> (any LunaConnectPort, UserDefaults) {
+            // Installed-build reviews use the existing store without reseeding it.
+            if ProcessInfo.processInfo.environment["OPV_UI_REVIEW_STORED_CAMERAS"] == "1" {
+                return (ReviewLunaPort(state: state), .standard)
+            }
             let name = "opc.monitor.presentation.review.cameras"
             let defaults = UserDefaults(suiteName: name)!
             defaults.removePersistentDomain(forName: name)

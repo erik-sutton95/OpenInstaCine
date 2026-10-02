@@ -27,6 +27,11 @@ opens the pair page with that camera selected. When Bluetooth is off or access
 is denied, the pairing page offers **Open Settings** and resumes discovery when
 you return.
 
+Press and hold a saved setup chip and choose **Rename setup** to label that
+connection. Clear the name to use its default title again. Renaming keeps the
+camera and its saved Wi-Fi details. **Privacy** and **Terms** are available from
+both the cameras page and the first-pair screen.
+
 Upgrading preserves saved cameras, custom names and Wi-Fi details. The saved
 list remains readable by earlier builds; renaming or forgetting a camera in an
 earlier build is reconciled on the next upgrade. Forgetting removes that

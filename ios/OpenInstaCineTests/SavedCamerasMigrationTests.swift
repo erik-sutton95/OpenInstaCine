@@ -187,6 +187,34 @@ final class SavedCamerasMigrationTests: XCTestCase {
         XCTAssertEqual(defaults.data(forKey: legacyKey), try fixture("legacy-downgrade-edits"))
     }
 
+    func testSetupRenameSurvivesOlderBuildEditsAndCanBeCleared() throws {
+        _ = try loaded("legacy")
+        let model = CamerasModel(integrations: [], store: AppModel.camerasStore(defaults))
+        let original = try XCTUnwrap(model.saved.first { $0.id == a })
+        let route = try XCTUnwrap(original.routes.first)
+        model.renameRoute(route.id, of: a, to: "  Location A  ")
+        XCTAssertEqual(model.saved.first { $0.id == a }?.routes.first?.title, "Location A")
+        XCTAssertEqual(defaults.data(forKey: legacyKey), try fixture("legacy"))
+
+        // The older format has no setup-title field. Its camera and network edits must
+        // preserve the new title and stable route identity when this app is reinstalled.
+        defaults.set(try fixture("legacy-downgrade-edits"), forKey: legacyKey)
+        let upgraded = CamerasModel(integrations: [], store: AppModel.camerasStore(defaults))
+        let camera = try XCTUnwrap(upgraded.saved.first { $0.id == a })
+        XCTAssertEqual(camera.routes.first?.id, route.id)
+        XCTAssertEqual(camera.routes.first?.title, "Location A")
+        XCTAssertEqual(camera.routes.last?.network, "Office")
+        let preferred = camera.preferredRoute
+        upgraded.renameRoute(route.id, of: a, to: " ")
+        let again = AppModel.camerasStore(defaults)
+        again.load()
+        let cleared = try XCTUnwrap(again.cameras.first { $0.id == a })
+        XCTAssertNil(cleared.routes.first?.title)
+        XCTAssertEqual(cleared.routes.first?.id, route.id)
+        XCTAssertEqual(cleared.preferredRoute, preferred)
+        XCTAssertEqual(storedKeys, [legacyKey, documentKey])
+    }
+
     // 5
     func testABadRecordIsKeptAndNeverOverwritten() throws {
         let store = try loaded("legacy-bad-record")

@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.appkit.CamerasModel
 import com.opencapture.opencine.appkit.SavedCamerasStore
 import com.opencapture.opencine.appkit.StoredString
 import com.opencapture.opencine.core.CameraDeviceID
@@ -8,6 +9,7 @@ import com.opencapture.opencine.core.SavedCamera
 import com.opencapture.opencine.insta360.luna.LunaFailures
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -150,6 +152,33 @@ class SavedCamerasMigrationTest {
         val fourth = upgraded.getValue(d)
         assertEquals("LUNA-AABBCC", fourth.routes.single().network)
         assertEquals(fourth.routes[0].id, fourth.preferredRoute)
+    }
+
+    @Test
+    fun setupRenameSurvivesOlderBuildEditsAndCanBeCleared() = runTest {
+        val (prefs, store) = upgraded()
+        val model = CamerasModel(emptyList(), store, backgroundScope)
+        val original = model.state.value.saved.first { it.id == a }
+        val route = original.routes.single()
+        model.renameRoute(route.id, a, "  Location A  ")
+        assertEquals("Location A", model.state.value.saved.first { it.id == a }.routes.single().title)
+        assertEquals(fixture("legacy"), prefs.values["legacy"])
+
+        // This format has no setup title, so older-build edits preserve it.
+        prefs.values["legacy"] = fixture("legacy-downgrade-edits")
+        val upgraded = CamerasModel(emptyList(), prefs.store(), backgroundScope)
+        val camera = upgraded.state.value.saved.first { it.id == a }
+        assertEquals(route.id, camera.routes.first().id)
+        assertEquals("Location A", camera.routes.first().title)
+        assertEquals("Office", camera.routes.last().network)
+        val preferred = camera.preferredRoute
+        upgraded.renameRoute(route.id, a, " ")
+        val again = prefs.store().also { it.load() }
+        val cleared = again.cameras.first { it.id == a }
+        assertNull(cleared.routes.first().title)
+        assertEquals(route.id, cleared.routes.first().id)
+        assertEquals(preferred, cleared.preferredRoute)
+        assertEquals(setOf("document", "legacy"), prefs.values.keys)
     }
 
     @Test
