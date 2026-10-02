@@ -72,7 +72,7 @@ internal class FeedIncidentRecorder(
         }
         current.header.outcome = FeedIncidentOutcome.EXHAUSTED
         current.header.endedAtMonotonic = now
-        return FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceJob.Reason.OUTCOME)
+        return FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceReason.OUTCOME)
     }
 
     fun recordBreadcrumb(breadcrumb: FeedIncidentBreadcrumb) {
@@ -96,7 +96,7 @@ internal class FeedIncidentRecorder(
             current.header.evictions += 1
             current.repairs.removeAt(0)
         }
-        return FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceJob.Reason.REPAIR)
+        return FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceReason.REPAIR)
     }
 
     fun noteUnexpectedDisconnect(now: Double): FeedIncidentPersistenceJob? {
@@ -193,7 +193,7 @@ internal class FeedIncidentRecorder(
             }
         open = incident
         incidentCount += 1
-        return FeedIncidentPersistenceJob(incident.bundle(), FeedIncidentPersistenceJob.Reason.STARTED)
+        return FeedIncidentPersistenceJob(incident.bundle(), FeedIncidentPersistenceReason.STARTED)
     }
 
     private fun continueOpen(
@@ -224,7 +224,7 @@ internal class FeedIncidentRecorder(
         current.snapshotsUntilCheckpoint -= 1
         if (current.snapshotsUntilCheckpoint <= 0) {
             current.snapshotsUntilCheckpoint = 5
-            return FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceJob.Reason.CHECKPOINT)
+            return FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceReason.CHECKPOINT)
         }
         return null
     }
@@ -239,7 +239,7 @@ internal class FeedIncidentRecorder(
             current.aftermathEndsAt = now + FeedIncidentBounds.AFTERMATH_SECONDS
         }
         if (snapshot != null) current.appendAftermath(snapshot)
-        return FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceJob.Reason.OUTCOME)
+        return FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceReason.OUTCOME)
     }
 
     private fun collectAftermath(snapshot: FeedIncidentSnapshot): FeedIncidentPersistenceJob? {
@@ -247,7 +247,7 @@ internal class FeedIncidentRecorder(
         val end = current.aftermathEndsAt ?: return null
         current.appendAftermath(snapshot)
         if (snapshot.monotonicNow >= end) {
-            val job = FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceJob.Reason.OUTCOME)
+            val job = FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceReason.OUTCOME)
             open = null
             return job
         }
@@ -260,7 +260,7 @@ internal class FeedIncidentRecorder(
         current.snapshotsUntilCheckpoint -= 1
         if (current.snapshotsUntilCheckpoint <= 0) {
             current.snapshotsUntilCheckpoint = 5
-            return FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceJob.Reason.CHECKPOINT)
+            return FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceReason.CHECKPOINT)
         }
         return null
     }
@@ -270,7 +270,7 @@ internal class FeedIncidentRecorder(
         // Swift twin: an EXHAUSTED or RECOVERED verdict survives the disconnect that follows it.
         if (current.header.outcome == FeedIncidentOutcome.OPEN) current.header.outcome = outcome
         if (current.header.endedAtMonotonic == null) current.header.endedAtMonotonic = now
-        val job = FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceJob.Reason.OUTCOME)
+        val job = FeedIncidentPersistenceJob(current.bundle(), FeedIncidentPersistenceReason.OUTCOME)
         open = null
         return job
     }
