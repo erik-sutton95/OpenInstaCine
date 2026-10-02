@@ -62,14 +62,17 @@ LUNA_OWNED=(
 )
 
 # Upstream DJI app code (BLE, datalink, Multi View on OpenCineMulticam, the OpenCineDJI control
-# port). Never synced: it builds on OpenCineDJI APIs this app does not link. Our frozen copies
-# of the older files stay (unreachable for Luna). Upstream files that only test or serve the Osmo
-# DUML session and that we deleted are skipped by the deleted-here rule, not listed.
+# port, the Wi-Fi and Hotspot setup sheets). Never synced: it builds on OpenCineDJI APIs this app
+# does not link, and the frozen copies were deleted here (SHELL-04). Upstream files that only test
+# or serve the Osmo DUML session and that we deleted are also skipped by the deleted-here rule.
 DJI_ONLY=(
   OpenInstaCine/BleLink.swift
   OpenInstaCine/DatalinkDriver.swift
   'OpenInstaCine/Multiview*'
   OpenInstaCine/StationNetworkSetupView.swift
+  OpenInstaCine/AddSetupView.swift
+  OpenInstaCine/WiFiNameAccess.swift
+  OpenInstaCineTests/NanoFrameQueueTests.swift
   'OpenInstaCine/CameraSession+DJI*'
   'OpenInstaCineTests/DJI*'
   'OpenInstaCineTests/Multiview*'

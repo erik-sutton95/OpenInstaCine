@@ -119,9 +119,6 @@ final class CameraSession {
             profile: status.colorMode.map { String($0.rawValue) } ?? "unknown",
             metering: faceMetering.map { $0 ? "face" : "matrix" } ?? "unknown")
     }
-    /// Osmo multiview borrows a DUML driver. Luna has no multiview; kept nil for the
-    /// shared Multiview files that still compile against it.
-    @ObservationIgnored var datalink: DatalinkDriver?
     @ObservationIgnored let log = Logger(subsystem: "com.opencapture.openinstacine", category: "session")
     @ObservationIgnored var scanTask: Task<Void, Never>?
     @ObservationIgnored var runTask: Task<Void, Never>?
@@ -377,14 +374,6 @@ final class CameraSession {
         backend.onIMU = { [weak self] in self?.ingestIMU($0) }
         backend.onLog = { ControlLiveLog.line($0) }
     }
-
-    // MARK: - Multiview (Osmo only). Kept so the shared Multiview files compile.
-
-    func updateMultiview(camera: FoundCamera, driver: DatalinkDriver?, status: CameraStatus) {}
-    func adoptMultiviewPose(_ pose: GimbalStickMapping) {}
-    func noteMultiviewFrame() {}
-    func receiveMultiview(_ frame: Duml.Frame) {}
-    func releaseMultiview() {}
 
     // MARK: - Discovery and connection
 

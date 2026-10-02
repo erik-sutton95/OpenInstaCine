@@ -89,9 +89,6 @@ final class CameraPagePresentationTests: XCTestCase {
                 StartupConnectionCopy.friendly(raw), StartupConnectionCopy.datalinkSilent)
         }
         XCTAssertEqual(
-            DatalinkDriver.DatalinkError.localNetworkDenied.errorDescription,
-            StartupConnectionCopy.localNetworkDenied)
-        XCTAssertEqual(
             WiFiJoiner.JoinError.personalHotspot.errorDescription,
             StartupConnectionCopy.personalHotspotOn)
         XCTAssertFalse(

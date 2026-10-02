@@ -5,44 +5,6 @@ import XCTest
 
 @MainActor
 final class VideoDisplayOwnershipTests: XCTestCase {
-    func testRetiredSingleCameraUpdateCannotStealMultiviewFeed() {
-        defer { LiveHDRDisplay.setEnabled(false) }
-        let tile = MultiviewSession.Tile()
-        let retired = DisplayLayerView(tile.decoder.displayLayer)
-        let single = singleCameraDisplay(tile.decoder, hdrDisplay: true)
-        single.updateDisplay(retired)
-        XCTAssertTrue(tile.decoder.processedFeed === retired.ciFeed)
-
-        let replacement = DisplayLayerView(tile.decoder.displayLayer)
-        let multiview = MultiviewVideoLayer(tile: tile)
-        multiview.updateDisplay(replacement)
-        single.updateDisplay(retired)
-
-        XCTAssertTrue(tile.decoder.processedFeed === replacement.ciFeed)
-        XCTAssertTrue(tile.decoder.sampleBus === tile.sampleBus)
-        XCTAssertFalse(tile.decoder.hdrDisplayEnabled)
-        tile.decoder.reset()
-    }
-
-    func testRetiredMultiviewUpdateCannotStealSingleCameraFeed() {
-        defer { LiveHDRDisplay.setEnabled(false) }
-        let tile = MultiviewSession.Tile()
-        let retired = DisplayLayerView(tile.decoder.displayLayer)
-        let multiview = MultiviewVideoLayer(tile: tile, hdrDisplay: true)
-        multiview.updateDisplay(retired)
-        XCTAssertTrue(tile.decoder.processedFeed === retired.ciFeed)
-
-        let replacement = DisplayLayerView(tile.decoder.displayLayer)
-        let single = singleCameraDisplay(tile.decoder, hdrDisplay: false)
-        single.updateDisplay(replacement)
-        multiview.updateDisplay(retired)
-
-        XCTAssertTrue(tile.decoder.processedFeed === replacement.ciFeed)
-        XCTAssertTrue(tile.decoder.sampleBus === single.sampleBus)
-        XCTAssertFalse(tile.decoder.hdrDisplayEnabled)
-        tile.decoder.reset()
-    }
-
     func testRetiredHostCannotCloseReplacementDisplayReadiness() {
         let decoder = HevcDecoder()
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 640, height: 360))

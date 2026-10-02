@@ -22,13 +22,6 @@ private func hex(_ s: String) -> [UInt8] {
     }
 
     // The enable command, byte-checked against the captured frame.
-    @Test func liveViewEnableFrame() throws {
-        let bytes = Duml.encode(Commands.liveViewEnable(seq: 0xE06E))
-        let f = try #require(DumlTransport.scanFrames(bytes).first)
-        #expect(f.receiver == 0x08 && f.cmdSet == 0x09 && f.cmdId == 0xA8)
-        #expect(f.payload == [0x00, 0x04, 0x02, 0, 0, 0, 0, 0, 0, 0])
-    }
-
     @Test func liveViewPrepareIsTapFocusHint() throws {
         let prepare = Commands.liveViewPrepare()
         let hint = Commands.tapFocusLiveHint()
@@ -84,73 +77,5 @@ private func hex(_ s: String) -> [UInt8] {
     private let marker: [UInt8] = [0, 0, 1, 0xff] + [UInt8](repeating: 0, count: 13)
     private let slice: [UInt8] = [0, 0, 1, 0x02, 0xAA, 0xBB]
 
-    @Test func groupsFragmentsAndEmitsStrippedAccessUnit() {
-        var dp = HevcDepacketizer()
-        let frame = marker + slice
-        // Frame 0x10 split across two in-order fragments — nothing emitted yet.
-        #expect(dp.feed(videoPacket(frame: 0x10, pos: 0, Array(frame[0..<10]))) == nil)
-        #expect(dp.feed(videoPacket(frame: 0x10, pos: 1, Array(frame[10...]))) == nil)
-        // First fragment of frame 0x11 completes frame 0x10.
-        let au = dp.feed(videoPacket(frame: 0x11, pos: 0, marker))
-        #expect(au == slice)  // reassembled and DJI marker stripped
-    }
-
-    @Test func dropsFrameWithMissingFragment() {
-        var dp = HevcDepacketizer()
-        _ = dp.feed(videoPacket(frame: 0x20, pos: 0, marker))  // ok
-        _ = dp.feed(videoPacket(frame: 0x20, pos: 2, slice))  // pos 1 lost -> corrupt
-        let au = dp.feed(videoPacket(frame: 0x21, pos: 0, marker))  // completes frame 0x20
-        #expect(au == nil)  // dropped rather than fed to the decoder broken
-        #expect(dp.droppedIncomplete == 1)
-    }
-
     /// Capture: 108/1856 frames start at pos 128/192/320, not 0. Relative contiguity still holds.
-    @Test func acceptsFrameThatDoesNotStartAtPositionZero() {
-        var dp = HevcDepacketizer()
-        let frame = marker + slice
-        #expect(dp.feed(videoPacket(frame: 0x10, pos: 128, Array(frame[0..<10]))) == nil)
-        #expect(dp.feed(videoPacket(frame: 0x10, pos: 129, Array(frame[10...]))) == nil)
-        let au = dp.feed(videoPacket(frame: 0x11, pos: 0, marker))
-        #expect(au == slice)
-        #expect(dp.droppedIncomplete == 0)
-    }
-
-    @Test func frameCounterWrapDoesNotDropAContiguousFrame() {
-        var dp = HevcDepacketizer()
-        let frame = marker + slice
-        #expect(dp.feed(videoPacket(frame: 0xFF, pos: 0, Array(frame[0..<10]))) == nil)
-        #expect(dp.feed(videoPacket(frame: 0xFF, pos: 1, Array(frame[10...]))) == nil)
-        let au = dp.feed(videoPacket(frame: 0x00, pos: 0, marker))
-        #expect(au == slice)
-        #expect(dp.droppedIncomplete == 0)
-    }
-
-    @Test func ignoresNonVideoPackets() {
-        var dp = HevcDepacketizer()
-        var cmd = [UInt8](repeating: 0, count: 30)
-        cmd[6] = 0x05  // a command packet
-        #expect(dp.feed(cmd) == nil)
-    }
-
-    @Test func reusedFrameNumberStartsANewAccessUnit() {
-        var dp = HevcDepacketizer()
-        let frame = marker + slice
-        #expect(dp.feed(videoPacket(frame: 0x10, pos: 0, Array(frame[0..<10]))) == nil)
-        #expect(dp.feed(videoPacket(frame: 0x10, pos: 1, Array(frame[10...]))) == nil)
-        // GOP restart reuses frame 0x10 at pos 0 — close the previous AU.
-        let au = dp.feed(videoPacket(frame: 0x10, pos: 0, marker + slice))
-        #expect(au == slice)
-        #expect(dp.droppedIncomplete == 0)
-    }
-
-    @Test func duplicateFragmentDoesNotCorruptTheAU() {
-        var dp = HevcDepacketizer()
-        let frame = marker + slice
-        #expect(dp.feed(videoPacket(frame: 0x10, pos: 0, Array(frame[0..<10]))) == nil)
-        #expect(dp.feed(videoPacket(frame: 0x10, pos: 0, Array(frame[0..<10]))) == nil)
-        #expect(dp.feed(videoPacket(frame: 0x10, pos: 1, Array(frame[10...]))) == nil)
-        let au = dp.feed(videoPacket(frame: 0x11, pos: 0, marker))
-        #expect(au == slice)
-        #expect(dp.droppedIncomplete == 0)
-    }
 }

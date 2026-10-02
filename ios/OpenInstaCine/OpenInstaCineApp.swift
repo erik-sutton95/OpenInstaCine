@@ -5,7 +5,6 @@ import SwiftUI
 struct OpenInstaCineApp: App {
     init() {
         #if DEBUG
-            MultiviewUIReview.prepareIfRequested()
             ReliabilityReportingVerification.prepareIfRequested()
         #endif
         ReliabilityReporting.install()
@@ -31,8 +30,6 @@ struct OpenInstaCineApp: App {
         #if DEBUG
             if ReliabilityReportingVerification.mode != nil {
                 Text("Reliability verification")
-            } else if MultiviewUIReview.isActive {
-                MultiviewUIReviewRoot()
             } else {
                 AppRoot()
             }

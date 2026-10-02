@@ -4,29 +4,7 @@ import Testing
 
 @Suite struct BleAdvertTests {
     // The real Osmo Pocket 4 Pro advert (new format): productType 0x00da = 218 -> model 0x22.
-    @Test func pocket4ProNewFormat() {
-        let payload: [UInt8] = [
-            0x00, 0x00, 0x00, 0xEE, 0x00, 0x04, 0xBD, 0x6E, 0x56, 0x20, 0xDA, 0x00, 0x00, 0x10,
-        ]
-        let d = BleAdvert.decode(payload)
-        #expect(d.modelId == 0x22)
-        #expect(d.newFormat == true)
-        #expect(d.rawProductType == 218)
-    }
-
     // Classic format: model id in bytes [0:2], new-format flag (byte5 bit2) clear.
-    @Test func classicPocket4() {
-        let payload: [UInt8] = [0x21, 0x00, 0x00, 0x58, 0xB8, 0x00, 0x11, 0x22, 0x33, 0x44]
-        let d = BleAdvert.decode(payload)
-        #expect(d.modelId == 0x21)
-        #expect(d.newFormat == false)
-    }
-
-    @Test func emptyIsNil() {
-        #expect(BleAdvert.modelId([]) == nil)
-        #expect(BleAdvert.modelId([0x00, 0x00]) == nil)  // zero is not a model
-    }
-
     /// #124 / #413: operator chrome follows captured body capabilities; everything
     /// without evidence fails closed.
     @Test func bodyCapabilitiesFailClosed() {

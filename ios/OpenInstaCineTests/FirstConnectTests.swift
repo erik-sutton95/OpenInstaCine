@@ -212,14 +212,6 @@ final class FirstConnectTests: XCTestCase {
                 rebuildInFlight: false, secondsSinceLastRebuild: nil),
             "SET ACK late while video flows — leave the socket alone")
         XCTAssertFalse(
-            CameraSetMailbox.timeoutImpliesUplinkFailure(.launchPending),
-            "superseded shutter SET is not half-dead uplink")
-        XCTAssertTrue(CameraSetMailbox.timeoutImpliesUplinkFailure(.waitLate))
-        XCTAssertFalse(
-            CameraSetMailbox.timeoutImpliesUplinkFailure(
-                .waitLate, key: CameraSetMailbox.zoomOpcodeKey),
-            "missing 0xB8 ACK is not half-dead uplink")
-        XCTAssertFalse(
             FeedWatchdog.shouldRepeatRecoverEnable(
                 secondsSinceLastEnable: 5, secondsSinceLastRebuild: 2.6,
                 pathReady: true, lastBleNotifyAge: 0.2, hadVideo: true),

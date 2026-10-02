@@ -8,8 +8,6 @@ struct SavedCamerasView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.monitorWindowGeometry) private var windowGeometry
     let compact: Bool
-    @State private var showMultiview = false
-    @State private var addSetup: AddSetupTarget?
     /// A hotspot connect waiting for the operator to turn Personal Hotspot on.
     @State private var hotspotPrompt: SavedCamera?
     @State private var hotspotSettingsFor: SavedCamera?
@@ -67,10 +65,8 @@ struct SavedCamerasView: View {
                     else { return }
                     connect(camera, over: setup)
                 },
-                onAddSetup: { id in
-                    guard !connectionBusy, let camera = saved(id) else { return }
-                    addSetup = AddSetupTarget(camera: camera, page: .choose)
-                },
+                // Luna has only the Camera Wi-Fi setup: the adapter never offers Add setup.
+                onAddSetup: { _ in },
                 onForgetSetup: { id, setup in
                     guard !connectionBusy, let camera = saved(id),
                         let setup = CameraConnectionSetup(rawValue: setup)
@@ -81,11 +77,6 @@ struct SavedCamerasView: View {
                     guard !connectionBusy, let camera = saved(id) else { return }
                     let failed = model.session.connectionSetup
                     switch action {
-                    case "edit":
-                        let page: AddSetupView.Page =
-                            failed == .phoneHotspot
-                            ? .hotspot : .password(camera.ssid(for: .wifi) ?? "")
-                        addSetup = AddSetupTarget(camera: camera, page: page)
                     case "cameraWiFi": connect(camera, over: .cameraWiFi)
                     case "settings":
                         if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -98,24 +89,6 @@ struct SavedCamerasView: View {
         .ignoresSafeArea()
         .onAppear { orientation.start() }
         .onDisappear { orientation.stop() }
-        .sheet(item: $addSetup) { target in
-            let nearby = model.session.found.contains { $0.id == target.camera.id }
-            AddSetupView(
-                camera: target.camera,
-                scan: nearby
-                    ? { onFound in
-                        try await model.scanNetworks(with: target.camera, onFound: onFound)
-                    }
-                    : nil,
-                save: { setup, ssid, password in
-                    model.addSetup(setup, ssid: ssid, password: password, to: target.camera)
-                },
-                close: { addSetup = nil }, path: target.page == .choose ? [] : [target.page]
-            )
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(MonitorTheme.background)
-        }
         .alert(
             "Turn on Personal Hotspot",
             isPresented: Binding(
@@ -139,9 +112,6 @@ struct SavedCamerasView: View {
             hotspotSettingsFor = nil
             hotspotPrompt = camera
         }
-        .fullScreenCover(
-            isPresented: $showMultiview,
-            onDismiss: { model.session.startScan() }, content: { MultiviewView() })
     }
 
     /// iOS reports Personal Hotspot only once a device has joined it, so a hotspot connect
@@ -158,10 +128,4 @@ struct SavedCamerasView: View {
     private func saved(_ id: String) -> SavedCamera? {
         model.savedCameras.first { $0.id.uuidString == id }
     }
-}
-
-struct AddSetupTarget: Identifiable {
-    let camera: SavedCamera
-    let page: AddSetupView.Page
-    var id: UUID { camera.id }
 }

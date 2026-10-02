@@ -489,14 +489,6 @@ import Testing
 
     /// pktType 0x00, 8-byte transport header. Session/seq are not part of the
     /// ACK test — a mismatch here is how a real reply was treated as a miss.
-    @Test func handshakeAckIsPktType00() {
-        #expect(DumlTransport.isHandshake([0x30, 0x80, 0x34, 0x12, 0x00, 0x00, 0x00, 0x00]))
-        #expect(!DumlTransport.isHandshake([0x30, 0x80, 0x34, 0x12, 0x00, 0x00, 0x02, 0x00]))
-        #expect(!DumlTransport.isHandshake([0x30, 0x80, 0x34, 0x12, 0x00, 0x00, 0x04, 0x00]))
-        #expect(!DumlTransport.isHandshake([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))
-        #expect(!DumlTransport.isHandshake([]))
-    }
-
     /// One bind of 20×350 ms is not a kick if 192.168.2.x is still on the path.
     @Test func handshakeTimeoutRebindsWhileSoftAPUp() {
         #expect(CameraSoftAP.handshakeTimeoutStep(pathReady: true, rebindsUsed: 0) == .rebindUDP)
