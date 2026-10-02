@@ -3,6 +3,7 @@ package com.opencapture.openpocketcine
 import android.content.Context
 import androidx.core.content.edit
 import com.opencapture.monitorui.MonitorJoystickSize
+import com.opencapture.opencine.appkit.MonitorOperatorPreferences
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.feed.FeedUpscaleSwitch
 import com.opencapture.openpocketcine.feed.FeedUpscaler
@@ -186,15 +187,7 @@ enum class PortraitFeedAspect(val raw: String) {
     }
 }
 
-enum class OperatorSettingsTab(val title: String, val subtitle: String, val pill: String, val rail: String) {
-    LINK("Link", "Connection state and link behavior.", "LIVE", "Connection"),
-    SHARING("Sharing", "Coming soon.", "SHARE", "Coming soon"),
-    ASSIST("View Assist", "Behavior for live-view tools.", "ASSIST", "Scopes & overlays"),
-    CONTROLS("Controls", "Touch behavior and safety.", "TOUCH", "Dials and safety"),
-    DISPLAY("Display", "Live view buttons and chrome.", "VISIBILITY", "Live view"),
-    STORAGE("Storage", "Local cache and integrations.", "DATA", "Cache & accounts"),
-    SYSTEM("System", "App-level behavior.", "APP", "App behavior"),
-}
+typealias OperatorSettingsTab = com.opencapture.monitorui.settings.MonitorSettingsTab
 
 object OperatorPrefs {
     private const val PREFS = "openpocketcine.operator"
@@ -239,38 +232,20 @@ object OperatorPrefs {
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun keepScreenAwake(context: Context): Boolean {
-        val stored = prefs(context)
-        return when {
-            stored.contains(AWAKE) -> stored.getBoolean(AWAKE, true)
-            stored.contains(AWAKE_LEGACY) -> stored.getBoolean(AWAKE_LEGACY, true)
-            else -> true
-        }
-    }
+    private fun common(context: Context) = MonitorOperatorPreferences(
+        storage = prefs(context),
+        keys = MonitorOperatorPreferences.Keys(AWAKE, HDR_DISPLAY, RECORD_CONFIRM, HAPTICS,
+            CACHE_FULL_RESOLUTION, AWAKE_LEGACY),
+    )
 
-    fun setKeepScreenAwake(context: Context, value: Boolean) {
-        prefs(context).edit { putBoolean(AWAKE, value) }
-    }
-
-    fun hdrDisplay(context: Context): Boolean = prefs(context).getBoolean(HDR_DISPLAY, false)
-
-    fun setHdrDisplay(context: Context, value: Boolean) {
-        prefs(context).edit { putBoolean(HDR_DISPLAY, value) }
-    }
-
-    fun recordConfirmationEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(RECORD_CONFIRM, true)
-
-    fun setRecordConfirmationEnabled(context: Context, value: Boolean) {
-        prefs(context).edit { putBoolean(RECORD_CONFIRM, value) }
-    }
-
-    fun hapticsEnabled(context: Context): Boolean =
-        prefs(context).getBoolean(HAPTICS, true)
-
-    fun setHapticsEnabled(context: Context, value: Boolean) {
-        prefs(context).edit { putBoolean(HAPTICS, value) }
-    }
+    fun keepScreenAwake(context: Context): Boolean = common(context).keepScreenAwake
+    fun setKeepScreenAwake(context: Context, value: Boolean) { common(context).keepScreenAwake = value }
+    fun hdrDisplay(context: Context): Boolean = common(context).hdrDisplay
+    fun setHdrDisplay(context: Context, value: Boolean) { common(context).hdrDisplay = value }
+    fun recordConfirmationEnabled(context: Context): Boolean = common(context).recordConfirmation
+    fun setRecordConfirmationEnabled(context: Context, value: Boolean) { common(context).recordConfirmation = value }
+    fun hapticsEnabled(context: Context): Boolean = common(context).haptics
+    fun setHapticsEnabled(context: Context, value: Boolean) { common(context).haptics = value }
 
     fun gimbalStickSensitivity(context: Context): Int =
         prefs(context).getInt(GIMBAL, DEFAULT_GIMBAL_SENSITIVITY).coerceIn(1, 5)
@@ -492,16 +467,9 @@ object OperatorPrefs {
         prefs(context).edit { remove(CLIP_SHOT_COLOR) }
     }
 
-    fun cacheFullResolution(context: Context): Boolean =
-        if (prefs(context).contains(CACHE_FULL_RESOLUTION)) {
-            prefs(context).getBoolean(CACHE_FULL_RESOLUTION, true)
-        } else {
-            true
-        }
+    fun cacheFullResolution(context: Context): Boolean = common(context).cacheOriginals
 
-    fun setCacheFullResolution(context: Context, value: Boolean) {
-        prefs(context).edit { putBoolean(CACHE_FULL_RESOLUTION, value) }
-    }
+    fun setCacheFullResolution(context: Context, value: Boolean) { common(context).cacheOriginals = value }
 
     fun assistEncoded(context: Context): String? =
         prefs(context).getString(ASSIST_V1, null)

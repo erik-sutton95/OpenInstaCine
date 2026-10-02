@@ -14,6 +14,20 @@ and renderer implementations. [Baseline provenance](baseline-provenance.json)
 records original paths and source hashes. OpenPocketCine and OpenZCine were
 read as references and were not modified by this extraction.
 
+## Shared settings migration, 2026-10-03
+
+The actual operator page now uses OpenCine's `MonitorSettingsPage`, common settings controls,
+touch/safety section and HDR panel section on SwiftUI and Compose. Common stored choices
+forward through `MonitorOperatorPreferences` with the existing app domains and keys intact.
+Swift preference code moved from `LiveAssists.swift` to `OperatorPreferences.swift`; the
+remaining assist values retain their original storage behavior. The sync script excludes
+these migrated files so a Pocket sync cannot restore the deleted implementations.
+
+Remaining display, assist, storage/delivery and system sections still live in this app and
+will migrate separately. The ownership table below records the earlier extraction baseline.
+The settings migration preserves Android's existing Sharing placeholder and iOS's existing
+sharing support. Simulator rendering and automated checks do not qualify physical devices.
+
 ## Ownership and dependencies
 
 | Owner / location | Responsibility and current dependencies |

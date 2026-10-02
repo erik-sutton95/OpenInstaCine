@@ -475,7 +475,6 @@ fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {
         )
     val phaseLabel = connectionPhaseLabel(phase, failure)
     val view = LocalView.current
-    val hapticsEnabled = model.hapticsEnabled
     var legalKind by remember { mutableStateOf<LegalKind?>(null) }
     var expandedDisp by remember { mutableStateOf<PocketDispMode?>(null) }
     var confirmClearCache by remember { mutableStateOf(false) }
@@ -495,47 +494,23 @@ fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {
             .pointerInput(Unit) { detectTapGestures {} }
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        com.opencapture.openpocketcine.monitor.MonitorPageScaffold(
+        com.opencapture.monitorui.settings.MonitorSettingsPage(
+            brand = MonitorConfiguration.identity.wordmark,
+            selection = model.operatorSettingsTab,
+            onSelect = { model.operatorSettingsTab = it },
+            isLive = isLive, phaseLabel = phaseLabel, disconnect = model::disconnect,
+            feedback = { operatorHaptic(view, model.hapticsEnabled) },
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            navigationWidth = 190f,
-            heading = { com.opencapture.openpocketcine.monitor.MonitorPageHeading("Operator Setup", com.opencapture.openpocketcine.MonitorConfiguration.identity.wordmark) },
-            navigation = { portrait ->
-                Column(
-                    if (portrait) Modifier.fillMaxWidth() else Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(if (portrait) 9.dp else 8.dp),
-                ) {
-                    if (portrait) {
-                        SettingsTabStrip(model, hapticsEnabled, view)
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            SettingsSessionStatus(isLive, phaseLabel, Modifier.weight(1f))
-                            if (isLive) SettingsDisconnectButton(model)
-                        }
-                    } else {
-                        val railScroll = rememberScrollState()
-                        Column(
-                            Modifier.weight(1f).monitorScrollFade(railScroll).verticalScroll(railScroll),
-                        ) {
-                            Column(Modifier.fillMaxWidth().monitorTabStrip(vertical = true)) {
-                                OperatorSettingsTab.entries.forEach { tab ->
-                                    SettingsTabButton(tab, model, hapticsEnabled, view, Modifier.fillMaxWidth(), vertical = true)
-                                }
-                            }
-                        }
-                        SettingsSessionStatus(isLive, phaseLabel, Modifier.fillMaxWidth())
-                        // The landscape sidebar button spans the rail.
-                        if (isLive) SettingsDisconnectButton(model, Modifier.fillMaxWidth())
-                    }
-                }
-            },
-        ) {
-            SettingsContentPane(model = model, isLive = isLive, phaseLabel = phaseLabel,
-                bars = bars, statusColorMode = status.monitorColorMode, expandedDisp = expandedDisp,
-                onExpandDisp = { expandedDisp = it }, onLegal = { legalKind = it },
-                onClearCache = { confirmClearCache = true }, onOpenLut = { showLutPicker = true })
+        ) { tab ->
+            when (tab) {
+                OperatorSettingsTab.LINK -> LinkRows(model, isLive, phaseLabel, bars)
+                OperatorSettingsTab.SHARING -> SharingRows()
+                OperatorSettingsTab.ASSIST -> AssistRows(model, status.monitorColorMode) { showLutPicker = true }
+                OperatorSettingsTab.CONTROLS -> ControlsRows(model)
+                OperatorSettingsTab.DISPLAY -> DisplayRows(model, isLive, expandedDisp) { expandedDisp = it }
+                OperatorSettingsTab.STORAGE -> StorageRows(model) { confirmClearCache = true }
+                OperatorSettingsTab.SYSTEM -> SystemRows(model) { legalKind = it }
+            }
         }
         legalKind?.let { kind ->
             LegalDocumentScreen(kind = kind, onClose = { legalKind = null })
@@ -589,219 +564,6 @@ private fun liveCameraName(model: AppModel): String =
 @Composable
 private fun LutPickerHost(model: AppModel, onClose: () -> Unit) {
     LUTPicker(model = model, onClose = onClose)
-}
-
-@Composable
-private fun SettingsTopBar(
-    stacked: Boolean,
-    isLive: Boolean,
-    phaseLabel: String,
-    bars: Int,
-    cameraName: String,
-    fpsLabel: String,
-    hasVideoFormat: Boolean,
-    onDisconnect: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(
-                    com.opencapture.openpocketcine.MonitorConfiguration.identity.wordmark,
-                    style = LiveType.ui(9.5f, FontWeight.Bold).copy(letterSpacing = 0.8.sp),
-                    color = LiveDesign.accent,
-                )
-                Text(
-                    "Settings",
-                    style = LiveType.title(24f, FontWeight.SemiBold),
-                    color = LiveDesign.text,
-                    maxLines = 1,
-                )
-            }
-            if (!stacked) {
-                SessionControls(isLive, phaseLabel, bars, cameraName, fpsLabel, hasVideoFormat, onDisconnect)
-            }
-        }
-        if (stacked) {
-            SessionControls(isLive, phaseLabel, bars, cameraName, fpsLabel, hasVideoFormat, onDisconnect)
-        }
-    }
-}
-
-@Composable
-private fun SessionControls(
-    isLive: Boolean,
-    phaseLabel: String,
-    bars: Int,
-    cameraName: String,
-    fpsLabel: String,
-    hasVideoFormat: Boolean,
-    onDisconnect: () -> Unit,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (isLive) {
-            SettingsActionPill(
-                title = "Disconnect",
-                icon = OpcIcon.UNPLUG,
-                tint = LiveDesign.rec,
-                background = LiveDesign.rec.copy(alpha = 0.16f),
-                onClick = onDisconnect,
-            )
-        }
-        SettingsLiveTile(
-            isLive = isLive,
-            phaseLabel = phaseLabel,
-            bars = bars,
-            cameraName = cameraName,
-            fpsLabel = fpsLabel,
-            hasVideoFormat = hasVideoFormat,
-        )
-    }
-}
-
-/** Settings tabs breathe a little more than compact control tabs; the baseline stays continuous. */
-private val SettingsTabGap = 6.dp
-
-@Composable
-private fun SettingsDisconnectButton(model: AppModel, modifier: Modifier = Modifier) {
-    com.opencapture.monitorui.MonitorCameraAction(
-        text = "Disconnect",
-        primary = false,
-        enabled = true,
-        contentDescription = "Disconnect",
-        onClick = model::disconnect,
-        modifier = modifier,
-        destructive = true,
-        icon = { tint -> OpcIcon(OpcIcon.LINK_2_OFF, null, Modifier.size(14.dp), tint) },
-    )
-}
-
-@Composable
-private fun SettingsTabRail(model: AppModel, hapticsEnabled: Boolean, view: View) {
-    Column(
-        Modifier
-            .width(146.dp)
-            .fillMaxHeight()
-            .monitorTabStrip(vertical = true),
-        verticalArrangement = Arrangement.spacedBy(SettingsTabGap),
-    ) {
-        OperatorSettingsTab.entries.forEach { tab ->
-            SettingsTabButton(tab, model, hapticsEnabled, view, Modifier.fillMaxWidth(), vertical = true)
-        }
-    }
-}
-
-@Composable
-private fun SettingsTabStrip(
-    model: AppModel,
-    hapticsEnabled: Boolean,
-    view: View,
-    modifier: Modifier = Modifier,
-) {
-    val scroll = rememberScrollState()
-    Row(
-        modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .monitorScrollFade(scroll, vertical = false)
-            .horizontalScroll(scroll)
-            .monitorTabStrip()
-            .testTag("monitor.settings.tabs"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SettingsTabGap),
-    ) {
-        OperatorSettingsTab.entries.forEach { tab ->
-            SettingsTabButton(tab, model, hapticsEnabled, view, Modifier.wrapContentWidth())
-        }
-    }
-}
-
-@Composable
-private fun SettingsTabButton(
-    tab: OperatorSettingsTab,
-    model: AppModel,
-    hapticsEnabled: Boolean,
-    view: View,
-    modifier: Modifier = Modifier,
-    vertical: Boolean = false,
-) {
-    val selected = model.operatorSettingsTab == tab
-    val bringIntoView = remember { BringIntoViewRequester() }
-    LaunchedEffect(selected) { if (selected) bringIntoView.bringIntoView() }
-    MonitorTab(selected, onClick = {
-        if (tab != model.operatorSettingsTab) operatorHaptic(view, hapticsEnabled)
-        model.operatorSettingsTab = tab
-    }, modifier = modifier.height(44.dp).bringIntoViewRequester(bringIntoView)
-        .testTag("monitor.settings.tab.${tab.title}"), vertical = vertical,
-        separator = tab != OperatorSettingsTab.entries.first(), accessibilityLabel = tab.title) {
-        Column(Modifier.then(if (vertical) Modifier.fillMaxWidth() else Modifier),
-            verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(tab.title, style = LiveType.ui(12.5f, FontWeight.SemiBold),
-                color = if (selected) LiveDesign.accent else LiveDesign.muted, maxLines = 1)
-            Text(tab.rail, style = LiveType.ui(10f), color = LiveDesign.faint, maxLines = 1)
-        }
-    }
-}
-
-@Composable
-private fun SettingsContentPane(
-    model: AppModel,
-    isLive: Boolean,
-    phaseLabel: String,
-    bars: Int,
-    statusColorMode: Int,
-    expandedDisp: PocketDispMode?,
-    onExpandDisp: (PocketDispMode?) -> Unit,
-    onLegal: (LegalKind) -> Unit,
-    onClearCache: () -> Unit,
-    onOpenLut: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val tab = model.operatorSettingsTab
-    Column(
-        modifier.fillMaxSize(),
-    ) {
-        Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(tab.title, style = LiveType.title(17f, FontWeight.SemiBold), color = LiveDesign.text)
-                Text(tab.subtitle, style = LiveType.ui(10.5f), color = LiveDesign.muted, maxLines = 2)
-            }
-            Text(
-                tab.pill.uppercase(),
-                style = LiveType.mono(10f, FontWeight.Bold).copy(letterSpacing = 0.6.sp, color = LiveDesign.accent),
-                modifier =
-                    Modifier
-                        .border(1.dp, LiveDesign.accentDim, CircleShape)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        key(tab) {
-            val scroll = rememberScrollState()
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .monitorScrollFade(scroll)
-                        .verticalScroll(scroll)
-                        .padding(bottom = 22.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    when (tab) {
-                        OperatorSettingsTab.LINK ->
-                            LinkRows(model, isLive, phaseLabel, bars)
-                        OperatorSettingsTab.SHARING -> SharingRows()
-                        OperatorSettingsTab.ASSIST -> AssistRows(model, statusColorMode, onOpenLut)
-                        OperatorSettingsTab.CONTROLS -> ControlsRows(model)
-                        OperatorSettingsTab.DISPLAY ->
-                            DisplayRows(model, isLive, expandedDisp, onExpandDisp)
-                        OperatorSettingsTab.STORAGE -> StorageRows(model, onClearCache)
-                        OperatorSettingsTab.SYSTEM -> SystemRows(model, onLegal)
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -1252,34 +1014,14 @@ private fun ControlsRows(model: AppModel) {
     var gimbalGamepadStick by remember {
         mutableStateOf(OperatorPrefs.gimbalGamepadStick(context))
     }
-    SettingsRowCard(title = "Touch & safety") {
-        SettingsSwitchInlineRow(
-            title = "Record confirmation",
-            help = SettingsHelpCopy.RECORD_CONFIRMATION,
-            showTopDivider = false,
-            isOn = model.recordConfirmationEnabled,
-        ) {
-            operatorHaptic(view, model.hapticsEnabled)
-            model.updateRecordConfirmationEnabled(!model.recordConfirmationEnabled)
-        }
-        SettingsSwitchInlineRow(
-            title = "Haptics",
-            help = SettingsHelpCopy.HAPTICS,
-            isOn = model.hapticsEnabled,
-        ) {
-            val next = !model.hapticsEnabled
-            operatorHaptic(view, model.hapticsEnabled)
-            model.updateHapticsEnabled(next)
-        }
-        SettingsSwitchInlineRow(
-            title = "Keep screen awake",
-            help = SettingsHelpCopy.KEEP_SCREEN_AWAKE,
-            isOn = model.keepScreenAwake,
-        ) {
-            operatorHaptic(view, model.hapticsEnabled)
-            model.updateKeepScreenAwake(!model.keepScreenAwake)
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorOperatorSafetySettings(
+        recordConfirmation = model.recordConfirmationEnabled, haptics = model.hapticsEnabled,
+        keepScreenAwake = model.keepScreenAwake,
+        onRecordConfirmation = model::updateRecordConfirmationEnabled,
+        onHaptics = model::updateHapticsEnabled, onKeepScreenAwake = model::updateKeepScreenAwake,
+        hapticsHelp = SettingsHelpCopy.HAPTICS, keepScreenAwakeHelp = SettingsHelpCopy.KEEP_SCREEN_AWAKE,
+        feedback = { operatorHaptic(view, model.hapticsEnabled) },
+    )
     if (layout.gimbal) {
         SettingsRowCard(title = "Gimbal") {
             SettingsInlineRow(
@@ -1408,17 +1150,10 @@ private fun DisplayRows(
     onExpandDisp: (PocketDispMode?) -> Unit,
 ) {
     val view = LocalView.current
-    SettingsRowCard(title = "Panel") {
-        SettingsSwitchInlineRow(
-            title = "HDR display",
-            help = SettingsHelpCopy.HDR_DISPLAY,
-            showTopDivider = false,
-            isOn = model.hdrDisplay,
-        ) {
-            operatorHaptic(view, model.hapticsEnabled)
-            model.updateHdrDisplay(!model.hdrDisplay)
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorPanelSettings(
+        hdrDisplay = model.hdrDisplay, help = SettingsHelpCopy.HDR_DISPLAY,
+        onChange = model::updateHdrDisplay, feedback = { operatorHaptic(view, model.hapticsEnabled) },
+    )
     PocketDispMode.entries.forEach { mode ->
         SettingsRowCard(
             title = mode.settingsTitle,
@@ -1719,42 +1454,6 @@ private fun operatorHaptic(view: View, enabled: Boolean) {
 @Composable
 fun OperatorCloseButton(onClose: () -> Unit, modifier: Modifier = Modifier) {
     PanelCloseButton(onClick = onClose, modifier = modifier)
-}
-
-@Composable
-private fun SettingsSessionStatus(
-    isLive: Boolean,
-    phaseLabel: String,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier
-            .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(10.dp))
-            .padding(9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(
-            Modifier
-                .size(7.dp)
-                .background(if (isLive) LiveDesign.good else LiveDesign.faint, CircleShape),
-        )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                if (isLive) "Active link" else "No camera connected",
-                style = LiveType.ui(11.5f, FontWeight.SemiBold),
-                color = LiveDesign.text,
-                maxLines = 1,
-            )
-            Text(
-                phaseLabel,
-                style = LiveType.ui(9f),
-                color = LiveDesign.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
 }
 
 @Composable

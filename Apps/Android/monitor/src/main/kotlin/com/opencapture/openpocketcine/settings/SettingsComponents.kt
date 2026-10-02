@@ -124,45 +124,13 @@ fun SettingsRowCard(
     onReset: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .settingsCardSurface()
-            .padding(horizontal = 13.dp)
-            .padding(top = if (title != null) 0.dp else 8.dp, bottom = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(com.opencapture.monitorui.MonitorLayoutPolicy.SETTINGS_TITLE_CONTENT_GAP.dp),
-    ) {
-        if (title != null) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 11.dp)
-                    .heightIn(min = com.opencapture.monitorui.MonitorLayoutPolicy.SETTINGS_TITLE_MIN_HEIGHT.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(title, style = chromeStyle(13f, FontWeight.SemiBold), color = LiveDesign.text)
-                Spacer(Modifier.weight(1f))
-                if (onReset != null) SettingsResetButton(onClick = onReset)
-            }
-        }
-        content()
-    }
+    com.opencapture.monitorui.settings.MonitorSettingsRowCard(title = title, onReset = onReset, content = content)
 }
 
 /** Circular refresh-cw reset control (iOS `SettingsResetButton`, 28dp). */
 @Composable
 fun SettingsResetButton(onClick: () -> Unit) {
-    val description = "Reset to defaults"
-    Box(
-        Modifier.size(28.dp)
-            .background(LiveDesign.background.copy(alpha = 0.42f), CircleShape)
-            .border(1.dp, LiveDesign.hairline, CircleShape)
-            .settingsClickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        OpcIcon(OpcIcon.REFRESH_CW, null, Modifier.size(12.dp), LiveDesign.muted)
-    }
+    com.opencapture.monitorui.settings.MonitorSettingsResetButton(onClick = onClick)
 }
 
 /**
@@ -326,57 +294,7 @@ fun SettingsInlineRow(
     stacked: Boolean = false,
     trailing: @Composable () -> Unit,
 ) {
-    val inspectorHelp = LocalMonitorInspectorHelp.current
-    val label = @Composable {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                title,
-                style = chromeStyle(12.5f, FontWeight.SemiBold),
-                color = LiveDesign.text,
-                maxLines = if (stacked) 2 else 1,
-            )
-            if (inspectorHelp == null) help?.let { SettingsHelpBadge(it) }
-        }
-    }
-    Column {
-        if (showTopDivider) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(LiveDesign.hairline))
-        }
-        if (stacked) {
-            Column(
-                Modifier.fillMaxWidth().defaultMinSize(minHeight = 44.dp).padding(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                label()
-                Box(Modifier.fillMaxWidth()) { trailing() }
-            }
-        } else {
-            Row(
-                Modifier.fillMaxWidth().defaultMinSize(minHeight = 50.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                label()
-                Box(
-                    Modifier.weight(1f).padding(start = 4.dp),
-                    contentAlignment = Alignment.CenterEnd,
-                ) {
-                    trailing()
-                }
-            }
-        }
-        if (inspectorHelp == true && !help.isNullOrEmpty()) {
-            Text(
-                help,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                style = chromeStyle(10f, FontWeight.Normal),
-                color = LiveDesign.muted,
-            )
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorSettingsInlineRow(title = title, help = help, showTopDivider = showTopDivider, stacked = stacked, trailing = trailing)
 }
 
 /** Switch row inside a row card (iOS `SettingsSwitchInlineRow`). */
@@ -390,22 +308,7 @@ fun SettingsSwitchRow(
     testTag: String? = null,
     onToggle: () -> Unit,
 ) {
-    SettingsInlineRow(
-        title = title,
-        help = help,
-        showTopDivider = showTopDivider,
-        stacked = stacked,
-    ) {
-        val access =
-            Modifier.settingsClickable(role = Role.Switch, onClick = onToggle).semantics {
-                contentDescription = title
-                toggleableState = if (isOn) ToggleableState.On else ToggleableState.Off
-                stateDescription = if (isOn) "On" else "Off"
-            }.then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
-        Box(access) {
-            SettingsSwitchGraphic(isOn = isOn)
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorSettingsSwitchInlineRow(title = title, isOn = isOn, help = help, showTopDivider = showTopDivider, stacked = stacked, testTag = testTag, onToggle = onToggle)
 }
 
 /** iOS `SettingsSwitchInlineRow` — Pocket call-site alias of [SettingsSwitchRow]. */
@@ -440,46 +343,7 @@ fun SettingsSwitchInlineRow(
  */
 @Composable
 fun SettingsHelpBadge(text: String) {
-    var open by remember { mutableStateOf(false) }
-    val description = "Help"
-    Box {
-        // A 16dp mark inside a 24dp target. The full 44dp floor would reserve 44dp of ROW
-        // width on every helped row and squeeze the trailing control off a landscape-phone
-        // pane; 24dp still clears the WCAG 2.2 AA target size.
-        Box(
-            Modifier.size(24.dp)
-                .settingsClickable(role = Role.Button) { open = !open }
-                .semantics { contentDescription = description },
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                Modifier
-                    .size(16.dp)
-                    .background(LiveDesign.background.copy(alpha = 0.5f), CircleShape)
-                    .border(1.dp, LiveDesign.hairline, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                OpcIcon(OpcIcon.INFO, null, Modifier.size(9.dp), LiveDesign.faint)
-            }
-        }
-        if (open) {
-            Popup(onDismissRequest = { open = false }) {
-                Box(
-                    Modifier
-                        .width(248.dp)
-                        .background(LiveDesign.surface, ChromeShape)
-                        .border(1.dp, LiveDesign.hairline, ChromeShape)
-                        .padding(12.dp),
-                ) {
-                    Text(
-                        text,
-                        style = chromeStyle(12f, FontWeight.Normal),
-                        color = LiveDesign.text,
-                    )
-                }
-            }
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorSettingsHelpBadge(text = text)
 }
 
 /**
@@ -829,31 +693,13 @@ fun SettingsCrushClipSegmented(
 /** iOS `SettingsSwitchGraphic`: 39×22 capsule, cyan thumb on dim track when on. */
 @Composable
 fun SettingsSwitchGraphic(isOn: Boolean) {
-    val thumbX by animateFloatAsState(if (isOn) 20.5f else 3.5f, tween(160), label = "settings-switch")
-    Box(
-        Modifier
-            .size(39.dp, 22.dp)
-            .background(if (isOn) LiveDesign.accentDim else LiveDesign.surface, CircleShape)
-            .border(1.dp, if (isOn) LiveDesign.accentDim else LiveDesign.hairline, CircleShape),
-    ) {
-        Box(
-            Modifier
-                .offset(x = thumbX.dp, y = 3.5.dp)
-                .size(15.dp)
-                .background(if (isOn) LiveDesign.accent else LiveDesign.muted, CircleShape),
-        )
-    }
+    com.opencapture.monitorui.settings.MonitorSettingsSwitchGraphic(isOn = isOn)
 }
 
 /** Plain monospace value text (iOS `SettingsValueText`). */
 @Composable
 fun SettingsValueText(value: String) {
-    Text(
-        value,
-        style = chromeStyle(12.5f, FontWeight.Medium, mono = true),
-        color = LiveDesign.muted,
-        maxLines = 1,
-    )
+    com.opencapture.monitorui.settings.MonitorSettingsValueText(value = value)
 }
 
 /** Accent inline action ("Open", "Sign in") — the iOS System-tab link button treatment. */

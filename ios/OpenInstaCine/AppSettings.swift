@@ -222,110 +222,9 @@ struct CloseButton: View {
     }
 }
 
-struct HelpBadge: View {
-    let text: String
-    @State private var showing = false
-
-    var body: some View {
-        Button {
-            showing.toggle()
-        } label: {
-            OpcIcon.info
-                .foregroundStyle(LiveDesign.faint)
-                .frame(width: 9, height: 9)
-                .frame(width: 16, height: 16)
-                .background(LiveDesign.background.opacity(0.5), in: Circle())
-                .overlay(Circle().stroke(LiveDesign.hairline, lineWidth: 1))
-        }
-        .buttonStyle(.zcTapTarget)
-        .popover(isPresented: $showing) {
-            Text(text)
-                .font(LiveType.ui(size: 12, weight: .regular))
-                .foregroundStyle(LiveDesign.text)
-                .padding(12)
-                .frame(width: 248)
-                .fixedSize(horizontal: false, vertical: true)
-                .presentationCompactAdaptation(.popover)
-        }
-    }
-}
-
-struct SettingsInlineRow<Trailing: View>: View {
-    @Environment(\.monitorInspectorHelp) private var inspectorHelp
-    let title: String
-    var help: String? = nil
-    var showTopDivider = true
-    var stacked: Bool = false
-    @ViewBuilder let trailing: Trailing
-
-    var body: some View {
-        VStack(spacing: 0) {
-            if showTopDivider {
-                Rectangle().fill(LiveDesign.hairline).frame(height: 1)
-            }
-            if stacked {
-                stackedRow
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
-                        labelRow
-                        Spacer(minLength: 12)
-                        trailing
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    stackedRow
-                }
-            }
-            if inspectorHelp == true, let help, !help.isEmpty {
-                Text(help)
-                    .font(MonitorTheme.font(10)).foregroundStyle(MonitorTheme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 10)
-            }
-        }
-    }
-
-    private var stackedRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            labelRow
-            trailing
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, minHeight: 44)
-    }
-
-    private var labelRow: some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(
-                    LiveType.ui(
-                        size: CGFloat(MonitorSettingsCardMetrics.rowTitlePointSize),
-                        weight: .semibold)
-                )
-                .foregroundStyle(LiveDesign.text)
-                .lineLimit(stacked ? 2 : 1)
-                .fixedSize(horizontal: !stacked, vertical: true)
-                .layoutPriority(1)
-                .accessibilityIdentifier("monitor.settings.row.title")
-            if inspectorHelp == nil, let help { HelpBadge(text: help) }
-            if !stacked { Spacer(minLength: 0) }
-        }
-    }
-}
-
-struct SettingsValueText: View {
-    let value: String
-    var body: some View {
-        Text(value)
-            .font(MonitorTheme.font(12.5, weight: .medium)).monospacedDigit()
-            .foregroundStyle(LiveDesign.muted)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-    }
-}
+typealias HelpBadge = MonitorSettingsHelpBadge
+typealias SettingsInlineRow<Trailing: View> = MonitorSettingsInlineRow<Trailing>
+typealias SettingsValueText = MonitorSettingsValueText
 
 /// Compact mono value field with a number pad and a Done accessory.
 /// OpenZCine `SettingsNumberField` (`settings-num`). Used by any assist
@@ -483,22 +382,7 @@ struct SettingsActionPill: View {
     }
 }
 
-struct SettingsSwitchGraphic: View {
-    let isOn: Bool
-
-    var body: some View {
-        Capsule()
-            .fill(isOn ? LiveDesign.accentDim : LiveDesign.surface)
-            .frame(width: 39, height: 22)
-            .overlay(alignment: isOn ? .trailing : .leading) {
-                Circle()
-                    .fill(isOn ? LiveDesign.accent : LiveDesign.muted)
-                    .frame(width: 15, height: 15)
-                    .padding(3.5)
-            }
-            .overlay(Capsule().stroke(isOn ? LiveDesign.accentDim : LiveDesign.hairline))
-    }
-}
+typealias SettingsSwitchGraphic = MonitorSettingsSwitchGraphic
 
 /// OpenZCine `DisplayToggleItem` — compact switch tile for the DISP 2 assist pin grid.
 struct DisplayToggleItem: View {
@@ -537,43 +421,17 @@ struct SettingsSwitchInlineRow: View {
     let title: String
     var help: String? = nil
     var showTopDivider = true
-    var stacked: Bool = false
+    var stacked = false
     let isOn: Bool
     var identifier: String? = nil
     let action: () -> Void
 
     var body: some View {
-        SettingsInlineRow(
-            title: title, help: help, showTopDivider: showTopDivider, stacked: stacked
-        ) {
-            Button {
-                OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
-                action()
-            } label: {
-                SettingsSwitchGraphic(isOn: isOn)
-            }
-            .buttonStyle(.zcTapTarget)
-            .modifier(SettingsSwitchAccess(identifier: identifier, title: title, isOn: isOn))
-        }
-    }
-}
-
-private struct SettingsSwitchAccess: ViewModifier {
-    let identifier: String?
-    let title: String
-    let isOn: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if let identifier {
-            content
-                .accessibilityIdentifier(identifier)
-                .accessibilityLabel(title)
-                .accessibilityValue(isOn ? "On" : "Off")
-                .accessibilityAddTraits(.isButton)
-        } else {
-            content
-        }
+        MonitorSettingsSwitchInlineRow(
+            title: title, help: help, showTopDivider: showTopDivider, stacked: stacked,
+            isOn: isOn, identifier: identifier,
+            feedback: { OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled) },
+            action: action)
     }
 }
 
@@ -596,29 +454,13 @@ struct SettingsSegmented: View {
     }
 }
 
-enum SettingsRowChrome {
-    case liquidGlass
-    case surface
-}
-
 struct SettingsResetButton: View {
     @Environment(AppModel.self) private var model
     let action: () -> Void
-
     var body: some View {
-        Button {
-            OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled)
-            action()
-        } label: {
-            OpcIcon.refreshCw
-                .foregroundStyle(LiveDesign.muted)
-                .frame(width: 12, height: 12)
-                .frame(width: 28, height: 28)
-                .background(LiveDesign.background.opacity(0.42), in: Circle())
-                .overlay(Circle().stroke(LiveDesign.hairline, lineWidth: 1))
-        }
-        .buttonStyle(.zcTapTarget)
-        .accessibilityLabel("Reset to defaults")
+        MonitorSettingsResetButton(
+            feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) },
+            action: action)
     }
 }
 
@@ -696,92 +538,22 @@ enum OperatorSettingsHaptics {
 }
 
 struct SettingsRowCard<Content: View>: View {
-    var title: String? = nil
-    var onReset: (() -> Void)? = nil
-    var chrome: SettingsRowChrome = .surface
-    @ViewBuilder let content: Content
-
-    init(
-        title: String? = nil,
-        onReset: (() -> Void)? = nil,
-        chrome: SettingsRowChrome = .surface,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.onReset = onReset
-        self.chrome = chrome
-        self.content = content()
+    @Environment(AppModel.self) private var model
+    let title: String?
+    let onReset: (() -> Void)?
+    let content: Content
+    init(title: String? = nil, onReset: (() -> Void)? = nil, @ViewBuilder content: () -> Content) {
+        self.title = title; self.onReset = onReset; self.content = content()
     }
-
-    private var cardShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: LiveDesign.cornerRadius, style: .continuous)
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: CGFloat(MonitorSettingsCardMetrics.titleContentGap)) {
-            if let title {
-                HStack(alignment: .center, spacing: 8) {
-                    Text(title)
-                        .font(
-                            LiveType.ui(
-                                size: CGFloat(MonitorSettingsCardMetrics.titlePointSize),
-                                weight: .semibold)
-                        )
-                        .foregroundStyle(LiveDesign.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("monitor.settings.card.title")
-                    Spacer(minLength: 0)
-                    if let onReset {
-                        SettingsResetButton(action: onReset)
-                    }
-                }
-                .frame(
-                    minHeight: CGFloat(MonitorSettingsCardMetrics.titleMinHeight),
-                    alignment: .leading
-                )
-                .padding(.top, CGFloat(MonitorSettingsCardMetrics.titleTopPadding))
-            }
-            content
-        }
-        .padding(.horizontal, 13)
-        .padding(.bottom, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .modifier(SettingsRowChromeStyle(chrome: chrome, shape: cardShape))
+        MonitorSettingsRowCard(
+            title: title, onReset: onReset,
+            feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }
+        ) { content }
     }
 }
 
-private struct SettingsRowChromeStyle: ViewModifier {
-    let chrome: SettingsRowChrome
-    let shape: RoundedRectangle
-
-    func body(content: Content) -> some View {
-        switch chrome {
-        case .liquidGlass:
-            content.liquidGlass(in: shape)
-        case .surface:
-            content
-                .monitorCardSurface()
-        }
-    }
-}
-
-struct SettingsTabScrollArea<Content: View>: View {
-    let tabID: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 8) {
-                content
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 22)
-        }
-        .scrollDismissesKeyboard(.interactively)
-        .monitorScrollFade()
-        .id(tabID)
-    }
-}
+typealias SettingsTabScrollArea<Content: View> = MonitorSettingsTabScrollArea<Content>
 
 struct SettingsDashScale: View {
     let title: String

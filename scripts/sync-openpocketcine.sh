@@ -66,6 +66,12 @@ LUNA_OWNED=(
   OpenInstaCine/MonitorUIReview.swift
   OpenInstaCineTests/MonitorCanvasObservationTests.swift
   OpenInstaCineUITests/MonitorUIFlowTests.swift
+  # SHELL-03 I-4: common settings controls and preference storage are shared. These
+  # files retain app composition and existing key spellings until I-6 retires the sync.
+  OpenInstaCine/AppSettings.swift
+  OpenInstaCine/SettingsRootView.swift
+  OpenInstaCine/OperatorPreferences.swift
+  OpenInstaCine/LiveAssists.swift
   # What is left of upstream's startup chrome once the wizard moved to OpenCineAppKit (SHELL-02).
   OpenInstaCine/StartupChrome.swift
   OpenInstaCine/PictureEVMeter.swift

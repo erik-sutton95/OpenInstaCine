@@ -73,16 +73,7 @@ enum SettingsHelpCopy {
         "Remove local copies of saved freeze reports. Turn off Automatic error reports to clear pending uploads. Reports already sent cannot be removed here."
 }
 
-enum OperatorSettingsTab: String, CaseIterable, Identifiable {
-    case link = "Link"
-    case sharing = "Sharing"
-    case assist = "View Assist"
-    case controls = "Controls"
-    case display = "Display"
-    case storage = "Storage"
-    case system = "System"
-    var id: String { rawValue }
-}
+typealias OperatorSettingsTab = MonitorSettingsTab
 
 /// OpenZCine `OperatorSettingsPanel` chrome. Live chrome presents this; home uses `AppPanelHost`.
 ///
@@ -97,7 +88,6 @@ struct SettingsRootView: View {
 
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
-    @State private var keyboardInset: CGFloat = 0
     @State private var legalKind: LegalDocumentView.Kind?
     @State private var showLUTPicker = false
     @State private var showWatcherWiFiCode = false
@@ -121,17 +111,16 @@ struct SettingsRootView: View {
     @State private var gimbalGamepadStick = OperatorPrefs.gimbalGamepadStick
 
     var body: some View {
-        MonitorPage(
-            safeArea: safeArea, navigationWidth: 188,
-            heading: MonitorPageHeading(brand: "OpenInstaCine", title: "Operator Setup"),
-            backLabel: model.isLive ? "Back to live" : "Your cameras", back: dismiss
-        ) { portrait in
-            settingsNavigation(portrait: portrait)
-        } detail: { _ in
-            settingsContent
+        MonitorSettingsPage(
+            safeArea: safeArea, brand: "OpenInstaCine",
+            selection: Bindable(model).operatorSettingsTab,
+            isLive: model.isLive, phaseLabel: model.session.phase.label,
+            sharingSubtitle: "Share this feed with OpenInstaCine devices on the same camera Wi-Fi.",
+            feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) },
+            onClose: dismiss, disconnect: model.disconnect
+        ) { _ in
+            settingsRows
         }
-        .ignoresSafeArea()
-        .preferredColorScheme(.dark)
         .overlay {
             if let legalKind {
                 LegalDocumentView(kind: legalKind, onClose: { self.legalKind = nil })
@@ -162,152 +151,6 @@ struct SettingsRootView: View {
             onClose()
         } else {
             model.shell.dismissCover()
-        }
-    }
-
-    private func settingsNavigation(portrait: Bool) -> some View {
-        VStack(alignment: .leading, spacing: portrait ? 9 : 8) {
-            ScrollView(portrait ? .horizontal : .vertical, showsIndicators: false) {
-                // Settings tabs breathe a little more; the baseline stays continuous.
-                MonitorTabStrip(vertical: !portrait, spacing: 6) {
-                    ForEach(OperatorSettingsTab.allCases) { tab in
-                        MonitorNavigationItem(
-                            tab.rawValue, subtitle: tabSubtitle(tab),
-                            selected: model.operatorSettingsTab == tab,
-                            separator: tab != OperatorSettingsTab.allCases.first
-                        ) {
-                            if tab != model.operatorSettingsTab {
-                                OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled)
-                            }
-                            model.operatorSettingsTab = tab
-                        }
-                        .fixedSize(horizontal: portrait, vertical: false)
-                        .accessibilityIdentifier("monitor.settings.tab.\(tab.id)")
-                    }
-                }
-            }
-            .monitorScrollFade(portrait ? .horizontal : .vertical)
-            .frame(height: portrait ? 44 : nil)
-            .accessibilityIdentifier("monitor.settings.tabs")
-            sessionControls(portrait: portrait)
-        }
-    }
-
-    private func sessionControls(portrait: Bool) -> some View {
-        let layout =
-            portrait
-            ? AnyLayout(HStackLayout(spacing: 8))
-            : AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
-        return layout {
-            HStack(spacing: 8) {
-                Circle().fill(model.isLive ? Color.green : MonitorTheme.faint)
-                    .frame(width: 7, height: 7)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.isLive ? "Active link" : "No camera connected")
-                        .font(MonitorTheme.font(11.5, weight: .semibold))
-                        .foregroundStyle(MonitorTheme.text)
-                    Text(model.session.phase.label)
-                        .font(MonitorTheme.font(9)).foregroundStyle(MonitorTheme.muted)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(9)
-            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
-            if model.isLive {
-                Button {
-                    model.disconnect()
-                } label: {
-                    HStack(spacing: 7) {
-                        OpcIcon.link2Off.frame(width: 14, height: 14)
-                        Text("Disconnect")
-                    }
-                    // The landscape sidebar button spans the rail; portrait sits inline.
-                    .frame(maxWidth: portrait ? nil : .infinity)
-                }
-                .buttonStyle(CameraPageButtonStyle(destructive: true))
-            }
-        }
-    }
-
-    private var settingsContent: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(model.operatorSettingsTab.rawValue)
-                        .font(MonitorTheme.font(17, weight: .semibold))
-                        .foregroundStyle(LiveDesign.text)
-                    Text(subtitle)
-                        .font(MonitorTheme.font(10.5))
-                        .foregroundStyle(LiveDesign.muted)
-                        .lineLimit(2)
-                }
-                Spacer()
-                Text(pillText.uppercased())
-                    .font(MonitorTheme.font(10, weight: .bold)).monospacedDigit()
-                    .kerning(0.6)
-                    .foregroundStyle(LiveDesign.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .overlay(Capsule().stroke(LiveDesign.accentDim, lineWidth: 1))
-            }
-            SettingsTabScrollArea(tabID: model.operatorSettingsTab.id) {
-                MonitorCardColumns {
-                    settingsRows
-                }
-                .padding(.bottom, keyboardInset)
-            }
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: UIResponder.keyboardWillChangeFrameNotification)
-        ) { note in
-            guard let frame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
-            else { return }
-            let overlap = max(0, UIScreen.main.bounds.maxY - frame.minY)
-            withAnimation(.easeOut(duration: 0.2)) { keyboardInset = overlap }
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
-        ) { _ in
-            withAnimation(.easeOut(duration: 0.2)) { keyboardInset = 0 }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var subtitle: String {
-        switch model.operatorSettingsTab {
-        case .link: "Connection state and link behavior."
-        case .sharing: "Share this feed with OpenInstaCine devices on the same camera Wi-Fi."
-        case .assist: "Behavior for live-view tools."
-        case .controls: "Touch behavior and safety."
-        case .display: "Live view buttons and chrome."
-        case .storage: "Local cache and integrations."
-        case .system: "App-level behavior."
-        }
-    }
-
-    private var pillText: String {
-        switch model.operatorSettingsTab {
-        case .link: "Live"
-        case .sharing: "Share"
-        case .assist: "Assist"
-        case .controls: "Touch"
-        case .display: "Visibility"
-        case .storage: "Data"
-        case .system: "App"
-        }
-    }
-
-    private func tabSubtitle(_ tab: OperatorSettingsTab) -> String {
-        switch tab {
-        case .link: "Connection"
-        case .sharing: "SHARE"
-        case .assist: "Scopes & overlays"
-        case .controls: "Dials and safety"
-        case .display: "Live view"
-        case .storage: "Cache & accounts"
-        case .system: "App behavior"
         }
     }
 
@@ -617,19 +460,14 @@ struct SettingsRootView: View {
     // MARK: - Controls
 
     @ViewBuilder private var controlsRows: some View {
-        SettingsRowCard(title: "Touch & safety") {
-            SettingsSwitchInlineRow(
-                title: "Record confirmation", help: SettingsHelpCopy.recordConfirmation,
-                showTopDivider: false, isOn: model.recordConfirmationEnabled
-            ) { model.recordConfirmationEnabled.toggle() }
-            SettingsSwitchInlineRow(
-                title: "Haptics", help: SettingsHelpCopy.haptics, isOn: model.hapticsEnabled
-            ) { model.hapticsEnabled.toggle() }
-            SettingsSwitchInlineRow(
-                title: "Keep screen awake", help: SettingsHelpCopy.keepScreenAwake,
-                isOn: model.keepScreenAwake
-            ) { model.keepScreenAwake.toggle() }
-        }
+        MonitorOperatorSafetySettings(
+            recordConfirmation: Bindable(model).recordConfirmationEnabled,
+            haptics: Bindable(model).hapticsEnabled,
+            keepScreenAwake: Bindable(model).keepScreenAwake,
+            hapticsHelp: SettingsHelpCopy.haptics,
+            keepScreenAwakeHelp: SettingsHelpCopy.keepScreenAwake,
+            feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }
+        )
         let capabilities = OsmoMonitorPresentation.capabilities(model.session)
         if capabilities.gimbal {
             SettingsRowCard(title: "Gimbal") {
@@ -724,14 +562,10 @@ struct SettingsRootView: View {
 
     @ViewBuilder private var displayRows: some View {
         Group {
-            SettingsRowCard(title: "Panel") {
-                SettingsSwitchInlineRow(
-                    title: "HDR display",
-                    help: SettingsHelpCopy.hdrDisplay,
-                    showTopDivider: false,
-                    isOn: model.hdrDisplay
-                ) { model.hdrDisplay.toggle() }
-            }
+            MonitorPanelSettings(
+                hdrDisplay: Bindable(model).hdrDisplay, help: SettingsHelpCopy.hdrDisplay,
+                feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }
+            )
             dispSectionCard(
                 .live,
                 reset: { model.dispLive = .liveDefaults }
