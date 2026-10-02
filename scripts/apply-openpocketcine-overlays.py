@@ -55,28 +55,9 @@ def main() -> None:
     if "import MonitorUI" not in text:
         branding.write_text(text.replace("import SwiftUI\n", "import MonitorUI\nimport SwiftUI\n", 1))
 
-    startup = APP / "StartupChrome.swift"
-    replace_once(
-        startup,
-        "    static var accent: Color { LiveHDRDisplay.chromeColor(hex: 0x00A3E0) }\n",
-        "    static var accent: Color { LiveHDRDisplay.chromeColor(hex: MonitorTheme.accentRGB) }\n",
-    )
-
-    # --- Pairing and connection copy: the Insta360 app, not DJI Mimo / Frame Tap, holds a Luna. ---
-    for old_phrase, new_phrase in (
-        ("DJI Frame Tap or a running DJI Mimo holds", "A running Insta360 app holds"),
-        ("turn off DJI Frame Tap and force quit DJI Mimo", "force quit the Insta360 app"),
-        ("Turn off DJI Frame Tap and force quit DJI Mimo", "Force quit the Insta360 app"),
-        ("Force quit DJI Mimo", "Force quit the Insta360 app"),
-    ):
-        replace_phrase(startup, old_phrase, new_phrase)
-    pairing_tests = ROOT / "ios/OpenInstaCineTests/CameraPagePresentationTests.swift"
-    for old_phrase, new_phrase in (
-        ("turn off DJI Frame Tap and force quit DJI Mimo", "force quit the Insta360 app"),
-        ("Turn off DJI Frame Tap and force quit DJI Mimo", "Force quit the Insta360 app"),
-        ('.contains("DJI Frame Tap")', '.contains("Insta360 app")'),
-    ):
-        replace_phrase(pairing_tests, old_phrase, new_phrase)
+    # The pairing copy (the Insta360 app, not DJI Mimo / Frame Tap, holds a Luna) and the startup
+    # accent live in app-owned files since SHELL-02 (StartupChrome is Luna-owned; the cameras and
+    # pair pages come from OpenCineAppKit), so no overlay touches them.
 
     # --- Insta360 calls Normal "Standard" (ColorMode.labelOverrides, set at launch). ---
     snapshot_tests = ROOT / "ios/OpenInstaCineTests/CaptureQuickSnapshotTests.swift"
@@ -157,8 +138,7 @@ def main() -> None:
                  "            tile(.exposure, label: \"EXPOSURE\", value: expoValue, widest: \"Manual\")\n            LunaMeteringTile(session: model.session)\n")
 
     # --- Wordmark (the sync rename is case-sensitive) and public pages on the combined site. ---
-    for name in ("StartupChrome.swift", "AppSettings.swift"):
-        replace_phrase(APP / name, 'Text("OPENPOCKETCINE")', 'Text("OPENINSTACINE")')
+    replace_phrase(APP / "AppSettings.swift", 'Text("OPENPOCKETCINE")', 'Text("OPENINSTACINE")')
     site = "https://opencapture.org/openinstacine"
     for name, pairs in (
         ("AppSettings.swift", (("https://openinstacine.app/privacy/", f"{site}/privacy"),
