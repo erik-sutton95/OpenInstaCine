@@ -44,6 +44,8 @@ SIBLING_PACKAGES = {
                 "Sources/OpenCineMedia",
                 "Sources/OpenCineMotion",
                 "Sources/OpenCineRelay",
+                "Sources/OpenCineJNI",
+                "Sources/OpenCineJNISupport",
                 "Android",
             ],
         ),
