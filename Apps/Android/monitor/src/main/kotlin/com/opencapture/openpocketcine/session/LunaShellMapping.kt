@@ -1,6 +1,7 @@
 package com.opencapture.openpocketcine.session
 
 import com.opencapture.openpocketcine.EvComp
+import com.opencapture.opencine.core.CameraTimecode
 import com.opencapture.opencine.insta360.shell.CameraColorProfile
 import com.opencapture.opencine.insta360.shell.CameraFocusMode
 import com.opencapture.opencine.insta360.shell.CameraGimbalMode
@@ -219,14 +220,22 @@ internal object LunaShellMapping {
      * Time-of-day timecode, non-drop. Frames count at the recording rate, halved above 30
      * (50 and 100 count 25s, 60 and 120 count 30s); 25 until the rate is known.
      */
-    fun timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int): String {
+    fun timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int): String =
+        timecodeText(cameraTimecode(unixSeconds, timeZoneSeconds, fps))
+
+    fun cameraTimecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int): CameraTimecode {
         var base = if (fps > 0) fps else 25
         while (base > 30) base /= 2
         val local = unixSeconds + timeZoneSeconds
         val whole = kotlin.math.floor(local)
         val second = Math.floorMod(whole.toLong(), 86_400L).toInt()
         val frame = minOf(base - 1, ((local - whole) * base).toInt())
-        return String.format(Locale.US, "%02d:%02d:%02d:%02d", second / 3600, (second / 60) % 60, second % 60, frame)
+        return CameraTimecode(second / 3600, (second / 60) % 60, second % 60, frame, dropFrame = false)
+    }
+
+    /** `HH:MM:SS:FF`, the status text the HUD reads. */
+    fun timecodeText(timecode: CameraTimecode): String = with(timecode) {
+        String.format(Locale.US, "%02d:%02d:%02d:%02d", hours, minutes, seconds, frames)
     }
 
     /** Battery, storage and shooting mode (iOS `apply(device:)` + `applyDeviceStatus`). */

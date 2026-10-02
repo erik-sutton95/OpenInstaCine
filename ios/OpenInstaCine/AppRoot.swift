@@ -74,7 +74,7 @@ final class AppModel {
         let raw = session.status.colorMode
         let photo = session.status.isPhoto
         assist.evMeterFromPicture = !session.reportsMeteredEV
-        assist.cameraHasAudio = session.supportsAudio
+        assist.cameraHasAudio = OsmoMonitorPresentation.capabilities(session).audio
         assist.syncLUT(
             to: raw,
             family: session.bodyFamily,
@@ -317,7 +317,7 @@ final class AppModel {
     /// Whether `section` mounts right now: switched on, or force-mounted while that
     /// mode's chrome is being edited. Settings stays reachable if both modes hid it.
     func chromeSectionMounts(_ section: PocketDispChrome.Section) -> Bool {
-        if section == .timecode, !session.supportsTimecode { return false }
+        if section == .timecode, !OsmoMonitorPresentation.capabilities(session).timecode { return false }
         if let mode = chromeEditorMode, mode == currentDispMode,
             PocketDispChrome.isConfigurable(section, in: mode)
         {

@@ -25,6 +25,7 @@ the former repositories, now areas of OpenCine with the same product names and c
 | CORE-API: Kotlin shell contract and Luna adapter from OpenCineInsta360 `Android/` | `opencine/core-api-shared` | 9f5ee09 |
 | MEDIA-02 step 3: Android Vulkan renderer from OpenCineCore `:vulkan` | on this branch | e3e03ce |
 | RELEASE-01: sync narrowed to the iOS shell; three unreachable core types dropped | on this branch | 705d316, 764da0e |
+| SHELL-01 step 6: live monitor laid out from the Luna integration's capability projection | `opencine/shell-01` | see `git log` |
 
 ### Merged branches
 
@@ -63,6 +64,14 @@ Nothing is meant to look different. Underneath:
 - Shared UI and media: theme, Sora, icons and page layouts come from OpenCineUI; LUT, I-Log
   curve, scope and false-colour math come from OpenCineMedia. Screenshots matched before and
   after on the simulator.
+- Capability-driven layout (SHELL-01): the live monitor shows what the connected Luna declares
+  through OpenCine (`LunaCameraSession.layout`): gimbal and head tracking from its motion,
+  host-derived timecode, no audio levels, no iris. The app keeps only clip delete, clip star and
+  the internet hop. Differences: the Clean view settings no longer offer an AUDIO pin (Luna
+  reports no audio levels); with no camera connected, Settings shows no gimbal, joystick,
+  head-tracking, zoom chip or timecode rows on iPhone (nothing is declared yet; Android already
+  behaved this way). No
+  Multiview entry: the app qualifies no multicam budget.
 
 ## Physical device checklist (Luna Ultra, iOS and Android)
 
@@ -96,6 +105,11 @@ Nothing below has run on hardware.
     HDR panel and upscaler toggles never black the well; background return keeps the picture;
     Face AF tracks. Compare glass-to-glass latency, memory over 30 min live with LUT and WAVE, and
     thermal state after 20 min against `opencine/integration` without this branch.
+14. SHELL-01 (iPhone and Android, against `opencine/integration` without `opencine/shell-01`):
+    the joystick, gimbal sheet, motion overlay and head tracking (iPhone) appear and move the
+    head; no AUDIO tile, assist, meter or Clean view pin anywhere live; the live timecode runs
+    time of day and matches the camera clock after connect; zoom chip and FOCUS tile as before,
+    no APERTURE; record start and stop from the record button with and without confirmation.
 
 Known limits: two Luna cameras at once cannot be tested (LunaWiFi joins one camera access point,
 192.168.42.x); the two-session gate is simulated only. Android reports no serial on this path,

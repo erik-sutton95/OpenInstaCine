@@ -76,7 +76,7 @@ struct LiveAssistBar: View {
                     )
                 }
             }
-            if showsAudio, model.session.supportsAudio {
+            if showsAudio, OsmoMonitorPresentation.capabilities(model.session).audio {
                 if !groups.isEmpty { assistDivider }
                 AssistBarButton(
                     tool: .audioMeters, assist: assist, isLocked: locked, onPresent: presentOptions)

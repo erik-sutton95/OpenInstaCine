@@ -188,3 +188,19 @@ final class SessionIsolationTests: XCTestCase {
         shell.detachCore()
     }
 }
+
+@MainActor
+final class LunaLayoutTests: XCTestCase {
+    /// SHELL-01: the live monitor lays out what the Luna integration declares over the app base
+    /// (clip delete, clip star, internet hop); with no camera nothing is declared.
+    func testMonitorLaysOutTheLunaProjection() {
+        let shell = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
+        var base = MonitorLayoutCapabilities()
+        (base.clipDelete, base.clipStar, base.requiresInternetHop) = (true, true, true)
+        XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), base)
+        shell.attachCore(FakeLuna().connectedSession())
+        var luna = base
+        (luna.gimbal, luna.headTracking, luna.zoom, luna.focus, luna.timecode) = (true, true, true, true, true)
+        XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), luna, "no audio levels, no iris")
+    }
+}

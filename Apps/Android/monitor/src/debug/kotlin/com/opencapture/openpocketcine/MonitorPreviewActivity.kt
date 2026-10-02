@@ -33,7 +33,7 @@ import androidx.core.graphics.scale
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.opencapture.monitorui.MonitorCapabilities
+import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.openpocketcine.assists.MonitorAssistInspector
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraStatus
@@ -65,7 +65,7 @@ class MonitorPreviewActivity : ComponentActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         model = AppModel(applicationContext)
-        val capabilities = MonitorCapabilities(
+        val capabilities = MonitorLayoutCapabilities(
             gimbal = intent.getBooleanExtra("gimbal", true),
             zoom = intent.getBooleanExtra("zoom", true),
             focus = intent.getBooleanExtra("focus", true),
@@ -101,7 +101,7 @@ class MonitorPreviewActivity : ComponentActivity() {
 }
 
 @Composable
-private fun ReviewMonitor(model: AppModel, capabilities: MonitorCapabilities, sourceAspect: Float,
+private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabilities, sourceAspect: Float,
     safeTop: Float, safeBottom: Float, patterned: Boolean = false) {
     val status = remember(capabilities) {
         CameraStatus(batteryPercent = 80, storageTotalMb = 131072, storageFreeMb = 109568,

@@ -329,7 +329,7 @@ struct FieldMonitorAssistPalette: View {
         if model.session.status.isPhoto {
             return LiveAssistTool.toolbarCases
         }
-        return LiveAssistTool.toolbarCases + (model.session.supportsAudio ? [.audioMeters] : [])
+        return LiveAssistTool.toolbarCases + (OsmoMonitorPresentation.capabilities(model.session).audio ? [.audioMeters] : [])
     }
 
     private var shouldCollapse: Bool {

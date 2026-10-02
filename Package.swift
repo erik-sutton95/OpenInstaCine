@@ -38,7 +38,8 @@ let package = Package(
         ),
         .testTarget(
             name: "OpenPocketViewCoreTests",
-            dependencies: ["OpenPocketViewCore"],
+            // Insta360Apple: the shell reach is checked against what the Luna integration declares.
+            dependencies: ["OpenPocketViewCore", .product(name: "Insta360Apple", package: "OpenCine")],
             exclude: ["Fixtures"]
         ),
         // Header-only shim exposing the NDK's <jni.h> to Swift; empty on Darwin.

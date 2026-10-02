@@ -1,6 +1,8 @@
 import Foundation
+import Insta360Apple
 import MonitorPresentation
 import MonitorUI
+import OpenCineCore
 import OpenPocketViewCore
 import SwiftUI
 
@@ -16,16 +18,24 @@ enum OsmoMonitorPresentation {
         MonitorZoomCaption.label(factor: session.zoomReadout, opticalStops: session.zoomStops)
     }
 
-    static func capabilities(_ session: CameraSession) -> MonitorCapabilities {
-        // Luna phone protocol: no AF-S/AF-C switch, iris, audio meters, gimbal attitude
-        // (so no head tracking) or timecode. Favorites are kept on the phone. Simulator
-        // reviews use these same gates so screenshots show what a Luna operator sees.
-        return MonitorCapabilities(
-            gimbal: session.hasGimbal, zoom: session.supportsZoom,
-            focus: session.supportsFocusMode, iris: session.supportsAperture, audio: session.supportsAudio,
-            headTracking: true, clipDelete: true, clipStar: true,
-            requiresInternetHop: true, timecode: session.supportsTimecode)
+    /// What the monitor lays out: the Luna integration's projection of the connected camera
+    /// (`LunaCameraSession.layout`): gimbal and head tracking from its motion (GET_ANGLE is the
+    /// pose), host-derived timecode, no audio levels, no iris. Only clip delete, clip star and
+    /// the internet hop are the app's, until media and connection routes carry them (SHELL-02).
+    /// No session: the Core projection of nothing keeps the base. Simulator reviews open one
+    /// (`MonitorUIReview.prepare`), so screenshots show what a Luna operator sees.
+    static func capabilities(_ session: CameraSession) -> MonitorLayoutCapabilities {
+        (session.core.session as? LunaCameraSession)?.layout(base: appBase)
+            ?? MonitorLayoutCapabilities(CapabilitySnapshot(), base: appBase)
     }
+
+    private static let appBase: MonitorLayoutCapabilities = {
+        var base = MonitorLayoutCapabilities()
+        base.clipDelete = true
+        base.clipStar = true
+        base.requiresInternetHop = true
+        return base
+    }()
 }
 
 /// Luna METER tile beside EXPOSURE (overlay hook): tap switches Matrix and Face Priority

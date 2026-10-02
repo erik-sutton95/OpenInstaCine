@@ -9,8 +9,8 @@ extension HeadTrack {
     /// The shell's head-track and waypoint reach, inherited from the Pocket shell (display
     /// `0x04/0x05` degrees). Pan 0 is front; the positive arc passes selfie to raw −135°
     /// (= +225°). The other endpoint is −48°; the intervening negative arc is unreachable.
-    /// Luna's own reach (`MotionCapabilities.lunaUltra`) contains it, so shared motion bound to
-    /// it never commands Luna outside what Luna declares.
+    /// Luna's own reach (`LunaCameraSession.motion` in Insta360Apple) contains it, so shared
+    /// motion bound to it never commands Luna outside what Luna declares.
     public enum Reach {
         public static let panMinDeg = -48.0
         public static let panMaxDeg = 225.0
@@ -35,17 +35,6 @@ extension HeadTrack {
             bounds.project(lookRight: lookRight, lookUp: lookUp, yaw0: yaw0, pitch0: pitch0)
         }
     }
-}
-
-extension MotionCapabilities {
-    /// What Luna Ultra (fw 1.1.15) declares to shared motion: handle-frame pan and tilt
-    /// (cmd 226 SET_ANGLE), pitch -57...90, yaw one arc from about -125 through ±180 to -58.5
-    /// (unwrapped -58.5...235), no zoom in moves, no client rate cap (each SET re-plans), a
-    /// GET_ANGLE older than 0.3 s is not feedback, aim ends within 0.5°.
-    public static let lunaUltra = MotionCapabilities(
-        axes: [.pan, .tilt], frame: .handle,
-        bounds: MotionBounds(pan: -58.5...235, tilt: -57...90),
-        maxRateDegPerSec: nil, feedbackMaxAge: .milliseconds(300), arrivalToleranceDeg: 0.5)
 }
 
 // Call sites from before the move, bound to the shell reach.

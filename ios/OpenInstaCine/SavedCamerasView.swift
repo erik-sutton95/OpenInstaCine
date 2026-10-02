@@ -45,8 +45,7 @@ struct SavedCamerasView: View {
                 },
                 onCancel: { model.cancelPairing() }, onMedia: { model.homePanel = .media },
                 onSettings: { model.homePanel = .settings },
-                // Multiview stages several DJI bodies over RTMP; Luna has no equivalent.
-                onMultiview: nil,
+                // No Multiview entry: this app qualifies no multicam budget (one camera).
                 onWatchFeed: {
                     guard !connectionBusy else { return }
                     model.openWatcherBrowse()

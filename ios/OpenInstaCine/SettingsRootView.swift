@@ -820,7 +820,7 @@ struct SettingsRootView: View {
             help: "Standby / recording chip on the status bar.",
             isOn: chrome.wrappedValue.recReadout
         ) { chrome.wrappedValue.recReadout.toggle() }
-        if model.session.supportsTimecode {
+        if OsmoMonitorPresentation.capabilities(model.session).timecode {
             SettingsSwitchInlineRow(
                 title: "Timecode",
                 help: "Running timecode on the status bar.",
@@ -1140,7 +1140,8 @@ struct CleanViewPinStrip: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 116), spacing: 7)], spacing: 7) {
-            ForEach(LiveAssistTool.cleanPinCases) { tool in
+            // A camera without live audio levels offers no AUDIO pin.
+            ForEach(LiveAssistTool.cleanPinCases.filter { $0 != .audioMeters || OsmoMonitorPresentation.capabilities(model.session).audio }) { tool in
                 DisplayToggleItem(
                     title: tool.displaySettingsTitle,
                     isOn: model.assist.cleanViewPinnedTools.contains(tool)

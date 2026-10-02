@@ -194,7 +194,7 @@ struct LivePortraitAssistRail: View {
                             onPresent: presentOptions
                         )
                     }
-                    if model.session.supportsAudio, !model.session.status.isPhoto {
+                    if OsmoMonitorPresentation.capabilities(model.session).audio, !model.session.status.isPhoto {
                         AssistBarButton(
                             tool: .audioMeters,
                             assist: model.assist,

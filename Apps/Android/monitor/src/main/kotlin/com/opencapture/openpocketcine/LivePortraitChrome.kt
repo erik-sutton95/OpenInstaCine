@@ -216,7 +216,7 @@ fun LivePortraitChrome(
     fpsLabel: String = "—",
     bars: Int = 0,
     sourceIsVertical: Boolean = false,
-    capabilities: com.opencapture.monitorui.MonitorCapabilities = model.monitorCapabilities(status),
+    capabilities: com.opencapture.opencine.core.MonitorLayoutCapabilities = model.monitorLayout(),
     onTileFrame: (LiveSheet, ChromeRect) -> Unit = { _, _ -> },
     readoutFrame: ChromeRect = livePortraitReadoutFrame(layout, zones),
     onAssistBoundsChanged: (ChromeRect?) -> Unit = {},
@@ -728,7 +728,7 @@ fun LiveCaptureStrip(
             valueIcon = if (CaptureLists.wbIsAuto(status) && !awbLocked) OpcIcon.APERTURE else null))
         if (showFocus) add(value(LiveSheet.FOCUS, "FOCUS", status.focusLabel))
         if (showAperture) add(value(LiveSheet.APERTURE, "APERTURE", ApertureStrategy.tileValue(status)))
-        if (model?.session?.supportsAudio != false && CaptureShutterPolicy.showsAudioControls(status.shootingMode)) {
+        if (model?.monitorLayout()?.audio != false && CaptureShutterPolicy.showsAudioControls(status.shootingMode)) {
             add(value(LiveSheet.AUDIO, "AUDIO", status.audioLabel))
         }
     }

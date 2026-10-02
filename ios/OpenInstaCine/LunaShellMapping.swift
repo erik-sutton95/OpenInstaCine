@@ -1,6 +1,7 @@
 import Foundation
 import Insta360Apple
 import Insta360Protocol
+import OpenCineCore
 import OpenPocketViewCore
 
 /// Optimistic values the operator just asked for, held until the camera reports
@@ -315,13 +316,26 @@ enum LunaShellMapping {
     /// Time-of-day timecode, non-drop. Frames count at the recording rate, halved above 30
     /// (50 and 100 count 25s, 60 and 120 count 30s).
     static func timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int) -> String {
+        timecodeText(cameraTimecode(unixSeconds: unixSeconds, timeZoneSeconds: timeZoneSeconds, fps: fps))
+    }
+
+    static func cameraTimecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int) -> CameraTimecode {
         var base = fps > 0 ? fps : 25
         while base > 30 { base /= 2 }
         let local = unixSeconds + Double(timeZoneSeconds)
         let whole = local.rounded(.down)
         let second = ((Int(whole) % 86_400) + 86_400) % 86_400
         let frame = min(base - 1, Int((local - whole) * Double(base)))
-        return String(format: "%02d:%02d:%02d:%02d", second / 3600, (second / 60) % 60, second % 60, frame)
+        return CameraTimecode(
+            hours: second / 3600, minutes: (second / 60) % 60, seconds: second % 60, frames: frame,
+            dropFrame: false)
+    }
+
+    /// `HH:MM:SS:FF`, the status text the HUD reads.
+    static func timecodeText(_ timecode: CameraTimecode) -> String {
+        String(
+            format: "%02d:%02d:%02d:%02d", timecode.hours, timecode.minutes, timecode.seconds,
+            timecode.frames)
     }
 }
 

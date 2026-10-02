@@ -1,4 +1,5 @@
 import Foundation
+import Insta360Apple
 import Testing
 
 @testable import OpenPocketViewCore
@@ -10,14 +11,14 @@ import Testing
     /// reach, which lies inside the reach Luna declares, so they never command Luna past it.
     @Test func shellReachLiesInsideTheDeclaredLunaReach() {
         #expect(HeadTrackNative().bounds == HeadTrack.Reach.bounds)
-        #expect(MotionCapabilities.lunaUltra.bounds.contains(HeadTrack.Reach.bounds))
-        #expect(MotionCapabilities.lunaUltra.bounds.tilt == -57...90)
-        #expect(!MotionCapabilities.lunaUltra.axes.contains(.zoom), "Luna moves keep one zoom")
+        #expect(LunaCameraSession.motion.bounds.contains(HeadTrack.Reach.bounds))
+        #expect(LunaCameraSession.motion.bounds.tilt == -57...90)
+        #expect(!LunaCameraSession.motion.axes.contains(.zoom), "Luna moves keep one zoom")
         var track = HeadTrackNative()
         #expect(track.center(pose: origin) == .centered)
         for look in stride(from: -400.0, through: 400, by: 37) {
             let target = track.target(lookRightDeg: look, lookUpDeg: look / 2)
-            #expect(target.flatMap(MotionCapabilities.lunaUltra.target) != nil)
+            #expect(target.flatMap(LunaCameraSession.motion.target) != nil)
         }
     }
 

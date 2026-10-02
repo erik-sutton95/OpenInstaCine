@@ -197,6 +197,8 @@ afterEvaluate {
 dependencies {
     // Insta360 shell contract (CameraBackend, controls, media, values); brings OpenCineCore core.
     api(libs.opencine.insta360.shell)
+    // The Luna session's layout projection and host-derived timecode (SHELL-01).
+    implementation(libs.opencine.insta360.luna)
     api(libs.opencine.monitor.ui)
     implementation("com.opencapture.opencine:media:0.1.0-SNAPSHOT")
     // Live-view MediaCodec decoder (HevcDecoder), shared with OpenPocketCine.

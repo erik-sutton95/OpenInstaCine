@@ -461,7 +461,7 @@ fun LiveViewScreen(model: AppModel) {
             else if (fillCrop) portraitFillCropContent(layout.feed) else layout.onFeed
         var assistPaletteBounds by remember(vw, vh) { mutableStateOf<ChromeRect?>(null) }
         val showGimbalButton =
-            model.monitorCapabilities(status).gimbal &&
+            model.monitorLayout().gimbal &&
                 model.chromeSectionMounts(PocketDispSection.GIMBAL_STICK)
         val cluster = layout.gimbalCluster(showGimbalButton)
         val zoom = cluster.zoom
@@ -1361,7 +1361,7 @@ internal fun LandscapeChrome(
     zoomDialReadout: Double = zoomReadout,
     onTileFrame: (LiveSheet, ChromeRect) -> Unit = { _, _ -> },
     onStatusChipFrame: (PocketDispSection, ChromeRect) -> Unit = { _, _ -> },
-    capabilities: com.opencapture.monitorui.MonitorCapabilities = model.monitorCapabilities(status),
+    capabilities: com.opencapture.opencine.core.MonitorLayoutCapabilities = model.monitorLayout(),
     onAssistBoundsChanged: (ChromeRect?) -> Unit = {},
 ) {
     var stripQuick by remember { mutableStateOf(false) }

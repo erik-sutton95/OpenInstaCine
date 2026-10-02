@@ -1,5 +1,6 @@
 #if targetEnvironment(simulator)
     import Foundation
+    import Insta360Apple
     import OpenPocketViewCore
 
     /// Deterministic simulator-only presentation fixture. Opt-in environment values
@@ -106,6 +107,10 @@
             ]
             status.availableShutterDenoms = [25, 50, 100, 200, 500]
             model.session.status = status
+            // An unconnected Luna session: the screens lay out what it declares, through the
+            // same projection as a connected camera. Its snapshots are not followed, so the
+            // fixture status above stays.
+            model.session.core.session = model.session.backend.openSession()
             if ProcessInfo.processInfo.environment["OPV_UI_REVIEW_MOTION"] == "1" {
                 model.session.gimbalProgram = GimbalProgram(
                     a: .init(yawDeg: 0, pitchDeg: 0, zoom: 1, nativePitchDeg: 0),

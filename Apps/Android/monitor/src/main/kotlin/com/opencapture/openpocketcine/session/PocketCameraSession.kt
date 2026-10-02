@@ -16,6 +16,9 @@ import com.opencapture.opencine.core.CameraCommand
 import com.opencapture.opencine.core.CameraCommandIntent
 import com.opencapture.opencine.core.CameraSession as CoreCameraSession
 import com.opencapture.opencine.core.CameraSnapshot as CoreSnapshot
+import com.opencapture.opencine.core.CapabilitySnapshot
+import com.opencapture.opencine.core.MonitorLayoutCapabilities
+import com.opencapture.opencine.insta360.luna.LunaCameraSession
 import com.opencapture.opencine.core.CommandPreconditions
 import com.opencapture.opencine.core.CommandReceipt
 import com.opencapture.opencine.core.CommandStage
@@ -113,7 +116,7 @@ import com.opencapture.opencine.media.LivePipelineCadence
  */
 class PocketCameraSession(
     context: Context, borrowing: HevcDecoder? = null,
-    // Multiview is off on Luna ([supportsMultiview]); the lease is accepted for the shared AppModel only.
+    // No multicam budget in this app (one camera); the lease is accepted for the shared AppModel only.
     @Suppress("UNUSED_PARAMETER") controlLease: MultiviewControlLease? = null,
 ) {
     private val appContext = context.applicationContext
@@ -127,8 +130,6 @@ class PocketCameraSession(
     val capabilities: Set<CameraCapability> get() = backend.capabilities
     private fun can(capability: CameraCapability) = controls != null && capability in capabilities
 
-    /** Multiview drives several DUML datalinks; the Luna shell has one camera link. */
-    val supportsMultiview: Boolean get() = false
     internal val cadence = LivePipelineCadence()
     @Volatile internal var debugVideoPacketAdmission: (() -> Boolean)? = null
     internal var debugCameraSetResult: ((Int, Boolean) -> Unit)? = null
@@ -217,8 +218,6 @@ class PocketCameraSession(
     /** iOS `supportsFocusMode`: AF-S, AF-C and Product Showcase (option 93). */
     val supportsFocusMode: Boolean get() = can(CameraCapability.CAMERA_SETTINGS)
     val supportsTapFocus: Boolean get() = can(CameraCapability.FOCUS)
-    /** iOS `supportsAudio`: the Luna sends no audio levels, so AUDIO is hidden live (clip playback keeps its meters). */
-    val supportsAudio: Boolean get() = can(CameraCapability.AUDIO)
     /** iOS `reportsMeteredEV`: the Luna sends none, so the EV meter reads the picture. */
     val reportsMeteredEV: Boolean get() = CameraCapability.METERED_EV in capabilities
     /** DJI camcap hop to the log curve's native ISO on a color change; the Luna has none, so the ISO sheet hides the toggle. */
@@ -394,6 +393,13 @@ class PocketCameraSession(
         backend.connect(camera.id)
     }
 
+    /**
+     * What the monitor lays out: the Luna session's projection (iOS `LunaCameraSession.layout`).
+     * No session: the Core projection of nothing keeps [base].
+     */
+    fun layout(base: MonitorLayoutCapabilities): MonitorLayoutCapabilities =
+        (core as? LunaCameraSession)?.layout(base) ?: MonitorLayoutCapabilities(CapabilitySnapshot(), base)
+
     /** A fresh Core session per connection; recovery keeps it (its epoch advances on LIVE). */
     private fun openCore() {
         closeCore()
@@ -532,7 +538,9 @@ class PocketCameraSession(
         if (second == lastTimecodeSecond) return
         lastTimecodeSecond = second
         val zone = java.util.TimeZone.getDefault().getOffset(wall) / 1_000
-        _status.update { it.copy(timecode = LunaShellMapping.timecode(wall / 1_000.0, zone, it.fps)) }
+        val timecode = LunaShellMapping.cameraTimecode(wall / 1_000.0, zone, _status.value.fps)
+        _status.update { it.copy(timecode = LunaShellMapping.timecodeText(timecode)) }
+        (core as? LunaCameraSession)?.ingest(timecode)
     }
 
     private fun canSendControl(): Boolean {

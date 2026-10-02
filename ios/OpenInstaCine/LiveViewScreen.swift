@@ -1252,7 +1252,7 @@ private struct LiveScopeOverlays: View {
                 chromeClearance: clearance
             )
         }
-        if !model.isWatchingFeed, model.session.supportsAudio, !model.session.status.isPhoto,
+        if !model.isWatchingFeed, OsmoMonitorPresentation.capabilities(model.session).audio, !model.session.status.isPhoto,
             model.assist.isVisible(.audioMeters)
         {
             LiveAudioMeterOverlay(bounds: canvas, chromeClearance: clearance)

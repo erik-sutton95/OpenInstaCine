@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import Insta360Apple
 import Insta360Protocol
 import OpenPocketViewCore
 
@@ -37,10 +38,6 @@ extension CameraSession {
     /// Matrix / Face Priority metering (option 46), shown in the Exposure sheet.
     var supportsFaceMetering: Bool { true }
     var supportsAperture: Bool { false }
-    /// Luna phone protocol exposes no audio channel setting or meters.
-    var supportsAudio: Bool { false }
-    /// Luna reports no timecode; the REC timer carries elapsed time.
-    var supportsTimecode: Bool { true }
     /// Luna sends no metered EV; the EV meter reads the picture.
     var reportsMeteredEV: Bool { false }
     /// Auto ISO ceiling and native-ISO hop are Osmo camcap features; Luna has neither.
@@ -561,8 +558,8 @@ extension CameraSession {
     /// fw 1.1.15 reach: pitch -57.3...+90; yaw is one arc from about -125 through ±180
     /// to -58.5 (gap centred near -92, like the shell's `HeadTrack.Reach`), and SET_ANGLE
     /// takes yaw in -180...180 and routes around the stop itself. Declared once in
-    /// `MotionCapabilities.lunaUltra`.
-    static let gimbalPitchRange = MotionCapabilities.lunaUltra.bounds.tilt
+    /// `LunaCameraSession.motion`.
+    static let gimbalPitchRange = LunaCameraSession.motion.bounds.tilt
 
     func startGimbalAnglePoll() {
         gimbalAnglePoll?.cancel()
@@ -1389,7 +1386,9 @@ extension CameraSession {
         let second = Int(wall.rounded(.down))
         guard second != lastTimecodeSecond else { return }
         lastTimecodeSecond = second
-        status.timecode = LunaShellMapping.timecode(
+        let timecode = LunaShellMapping.cameraTimecode(
             unixSeconds: wall, timeZoneSeconds: TimeZone.current.secondsFromGMT(), fps: status.fps)
+        status.timecode = LunaShellMapping.timecodeText(timecode)
+        (core.session as? LunaCameraSession)?.ingest(timecode: timecode)
     }
 }

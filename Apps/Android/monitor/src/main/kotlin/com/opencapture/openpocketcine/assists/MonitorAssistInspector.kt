@@ -31,6 +31,7 @@ import com.opencapture.monitorui.monitorScrollFade
 import com.opencapture.openpocketcine.AppModel
 import com.opencapture.openpocketcine.LocalOperatorHaptics
 import com.opencapture.openpocketcine.LiveDesign
+import com.opencapture.openpocketcine.monitorLayout
 import com.opencapture.openpocketcine.LiveType
 
 /** Assist options ride the shared inspector frame; preview work stays in AssistOptionsPopup. */
@@ -47,7 +48,7 @@ fun MonitorAssistInspector(
 ) {
     var helpVisible by remember { mutableStateOf(false) }
     // Live AUDIO only where the camera reports levels; clip playback keeps its meters.
-    val tabs = LiveAssistTool.settingsCases.filter { it != LiveAssistTool.AUDIO || playback || model?.session?.supportsAudio != false }
+    val tabs = LiveAssistTool.settingsCases.filter { it != LiveAssistTool.AUDIO || playback || model?.monitorLayout()?.audio != false }
     MonitorInspector(
         title = tool.title,
         helpVisible = helpVisible,
