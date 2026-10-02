@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Brand hunks applied after every OpenPocketCine sync (see sync-openpocketcine.sh).
 
-Keep these patches tiny and exact. Camera protocol lives in the sibling OpenCineInsta360
-package and in the
+Keep these patches tiny and exact. Camera protocol lives in the sibling OpenCine
+package (Insta360 products) and in the
 Luna-owned shell files listed in sync-openpocketcine.sh. If a hunk stops matching,
 the sync fails instead of silently shipping a blue OpenPocketCine clone.
 """

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Check out each shared OpenCine package pinned in opencine-pins.txt next to this
+# Check out the OpenCine platform repository pinned in opencine-pins.txt next to this
 # repository (../<Name>) at its exact commit, then verify the commit. Never follows a branch.
 # Usage: scripts/checkout-opencine.sh [base-url]   (default https://github.com/erik-sutton95)
 set -eu

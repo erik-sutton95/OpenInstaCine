@@ -156,8 +156,8 @@ val stageSwiftCore =
                 include("Package.swift", "Package.resolved", "Sources/**", "Adapters/OsmoCompatibility/Sources/**")
             },
             // OpenCineMedia, OpenCineMotion, OpenCineRelay (and OpenCineCore, which they depend on): the root
-            // Package.swift takes them from the sibling OpenCineCore checkout.
-            fileTree(repositoryRoot.resolve("../OpenCineCore")) {
+            // Package.swift takes them from the sibling OpenCine checkout.
+            fileTree(repositoryRoot.resolve("../OpenCine")) {
                 include(
                     "Package.swift",
                     "Sources/OpenCineMedia/**",

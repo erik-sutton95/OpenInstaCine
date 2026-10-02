@@ -2,7 +2,14 @@
 
 Branch `opencine/integration` combines every local OpenCine candidate for OpenInstaCine so it
 can be reviewed and device-tested once. Local only: nothing is pushed, and it cannot build in
-CI until the shared repositories are published (see the end of this page).
+CI until the OpenCine repository is published (see the end of this page).
+
+Since 2026-10-02 every shared package lives in one platform repository, OpenCine (`../OpenCine`,
+pinned by one line in `opencine-pins.txt`): one `OpenCine` path package in `ios/project.yml` and
+`Package.swift`, one Android included build `../../../OpenCine/Android` named `opencine`. The
+sections below record the work packages as they landed; the repository names they cite
+(OpenCineUI, OpenCineCore, OpenCineInsta360 and their `opencinecore`/`opencineinsta360` builds) are
+the former repositories, now areas of OpenCine with the same product names and coordinates.
 
 ## What it combines
 
@@ -31,17 +38,16 @@ Merged into `opencine/integration` with `--no-ff` on 2026-10-02, in this order:
   to each sibling's current main; `settings.gradle.kts` includes `opencinecore`,
   `opencineinsta360` and OpenCineUI once each; build identity hashes the union)
 
-Pins now (`opencine-pins.txt`, each sibling's `main`): OpenCineUI 54bcbb3, OpenCineCore 23adfdf
+Pins then (before the consolidation into OpenCine): OpenCineUI 54bcbb3, OpenCineCore 23adfdf
 (motion, relay, Apple runtime, harness fixes, `:vulkan`; README-only on top of 7a17350), OpenCineInsta360 f8f4c27 (Swift
 products plus `Android/` shell contract and Luna adapter, harness fixes).
 
 Base is `opencine/state-01-luna`; the other two are merged with `--no-ff`. Pinned siblings
 (`opencine-pins.txt`): OpenCineUI 54bcbb3, OpenCineCore 8c2415c (contains the MEDIA-01
 commit 248b858 the media branch pinned). `ios/project.yml` names both packages by path;
-Android includes `../../../OpenCineUI/Android` (default name `Android`) and
-`../../../OpenCineCore/Android` (named `opencinecore`). The root `Package.swift` takes
-OpenCineMedia from `../OpenCineCore`, the same checkout the app project names, so Xcode sees
-one package identity. `tools/build-identity.py` hashes both siblings on both platforms
+Android included the OpenCineUI and OpenCineCore Android builds (the latter named
+`opencinecore`). The root `Package.swift` took OpenCineMedia from the same OpenCineCore checkout
+the app project named, so Xcode saw one package identity. `tools/build-identity.py` hashed both siblings on both platforms
 (OpenCineCore `Package.swift` and `Sources`, plus `Android` for Android builds).
 
 ## What changes for users
@@ -151,7 +157,7 @@ OpenCineInsta360 `Android/` builds `com.opencapture.opencine:insta360-shell` (th
 `CameraReadout` and the other Luna-shaped values, package `com.opencapture.opencine.insta360.shell`)
 and `com.opencapture.opencine:insta360-luna` (`LunaBackend`, `LunaCameraSession`, package
 `com.opencapture.opencine.insta360.luna`), substituted from the included build `opencineinsta360`
-(`../../../OpenCineInsta360/Android`, pinned with the Swift package). `:monitor` depends on the
+(the OpenCineInsta360 Android build, pinned with the Swift package; now OpenCine `Android/`). `:monitor` depends on the
 contract, `:app` on the adapter. `BrandIdentity` is app-owned and now lives next to
 `MonitorConfiguration`; the legacy `CameraSession` seam (phase/startScan/disconnect) is retired.
 The SharedPreferences name `openinstacine.client-identity` stays the `LunaBackend` default (pinned
@@ -161,7 +167,7 @@ approval on the camera screen.
 
 ## Publishing prerequisite
 
-The OpenCineUI, OpenCineCore and OpenCineInsta360 repositories must exist before CI, Xcode Cloud or another
-machine can build this branch: `scripts/checkout-opencine.sh` fetches the pinned SHAs from them.
-Follow `opencapture-atlas/docs/PUBLISH.md`, then replace the path packages and included builds
-with url + version pins and Maven coordinates.
+The OpenCine repository must exist before CI, Xcode Cloud or another machine can build this
+branch: `scripts/checkout-opencine.sh` fetches the pinned SHA from it. Follow
+`OpenCine/atlas/docs/PUBLISH.md`, then replace the path package and included build with a url +
+version pin and Maven coordinates.

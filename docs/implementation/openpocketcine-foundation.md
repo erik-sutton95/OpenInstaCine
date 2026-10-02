@@ -8,18 +8,18 @@ already drifted from current OpenPocketCine.
 
 Until the two products share a monorepo, OpenInstaCine **vendors** the OpenPocketCine iOS
 presentation shell, then overlays brand identity and the Luna adapter. Everything that has a
-shared OpenCine package comes from that package at the SHA pinned in `opencine-pins.txt`, never
-from a copy:
+shared OpenCine package comes from the OpenCine platform repository (`../OpenCine`) at the SHA
+pinned in `opencine-pins.txt`, never from a copy:
 
 | Shared system | Owner | How OpenInstaCine gets it |
 | --- | --- | --- |
-| Design system (`MonitorUI`, `MonitorPresentation`, Android `monitor-ui`) | OpenCineUI | `ios/project.yml` path package; `includeBuild("../../../OpenCineUI/Android")` |
-| Camera contracts, media math, motion, relay, Apple decode runtime | OpenCineCore (`OpenCineCore`, `OpenCineMedia`, `OpenCineMotion`, `OpenCineRelay`, `OpenCineApple`) | root `Package.swift` and `ios/project.yml` path package |
-| Android core, media and the native Vulkan renderer (`libopc_vulkan.so`, `feed.OpcVulkan`) | OpenCineCore `Android/` (`:core`, `:media`, `:vulkan`) | `includeBuild(".../OpenCineCore/Android")` named `opencinecore` |
-| Luna protocol, Apple I/O, Kotlin shell contract and Luna adapter | OpenCineInsta360 (Swift products, `Android/` `insta360-shell`, `insta360-luna`) | path package; `includeBuild(".../OpenCineInsta360/Android")` |
-| DJI protocol and session | OpenCineDJI | not linked: the Luna build never needs it |
+| Design system (`MonitorUI`, `MonitorPresentation`, Android `monitor-ui`) | OpenCine | `ios/project.yml` path package `OpenCine`; Android `monitor-ui` from the included build `../../../OpenCine/Android` (named `opencine`) |
+| Camera contracts, media math, motion, relay, Apple decode runtime | OpenCine (`OpenCineCore`, `OpenCineMedia`, `OpenCineMotion`, `OpenCineRelay`, `OpenCineApple`) | root `Package.swift` and `ios/project.yml` path package |
+| Android core, media and the native Vulkan renderer (`libopc_vulkan.so`, `feed.OpcVulkan`) | OpenCine `Android/` (`:core`, `:media`, `:vulkan`) | the same `opencine` included build |
+| Luna protocol, Apple I/O, Kotlin shell contract and Luna adapter | OpenCine (Swift products, `Android/` `insta360-shell`, `insta360-luna`) | path package; the same `opencine` included build |
+| DJI protocol and session | OpenCine (`OpenCineDJI`) | not linked: the Luna build never needs it |
 
-Change shared code in its package, then move the pin.
+Change shared code in OpenCine, then move the pin.
 
 ```sh
 just sync-openpocketcine
@@ -107,7 +107,7 @@ package), then re-sync. OpenInstaCine-owned code is:
 | Brand storefront | `LUNA_OWNED` files in `ios/OpenInstaCine`, `Apps/Android/app` |
 | Swift core and JNI facade | `Package.swift`, `Sources/`, `Tests/` |
 | Android shell | `Apps/Android` (`:monitor` is the inherited presentation, `:app` the brand) |
-| Luna protocol, Apple I/O, Kotlin shell contract and adapter | sibling OpenCineInsta360 |
+| Luna protocol, Apple I/O, Kotlin shell contract and adapter | sibling OpenCine (Insta360 products) |
 | Overlays / sync | `scripts/sync-openpocketcine.sh`, `scripts/apply-openpocketcine-overlays.py` |
 | Protocol research | `docs/research`, `tools/luna_*` |
 

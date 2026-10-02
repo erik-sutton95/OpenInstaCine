@@ -7,9 +7,9 @@
 #   NEW_COMMIT=<sha> scripts/sync-openpocketcine.sh             # sync to <sha> instead of HEAD
 #
 # Scope (RELEASE-01; docs/implementation/openpocketcine-foundation.md, "Sync scope"): ios/
-# and three neutral tools, nothing else. Shared code reaches this app only through its pinned
-# OpenCine packages (OpenCineUI, OpenCineCore with Media/Motion/Relay/Apple/FrameIO and the
-# Android :vulkan renderer, OpenCineInsta360), never through this script. The Swift core (Package.swift,
+# and three neutral tools, nothing else. Shared code reaches this app only through the pinned
+# OpenCine platform package (../OpenCine: MonitorUI, OpenCineCore with Media/Motion/Relay/Apple/
+# FrameIO, the Android :vulkan renderer and the Insta360 products), never through this script. The Swift core (Package.swift,
 # Sources/, Tests/) and Apps/Android are OpenInstaCine-owned: upstream's core now depends on
 # OpenCineDJI, which this app does not link, and ours carries the STATE-01 Luna edits.
 #
@@ -35,7 +35,7 @@ NEW="$(git -C "$SRC" rev-parse --verify "${NEW_COMMIT:-HEAD}^{commit}")"
 
 # Files OpenInstaCine owns inside ios/ (Luna seams, brand assets, package graph). Never touched
 # by a sync; upstream edits to them are reported for porting by hand. Luna protocol and Apple
-# adapter code lives in the sibling OpenCineInsta360 package.
+# adapter code lives in the sibling OpenCine package (Insta360Protocol, Insta360Apple).
 LUNA_OWNED=(
   OpenInstaCine/CameraSession.swift
   OpenInstaCine/CameraSessionControls.swift
@@ -52,11 +52,11 @@ LUNA_OWNED=(
   OpenInstaCineWatch/Assets.xcassets
   TestFlight
   Config/Version.xcconfig
-  # Package graph: OpenCineInsta360 here, OpenCineDJI/OpenCineMulticam upstream.
+  # Package graph: the Insta360 products of OpenCine here, OpenCineDJI/OpenCineMulticam upstream.
   project.yml
   Package.resolved
   ci_scripts
-  # Upstream's Frame.io client moved into OpenCineCore's OpenCineFrameIO (OPTIONAL-01); this
+  # Upstream's Frame.io client moved into OpenCine's OpenCineFrameIO (OPTIONAL-01); this
   # copy stays until OpenInstaCine adopts that product.
   OpenInstaCine/Frameio
 )

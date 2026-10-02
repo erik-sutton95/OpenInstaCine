@@ -26,20 +26,27 @@ def identity(root: Path, platform: str, configuration: str) -> str:
 
 
 SIBLING_PACKAGES = {
-    # OpenCineCore: Swift contracts, OpenCineMedia (iOS app and the Swift Android core) and OpenCineApple (iOS app)
-    # plus the Kotlin core, media and native Vulkan renderer (`:vulkan`, C++ and shaders) included by
-    # Apps/Android/settings.gradle.kts, so a renderer edit changes the Android identity.
-    # OpenCineInsta360: the Luna protocol and Apple adapter (iOS), the Kotlin shell contract and
-    # Luna adapter (Android/, included by Apps/Android/settings.gradle.kts).
+    # OpenCine (one platform repository): iOS links OpenCineCore, OpenCineMedia, OpenCineMotion,
+    # OpenCineRelay, OpenCineApple, MonitorUI/MonitorPresentation and the Insta360 products. The
+    # Swift Android core (scripts/android-stage-swift-core.sh) compiles OpenCineCore, OpenCineMedia,
+    # OpenCineMotion and OpenCineRelay; Apps/Android/settings.gradle.kts includes OpenCine/Android
+    # (core, media, the native Vulkan renderer, monitor-ui, the Insta360 shell contract and Luna
+    # adapter), so a renderer edit changes the Android identity.
     "ios": [
-        ("OpenCineUI", ["Package.swift", "Sources"]),
-        ("OpenCineCore", ["Package.swift", "Sources"]),
-        ("OpenCineInsta360", ["Package.swift", "Sources"]),
+        ("OpenCine", ["Package.swift", "Sources"]),
     ],
     "android": [
-        ("OpenCineUI", ["Android"]),
-        ("OpenCineCore", ["Package.swift", "Sources", "Android"]),
-        ("OpenCineInsta360", ["Android"]),
+        (
+            "OpenCine",
+            [
+                "Package.swift",
+                "Sources/OpenCineCore",
+                "Sources/OpenCineMedia",
+                "Sources/OpenCineMotion",
+                "Sources/OpenCineRelay",
+                "Android",
+            ],
+        ),
     ],
 }
 

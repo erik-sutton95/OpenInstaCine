@@ -63,7 +63,7 @@ class BuildIdentityTests(unittest.TestCase):
         self.assertNotEqual(before, self.identity())
 
     def test_sibling_shared_ui_package_changes_ios_identity_only(self):
-        shared_ui = self.root / "OpenCineUI"
+        shared_ui = self.root / "OpenCine"
         nested = self.root / "app"
         subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
         (nested / "Sources").mkdir()
@@ -79,7 +79,7 @@ class BuildIdentityTests(unittest.TestCase):
         self.assertEqual(android, module.identity(nested, "android", "Debug"))
 
     def test_sibling_shared_android_ui_changes_android_identity_only(self):
-        shared_ui = self.root / "OpenCineUI"
+        shared_ui = self.root / "OpenCine"
         nested = self.root / "app"
         subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
         (nested / "Sources").mkdir()
@@ -96,7 +96,7 @@ class BuildIdentityTests(unittest.TestCase):
         self.assertEqual(module.identity(nested, "android", "Debug"), module.identity(relative, "android", "Debug"))
 
     def test_sibling_core_package_changes_both_identities(self):
-        core = self.root / "OpenCineCore"
+        core = self.root / "OpenCine"
         nested = self.root / "app"
         subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
         (nested / "Sources").mkdir()
@@ -112,7 +112,7 @@ class BuildIdentityTests(unittest.TestCase):
         self.assertNotEqual(android, module.identity(nested, "android", "Debug"))
 
     def test_sibling_core_android_build_changes_android_identity_only(self):
-        core = self.root / "OpenCineCore"
+        core = self.root / "OpenCine"
         nested = self.root / "app"
         subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
         (nested / "Sources").mkdir()
@@ -127,7 +127,7 @@ class BuildIdentityTests(unittest.TestCase):
         self.assertNotEqual(android, module.identity(nested, "android", "Debug"))
 
     def test_sibling_insta360_package_changes_ios_identity_only(self):
-        luna = self.root / "OpenCineInsta360"
+        luna = self.root / "OpenCine"
         nested = self.root / "app"
         subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
         (nested / "Sources").mkdir()
@@ -143,7 +143,7 @@ class BuildIdentityTests(unittest.TestCase):
         self.assertEqual(android, module.identity(nested, "android", "Debug"))
 
     def test_sibling_insta360_android_build_changes_android_identity_only(self):
-        luna = self.root / "OpenCineInsta360"
+        luna = self.root / "OpenCine"
         nested = self.root / "app"
         subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
         (nested / "Sources").mkdir()

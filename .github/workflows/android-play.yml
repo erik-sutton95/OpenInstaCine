@@ -76,13 +76,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
-      # OpenCineUI (UI-03), OpenCineCore (CORE-02, MEDIA-01) and OpenCineInsta360 (CORE-API)
-      # candidate wiring. Apps/Android/settings.gradle.kts includes ../../../OpenCineUI/Android,
-      # ../../../OpenCineCore/Android and ../../../OpenCineInsta360/Android (Luna adapter and
-      # shell contract; its tests run in that package's CI), and the Swift Android core links OpenCineMedia from
-      # ../OpenCineCore: sibling checkouts pinned by SHA in opencine-pins.txt. Works only once
-      # those remotes exist (owner/URL not final).
-      - name: Check out pinned OpenCine packages next to the repository
+      # OpenCine candidate wiring. Apps/Android/settings.gradle.kts includes ../../../OpenCine/Android
+      # (monitor-ui, core, media, vulkan, the Insta360 shell contract and Luna adapter; their tests run
+      # in OpenCine's CI), and the Swift Android core links OpenCineMedia from ../OpenCine: one sibling
+      # checkout pinned by SHA in opencine-pins.txt. Works only once that remote exists (owner/URL
+      # not final).
+      - name: Check out pinned OpenCine next to the repository
         run: scripts/checkout-opencine.sh
 
       - name: Set up Android NDK 27

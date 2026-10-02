@@ -7,11 +7,11 @@ import PackageDescription
 // without a device. The iOS app (ios/) imports this and supplies CoreBluetooth /
 // Network / Hotspot I/O. Android consumes the same target via a JNI facade
 // (`just android-core`) — keep this module UI-free and platform-agnostic.
-// Shared UI (MonitorPresentation, MonitorUI) comes from the OpenCineUI package,
+// Shared UI (MonitorPresentation, MonitorUI) comes from the OpenCine package,
 // consumed by ios/project.yml, not from this manifest.
 let package = Package(
     name: "OpenPocketViewCore",
-    // macOS 13: OpenCineCore's minimum (host `swift test` only; no macOS app ships).
+    // macOS 13: OpenCine's minimum (host `swift test` only; no macOS app ships).
     platforms: [.iOS(.v17), .macOS(.v13), .watchOS(.v10)],
     products: [
         .library(name: "OpenPocketViewCore", targets: ["OpenPocketViewCore"]),
@@ -24,16 +24,16 @@ let package = Package(
     dependencies: [
         // Portable media math (OpenCineMedia), shared gimbal motion (OpenCineMotion) and the
         // second-screen relay wire (OpenCineRelay).
-        // Sibling checkout until OpenCineCore is published.
-        .package(path: "../OpenCineCore")
+        // The OpenCine platform package. Sibling checkout until OpenCine is published.
+        .package(path: "../OpenCine")
     ],
     targets: [
         .target(
             name: "OpenPocketViewCore",
             dependencies: [
-                .product(name: "OpenCineMedia", package: "OpenCineCore"),
-                .product(name: "OpenCineMotion", package: "OpenCineCore"),
-                .product(name: "OpenCineRelay", package: "OpenCineCore"),
+                .product(name: "OpenCineMedia", package: "OpenCine"),
+                .product(name: "OpenCineMotion", package: "OpenCine"),
+                .product(name: "OpenCineRelay", package: "OpenCine"),
             ]
         ),
         .testTarget(

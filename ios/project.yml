@@ -15,22 +15,14 @@ packages:
     exactVersion: 9.24.0
   OpenPocketViewCore:
     path: ..
-  # Insta360 Luna integration (Insta360Protocol, Insta360Apple). Candidate: a sibling checkout of
-  # OpenCineInsta360 next to this repository, pinned in opencine-pins.txt. Switch to
-  # url + exactVersion once it is published.
-  OpenCineInsta360:
-    path: ../../OpenCineInsta360
-  # Shared UI 2.0 (MonitorUI, MonitorPresentation). Candidate: a sibling checkout of
-  # OpenCineUI next to this repository. Switch to url + exactVersion once it is published.
-  OpenCineUI:
-    path: ../../OpenCineUI
-  # Common camera contracts (OpenCineCore) and portable media math (OpenCineMedia, also
-  # re-exported by OpenPocketViewCore, which depends on the same ../OpenCineCore checkout).
-  # Candidate: a sibling checkout of OpenCineCore next to this repository. Switch to
-  # url + exactVersion once it is published. The app and tests call OpenCineMedia directly,
-  # so they link the product themselves.
-  OpenCineCore:
-    path: ../../OpenCineCore
+  # The OpenCine platform package: common camera contracts (OpenCineCore), portable media math
+  # (OpenCineMedia, also re-exported by OpenPocketViewCore, whose Package.swift names the same
+  # ../OpenCine checkout), shared UI 2.0 (MonitorUI, MonitorPresentation) and the Insta360 Luna
+  # integration (Insta360Protocol, Insta360Apple). Candidate: a sibling checkout of OpenCine next
+  # to this repository, pinned in opencine-pins.txt. Switch to url + exactVersion once it is
+  # published. The app and tests call OpenCineMedia directly, so they link the product themselves.
+  OpenCine:
+    path: ../../OpenCine
 
 targets:
   OpenInstaCine:
@@ -47,25 +39,25 @@ targets:
         product: Sentry
       - package: OpenPocketViewCore
         product: OpenPocketViewCore
-      - package: OpenCineCore
+      - package: OpenCine
         product: OpenCineMedia
-      - package: OpenCineCore
+      - package: OpenCine
         product: OpenCineMotion
-      - package: OpenCineCore
+      - package: OpenCine
         product: OpenCineRelay
-      - package: OpenCineUI
+      - package: OpenCine
         product: MonitorUI
-      - package: OpenCineUI
+      - package: OpenCine
         product: MonitorPresentation
-      - package: OpenCineInsta360
+      - package: OpenCine
         product: Insta360Protocol
-      - package: OpenCineInsta360
+      - package: OpenCine
         product: Insta360Apple
-      - package: OpenCineCore
+      - package: OpenCine
         product: OpenCineCore
       # Apple media runtime (OpenCine plan MEDIA-02): the VideoToolbox decoder runtime under
       # HevcDecoder and decoded-frame leases. iOS app only; the watch never decodes live video.
-      - package: OpenCineCore
+      - package: OpenCine
         product: OpenCineApple
       - target: OpenInstaCineWatch
         embed: true
@@ -140,21 +132,21 @@ targets:
       - target: OpenInstaCine
       - package: OpenPocketViewCore
         product: OpenPocketViewCore
-      - package: OpenCineCore
+      - package: OpenCine
         product: OpenCineMedia
-      - package: OpenCineCore
+      - package: OpenCine
         product: OpenCineMotion
-      - package: OpenCineCore
+      - package: OpenCine
         product: OpenCineRelay
-      - package: OpenCineInsta360
+      - package: OpenCine
         product: Insta360Protocol
       # Also provides the Insta360Apple module; Xcode then shares one Insta360Apple
       # framework between the app and this bundle instead of a second static copy.
-      - package: OpenCineInsta360
+      - package: OpenCine
         product: Insta360AppleTestSupport
-      - package: OpenCineCore
+      - package: OpenCine
         product: OpenCineCore
-      - package: OpenCineCore
+      - package: OpenCine
         product: OpenCineApple
     settings:
       base:
