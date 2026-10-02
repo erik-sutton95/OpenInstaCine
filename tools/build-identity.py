@@ -27,7 +27,8 @@ def identity(root: Path, platform: str, configuration: str) -> str:
 
 SIBLING_PACKAGES = {
     # OpenCineCore: Swift contracts, OpenCineMedia (iOS app and the Swift Android core) and OpenCineApple (iOS app)
-    # plus the Kotlin core included by Apps/Android/settings.gradle.kts.
+    # plus the Kotlin core, media and native Vulkan renderer (`:vulkan`, C++ and shaders) included by
+    # Apps/Android/settings.gradle.kts, so a renderer edit changes the Android identity.
     # OpenCineInsta360: the Luna protocol and Apple adapter (iOS), the Kotlin shell contract and
     # Luna adapter (Android/, included by Apps/Android/settings.gradle.kts).
     "ios": [

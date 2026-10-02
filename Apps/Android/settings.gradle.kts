@@ -18,6 +18,7 @@ includeBuild("../../../OpenCineCore/Android") {
     dependencySubstitution {
         substitute(module("com.opencapture.opencine:core")).using(project(":core"))
         substitute(module("com.opencapture.opencine:media")).using(project(":media"))
+        substitute(module("com.opencapture.opencine:vulkan")).using(project(":vulkan"))
     }
 }
 // Candidate (CORE-API): the Insta360 shell contract and the Kotlin Luna adapter from a sibling
