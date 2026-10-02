@@ -14,7 +14,7 @@ class FeedIncidentStoreTest {
             val store = FeedIncidentStore(dir)
             val bundle = sampleBundle("inc-a")
             store.persist(
-                FeedIncidentPersistenceJob(bundle, FeedIncidentPersistenceJob.Reason.STARTED),
+                FeedIncidentPersistenceJob(bundle, FeedIncidentPersistenceReason.STARTED),
                 nowMs = bundle.header.startedAtWallClockMs,
             )
             val loaded = store.loadAll().single()
@@ -38,7 +38,7 @@ class FeedIncidentStoreTest {
         try {
             val store = FeedIncidentStore(dir)
             store.persist(
-                FeedIncidentPersistenceJob(sampleBundle("inc-open"), FeedIncidentPersistenceJob.Reason.STARTED),
+                FeedIncidentPersistenceJob(sampleBundle("inc-open"), FeedIncidentPersistenceReason.STARTED),
                 nowMs = 1_000,
             )
             val changed = store.markInterrupted(nowMs = 1_000)
@@ -88,7 +88,7 @@ class FeedIncidentStoreTest {
         try {
             val store = FeedIncidentStore(dir)
             store.persist(
-                FeedIncidentPersistenceJob(sampleBundle("inc-json"), FeedIncidentPersistenceJob.Reason.STARTED),
+                FeedIncidentPersistenceJob(sampleBundle("inc-json"), FeedIncidentPersistenceReason.STARTED),
                 nowMs = 1_000,
             )
             val extras = store.exportExtras()
@@ -128,7 +128,7 @@ class FeedIncidentStoreTest {
                         ),
                 )
             store.persist(
-                FeedIncidentPersistenceJob(dirty, FeedIncidentPersistenceJob.Reason.STARTED),
+                FeedIncidentPersistenceJob(dirty, FeedIncidentPersistenceReason.STARTED),
                 nowMs = 1_000,
             )
             val extras = store.exportExtras()
@@ -178,7 +178,7 @@ class FeedIncidentStoreTest {
     private fun job(id: String, started: Long) =
         FeedIncidentPersistenceJob(
             sampleBundle(id).copy(header = sampleBundle(id).header.copy(incidentId = id, startedAtWallClockMs = started)),
-            FeedIncidentPersistenceJob.Reason.STARTED,
+            FeedIncidentPersistenceReason.STARTED,
         )
 
     private fun sampleBundle(id: String) =

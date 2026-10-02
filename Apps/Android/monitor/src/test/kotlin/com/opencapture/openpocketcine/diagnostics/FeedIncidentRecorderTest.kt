@@ -16,7 +16,7 @@ class FeedIncidentRecorderTest {
         }
         val job = recorder.recordSnapshot(staleOutput(monotonic = 3.0))
         assertNotNull(job)
-        assertEquals(FeedIncidentPersistenceJob.Reason.STARTED, job.reason)
+        assertEquals(FeedIncidentPersistenceReason.STARTED, job.reason)
         assertEquals(FeedIncidentKind.FRESH_INPUT_STALE_OUTPUT, job.bundle.header.kind)
         assertEquals(FeedIncidentOutcome.OPEN, job.bundle.header.outcome)
         assertEquals("inc-fresh", job.bundle.header.incidentId)
