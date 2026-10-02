@@ -128,7 +128,7 @@ A shared Swift business core from OpenPocketCine, Luna protocol adapters and nat
 | --- | --- | --- |
 | **Shared core** | `Sources/` | OpenPocketCine monitor core (`OpenPocketViewCore`, ...) with small Luna hooks |
 | **Shared UI** | `../OpenCine` | Sibling checkout of the OpenCine platform repository: SwiftUI `MonitorUI` and `MonitorPresentation`, Compose `monitor-ui` |
-| **Connection flow** | `../OpenCine` | `OpenCineAppKit` and Compose `appkit`: cameras, pairing, progress, recovery actions and saved-camera migration through `LunaIntegration` |
+| **App shell** | `../OpenCine` | `OpenCineAppKit` and Compose `appkit`: the root (cameras, pair, monitor and its Settings/Media covers), the monitor's camera lifetime and common controls (ISO, shutter, white balance, record), cameras, pairing, progress, recovery actions and saved-camera migration through `LunaIntegration` |
 | **Shared camera core** | `../OpenCine` | OpenCine: camera `CameraSession` contracts (Swift and Kotlin `:core`) and `OpenCineMedia` (LUT, curve, scope math) |
 | **Luna integration** | `../OpenCine` | OpenCine: `Insta360Protocol` (UCD2 framing, protobuf, status, settings, media and control messages) and `Insta360Apple` (CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport, the Luna `CameraSession`) |
 | **iOS app** | `ios/OpenInstaCine/` | The OpenPocketCine shell plus the Luna session (`CameraSession*.swift`, `LunaShellMapping.swift`); Apple Watch app in `ios/OpenInstaCineWatch/` |

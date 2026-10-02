@@ -43,6 +43,12 @@ LUNA_OWNED=(
   OpenInstaCine/LunaShellMapping.swift
   OpenInstaCine/LunaThumbnailImage.swift
   OpenInstaCine/DebugRemote.swift
+  # SHELL-03 I-1: the root, covers and monitor lifetime are OpenCineAppKit's AppShell and
+  # ShellModel, the common controls its MonitorControlModel. What is left here is this app's
+  # composition and typed adapters; upstream edits are ported by hand until I-6 retires the sync.
+  OpenInstaCine/AppRoot.swift
+  OpenInstaCine/CamerasExperience.swift
+  OpenInstaCine/CameraSessionCore.swift
   OpenInstaCine/OpenInstaCineBrand.swift
   OpenInstaCine/OsmoMonitorPresentation.swift
   # What is left of upstream's startup chrome once the wizard moved to OpenCineAppKit (SHELL-02).

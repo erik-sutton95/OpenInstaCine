@@ -141,6 +141,17 @@ Nothing below has run on hardware.
     keeps every camera, name and Wi-Fi; downgrade to it shows them too, an edit there (rename,
     forget) survives the next upgrade.
 
+16. SHELL-03 I-1 (iPhone and Android): connect a saved camera from the cameras page: the monitor
+    appears with the picture; open Settings, then Media, and close each: the picture is still
+    there and live (no reconnect, no black frame, no second "Starting the picture"); ISO, shutter,
+    white balance (Auto and Kelvin) and EV edits from the drums confirm as before; record start
+    and stop from the record button with and without confirmation (the lamp waits for the camera);
+    rotate the phone with Settings open and closed; background the app and return (the picture
+    comes back once); Disconnect from Settings returns to the cameras page and the camera keeps
+    recording if it was; connect a second camera after closing the first (replace camera): no
+    note or edit from the first appears; close the app while recording: the camera keeps
+    recording.
+
 Known limits: two Luna cameras at once cannot be tested (LunaWiFi joins one camera access point,
 192.168.42.x); the two-session gate is simulated only. Android reports no serial on this path,
 so EV keys use the connected camera id.
@@ -166,6 +177,32 @@ optional iOS appearance switch remains unchanged. The shared connection model's 
 scope is cancelled when the activity closes so its discovery and connection collectors end
 with the monitor. Physical pairing, reconnect, cancellation, recovery and credential
 preservation remain **untested**, pending checklist item 15.
+
+## SHELL-03 slice I-1: shared root, monitor lifetime and common controls
+
+The app root is OpenCine's `AppShell` over `ShellModel` (Swift and Compose): the cameras and pair
+pages, the monitor, and the Settings and Media covers. The shell owns the connected camera's
+common session: `LunaIntegration`'s attempt session is bound when it connects, closed once when
+the operator leaves the monitor (never a camera command, so a recording continues) and replaced
+cleanly by the next camera. ISO, shutter, white balance and record go through the shared
+`MonitorControlModel` (the one snapshot subscription, coalesced edits, record start or stop from
+a fresh report, late outcomes of a previous camera dropped). The app's own reconnects of the same
+camera (foreground, internet hop, saved Wi-Fi) keep that session. Scene activity reaches the
+session once per change.
+
+Deleted from the app: the session's own Core subscription, pending edits and record operation
+(iOS `CameraSessionCore`, Android `PocketCameraSession`/`CoreControl`), `homePanel`,
+`liveOperatorPanel`, the pairing flag, the enter/leave-live cleanup and duplicated scene
+handlers. Temporary until later slices: the existing `LiveViewScreen` is the shell's monitor slot
+and still draws Settings and Media over itself; the capture drums map this app's values
+(`IsoIndex`, shutter denominators, Kelvin) through the session's adapters into the shared model;
+the shared readouts are still projected into `CameraStatus` for the views that read it; the
+Android launcher still installs its backend factory (`MonitorConfiguration.install`).
+
+Simulated review: `OPV_UI_REVIEW_SCREEN=sequence` (iOS) and the debug `ShellReviewActivity`
+(Android) step cameras, live, Settings, live, Media, live, cameras in one launch and log the
+monitor host count: one host for the whole live period, disposed once on close. Physical
+behavior is **untested** (checklist item 16).
 
 ## MEDIA-02 step 4: Apple runtime
 
