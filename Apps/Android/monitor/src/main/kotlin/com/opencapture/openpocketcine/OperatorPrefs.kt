@@ -196,11 +196,6 @@ enum class OperatorSettingsTab(val title: String, val subtitle: String, val pill
     SYSTEM("System", "App-level behavior.", "APP", "App behavior"),
 }
 
-enum class LiveOperatorPanel {
-    SETTINGS,
-    MEDIA,
-}
-
 object OperatorPrefs {
     private const val PREFS = "openpocketcine.operator"
     private const val AWAKE = "OpenPocketCine.KeepScreenAwake"

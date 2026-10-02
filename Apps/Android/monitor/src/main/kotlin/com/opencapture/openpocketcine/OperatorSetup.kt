@@ -577,7 +577,7 @@ fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {
 }
 
 @Composable
-fun AppSettingsScreen(model: AppModel, onClose: () -> Unit = { model.homePanel = null }) {
+fun AppSettingsScreen(model: AppModel, onClose: () -> Unit = { model.shell.dismissCover() }) {
     OperatorSetupScreen(model, onClose)
 }
 
@@ -1446,7 +1446,6 @@ private fun DispSectionBody(model: AppModel, mode: PocketDispMode, isLive: Boole
             modifier = Modifier.padding(vertical = 8.dp),
             onClick = {
                 operatorHaptic(view, model.hapticsEnabled)
-                model.homePanel = null
                 model.beginChromeEditing(mode)
             },
         )

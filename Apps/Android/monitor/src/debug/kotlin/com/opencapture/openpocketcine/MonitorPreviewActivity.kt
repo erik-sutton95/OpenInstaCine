@@ -82,13 +82,7 @@ class MonitorPreviewActivity : ComponentActivity() {
                             intent.getFloatExtra("safeTop", 0f), intent.getFloatExtra("safeBottom", 0f),
                             intent.getBooleanExtra("patterned", false))
                     }
-                    when (model.liveOperatorPanel) {
-                        LiveOperatorPanel.SETTINGS -> OperatorSetupScreen(model) { model.liveOperatorPanel = null }
-                        LiveOperatorPanel.MEDIA -> com.opencapture.openpocketcine.media.MediaLibraryScreen(model) {
-                            model.liveOperatorPanel = null
-                        }
-                        null -> Unit
-                    }
+                    model.liveCover()?.let { cover -> ShellPage(model, cover) }
                 }
             }
         }
@@ -111,8 +105,9 @@ private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabiliti
             resolutionCode = CameraCommands.RES_4K, fps = 25, fpsIndex = 2,
             wbMode = 6, wbKelvin = 5600, focusMode = 2, focusTrack = 0, audioChannel = 2, audioMetersLeft = -21.0, audioMetersRight = -14.0)
     }
-    LaunchedEffect(model.liveOperatorPanel) {
-        if (model.liveOperatorPanel != null) model.assist.configureTool = null
+    val cover = model.liveCover()
+    LaunchedEffect(cover) {
+        if (cover != null) model.assist.configureTool = null
     }
     var locked by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<LiveSheet?>(null) }
@@ -166,7 +161,7 @@ private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabiliti
         if (!locked && capabilities.gimbal && model.liveGimbalPanel == LiveGimbalPanel.SHEET) {
             LiveGimbalSheetHost(model, layout, cluster, 0f, 0f, 0f, 0f)
         }
-        if (!locked && model.liveOperatorPanel == null) model.assist.configureTool?.let { tool ->
+        if (!locked && cover == null) model.assist.configureTool?.let { tool ->
             MonitorAssistInspector(tool, model.assist, model, status.colorMode,
                 width, height, 0f, 0f, 0f, zones?.controls?.minY ?: height,
                 onDismiss = { model.assist.configureTool = null })

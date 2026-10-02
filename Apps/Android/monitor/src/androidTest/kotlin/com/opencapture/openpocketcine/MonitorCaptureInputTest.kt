@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.appkit.ShellModel
 import android.content.res.Configuration
 import android.os.SystemClock
 import android.view.InputDevice
@@ -101,8 +102,8 @@ class MonitorCaptureInputTest {
                         activity.setContent { NavigationFixture(checkNotNull(model), probe, layoutProbe, tablet) }
                     }
                     awaitReady(scenario, layoutProbe)
-                    for ((label, destination) in listOf("Settings" to LiveOperatorPanel.SETTINGS,
-                        "Media" to LiveOperatorPanel.MEDIA)) {
+                    for ((label, destination) in listOf("Settings" to ShellModel.Cover.SETTINGS,
+                        "Media" to ShellModel.Cover.MEDIA)) {
                         val target = nativeControlRect(scenario, label)
                         val down = SystemClock.uptimeMillis()
                         event(scenario, MotionEvent.ACTION_DOWN, target.center.x, target.center.y, down)
@@ -110,11 +111,11 @@ class MonitorCaptureInputTest {
                         event(scenario, MotionEvent.ACTION_UP, target.center.x, target.center.y, down)
                         settle()
                         scenario.onActivity {
-                            assertEquals(destination, model?.liveOperatorPanel,
+                            assertEquals(destination, model?.shell?.state?.value?.cover,
                                 "First $label tap, tablet=$tablet, sheet=${probe.sheet}, target=$target")
                             assertEquals(LiveSheet.ISO, probe.sheet, "Navigation must retain the picker")
                             // Simulate the destination's close callback without replacing the monitor host.
-                            model?.liveOperatorPanel = null
+                            model?.shell?.dismissCover()
                         }
                         settle()
                         // Disabling a mounted control retires its hole without requiring relayout.
@@ -122,7 +123,7 @@ class MonitorCaptureInputTest {
                         settle()
                         tap(scenario, target)
                         scenario.onActivity {
-                            assertNull(model?.liveOperatorPanel, "Disabled navigation cannot bypass the backdrop")
+                            assertNull(model?.shell?.state?.value?.cover, "Disabled navigation cannot bypass the backdrop")
                             assertNull(probe.sheet, "The disabled target becomes an outside-dismiss region")
                             probe.navigationEnabled = true
                             probe.sheet = LiveSheet.ISO
@@ -134,7 +135,7 @@ class MonitorCaptureInputTest {
                     settle()
                     tap(scenario, oldSettings)
                     scenario.onActivity {
-                        assertNull(model?.liveOperatorPanel, "Unmounting navigation must remove its hole")
+                        assertNull(model?.shell?.state?.value?.cover, "Unmounting navigation must remove its hole")
                         assertNull(probe.sheet)
                         probe.showsNavigation = true
                         probe.sheet = LiveSheet.ISO

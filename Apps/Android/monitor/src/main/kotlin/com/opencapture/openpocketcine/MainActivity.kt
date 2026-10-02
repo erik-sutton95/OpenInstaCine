@@ -64,7 +64,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.diagnostics.AutomaticReportsPrompt
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.openpocketcine.diagnostics.ManualProblemReport
@@ -73,8 +72,10 @@ import com.opencapture.openpocketcine.diagnostics.ReliabilityReportingConsent
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.opencapture.opencine.appkit.CamerasScreen
-import com.opencapture.opencine.appkit.PairScreen
+import com.opencapture.opencine.appkit.AppShell
+import com.opencapture.opencine.appkit.ShellActions
+import com.opencapture.opencine.appkit.ShellBrand
+import com.opencapture.opencine.appkit.ShellModel
 import com.opencapture.openpocketcine.diagnostics.ManualProblemReportDialog
 import com.opencapture.openpocketcine.pairing.DiscoveryPermissions
 import com.opencapture.openpocketcine.pairing.LocalPairingCallouts
@@ -87,7 +88,7 @@ import kotlinx.coroutines.delay
 
 open class MainActivity : ComponentActivity() {
     private val composeFirstFrameDrawn = AtomicBoolean(false)
-    internal lateinit var model: AppModel
+    lateinit var model: AppModel
         private set
     var hideSystemNavigation = false
     var playbackHidesSystemNavigation = false
@@ -131,7 +132,7 @@ open class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
-        if (::model.isInitialized) model.session.noteSceneBecameInactive()
+        if (::model.isInitialized) model.shell.setSceneActive(false)
         ManualProblemReport.setForeground(false)
         super.onPause()
     }
@@ -140,7 +141,7 @@ open class MainActivity : ComponentActivity() {
         super.onResume()
         ManualProblemReport.setForeground(true)
         if (::model.isInitialized) {
-            model.session.noteSceneBecameActive()
+            model.shell.setSceneActive(true)
             model.gimbalGamepad.ensureListening(this, model)
         }
     }
@@ -164,7 +165,10 @@ open class MainActivity : ComponentActivity() {
 
 @Composable
 private fun OpenPocketCineApp(model: AppModel) {
-    val phase by model.session.phaseFlow.collectAsState()
+    val shell by model.shell.state.collectAsState()
+    val context = LocalContext.current
+    var showProblemReport by remember { mutableStateOf(false) }
+    var showReportingPrivacy by remember { mutableStateOf(false) }
     var launchSplashVisible by remember { mutableStateOf(true) }
     val activity = LocalActivity.current
     lateinit var discovery: PermissionGate
@@ -203,7 +207,7 @@ private fun OpenPocketCineApp(model: AppModel) {
         model.showsLaunchSplash = false
     }
 
-    val showLive = phase == ConnectionPhase.LIVE || model.session.holdsMonitor
+    val showLive = shell.monitor != null
     LaunchedEffect(model.hdrDisplay, model.screenCaptured, activity) {
         HdrDisplay.apply(activity, enabled = model.hdrDisplayActive)
     }
@@ -225,37 +229,40 @@ private fun OpenPocketCineApp(model: AppModel) {
         }
         onDispose { runCatching { windowManager.removeScreenRecordingCallback(callback) } }
     }
-    val hideNavigation = showLive && model.liveOperatorPanel == null
+    val hideNavigation = showLive && shell.cover == null
     LaunchedEffect(activity, hideNavigation) {
         (activity as? MainActivity)?.hideSystemNavigation = hideNavigation
         (activity as? MainActivity)?.updateSystemBars()
     }
 
     Box(Modifier.fillMaxSize().startupBackdrop()) {
-        if (showLive) {
-            LiveViewScreen(model)
-        } else {
-            LinkExperience(
-                model = model,
-                discovery = discovery,
-                onEnableBluetooth = { requestBluetoothOn() },
+        CompositionLocalProvider(LocalPairingCallouts provides { PairingCallouts(model, discovery) { requestBluetoothOn() } }) {
+            AppShell(
+                model.shell,
+                ShellBrand(MonitorConfiguration.identity.wordmark),
+                ShellActions(
+                    diagnostics = { DiagnosticCenter.shareReport(context, model.session) },
+                    reportProblem = { showProblemReport = true },
+                ),
+                // Temporary (SHELL-03 I-1): the existing monitor, which draws Settings and Media over itself.
+                monitor = { LiveViewScreen(model) },
+                page = { cover -> ShellPage(model, cover) },
+                pageFrame = { route, content -> HomeFrame(model, pairing = route == ShellModel.Route.PAIR, content) },
             )
         }
         MonitorConfiguration.identity.sourceLabel?.let { label ->
             if (showLive) Text(label, color = BrandColors.accent, style = LiveType.mono(10f), modifier = Modifier.align(Alignment.TopCenter).background(BrandColors.background).padding(horizontal = 8.dp, vertical = 3.dp))
         }
         LaunchSplashOverlay(visible = launchSplashVisible)
-        if (model.homePanel != null && !showLive) {
-            AppPanelHost(model)
-        }
+        model.legal?.let { kind -> if (!showLive) LegalDocumentScreen(kind) { model.legal = null } }
         var showAutomaticPrompt by remember {
             mutableStateOf(ReliabilityReportingConsent.shouldOfferAutomaticPrompt())
         }
         if (!launchSplashVisible && !showLive && showAutomaticPrompt &&
-            model.homePanel != AppPanel.PRIVACY
+            model.legal != LegalKind.PRIVACY
         ) {
             AutomaticReportsPrompt(
-                onPrivacy = { model.homePanel = AppPanel.PRIVACY },
+                onPrivacy = { model.legal = LegalKind.PRIVACY },
                 onEnable = {
                     ReliabilityReporting.setConsent(true)
                     showAutomaticPrompt = false
@@ -267,6 +274,14 @@ private fun OpenPocketCineApp(model: AppModel) {
             )
         }
     }
+    if (showProblemReport) {
+        ManualProblemReportDialog(model = model, onClose = { showProblemReport = false }, onPrivacy = { showReportingPrivacy = true })
+    }
+    if (showReportingPrivacy) {
+        Dialog(onDismissRequest = { showReportingPrivacy = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            LegalDocumentScreen(kind = LegalKind.PRIVACY, onClose = { showReportingPrivacy = false })
+        }
+    }
 }
 
 private fun beginDiscovery(model: AppModel, onBluetoothOff: () -> Unit = {}) {
@@ -274,21 +289,13 @@ private fun beginDiscovery(model: AppModel, onBluetoothOff: () -> Unit = {}) {
     if (!model.session.radioOn.value) onBluetoothOff()
 }
 
+/** The app's insets and back handling around the shared cameras and pair pages. */
 @Composable
-private fun LinkExperience(
-    model: AppModel,
-    discovery: PermissionGate,
-    onEnableBluetooth: () -> Unit,
-) {
+private fun HomeFrame(model: AppModel, pairing: Boolean, content: @Composable () -> Unit) {
     val density = LocalDensity.current
     val layoutDir = LocalLayoutDirection.current
     val configuration = LocalConfiguration.current
-    val context = LocalContext.current
     val state by model.cameras.state.collectAsState()
-    // No saved camera opens the pair page, as at first launch.
-    val pairing = state.saved.isEmpty() || model.pairing
-    var showProblemReport by remember { mutableStateOf(false) }
-    var showReportingPrivacy by remember { mutableStateOf(false) }
     val landscapeHome = configuration.screenWidthDp > configuration.screenHeightDp
     val homeSide = with(density) {
         val leading = WindowInsets.safeDrawing.getLeft(this, layoutDir).toDp()
@@ -318,35 +325,12 @@ private fun LinkExperience(
             end = if (pairing) 14.dp else 18.dp,
             top = if (pairing) 0.dp else 8.dp,
         )) {
-            CompositionLocalProvider(LocalPairingCallouts provides { PairingCallouts(model, discovery, onEnableBluetooth) }) {
-                if (pairing) {
-                    BackHandler(enabled = state.attempts.isNotEmpty() || state.saved.isNotEmpty()) {
-                        if (state.attempts.isNotEmpty()) model.cameras.cancelAll() else model.pairing = false
-                    }
-                    PairScreen(
-                        model.cameras,
-                        onDone = { model.pairing = false },
-                        onDiagnostics = { DiagnosticCenter.shareReport(context, model.session) },
-                        onReportProblem = { showProblemReport = true },
-                    )
-                } else {
-                    CamerasScreen(
-                        model.cameras,
-                        brandName = MonitorConfiguration.identity.wordmark,
-                        onPair = { model.pairing = true },
-                        onMedia = { model.homePanel = AppPanel.MEDIA },
-                        onSettings = { model.homePanel = AppPanel.SETTINGS },
-                    )
+            if (pairing) {
+                BackHandler(enabled = state.attempts.isNotEmpty() || state.saved.isNotEmpty()) {
+                    if (state.attempts.isNotEmpty()) model.cameras.cancelAll() else model.shell.endPairing()
                 }
             }
-        }
-    }
-    if (showProblemReport) {
-        ManualProblemReportDialog(model = model, onClose = { showProblemReport = false }, onPrivacy = { showReportingPrivacy = true })
-    }
-    if (showReportingPrivacy) {
-        Dialog(onDismissRequest = { showReportingPrivacy = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            LegalDocumentScreen(kind = LegalKind.PRIVACY, onClose = { showReportingPrivacy = false })
+            content()
         }
     }
 }

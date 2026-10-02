@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug only, SIMULATED: SHELL-03 review driver over the real root. -->
+        <activity android:name=".ShellReviewActivity" android:exported="true" android:launchMode="singleTop"
+            android:theme="@style/Theme.OpenPocketCine.Starting" android:screenOrientation="user"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+    </application>
+</manifest>

@@ -3,6 +3,7 @@ package com.opencapture.openpocketcine
 import com.opencapture.monitorui.MonitorExposureReadout
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorMaterial
+import com.opencapture.opencine.appkit.ShellModel
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -221,6 +222,7 @@ fun LivePortraitChrome(
     readoutFrame: ChromeRect = livePortraitReadoutFrame(layout, zones),
     onAssistBoundsChanged: (ChromeRect?) -> Unit = {},
 ) {
+    val cover = model.liveCover()
     var stripQuick by remember { mutableStateOf(false) }
     var topQuick by remember { mutableStateOf(false) }
     val captureOpen = sheet != null || stripQuick || topQuick
@@ -236,7 +238,7 @@ fun LivePortraitChrome(
         !model.session.isMultiviewBorrowed
     val showsSettings = !topQuick && !stripQuick && (model.chromeSectionMounts(PocketDispSection.RAIL_SETTINGS) || status.isRecording)
     val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR) &&
-        model.liveOperatorPanel == null && assist.configureTool == null
+        cover == null && assist.configureTool == null
     val showsCapture = model.chromeSectionMounts(PocketDispSection.CAMERA_VALUES)
     val floorY = zones.assistToolbar.minY
     val showGimbalButton =
@@ -459,7 +461,7 @@ fun LivePortraitChrome(
         if (showGimbalButton) {
             Box(Modifier.liveModuleFrame(stick).alpha(if (captureOpen) 0f else 1f).chromeEditStroke(editing != null, true)) {
                 LiveGimbalStick(
-                    enabled = !captureOpen && !uiLocked && model.liveOperatorPanel == null && chromeInteractive,
+                    enabled = !captureOpen && !uiLocked && cover == null && chromeInteractive,
                     onMove = model::updateGimbalStick,
                     onRelease = model::endGimbalStick,
                     onRecenter = { model.session.performGimbalDoubleTap() },
@@ -467,7 +469,7 @@ fun LivePortraitChrome(
                 )
             }
         }
-        if (!captureOpen && showGimbalButton && chromeInteractive && !uiLocked && model.liveOperatorPanel == null) {
+        if (!captureOpen && showGimbalButton && chromeInteractive && !uiLocked && cover == null) {
             LiveGimbalOverlay(
                 model = model,
                 layout = layout,
@@ -558,9 +560,10 @@ fun LivePortraitSystemBar(
     showsSettings: Boolean,
     controlBusy: Boolean,
 ) {
+    val cover = model.liveCover()
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val tablet = min(configuration.screenWidthDp, configuration.screenHeightDp) >= 600
-    val navigationEnabled = !uiLocked && chromeInteractive && model.liveOperatorPanel == null
+    val navigationEnabled = !uiLocked && chromeInteractive && cover == null
     if (tablet) {
         Box(Modifier.fillMaxSize().padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
             Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically,
@@ -583,10 +586,10 @@ fun LivePortraitSystemBar(
             // Same order as landscape: Media next to Record, Settings outside it.
             Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(com.opencapture.monitorui.MonitorLayoutPolicy.SETTINGS_MEDIA_GAP.dp)) {
-                if (showsMedia) AuxCircleButton(Modifier.size(48.dp).monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.MEDIA }) {
+                if (showsMedia) AuxCircleButton(Modifier.size(48.dp).monitorPickerPassthrough(navigationEnabled), onClick = { model.shell.open(ShellModel.Cover.MEDIA) }) {
                     OpcIcon(OpcIcon.FILM, "Media", Modifier.fillMaxSize(), it)
                 }
-                if (showsSettings) AuxCircleButton(Modifier.size(48.dp).monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.SETTINGS }) {
+                if (showsSettings) AuxCircleButton(Modifier.size(48.dp).monitorPickerPassthrough(navigationEnabled), onClick = { model.shell.open(ShellModel.Cover.SETTINGS) }) {
                     OpcIcon(OpcIcon.SETTINGS, "Settings", Modifier.fillMaxSize(), it)
                 }
             }
@@ -626,13 +629,13 @@ fun LivePortraitSystemBar(
                 Spacer(Modifier.weight(1f))
                 // Same order as landscape: Media next to Record, Settings outside it.
                 if (showsMedia) {
-                    AuxCircleButton(Modifier.monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.MEDIA }) {
+                    AuxCircleButton(Modifier.monitorPickerPassthrough(navigationEnabled), onClick = { model.shell.open(ShellModel.Cover.MEDIA) }) {
                         OpcIcon(OpcIcon.FILM, contentDescription = "Media", tint = it, modifier = Modifier.fillMaxSize())
                     }
                     Spacer(Modifier.weight(1f))
                 }
                 if (showsSettings) {
-                    AuxCircleButton(Modifier.monitorPickerPassthrough(navigationEnabled), onClick = { model.liveOperatorPanel = LiveOperatorPanel.SETTINGS }) {
+                    AuxCircleButton(Modifier.monitorPickerPassthrough(navigationEnabled), onClick = { model.shell.open(ShellModel.Cover.SETTINGS) }) {
                         OpcIcon(OpcIcon.SETTINGS, contentDescription = "Settings", tint = it, modifier = Modifier.fillMaxSize())
                     }
                     Spacer(Modifier.weight(1f))

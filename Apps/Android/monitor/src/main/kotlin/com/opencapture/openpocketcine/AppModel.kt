@@ -16,9 +16,11 @@ import com.opencapture.opencine.appkit.BodyRecordsV0
 import com.opencapture.opencine.appkit.CamerasModel
 import com.opencapture.opencine.appkit.IntegrationSlots
 import com.opencapture.opencine.appkit.SavedCamerasStore
+import com.opencapture.opencine.appkit.ShellModel
 import com.opencapture.opencine.appkit.StoredString
 import com.opencapture.opencine.appkit.stored
 import com.opencapture.opencine.core.SavedCamera
+import com.opencapture.opencine.core.SessionCloseReason
 import com.opencapture.opencine.insta360.luna.LunaFailures
 import com.opencapture.opencine.insta360.luna.LunaIntegration
 import com.opencapture.openpocketcine.pairing.LocalPairingCallouts
@@ -33,6 +35,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** [borrowing] builds a Live View model over a Multiview tile's decoder (iOS `CameraSession(borrowing:)`). */
@@ -63,17 +68,23 @@ class AppModel(
             appContext.getSharedPreferences(LEGACY_CAMERAS, Context.MODE_PRIVATE).stored("records-json"),
         ),
         scope,
-    ).also { it.onConnected = { pairing = false } }
+    )
+
+    /**
+     * The root over [cameras] (SHELL-03): cameras, pair or the monitor, its cover (Settings or
+     * Media), the monitor camera's session lifetime and the shared common controls.
+     */
+    val shell = ShellModel(cameras, session.control).also { shell ->
+        shell.onSceneActivity = { active -> if (active) session.noteSceneBecameActive() else session.noteSceneBecameInactive() }
+    }
 
     val savedCameras: List<SavedCamera> get() = cameras.state.value.saved
-    /** The operator opened the pair page from the cameras page. */
-    var pairing by mutableStateOf(false)
     var showsLaunchSplash by mutableStateOf(true)
     /** Long-press on the tap-focus box locks it: feed taps no longer move focus. */
     var focusBoxLocked by mutableStateOf(false)
     var coreVersion by mutableStateOf<String?>(null)
-    var homePanel by mutableStateOf<AppPanel?>(null)
-    var liveOperatorPanel by mutableStateOf<LiveOperatorPanel?>(null)
+    /** A legal document over the cameras page (product composition, not a shell cover). */
+    var legal by mutableStateOf<LegalKind?>(null)
     var operatorSettingsTab by mutableStateOf(OperatorSettingsTab.LINK)
     var chromeEditorMode by mutableStateOf<PocketDispMode?>(null)
     var chromeEditorReturnMode by mutableStateOf<PocketDispMode?>(null)
@@ -193,7 +204,7 @@ class AppModel(
     }
 
     fun beginChromeEditing(mode: PocketDispMode) {
-        liveOperatorPanel = null
+        shell.dismissCover()
         liveGimbalPanel = LiveGimbalPanel.NONE
         setDisplayMode(clean = mode == PocketDispMode.CLEAN)
         chromeEditorMode = mode
@@ -203,16 +214,15 @@ class AppModel(
         chromeEditorReturnMode = chromeEditorMode
         chromeEditorMode = null
         operatorSettingsTab = OperatorSettingsTab.DISPLAY
-        liveOperatorPanel = LiveOperatorPanel.SETTINGS
+        shell.open(ShellModel.Cover.SETTINGS)
     }
 
     fun setDisplayMode(clean: Boolean) {
         assistClean = clean
     }
 
+    /** A new monitor: no leftover Edit view, and the connect tap cannot hit live chrome. */
     fun noteBecameLive() {
-        homePanel = null
-        liveOperatorPanel = null
         chromeEditorMode = null
         liveChromeInteractive = false
         scope.launch {
@@ -439,32 +449,40 @@ class AppModel(
     fun endGimbalStick() = session.endGimbalStick()
 
     val isLive: Boolean
-        get() = session.phaseFlow.value == ConnectionPhase.LIVE || session.holdsMonitor
+        get() = shell.state.value.monitor != null
 
     fun canDriveGimbalPad(): Boolean =
         isLive &&
             !uiLocked &&
-            liveOperatorPanel == null &&
+            shell.state.value.cover == null &&
             !isEditingChrome &&
             !session.browsingMedia
 
     fun prepareStartup() {
         coreVersion =
             if (SwiftCore.isAvailable) runCatching { SwiftCore.coreVersion() }.getOrNull() else null
+        scope.launch { shell.state.map { it.monitor?.id }.distinctUntilChanged().filterNotNull().collect { noteBecameLive() } }
+        // The link ended (idle, or failed without recovery holding the picture): back to the cameras
+        // page, as the old live switch did. Recovery while live stays the session's.
         scope.launch {
-            session.phaseFlow.collect { phase -> if (phase == ConnectionPhase.LIVE) noteBecameLive() }
+            session.phaseFlow.collect { phase ->
+                val ended = phase == ConnectionPhase.IDLE || (phase == ConnectionPhase.FAILED && !session.holdsMonitor)
+                if (ended && shell.state.value.monitor != null) shell.close()
+            }
         }
     }
 
     fun disconnect() {
         focusBoxLocked = false
+        shell.close()
         session.disconnect()
-        cameras.sessionEnded()
     }
 
     fun close() {
         gimbalGamepad.stopListening()
         scope.cancel()
+        // The activity ends: its camera session ends with it, without restarting discovery.
+        shell.state.value.monitor?.session?.closeNow(SessionCloseReason.REQUESTED)
         session.close()
     }
 

@@ -1,15 +1,14 @@
 package com.opencapture.openpocketcine.session
 
-import com.opencapture.opencine.core.CameraCommandIntent
 import com.opencapture.opencine.core.CameraSessionID
 import com.opencapture.opencine.core.CameraSnapshot
+import com.opencapture.opencine.appkit.MonitorControlModel
 import com.opencapture.opencine.core.CommandFailure
 import com.opencapture.opencine.core.CommandStage
 import com.opencapture.opencine.core.ISOValue
 import com.opencapture.opencine.core.MonotonicInstant
 import com.opencapture.opencine.core.ObservedValue
 import com.opencapture.opencine.core.ObservationOrigin
-import com.opencapture.opencine.core.OperationID
 import com.opencapture.opencine.core.Rational
 import com.opencapture.opencine.core.RecordingState
 import com.opencapture.opencine.core.SettingKey
@@ -60,8 +59,8 @@ class CorePresentationTest {
 
     @Test fun pendingTargetShowsUntilItsOperationEnds() {
         val pending = mapOf(
-            SettingKey.WHITE_BALANCE to PendingSetting(OperationID(), SettingValue.WhiteBalance(WhiteBalanceValue.Kelvin(3200))),
-            SettingKey.SHUTTER to PendingSetting(OperationID(), SettingValue.Shutter(ShutterValue.Duration(Rational(1, 100)))),
+            SettingKey.WHITE_BALANCE to SettingValue.WhiteBalance(WhiteBalanceValue.Kelvin(3200)),
+            SettingKey.SHUTTER to SettingValue.Shutter(ShutterValue.Duration(Rational(1, 100))),
         )
         val held = CorePresentation.apply(snapshot, pending, CameraStatus(shutterDenom = 50))
         assertEquals(3200, held.wbKelvin)
@@ -74,9 +73,7 @@ class CorePresentationTest {
     @Test fun unknownRecordingIsNeitherShownNorToggled() {
         val unknown = snapshot.copy(recording = ObservedValue.unknown)
         assertFalse(CorePresentation.apply(unknown, emptyMap(), CameraStatus(isRecording = true)).isRecording)
-        assertNull(CorePresentation.recordIntent(unknown.recording.value), "no blind toggle")
-        assertEquals(CameraCommandIntent.StopRecording, CorePresentation.recordIntent(RecordingState.RECORDING))
-        assertEquals(CameraCommandIntent.StartRecording, CorePresentation.recordIntent(RecordingState.IDLE))
+        // Start or stop from the report (never a blind toggle) is the shared model's: MonitorControlModelTest.
         assertTrue(
             CorePresentation.apply(
                 snapshot.copy(recording = ObservedValue(RecordingState.RECORDING, ObservationOrigin.CAMERA_REPORTED, null)),
@@ -85,9 +82,10 @@ class CorePresentationTest {
         )
     }
 
+    /** The operator copy this app has always shown, now from the shared control model. */
     @Test fun onlyAConfirmationIsSilent() {
-        assertNull(CorePresentation.note(CommandStage.Confirmed, "ISO 400"))
-        assertEquals("ISO 400 was not applied by the camera.", CorePresentation.note(CommandStage.Failed(CommandFailure.NOT_APPLIED), "ISO 400"))
-        assertEquals("The camera did not confirm WB 3200K.", CorePresentation.note(CommandStage.TimedOut, "WB 3200K"))
+        assertNull(MonitorControlModel.note(CommandStage.Confirmed, "ISO 400"))
+        assertEquals("ISO 400 was not applied by the camera.", MonitorControlModel.note(CommandStage.Failed(CommandFailure.NOT_APPLIED), "ISO 400"))
+        assertEquals("The camera did not confirm WB 3200K.", MonitorControlModel.note(CommandStage.TimedOut, "WB 3200K"))
     }
 }

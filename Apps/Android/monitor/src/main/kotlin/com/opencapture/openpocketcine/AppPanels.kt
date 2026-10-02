@@ -1,31 +1,19 @@
 package com.opencapture.openpocketcine
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import com.opencapture.opencine.appkit.ShellModel
 import com.opencapture.openpocketcine.media.MediaLibraryScreen
 
-enum class AppPanel {
-    SETTINGS,
-    MEDIA,
-    PRIVACY,
-    TERMS,
-    LICENSES,
-    NOTICE,
-}
-
+/** The shell's cover pages over the cameras page (the live monitor draws its own over itself). */
 @Composable
-fun AppPanelHost(model: AppModel) {
-    when (model.homePanel) {
-        AppPanel.SETTINGS -> OperatorSetupScreen(model) { model.homePanel = null }
-        AppPanel.MEDIA -> MediaLibraryHost(model)
-        AppPanel.PRIVACY -> LegalDocumentScreen(LegalKind.PRIVACY) { model.homePanel = null }
-        AppPanel.TERMS -> LegalDocumentScreen(LegalKind.TERMS) { model.homePanel = null }
-        AppPanel.LICENSES -> LegalDocumentScreen(LegalKind.LICENSES) { model.homePanel = null }
-        AppPanel.NOTICE -> LegalDocumentScreen(LegalKind.NOTICE) { model.homePanel = null }
-        null -> Unit
+fun ShellPage(model: AppModel, cover: ShellModel.Cover) {
+    when (cover) {
+        ShellModel.Cover.SETTINGS -> OperatorSetupScreen(model) { model.shell.dismissCover() }
+        ShellModel.Cover.MEDIA -> MediaLibraryScreen(model) { model.shell.dismissCover() }
     }
 }
 
+/** The shell's cover, read in composition (recomposes when it changes). */
 @Composable
-fun MediaLibraryHost(model: AppModel) {
-    MediaLibraryScreen(model) { model.homePanel = null }
-}
+fun AppModel.liveCover(): ShellModel.Cover? = shell.state.collectAsState().value.cover

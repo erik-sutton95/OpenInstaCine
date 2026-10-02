@@ -13,6 +13,7 @@ import android.view.SurfaceView
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
+import com.opencapture.opencine.appkit.ShellModel
 import androidx.compose.foundation.Canvas
 import com.opencapture.monitorui.monitorReadoutShadow
 import androidx.compose.foundation.background
@@ -128,16 +129,18 @@ import kotlinx.coroutines.isActive
 
 @Composable
 fun LiveViewScreen(model: AppModel) {
+    val cover = model.liveCover()
     val status by model.session.chromeStatus.collectAsState()
     val cameraGalleryOpen by model.session.cameraGalleryOpen.collectAsState()
     var followedGallery by remember { mutableStateOf(cameraGalleryOpen) }
     LaunchedEffect(cameraGalleryOpen) {
         if (cameraGalleryOpen == followedGallery) return@LaunchedEffect
         followedGallery = cameraGalleryOpen
-        if (cameraGalleryOpen && model.liveOperatorPanel == null) {
-            model.liveOperatorPanel = LiveOperatorPanel.MEDIA
-        } else if (!cameraGalleryOpen && model.liveOperatorPanel == LiveOperatorPanel.MEDIA) {
-            model.liveOperatorPanel = null
+        val shown = model.shell.state.value.cover
+        if (cameraGalleryOpen && shown == null) {
+            model.shell.open(ShellModel.Cover.MEDIA)
+        } else if (!cameraGalleryOpen && shown == ShellModel.Cover.MEDIA) {
+            model.shell.dismissCover()
         }
     }
     val controlNote by model.session.controlNote.collectAsState()
@@ -223,8 +226,8 @@ fun LiveViewScreen(model: AppModel) {
         if (gimbalLimitPulse == 0) return@LaunchedEffect
         model.gimbalGamepad.pulseLimit(model, operatorHaptics)
     }
-    LaunchedEffect(model.liveOperatorPanel, model.chromeEditorMode) {
-        if (model.liveOperatorPanel != null || model.chromeEditorMode != null) {
+    LaunchedEffect(cover, model.chromeEditorMode) {
+        if (cover != null || model.chromeEditorMode != null) {
             model.gimbalGamepad.noteBlocked(model)
         }
     }
@@ -249,7 +252,7 @@ fun LiveViewScreen(model: AppModel) {
         }
     }
 
-    val chromeInteractive = !model.isEditingChrome && model.liveChromeInteractive && model.liveOperatorPanel == null
+    val chromeInteractive = !model.isEditingChrome && model.liveChromeInteractive && cover == null
     val showsBottomBars =
         model.chromeSectionMounts(PocketDispSection.TOOL_BAR) ||
             model.chromeSectionMounts(PocketDispSection.CAMERA_VALUES)
@@ -262,7 +265,7 @@ fun LiveViewScreen(model: AppModel) {
 
     val glass = remember { MonitorGlass(GlassTier.FLAT) }
     val backdrop = rememberMonitorBackdropFeed(model.session.connectedCamera ?: model.session,
-        enabled = model.liveOperatorPanel == null && hasPicture)
+        enabled = cover == null && hasPicture)
 
     var vulkanFailed by remember { mutableStateOf(false) }
     val vulkanSession =
@@ -288,7 +291,7 @@ fun LiveViewScreen(model: AppModel) {
     }
     val useVulkan = vulkanSession != null && !vulkanFailed
     val scopeSourceIdentity = model.session.connectedCamera ?: model.session
-    val scopeSourceActive = model.liveOperatorPanel != LiveOperatorPanel.MEDIA
+    val scopeSourceActive = cover != ShellModel.Cover.MEDIA
     LaunchedEffect(vulkanSession, useVulkan, scopeSourceIdentity, hasPicture, scopeSourceActive) {
         vulkanSession?.configureScopeSource(scopeSourceIdentity, hasPicture, scopeSourceActive && useVulkan)
     }
@@ -372,7 +375,7 @@ fun LiveViewScreen(model: AppModel) {
         val safeBottom by animateFloatAsState(
             monitorBottomInsetDp(
                 rawInsetDp = edgeDp(cutout.getBottom(density), 0),
-                isPortrait = portrait && model.liveOperatorPanel == null,
+                isPortrait = portrait && cover == null,
             ),
             label = "safeBottom",
         )
@@ -565,7 +568,7 @@ fun LiveViewScreen(model: AppModel) {
         Box(
             Modifier
                 .fillMaxSize()
-                .then(if (model.liveOperatorPanel != null) Modifier.clearAndSetSemantics { } else Modifier)
+                .then(if (cover != null) Modifier.clearAndSetSemantics { } else Modifier)
                 .onGloballyPositioned {
                     if (!useVulkan) canvasOrigin = it.positionInRoot()
                 },
@@ -625,7 +628,7 @@ fun LiveViewScreen(model: AppModel) {
             val gestureFrame = if (desqueezeVisible) pictureContent else layout.onFeed
             Box(Modifier.liveModuleFrame(gestureFrame)) {
                 LiveFeedGestureWell(
-                    enabled = !uiLocked && model.liveOperatorPanel == null && chromeInteractive,
+                    enabled = !uiLocked && cover == null && chromeInteractive,
                     feed = ChromeRect(0f, 0f, gestureFrame.width, gestureFrame.height),
                     onTap = onTap@{ point ->
                         if (model.focusBoxLocked) {
@@ -727,7 +730,7 @@ fun LiveViewScreen(model: AppModel) {
 
             // EV and LEVEL share the left-edge slot and its View Assist toolbar avoidance.
             val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR) &&
-                model.liveOperatorPanel == null && assist.configureTool == null
+                cover == null && assist.configureTool == null
             val collapsedPalette = if (!showsAssist) null else if (zones != null) {
                 portraitAssistToolbar(zones.assistToolbar.minY, minOf(vw, vh) >= 600f)
             } else layout.assist
@@ -926,7 +929,7 @@ fun LiveViewScreen(model: AppModel) {
             }
 
             val configure = assist.configureTool
-            if (chromeInteractive && configure != null && !uiLocked && model.liveOperatorPanel == null) {
+            if (chromeInteractive && configure != null && !uiLocked) {
                 Box(Modifier.fillMaxSize().zIndex(8f)) {
                     com.opencapture.openpocketcine.assists.MonitorAssistInspector(
                         configure, assist, model, status.monitorColorMode, vw, vh,
@@ -938,7 +941,7 @@ fun LiveViewScreen(model: AppModel) {
                 }
             }
 
-            val panel = model.liveOperatorPanel
+            val panel = cover
             LaunchedEffect(panel) {
                 assist.configureTool = null
                 model.session.setOperatorOverlayHeld(panel != null)
@@ -964,10 +967,10 @@ fun LiveViewScreen(model: AppModel) {
             if (panel != null && !model.isEditingChrome) {
                 Box(Modifier.fillMaxSize().zIndex(10f)) {
                     when (panel) {
-                        LiveOperatorPanel.SETTINGS ->
-                            OperatorSetupScreen(model, onClose = { model.liveOperatorPanel = null })
-                        LiveOperatorPanel.MEDIA ->
-                            MediaLibraryScreen(model, onClose = { model.liveOperatorPanel = null })
+                        ShellModel.Cover.SETTINGS ->
+                            OperatorSetupScreen(model, onClose = { model.shell.dismissCover() })
+                        ShellModel.Cover.MEDIA ->
+                            MediaLibraryScreen(model, onClose = { model.shell.dismissCover() })
                     }
                 }
             }
@@ -1364,6 +1367,7 @@ internal fun LandscapeChrome(
     capabilities: com.opencapture.opencine.core.MonitorLayoutCapabilities = model.monitorLayout(),
     onAssistBoundsChanged: (ChromeRect?) -> Unit = {},
 ) {
+    val cover = model.liveCover()
     var stripQuick by remember { mutableStateOf(false) }
     var topQuick by remember { mutableStateOf(false) }
     val captureOpen = sheet != null || stripQuick || topQuick
@@ -1378,7 +1382,7 @@ internal fun LandscapeChrome(
         !model.session.isMultiviewBorrowed
     val showsRecord = model.chromeSectionMounts(PocketDispSection.RAIL_RECORD) || status.isRecording
     val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR) &&
-        model.liveOperatorPanel == null && assist.configureTool == null
+        cover == null && assist.configureTool == null
     val showsCapture = model.chromeSectionMounts(PocketDispSection.CAMERA_VALUES)
     val hits = chromeInteractive
 
@@ -1436,14 +1440,14 @@ internal fun LandscapeChrome(
         }
         if (showsSettings) {
             Box(Modifier.liveModuleFrame(layout.settings).chromeEditStroke(editing != null, true)) {
-                AuxCircleButton(onClick = { if (hits) model.liveOperatorPanel = LiveOperatorPanel.SETTINGS }) {
+                AuxCircleButton(onClick = { if (hits) model.shell.open(ShellModel.Cover.SETTINGS) }) {
                     OpcIcon(OpcIcon.SETTINGS, contentDescription = "Settings", tint = it, modifier = Modifier.fillMaxSize())
                 }
             }
         }
         if (showsMedia) {
             Box(Modifier.liveModuleFrame(layout.media).chromeEditStroke(editing != null, true)) {
-                AuxCircleButton(onClick = { if (hits) model.liveOperatorPanel = LiveOperatorPanel.MEDIA }) {
+                AuxCircleButton(onClick = { if (hits) model.shell.open(ShellModel.Cover.MEDIA) }) {
                     OpcIcon(OpcIcon.FILM, contentDescription = "Media", tint = it, modifier = Modifier.fillMaxSize())
                 }
             }
@@ -1527,7 +1531,7 @@ internal fun LandscapeChrome(
         if (capabilities.gimbal && model.chromeSectionMounts(PocketDispSection.GIMBAL_STICK) && !stick.isEmpty) {
             Box(Modifier.liveModuleFrame(stick).alpha(if (captureOpen) 0f else 1f).chromeEditStroke(editing != null, true)) {
                 LiveGimbalStick(
-                    enabled = !captureOpen && !uiLocked && model.liveOperatorPanel == null && hits,
+                    enabled = !captureOpen && !uiLocked && cover == null && hits,
                     onMove = model::updateGimbalStick,
                     onRelease = model::endGimbalStick,
                     onRecenter = { model.session.performGimbalDoubleTap() },
@@ -1539,7 +1543,7 @@ internal fun LandscapeChrome(
             model.chromeSectionMounts(PocketDispSection.GIMBAL_STICK) &&
             hits &&
             !uiLocked &&
-            model.liveOperatorPanel == null
+            cover == null
         ) {
             LiveGimbalOverlay(
                 model = model,
