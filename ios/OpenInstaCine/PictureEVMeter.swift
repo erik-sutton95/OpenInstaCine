@@ -79,8 +79,8 @@ final class PictureEVMeter {
             }
         }
         lastAt = now
-        return ObservedValue(
-            picture - offset, origin: .imageEstimated, at: MonotonicInstant(.seconds(now)))
+        // `now` is the learning clock only; the observation is stamped on the shared host clock.
+        return ObservedValue(picture - offset, origin: .imageEstimated, at: .now())
     }
 
     /// Writes this source's learned keys over the stored v2 values; other keys stay as stored.
