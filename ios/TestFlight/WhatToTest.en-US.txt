@@ -1,16 +1,17 @@
 New and changed
 
+- ISO, shutter and white balance show as set only once the camera reports them. A change the camera drops says it was not applied instead of quietly reverting.
+- Record sends start or stop for what the camera reports, never a blind toggle, and waits for the camera's capture status right after connecting.
 - First open beta: a free, open-source field monitor for the Insta360 Luna Ultra (firmware 1.1.15) with live view, scopes, false color, zebras, peaking and LUTs.
-- Full camera control: exposure, white balance, METER (Matrix or Face), focus, recording and timecode, plus gimbal joystick, Recenter and AirPods head tracking.
-- Double-tap the picture to start Deep Track. Long-press the focus box to lock it so a stray tap cannot move it.
 
 Fixes
 
-- AirPods head tracking now follows your head smoothly instead of jumping, and the gimbal stops as soon as you stop moving.
-- The EV assist now reads the live picture, so auto exposure shows about 0.0 instead of -1.3.
+- The zoom chip and dial now reach and show 15x. The readout used to stop at 12x.
+- AirPods head tracking follows your head smoothly instead of jumping, and the gimbal stops as soon as you stop moving.
+- The EV assist reads the live picture, so auto exposure shows about 0.0 instead of -1.3.
 
 What to test
 
-- Force quit the Insta360 app, then pair from the start screen and allow Bluetooth, Wi-Fi and Local Network. Pairing should reach live view.
-- Start and stop a recording, check the timecode, and try waveform, false color and a LUT on I-Log.
-- Move the gimbal with the joystick and AirPods, double-tap a subject to track it, then report anything off with a TestFlight screenshot.
+- Set ISO Auto, 400 and 800, then change shutter and ISO quickly: each settles on the camera's value within a few seconds and never bounces back. Try WB Kelvin and Auto.
+- Start and stop recording from the app, the camera button and Apple Watch: the lamp follows the camera. Drop Wi-Fi during a change: it says the link dropped.
+- Force quit the Insta360 app, pair from the start screen, then zoom to the end of the chip and dial: both reach 15x. Try waveform, false color and a LUT on I-Log.
