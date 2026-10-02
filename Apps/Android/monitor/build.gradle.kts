@@ -207,7 +207,8 @@ afterEvaluate {
 }
 
 dependencies {
-    api(project(":core-api"))
+    // Insta360 shell contract (CameraBackend, controls, media, values); brings OpenCineCore core.
+    api(libs.opencine.insta360.shell)
     api(libs.opencine.monitor.ui)
     implementation("com.opencapture.opencine:media:0.1.0-SNAPSHOT")
 

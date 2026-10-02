@@ -73,7 +73,7 @@ import com.opencapture.openpocketcine.LocalMonitorGlass
 import com.opencapture.openpocketcine.LiveType
 import com.opencapture.openpocketcine.OpcIcon
 import com.opencapture.openpocketcine.chromeClickable
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.panelGlass
 import kotlinx.coroutines.launch
 

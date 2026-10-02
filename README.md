@@ -131,7 +131,7 @@ A shared Swift business core from OpenPocketCine, Luna protocol adapters and nat
 | **Shared camera core** | `../OpenCineCore` | Sibling checkout of OpenCineCore: camera `CameraSession` contracts (Swift and Kotlin `:core`) and `OpenCineMedia` (LUT, curve, scope math) |
 | **Luna integration** | `../OpenCineInsta360` | Sibling checkout of OpenCineInsta360: `Insta360Protocol` (UCD2 framing, protobuf, status, settings, media and control messages) and `Insta360Apple` (CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport, the Luna `CameraSession`) |
 | **iOS app** | `ios/OpenInstaCine/` | The OpenPocketCine shell plus the Luna session (`CameraSession*.swift`, `LunaShellMapping.swift`); Apple Watch app in `ios/OpenInstaCineWatch/` |
-| **Android app** | `Apps/Android/` | Jetpack Compose shell (`app`, `monitor`) on OpenCineUI `monitor-ui`, and the Kotlin Luna adapter (`luna-adapter`) |
+| **Android app** | `Apps/Android/` | Jetpack Compose shell (`app`, `monitor`) on OpenCineUI `monitor-ui`, and the Kotlin Luna adapter from OpenCineInsta360 (`insta360-luna`) |
 | **Android facade** | `Sources/OpenPocketCineAndroidFacade/` | Swift session and JNI boundary for Android |
 | **Tests** | `Tests/`, `ios/OpenInstaCineTests/` (protocol and Luna session tests live in OpenCineInsta360) | Core and app tests |
 

@@ -1,6 +1,6 @@
 package com.opencapture.openpocketcine.session
 
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

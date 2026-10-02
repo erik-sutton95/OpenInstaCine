@@ -1,6 +1,6 @@
 package com.opencapture.openpocketcine.session
 
-import com.opencapture.openpocketcine.core.CameraGimbalAngle
+import com.opencapture.opencine.insta360.shell.CameraGimbalAngle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -1,6 +1,6 @@
 package com.opencapture.openpocketcine.session
 
-import com.opencapture.openpocketcine.core.CameraGimbalAngle
+import com.opencapture.opencine.insta360.shell.CameraGimbalAngle
 import kotlin.math.abs
 
 /** Absolute-angle gimbal targets (cmd 226 SET_ANGLE / GET_ANGLE), iOS `CameraSessionControls` 309049f. */

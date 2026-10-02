@@ -26,10 +26,10 @@ read as references and were not modified by this extraction.
 | `Adapters/Insta360Protocol` | Independent Swift package for UCD2, bounded reassembly/checksum, protobuf, scheme-3 envelopes and verified Luna read/live commands. Foundation only, no network/BLE/crypto implementation |
 | `Adapters/Insta360Apple` | CoreBluetooth, CryptoKit, Keychain, hotspot join, Network.framework TCP and Luna session lifetime. `LunaCameraSession` implements OpenCineCore `CameraSession` for ISO, shutter, white balance and record (settle and readback included). Built as the `Insta360Apple` framework target in `ios/project.yml`; depends on `MonitorContracts`, `Insta360Protocol` and OpenCineCore |
 | `Apps/Android/app` | Thin branded activity, app manifest and DEBUG replay selection. Installs the brand identity (accent `0xFFFFCF00`) and Luna backend factory through `MonitorConfiguration` |
-| `Apps/Android/monitor` | Shared Compose shell, MediaCodec, Vulkan/GLES, assists, library/player, local delivery and Android integration. Depends on `:core-api`, OpenCineUI `monitor-ui` and staged native libraries |
+| `Apps/Android/monitor` | Shared Compose shell, MediaCodec, Vulkan/GLES, assists, library/player, local delivery and Android integration. Depends on OpenCineInsta360 `insta360-shell`, OpenCineUI `monitor-ui` and staged native libraries |
 | OpenCineUI `Android/monitor-ui` | Compose design language (theme with brand-assigned `MonitorPalette.accent`, Sora, icons, page scaffolds). Coordinate `com.opencapture.opencine:monitor-ui`, substituted from the included build `../../../OpenCineUI/Android` in `Apps/Android/settings.gradle.kts` |
-| `Apps/Android/core-api` | Kotlin/JVM backend discovery/lifecycle/state/capability/frame contract. Uses coroutines/flows; no Compose or Android platform types. Recording, ISO, shutter and WB are not on `CameraControls`: a `CoreSessionSource` backend opens an OpenCineCore `CameraSession` for them |
-| `Apps/Android/luna-adapter` | Android GATT, JCA cryptography, Wi-Fi/network-bound socket lifecycle and a Kotlin UCD2 implementation; `LunaCameraSession` is the OpenCineCore session (port of the Apple one). Depends on `:core-api`, which exposes OpenCineCore `:core` (included build `../../../OpenCineCore/Android`, named `opencinecore`) |
+| OpenCineInsta360 `Android/insta360-shell` | Kotlin/JVM backend discovery/lifecycle/state/capability/frame contract (was `Apps/Android/core-api`). Uses coroutines/flows; no Compose or Android platform types. Recording, ISO, shutter and WB are not on `CameraControls`: a `CoreSessionSource` backend opens an OpenCineCore `CameraSession` for them. Coordinate `com.opencapture.opencine:insta360-shell` |
+| OpenCineInsta360 `Android/insta360-luna` | Android GATT, JCA cryptography, Wi-Fi/network-bound socket lifecycle and a Kotlin UCD2 implementation; `LunaCameraSession` is the OpenCineCore session (port of the Apple one). Was `Apps/Android/luna-adapter`. Both come from the included build `../../../OpenCineInsta360/Android` (named `opencineinsta360`), which includes OpenCineCore `:core` under the same name as the app (`opencinecore`) |
 | `Sources/OpenPocketCineAndroidFacade`, `Sources/CJNI` | Swift JNI exports and Android header shim. Dynamic product `OpenPocketCineAndroid` imports `OpenPocketViewCore` |
 
 ```mermaid
@@ -45,7 +45,7 @@ flowchart TD
     Android[Android app] --> Monitor[Compose shell :monitor]
     Android --> LunaAndroid[Luna Android adapter]
     Monitor --> Compose[OpenCineUI monitor-ui]
-    Monitor --> API[Kotlin core-api]
+    Monitor --> API[OpenCineInsta360 insta360-shell]
     LunaAndroid --> API
     Monitor --> JNI[Swift JNI and native renderer]
     JNI --> Core
@@ -186,8 +186,8 @@ visible in build files rather than hidden in generated binaries.
 See the root [README](../../README.md#build-from-source) for commands. Apple uses
 `just ios-generate`, `just ios-build` and `just ios-test`, with OpenCineUI checked
 out at `../OpenCineUI`. Android uses `just android-check`: `:app:assembleDebug`,
-`:monitor:testDebugUnitTest`, `:luna-adapter:testDebugUnitTest` and each module's
-`lintDebug`. The final [acceptance report](acceptance.md) records verification
+`:monitor:testDebugUnitTest` and each module's `lintDebug` (the Luna adapter's tests run in
+OpenCineInsta360: `cd ../OpenCineInsta360/Android && ./gradlew test`). The final [acceptance report](acceptance.md) records verification
 after subsequent integration changes. The completed Apple test run is logged
 privately in `.local/apple-ui-tests-final.log`.
 

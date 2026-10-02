@@ -11,8 +11,7 @@ import com.opencapture.openpocketcine.GamepadShutterSync
 import com.opencapture.openpocketcine.EvComp
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.bridge.SwiftCore
-import com.opencapture.openpocketcine.core.CameraSession as CameraSessionSeam
-import com.opencapture.openpocketcine.core.CoreSessionSource
+import com.opencapture.opencine.insta360.shell.CoreSessionSource
 import com.opencapture.opencine.core.CameraCommand
 import com.opencapture.opencine.core.CameraCommandIntent
 import com.opencapture.opencine.core.CameraSession as CoreCameraSession
@@ -28,7 +27,7 @@ import com.opencapture.opencine.core.SettingKey
 import com.opencapture.opencine.core.SettingValue
 import com.opencapture.opencine.core.ShutterValue
 import com.opencapture.opencine.core.WhiteBalanceValue
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.feed.FacePriorityExposure
 import com.opencapture.opencine.media.SerialSessionGate
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
@@ -58,8 +57,8 @@ import com.opencapture.openpocketcine.pairing.CameraApJoiner
 import com.opencapture.openpocketcine.pairing.CameraConnectionSetup
 import com.opencapture.openpocketcine.multiview.MultiviewNetworkStore
 import com.opencapture.openpocketcine.ShutterAngle
-import com.opencapture.openpocketcine.core.CameraTrackFrame
-import com.opencapture.openpocketcine.core.CameraTrackState
+import com.opencapture.opencine.insta360.shell.CameraTrackFrame
+import com.opencapture.opencine.insta360.shell.CameraTrackState
 import com.opencapture.openpocketcine.pairing.CameraWifiCredentialStore
 import com.opencapture.openpocketcine.pairing.CameraWifiResolution
 import com.opencapture.openpocketcine.pairing.WifiLowLatencyLock
@@ -90,14 +89,14 @@ import kotlin.math.abs
 import kotlin.math.hypot
 import java.util.Locale
 import com.opencapture.openpocketcine.MonitorConfiguration
-import com.opencapture.openpocketcine.core.CameraBackend
-import com.opencapture.openpocketcine.core.CameraCapability
-import com.opencapture.openpocketcine.core.CameraNotice
-import com.opencapture.openpocketcine.core.CameraControls
-import com.opencapture.openpocketcine.core.CameraGimbalAngle
-import com.opencapture.openpocketcine.core.CameraIdentity
-import com.opencapture.openpocketcine.core.CameraMediaStore
-import com.opencapture.openpocketcine.core.CameraReadout
+import com.opencapture.opencine.insta360.shell.CameraBackend
+import com.opencapture.opencine.insta360.shell.CameraCapability
+import com.opencapture.opencine.insta360.shell.CameraNotice
+import com.opencapture.opencine.insta360.shell.CameraControls
+import com.opencapture.opencine.insta360.shell.CameraGimbalAngle
+import com.opencapture.opencine.insta360.shell.CameraIdentity
+import com.opencapture.opencine.insta360.shell.CameraMediaStore
+import com.opencapture.opencine.insta360.shell.CameraReadout
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
@@ -191,7 +190,7 @@ class PocketCameraSession(
     context: Context, borrowing: HevcDecoder? = null,
     // Multiview is off on Luna ([supportsMultiview]); the lease is accepted for the shared AppModel only.
     @Suppress("UNUSED_PARAMETER") controlLease: MultiviewControlLease? = null,
-) : CameraSessionSeam {
+) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backend: CameraBackend = MonitorConfiguration.createBackend(appContext)
@@ -212,7 +211,7 @@ class PocketCameraSession(
     val isMultiviewBorrowed = borrowing != null
     val decoder = borrowing ?: HevcDecoder(cadence)
 
-    override val phase: ConnectionPhase get() = backend.phase.value
+    val phase: ConnectionPhase get() = backend.phase.value
     val phaseFlow: StateFlow<ConnectionPhase> get() = backend.phase
     val failure: StateFlow<String?> get() = backend.failure
     val found: StateFlow<List<FoundCamera>> =
@@ -461,7 +460,7 @@ class PocketCameraSession(
     }
 
     // Connection.
-    override fun startScan() = backend.startScan()
+    fun startScan() = backend.startScan()
     fun startScan(reconnect: String?) { if (reconnect == null) startScan() else reconnect(reconnect) }
     fun reconnect(id: String) { _connectionTargetId.value = id; openCore(); backend.connect(id) }
     fun connect(camera: FoundCamera) {
@@ -504,7 +503,7 @@ class PocketCameraSession(
     fun adoptMultiviewPose(pose: GimbalStickMapping) = Unit
     fun receiveMultiview(frame: DumlFrame) = Unit
     fun releaseMultiview() = Unit
-    override fun disconnect() {
+    fun disconnect() {
         closeCore()
         backend.disconnect(); decoder.reset()
         holdsMonitor = false; hasVideoFormat = false

@@ -2,7 +2,7 @@ package com.opencapture.openpocketcine.pairing
 
 import com.opencapture.monitorui.MonitorConnectProgress
 import com.opencapture.monitorui.MonitorConnectStep
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

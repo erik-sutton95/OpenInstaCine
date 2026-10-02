@@ -1,10 +1,12 @@
 package com.opencapture.openpocketcine
 
 import android.content.Context
-import com.opencapture.openpocketcine.core.BrandIdentity
-import com.opencapture.openpocketcine.core.CameraBackend
+import com.opencapture.opencine.insta360.shell.CameraBackend
 import com.opencapture.openpocketcine.lut.LutCatalog
 import com.opencapture.openpocketcine.lut.LutEntry
+
+/** App identity the shell shows. App-owned (not part of the Insta360 shell contract). */
+data class BrandIdentity(val appName: String, val wordmark: String, val accentArgb: Long, val cameraFamily: String, val sourceUrl: String? = null, val supportUrl: String? = null, val issueUrl: String? = null, val featureUrl: String? = null, val sourceLabel: String? = null)
 
 /** Installed by a thin brand launcher before constructing any shared screen/model. */
 object MonitorConfiguration {

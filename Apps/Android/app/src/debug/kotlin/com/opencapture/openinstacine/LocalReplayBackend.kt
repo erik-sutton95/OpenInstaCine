@@ -1,7 +1,7 @@
 package com.opencapture.openinstacine
 
 import android.content.Context
-import com.opencapture.openpocketcine.core.*
+import com.opencapture.opencine.insta360.shell.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.json.JSONObject

@@ -142,6 +142,21 @@ class BuildIdentityTests(unittest.TestCase):
         self.assertNotEqual(ios, module.identity(nested, "ios", "Debug"))
         self.assertEqual(android, module.identity(nested, "android", "Debug"))
 
+    def test_sibling_insta360_android_build_changes_android_identity_only(self):
+        luna = self.root / "OpenCineInsta360"
+        nested = self.root / "app"
+        subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
+        (nested / "Sources").mkdir()
+        (nested / "Sources/Core.swift").write_text("let value = 1\n")
+        subprocess.run(["git", "init", "--quiet", str(luna)], check=True)
+        (luna / "Android/insta360-luna").mkdir(parents=True)
+        (luna / "Android/insta360-luna/LunaBackend.kt").write_text("val settle = 1\n")
+        ios = module.identity(nested, "ios", "Debug")
+        android = module.identity(nested, "android", "Debug")
+        (luna / "Android/insta360-luna/LunaBackend.kt").write_text("val settle = 2\n")
+        self.assertEqual(ios, module.identity(nested, "ios", "Debug"))
+        self.assertNotEqual(android, module.identity(nested, "android", "Debug"))
+
     def test_ios_version_configuration_changes_identity(self):
         self.write("ios/Config/Version.xcconfig", "CURRENT_PROJECT_VERSION = 1\n")
         before = self.identity()

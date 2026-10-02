@@ -10,7 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import com.opencapture.openpocketcine.bridge.SwiftCore
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.pairing.CameraConnectionSetup
 import com.opencapture.openpocketcine.pairing.SavedCamera
 import com.opencapture.openpocketcine.pairing.SavedCameras
