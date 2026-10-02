@@ -1,5 +1,6 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineAppKit
 import OpenPocketViewCore
 import SwiftUI
 
@@ -14,93 +15,44 @@ struct FieldMonitorStatusChrome: View {
     @State private var readoutOwnership = MonitorReadoutOwnership()
 
     var body: some View {
-        let portrait = layout.presentation?.portrait == true
-        Group {
-            if portrait {
-                ZStack {
-                    if model.chromeSectionMounts(.timecode), !model.session.status.isPhoto {
-                        MonitorClock(
-                            model.session.status.timecodeClock,
-                            fontSize: layout.presentation?.tablet == true ? 25 : 23
-                        )
-                    }
-                    HStack {
-                        tally
-                        Spacer(minLength: 4)
-                        // The format sits on the timecode's line at its size; the colour
-                        // profile hangs smaller underneath without moving that alignment.
-                        topReadout(
-                            model.session.status.isPhoto ? .mode : .resolution,
-                            value: model.session.status.isPhoto ? "MODE" : recSetupFormat,
-                            fontSize: model.session.status.isPhoto
-                                ? 12 : (layout.presentation?.tablet == true ? 25 : 23),
-                            weight: model.session.status.isPhoto ? .semibold : .medium,
-                            alwaysAccent: false,
-                            caption: model.session.status.isPhoto ? nil : recSetupColor
-                        )
-                        .accessibilityLabel(
-                            model.session.status.isPhoto
-                                ? "Shooting mode" : "Recording options")
-                    }
-                }
-            } else {
-                HStack(spacing: 24) {
-                    if model.chromeSectionMounts(.storage) { storageButton }
-                    if model.chromeSectionMounts(.format) {
-                        if model.session.status.isPhoto {
-                            topReadout(
-                                .mode,
-                                value: model.session.currentShootingMode?.label(
-                                    for: model.session.connectedCamera?.model) ?? "Photo",
-                                fontSize: layout.presentation?.tablet == true ? 18 : 16,
-                                alwaysAccent: true)
-                        } else {
-                            topButton(
-                                .recFormat,
-                                value: model.session.status.videoFormat?.chipLabel ?? "—")
-                        }
-                    }
-                    if model.chromeSectionMounts(.color), !model.session.status.isPhoto {
-                        topButton(
-                            .color,
-                            value: model.session.status.colorMode?.label(in: model.session.profile) ?? "\u{2014}")
-                    }
-                    if layout.viewport.width >= 800, !model.session.status.isPhoto {
-                        topReadout(
-                            .mode,
-                            value: model.session.currentShootingMode?.label(
-                                for: model.session.connectedCamera?.model) ?? "Video",
-                            fontSize: layout.presentation?.tablet == true ? 18 : 16,
-                            alwaysAccent: true)
-                    }
-                    Spacer(minLength: 4)
-                    HStack(spacing: 10) {
-                        tally
-                        if model.chromeSectionMounts(.timecode), !model.session.status.isPhoto {
-                            MonitorClock(
-                                model.session.status.timecodeClock,
-                                fontSize: layout.presentation?.tablet == true ? 25 : 23)
-                        }
-                    }
-                    .padding(.trailing, layout.presentation?.recordingReadoutTrailingInset ?? 8)
+        let geometry = layout.presentation ?? FieldMonitorLayout(width: layout.viewport.width, height: layout.viewport.height)
+        MonitorStatusChrome(
+            layout: geometry,
+            status: model.control.statusPresentation(elapsedSeconds: model.session.status.recordElapsedSec),
+            showsTimecode: model.chromeSectionMounts(.timecode) && !model.session.status.isPhoto,
+            showsRecording: model.chromeSectionMounts(.recReadout) && !model.session.status.isPhoto
+        ) {
+            if model.chromeSectionMounts(.storage) { storageButton }
+        } format: {
+            if geometry.portrait {
+                topReadout(
+                    model.session.status.isPhoto ? .mode : .resolution,
+                    value: model.session.status.isPhoto ? "MODE" : recSetupFormat,
+                    fontSize: model.session.status.isPhoto ? 12 : (geometry.tablet ? 25 : 23),
+                    weight: model.session.status.isPhoto ? .semibold : .medium,
+                    caption: model.session.status.isPhoto ? nil : recSetupColor)
+                    .accessibilityLabel(model.session.status.isPhoto ? "Shooting mode" : "Recording options")
+            } else if model.chromeSectionMounts(.format) {
+                if model.session.status.isPhoto {
+                    topReadout(.mode, value: model.session.currentShootingMode?.label(
+                        for: model.session.connectedCamera?.model) ?? "Photo",
+                        fontSize: geometry.tablet ? 18 : 16, alwaysAccent: true)
+                } else {
+                    topButton(.recFormat, value: model.session.status.videoFormat?.chipLabel ?? "\u{2014}")
                 }
             }
-        }
-        .frame(height: layout.topDeck.height)
-        .monitorReadoutShadow()
-        .overlay(alignment: .topLeading) {
-            if portrait, let p = layout.presentation {
-                HStack(spacing: 10) {
-                    if model.chromeSectionMounts(.storage) {
-                        storageButton.monitorReadoutShadow()
-                    }
-                    // Left of the Dynamic Island; the batteries stay on the right.
-                    if !p.tablet, model.chromeSectionMounts(.batteries) {
-                        FieldMonitorGauges(horizontal: true, showsPower: false)
-                    }
-                }
-                .offset(y: (p.tablet ? 52 : p.gauges.y) - p.status.y)
+        } color: {
+            if model.chromeSectionMounts(.color), !model.session.status.isPhoto {
+                topButton(.color, value: model.session.status.colorMode?.label(in: model.session.profile) ?? "\u{2014}")
             }
+        } mode: {
+            if layout.viewport.width >= 800, !model.session.status.isPhoto {
+                topReadout(.mode, value: model.session.currentShootingMode?.label(
+                    for: model.session.connectedCamera?.model) ?? "Video",
+                    fontSize: geometry.tablet ? 18 : 16, alwaysAccent: true)
+            }
+        } link: {
+            if model.chromeSectionMounts(.batteries) { FieldMonitorGauges(horizontal: true, showsPower: false) }
         }
         .onChange(of: locked) { _, isLocked in
             if isLocked {
@@ -119,28 +71,6 @@ struct FieldMonitorStatusChrome: View {
             if photo, model.assist.configureTool == .audioMeters {
                 model.assist.configureTool = nil
             }
-        }
-    }
-
-    @ViewBuilder private var tally: some View {
-        if model.chromeSectionMounts(.recReadout), !model.session.status.isPhoto {
-            let status = model.session.status
-            HStack(spacing: 5) {
-                Text(status.isRecording ? "REC" : "STBY").foregroundStyle(
-                    status.isRecording ? MonitorTheme.recording : .white)
-                Text(
-                    String(
-                        format: "%02d:%02d", status.recordElapsedSec / 60,
-                        status.recordElapsedSec % 60)
-                )
-                .foregroundStyle(MonitorTheme.secondary)
-            }
-            .font(MonitorTheme.font(10, weight: .semibold)).monospacedDigit()
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(.black.opacity(0.65), in: Capsule())
-            .fixedSize()
-            .accessibilityLabel(status.isRecording ? "Recording" : "Standby")
-            .accessibilityIdentifier("monitor.recording.readout")
         }
     }
 
@@ -170,7 +100,7 @@ struct FieldMonitorStatusChrome: View {
         if storagePercent && total > 0 {
             return "\(Int((Double(max(0, free)) / Double(total) * 100).rounded()))%"
         }
-        return free > 0 ? "\(free / 1024) GB" : "—"
+        return free > 0 ? "\(free / 1024) GB" : "\u{2014}"
     }
 
     private func topButton(_ item: LiveTopMenu, value: String) -> some View {
@@ -453,14 +383,14 @@ struct FieldMonitorGauges: View {
             }
             if showsPower {
                 Self.gauge(
-                    icon: .smartphone, value: phonePercent < 0 ? "—" : "\(phonePercent)%",
+                    icon: .smartphone, value: phonePercent < 0 ? "\u{2014}" : "\(phonePercent)%",
                     bars: 0, color: Self.batteryColor(phonePercent)
                 )
                 .accessibilityLabel(
                     "Phone battery \(phonePercent >= 0 ? String(phonePercent) : "unknown") percent")
                 let percent = model.session.status.batteryPercent
                 Self.gauge(
-                    icon: .camera, value: (0...100).contains(percent) ? "\(percent)%" : "—",
+                    icon: .camera, value: (0...100).contains(percent) ? "\(percent)%" : "\u{2014}",
                     bars: 0, color: Self.batteryColor(percent)
                 )
                 .accessibilityLabel(
@@ -486,7 +416,7 @@ struct FieldMonitorGauges: View {
             ? MonitorTheme.recording : percent <= 40 ? LiveDesign.amber : LiveDesign.good
     }
 
-    /// Whole frames with a unit; RECOV / LINK / — pass through.
+    /// Whole frames with a unit; RECOV / LINK / , pass through.
     private var fpsValue: String {
         let label = model.session.liveFPS
         return Double(label).map { "\(Int($0.rounded())) fps" } ?? label
@@ -500,7 +430,7 @@ struct FieldMonitorGauges: View {
     /// Multiview tiles: the camera battery pill without its glyph.
     static func cameraBattery(_ percent: Int) -> some View {
         gauge(
-            icon: nil, value: (0...100).contains(percent) ? "\(percent)%" : "—", bars: 0,
+            icon: nil, value: (0...100).contains(percent) ? "\(percent)%" : "\u{2014}", bars: 0,
             color: batteryColor(percent)
         )
         .accessibilityLabel(

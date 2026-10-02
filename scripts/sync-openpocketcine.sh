@@ -51,6 +51,21 @@ LUNA_OWNED=(
   OpenInstaCine/CameraSessionCore.swift
   OpenInstaCine/OpenInstaCineBrand.swift
   OpenInstaCine/OsmoMonitorPresentation.swift
+  # SHELL-03 I-2: shared monitor placement, status and guarded capture widgets. These
+  # files now compose native/integration slots around OpenCine; keep that adoption.
+  OpenInstaCine/LiveViewScreen.swift
+  OpenInstaCine/FieldMonitorChrome.swift
+  OpenInstaCine/LiveCameraControlBar.swift
+  OpenInstaCine/LiveRecordButton.swift
+  OpenInstaCine/LiveDispToggle.swift
+  OpenInstaCine/LiveLockButton.swift
+  OpenInstaCine/LiveSystemChrome.swift
+  OpenInstaCine/CaptureControlSheets.swift
+  OpenInstaCine/CaptureQuickControl.swift
+  OpenInstaCine/LiveMonitorLayout.swift
+  OpenInstaCine/MonitorUIReview.swift
+  OpenInstaCineTests/MonitorCanvasObservationTests.swift
+  OpenInstaCineUITests/MonitorUIFlowTests.swift
   # What is left of upstream's startup chrome once the wizard moved to OpenCineAppKit (SHELL-02).
   OpenInstaCine/StartupChrome.swift
   OpenInstaCine/PictureEVMeter.swift
@@ -93,6 +108,7 @@ DJI_ONLY=(
 # shell (OpenCineAppKit CamerasScreen / PairScreen / CamerasModel / SavedCamerasStore, SHELL-02),
 # and the helpers only they used. Never synced back.
 SHARED_SHELL=(
+  OpenInstaCine/LivePortraitSystemBar.swift
   OpenInstaCine/SavedCamerasView.swift
   OpenInstaCine/OsmoCameraPageAdapter.swift
   OpenInstaCine/ConnectionSetupView.swift

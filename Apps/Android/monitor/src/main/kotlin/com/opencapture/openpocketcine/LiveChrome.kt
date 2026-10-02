@@ -37,6 +37,8 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -105,7 +107,7 @@ val ChromeShape = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
 @Composable
 fun Modifier.monitorGlass(shape: Shape = ChromeShape): Modifier = liveChromeGlass(shape)
 
-/** iOS `CloseButton` on live picker / assist cards — 34dp glass circle. */
+/** iOS `CloseButton` on live picker / assist cards \u2014 34dp glass circle. */
 @Composable
 fun LivePopupCloseButton(
     onClick: () -> Unit,
@@ -159,7 +161,7 @@ fun Modifier.liveModuleFrame(rect: ChromeRect, alignment: Alignment): Modifier {
 }
 
 /**
- * Measures unbounded then scales down to [maxWidth] — iOS `minimumScaleFactor` for the
+ * Measures unbounded then scales down to [maxWidth] , iOS `minimumScaleFactor` for the
  * info-pill so chips compress instead of wrapping when the deck is tight.
  */
 @Composable
@@ -418,7 +420,7 @@ internal fun bottomBarSplit(barsWidth: Float, gap: Float, captureHug: Float): Bo
 }
 
 /**
- * The iPhone Dynamic Island's landscape leading safe-area inset, in points/dp —
+ * The iPhone Dynamic Island's landscape leading safe-area inset, in points/dp ,
  * the canonical iOS geometry throughout the layout tests (`LiveMonitorLayout`
  * 874×402 with leading 59). `feedFrame` turns it into a left chrome lane: the
  * feed starts at x = 59 while the fixed-margin lock button (chrome insets
@@ -458,7 +460,7 @@ internal const val PORTRAIT_SYSTEM_RAIL_BOTTOM_INSET_DP = 30f
  * Devices whose punch-hole resolves below the core's 50dp cutout threshold
  * would otherwise run the feed edge-to-edge, putting the lock button and
  * battery rail ON the image. Flooring the cutout at the iPhone island lane
- * synthesizes the iOS composition — feed right of the chrome — as a
+ * synthesizes the iOS composition , feed right of the chrome , as a
  * platform-adapter decision, keeping the layout math platform-blind. The
  * floor is a MINIMUM under the physical cutout only; a transient bar on this
  * edge still ADDS its lane on top so the feed clears the overlay.
@@ -468,7 +470,7 @@ internal fun monitorLeadingInsetDp(
     transientBarDp: Float,
     chromeScale: Float = 1f,
 ): Float {
-    // Island floor is geometry, not chrome scale — compact phones still get
+    // Island floor is geometry, not chrome scale , compact phones still get
     // the iPhone lane. `chromeScale` is unused here (callers pass it).
     return maxOf(cutoutDp, IOS_ISLAND_LANE_DP) + maxOf(0f, transientBarDp - cutoutDp)
 }
@@ -524,7 +526,7 @@ data class ChromeRect(val x: Float, val y: Float, val width: Float, val height: 
     }
 }
 
-/** Canvas origin in window pixels — capture / top-picker anchors are relative to this. */
+/** Canvas origin in window pixels \u2014 capture / top-picker anchors are relative to this. */
 val LocalLiveCanvasOrigin = compositionLocalOf { Offset.Zero }
 
 fun Modifier.reportChromeFrame(onFrame: (ChromeRect) -> Unit): Modifier =
@@ -548,7 +550,7 @@ fun Modifier.reportChromeFrame(onFrame: (ChromeRect) -> Unit): Modifier =
 /**
  * OpenZCine live-view popup geometry (`PanelHost.topPickerBody` / `bottomPickerBody`):
  * a glass card 8dp below a top chip or 10dp above a bottom bar, clamped into the
- * safe viewport — never a full-bleed or centred sheet.
+ * safe viewport , never a full-bleed or centred sheet.
  */
 object LivePopupPlacement {
     data class Box(val x: Float, val y: Float, val width: Float, val maxHeight: Float)
@@ -657,7 +659,7 @@ object LiveChromeReadout {
 }
 
 /**
- * Pocket mapping onto OpenZCine's FPS chip labels. SoftAP live view is ~25 fps —
+ * Pocket mapping onto OpenZCine's FPS chip labels. SoftAP live view is ~25 fps ,
  * that is the delivery target for bars, not `CameraStatus.fps` (record format).
  */
 object LiveViewLink {
@@ -688,7 +690,7 @@ object LiveViewLink {
         if (connection == ConnectionPhase.FAILED) return "FAIL"
         if (recovering) return "RECOV"
         if (measuredFPS > 0) return formattedFPS
-        return if (connection == ConnectionPhase.IDLE) "—" else "LINK"
+        return if (connection == ConnectionPhase.IDLE) "\u2014" else "LINK"
     }
 }
 
@@ -893,6 +895,7 @@ data class LiveMonitorLayout(
     val usesFieldMonitor: Boolean = false,
     /** Operator joystick diameter at chrome scale 1 (Small / Medium / Large). */
     val stickSide: Float = com.opencapture.monitorui.MonitorLayoutPolicy.STICK_SIDE,
+    val field: com.opencapture.monitorui.MonitorFieldLayout? = null,
 ) {
     val onFeed: ChromeRect
         get() = if (picture.width > 1f) picture else feed
@@ -1149,6 +1152,7 @@ data class LiveMonitorLayout(
                 safeBottom = safeBottom,
                 usesFieldMonitor = true,
                 stickSide = joystick.side,
+                field = p,
             )
         }
 
@@ -1165,7 +1169,7 @@ data class LiveMonitorLayout(
 
         /**
          * Center the displayed raster in the cinema well. A 9:16 Pocket flip
-         * pillarboxes here so the rail — keyed off the 16:9 well — never moves.
+         * pillarboxes here so the rail , keyed off the 16:9 well , never moves.
          */
         fun pictureFrame(
             aspect: Float,
@@ -1419,11 +1423,11 @@ internal fun MonitorChromeButton(
 }
 
 @Composable
-fun LockButton(locked: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun LockButton(locked: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     MonitorChromeButton(
         OpcIcon.LOCK, if (locked) "Unlock monitor controls" else "Lock monitor controls",
         modifier.semantics { toggleableState = ToggleableState(locked) },
-        selected = locked, buttonRole = Role.Switch, onClick = onClick,
+        enabled = enabled, selected = locked, buttonRole = Role.Switch, onClick = onClick,
     )
 }
 
@@ -1434,38 +1438,8 @@ fun DispButton(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
-    Column(
-        modifier
-            .width(LiveChromeMetrics.DISP_W.dp)
-            .height(LiveChromeMetrics.DISP_H.dp)
-            .monitorGlass()
-            .chromeClickable(onClick = onClick, onLongClick = onLongClick)
-            .semantics {
-                contentDescription = if (clean) "DISP 2 clean" else "DISP 1 live"
-                role = Role.Button
-            },
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
-    ) {
-        Text(
-            "DISP",
-            color = LiveDesign.muted,
-            style = LiveType.ui(com.opencapture.monitorui.MonitorLayoutPolicy.DISP_SIZE, FontWeight.Bold)
-                .copy(letterSpacing = com.opencapture.monitorui.MonitorLayoutPolicy.DISP_TRACKING.sp),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            Box(
-                Modifier.size(width = 14.dp, height = 3.dp)
-                    .clip(CircleShape)
-                    .background(if (!clean) LiveDesign.info else LiveDesign.hairlineStrong),
-            )
-            Box(
-                Modifier.size(width = 14.dp, height = 3.dp)
-                    .clip(CircleShape)
-                    .background(if (clean) LiveDesign.info else LiveDesign.hairlineStrong),
-            )
-        }
-    }
+    com.opencapture.monitorui.MonitorDisplayButton(clean, LiveChromeMetrics.DISP_W,
+        LiveChromeMetrics.DISP_H, modifier, onClick = onClick, onLongClick = onLongClick)
 }
 
 @Composable
@@ -1477,125 +1451,31 @@ fun AuxCircleButton(modifier: Modifier = Modifier, enabled: Boolean = true, onCl
             .size(side.dp)
             .alpha(if (enabled) 1f else 0.4f)
             .monitorGlass(RoundedCornerShape(14.dp))
-            .chromeClickable(enabled = enabled, onClick = onClick)
+            .then(if (enabled) Modifier.chromeClickable(onClick = onClick)
+                else Modifier.semantics { disabled() })
             .semantics { role = Role.Button },
         glyph = glyph,
     )
 }
 
+/** Only the native photo service and integration mode editor remain in the app. */
 @Composable
-internal fun RecordButton(
-    recording: Boolean,
+internal fun LiveCaptureButton(
+    model: AppModel,
     enabled: Boolean,
+    diameter: Float,
     modifier: Modifier = Modifier,
-    confirm: Boolean = false,
-    photo: Boolean = false,
-    diameter: Float = LiveChromeMetrics.RECORD,
-    request: RecordConfirmationRequest = CaptureShutterPolicy.request(
-        shootingMode = CameraCommands.SHOOT_VIDEO,
-        recording = recording,
-        locked = !enabled,
-        busy = !enabled,
-        phase = com.opencapture.opencine.insta360.shell.ConnectionPhase.LIVE,
-    ),
-    onClick: () -> Unit,
 ) {
-    var confirmOpen by remember { mutableStateOf(false) }
-    var pending by remember { mutableStateOf<RecordConfirmationRequest?>(null) }
-    LaunchedEffect(request) {
-        if (CaptureShutterPolicy.shouldDismiss(pending, request)) {
-            confirmOpen = false
-            pending = null
-        }
-    }
-    if (confirmOpen) {
-        Dialog(
-            onDismissRequest = { confirmOpen = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .chromeClickable(onClick = { confirmOpen = false }),
-                contentAlignment = Alignment.BottomCenter,
-            ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .pickerPanelGlass(ChromeShape)
-                        .padding(horizontal = 18.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        if (recording) "Stop recording?" else "Start recording?",
-                        color = LiveDesign.text,
-                        style = LiveType.ui(16f, FontWeight.SemiBold),
-                    )
-                    Text(
-                        if (recording) "Stop" else "Start",
-                        color = if (recording) LiveDesign.rec else LiveDesign.accent,
-                        style = LiveType.ui(16f, FontWeight.SemiBold),
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .chromeClickable(onClick = {
-                                    val snap = pending
-                                    confirmOpen = false
-                                    pending = null
-                                    if (CaptureShutterPolicy.canCommit(snap, request)) onClick()
-                                })
-                                // Both rows are plain Text, so without a role
-                                // they read as label, not as something to press
-                                // — at the one moment that costs a take.
-                                .semantics { role = Role.Button }
-                                .padding(vertical = 14.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    )
-                    Text(
-                        "Cancel",
-                        color = LiveDesign.muted,
-                        style = LiveType.ui(15f, FontWeight.Medium),
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .chromeClickable(onClick = { confirmOpen = false })
-                                .semantics { role = Role.Button }
-                                .padding(vertical = 12.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    )
-                }
-            }
-        }
-    }
-    Box(
-        modifier
-            .size(diameter.dp)
-            .then(if (recording && !enabled) Modifier.graphicsLayer { alpha = 0.72f } else Modifier)
-            .chromeClickable(enabled = enabled, onClick = {
-                if (confirm && request.canConfirm) {
-                    pending = request
-                    confirmOpen = true
-                } else if (!confirm) {
-                    onClick()
-                }
-            })
-            .semantics {
-                contentDescription =
-                    when {
-                        photo -> "Take photo"
-                        recording -> "Stop recording"
-                        else -> "Start recording"
-                    }
-                role = Role.Button
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        com.opencapture.monitorui.MonitorRecordLamp(
-            recording = recording, photo = photo, modifier = Modifier.fillMaxSize(),
-        )
-    }
+    val status by model.session.status.collectAsState()
+    val photo = CaptureShutterPolicy.isStillCapture(status.shootingMode)
+    com.opencapture.opencine.appkit.MonitorCaptureButton(
+        control = model.session.control, diameter = diameter,
+        enabled = enabled && (!photo || model.session.phase == com.opencapture.opencine.insta360.shell.ConnectionPhase.LIVE),
+        modifier = modifier,
+        photo = photo,
+        confirm = model.recordConfirmationEnabled,
+        takePhoto = model::pressShutter,
+    )
 }
 
 @Composable
@@ -1625,7 +1505,7 @@ internal fun BatteryOutlineRow(percent: Int, charging: Boolean, camera: Boolean)
             percent <= 40 -> LiveDesign.amber
             else -> LiveDesign.good
         }
-    val readout = if (percent < 0) "—" else "$percent"
+    val readout = if (percent < 0) "\u2014" else "$percent"
     // Phone and camera are told apart only by the glyph, so both rows speak a
     // bare number without this. The em dash for "unknown" reads as nothing.
     val source = if (camera) "Camera battery" else "Phone battery"
@@ -1704,98 +1584,28 @@ fun CameraBatteryReadout(percent: Int, modifier: Modifier = Modifier) {
     ) {
         CameraGlyph(LiveDesign.text, Modifier.size(12.dp, 10.dp))
         Text(
-            if (percent in 0..100) "$percent%" else "—",
+            if (percent in 0..100) "$percent%" else "\u2014",
             color = LiveDesign.text,
             style = LiveType.ui(12f, FontWeight.SemiBold),
         )
     }
 }
 
+/** Compatibility adapter for native timecode text used by remaining app surfaces. */
 @Composable
 fun TimecodeReadout(timecode: String?, modifier: Modifier = Modifier, portrait: Boolean = false) {
     val config = LocalConfiguration.current
-    val tablet = min(config.screenWidthDp, config.screenHeightDp) >= 600
-    val incoming = timecode?.takeIf { it.isNotBlank() }
-    val clock = com.opencapture.openpocketcine.session.timecodeClock(incoming)
-        ?: if (portrait) "00:00:00" else "--:--:--"
-    val raw = clock
-    val colon = raw.lastIndexOf(':')
-    val head = if (colon >= 0) raw.substring(0, colon + 1) else raw
-    val tail = if (colon >= 0) raw.substring(colon + 1) else ""
-    // Nothing on screen says these digits are a timecode, and the placeholder
-    // is punctuation that speech drops entirely.
-    val spoken = if (incoming == null) "Timecode not available" else "Timecode $raw"
-    if (portrait) {
-        Text(
-            raw,
-            color = LiveDesign.text,
-            style = LiveType.mono(15f, FontWeight.Normal),
-            maxLines = 1,
-            softWrap = false,
-            modifier = modifier.semantics { contentDescription = spoken },
-        )
-        return
-    }
-    Text(
-        buildAnnotatedString {
-            withStyle(SpanStyle(color = LiveDesign.text)) { append(head) }
-            withStyle(SpanStyle(color = LiveDesign.accent)) { append(tail) }
-        },
-        style = LiveType.mono(if (tablet) 25f else 23f, FontWeight.Medium)
-            ,
-        maxLines = 1,
-        softWrap = false,
-        modifier =
-            modifier
-                .wrapContentWidth(align = Alignment.Start, unbounded = true)
-                .semantics { contentDescription = spoken },
-    )
+    com.opencapture.monitorui.MonitorClock(
+        com.opencapture.openpocketcine.session.timecodeClock(timecode?.takeIf { it.isNotBlank() }),
+        tablet = min(config.screenWidthDp, config.screenHeightDp) >= 600,
+        modifier = modifier, compact = portrait)
 }
 
-/** "02:14" reads as digits; speech wants the units named. */
-private fun spokenElapsed(seconds: Int): String {
-    val minutes = seconds / 60
-    val rest = seconds % 60
-    val m = if (minutes == 1) "1 minute" else "$minutes minutes"
-    val s = if (rest == 1) "1 second" else "$rest seconds"
-    return when {
-        minutes == 0 -> s
-        rest == 0 -> m
-        else -> "$m $s"
-    }
-}
-
-/** Elapsed time comes from camera telemetry; this view never starts a timer. */
 @Composable
-fun RecChip(recording: Boolean, elapsedSeconds: Int = 0) {
-    val config = LocalConfiguration.current
-    val size = if (min(config.screenWidthDp, config.screenHeightDp) >= 600) 11.5f else 10.5f
-    val pulse = com.opencapture.monitorui.monitorPulsePhase(1600, enabled = recording)
-    val elapsed = elapsedSeconds.coerceAtLeast(0)
-    val duration = "%02d:%02d".format(java.util.Locale.ROOT, elapsed / 60, elapsed % 60)
-    Row(Modifier.graphicsLayer { alpha = 1f - .75f * pulse }
-        .background(if (recording) LiveDesign.rec.copy(alpha = .9f) else Color(0xFF060708).copy(alpha = .72f), RoundedCornerShape(percent = 50))
-        .padding(horizontal = 9.dp, vertical = 4.dp)
-        // "REC" and "02:14" are two nodes and read as fragments. Whether the
-        // chip also *announces* a start or stop is a live-region question the
-        // coverage rules in ARCHITECTURE.md have to settle first; this only
-        // makes the chip legible to someone who reaches it.
-        .clearAndSetSemantics {
-            val spoken = spokenElapsed(elapsed)
-            contentDescription =
-                when {
-                    recording -> "Recording, $spoken"
-                    elapsed > 0 -> "Standby, $spoken"
-                    else -> "Standby"
-                }
-        }, verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        if (recording) Box(Modifier.size(6.dp).background(Color.White, CircleShape))
-        Text(if (recording) "REC" else "STBY", color = LiveDesign.text,
-            style = LiveType.ui(size, FontWeight.Medium).copy(letterSpacing = .6.sp), maxLines = 1)
-        Text(duration, color = Color.White.copy(alpha = .75f),
-            style = LiveType.mono(size, FontWeight.Medium), maxLines = 1)
-    }
+fun RecChip(recording: Boolean?, elapsedSeconds: Int = 0) {
+    com.opencapture.monitorui.MonitorRecordingReadout(
+        com.opencapture.monitorui.MonitorStatusPresentation(recording,
+            if (recording == null) null else elapsedSeconds))
 }
 
 @Composable
