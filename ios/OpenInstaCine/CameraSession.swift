@@ -1373,7 +1373,9 @@ extension CameraSession: LunaConnectPort {
     /// The attempt's common session; the shell binds it to the monitor once it connects.
     func openSession() -> LunaCameraSession {
         resetForConnection()
-        return backend.openSession()
+        let next = backend.openSession()
+        next.configureLens(zoomDomain: 1...zoomCeiling)
+        return next
     }
 
     func forget(cameraID: UUID) { backend.forget(cameraID: cameraID) }

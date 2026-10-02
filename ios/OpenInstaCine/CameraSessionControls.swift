@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import Insta360Apple
 import Insta360Protocol
+import OpenCineCore
 import OpenPocketViewCore
 
 /// Held gimbal stick streamed as Luna `GIMBAL_CONTROL` MOVE (cmd 226) at a fixed rate.
@@ -236,7 +237,7 @@ extension CameraSession {
 
     // MARK: - Focus mode and metering
 
-    func setFocusMode(_ mode: FocusMode) {
+    func setFocusMode(_ mode: OpenPocketViewCore.FocusMode) {
         setFocusOption(mode == .single ? .single : .continuousDefault)
     }
 
@@ -253,6 +254,18 @@ extension CameraSession {
         pins.focus = CameraValuePin(option, now: pinNow, settle: 3)
         status.focusMode = option.focusMode
         status.focusTrack = option.track
+        if af == .single || af == .continuous {
+            guard let common = backend.session else {
+                pins.focus = nil
+                return
+            }
+            let focus: OpenCineCore.FocusMode = af == .single ? .single : .continuous
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if !(await submitLens(.focusMode(focus), through: common)) { pins.focus = nil }
+            }
+            return
+        }
         let mode = backend.functionMode
         sendControl(
             "Focus \(option.chip)", { try LunaProtocol.setAFMode(af, functionMode: mode) },
@@ -418,14 +431,30 @@ extension CameraSession {
         zoomWriteTask = Task { @MainActor [weak self] in
             while let self, let next = self.pendingZoomWrite {
                 self.pendingZoomWrite = nil
-                let mode = self.backend.functionMode
-                if let request = try? LunaProtocol.setZoomScale(next, functionMode: mode) {
-                    _ = try? await self.backend.send(request)
-                }
+                _ = await self.submitLens(.zoom(next))
                 try? await Task.sleep(for: .milliseconds(80))
             }
             self?.zoomWriteTask = nil
             self?.scheduleSettingsRefresh()
+        }
+    }
+
+    /// Preserves the app's existing lens pacing while using the connection's common receipts.
+    /// Product Showcase stays on the integration-owned extension above.
+    private func submitLens(
+        _ value: OpenCineCore.SettingValue, through session: LunaCameraSession? = nil
+    ) async -> Bool {
+        guard let common = session ?? backend.session else { return false }
+        let receipt = await common.submit(
+            CameraCommand(.set(value), preconditions: CommandPreconditions(common.current)))
+        switch receipt.stage {
+        case .accepted, .awaitingObservation, .confirmed:
+            scheduleSettingsRefresh()
+            return true
+        default:
+            noteCommandFailure()
+            controlNote = "\(value.key == .zoom ? "Zoom" : "Focus") was not applied by the camera."
+            return false
         }
     }
 
