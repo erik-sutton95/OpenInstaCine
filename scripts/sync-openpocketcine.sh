@@ -44,8 +44,9 @@ LUNA_OWNED=(
   OpenInstaCine/LunaThumbnailImage.swift
   OpenInstaCine/DebugRemote.swift
   OpenInstaCine/OpenInstaCineBrand.swift
-  OpenInstaCine/OsmoCameraPageAdapter.swift
   OpenInstaCine/OsmoMonitorPresentation.swift
+  # What is left of upstream's startup chrome once the wizard moved to OpenCineAppKit (SHELL-02).
+  OpenInstaCine/StartupChrome.swift
   OpenInstaCine/PictureEVMeter.swift
   OpenInstaCine/Assets.xcassets
   OpenInstaCine/Resources
@@ -80,6 +81,18 @@ DJI_ONLY=(
   'OpenInstaCineUITests/PhysicalStationSetupTests.swift'
   # Not DJI: tests upstream's OpenCineFrameIO credentials (see Frameio above).
   OpenInstaCineTests/FrameioCredentialsTests.swift
+)
+
+# Upstream's cameras page, pair wizard and saved-camera store, replaced by OpenCine's shared app
+# shell (OpenCineAppKit CamerasScreen / PairScreen / CamerasModel / SavedCamerasStore, SHELL-02),
+# and the helpers only they used. Never synced back.
+SHARED_SHELL=(
+  OpenInstaCine/SavedCamerasView.swift
+  OpenInstaCine/OsmoCameraPageAdapter.swift
+  OpenInstaCine/ConnectionSetupView.swift
+  OpenInstaCine/SavedCameraStore.swift
+  OpenInstaCine/CameraWifiKeychain.swift
+  OpenInstaCineTests/CameraPagePresentationTests.swift
 )
 
 TOOLS=(stamp-source-revision.sh pull-control-log.sh analyze-live-log.py)
@@ -117,6 +130,7 @@ build_tree() {
   rename_tree "$out/ios"
   for d in "${LUNA_OWNED[@]}"; do rm -rf "${out:?}/ios/$d"; done
   for d in "${DJI_ONLY[@]}"; do rm -rf "${out:?}"/ios/$d; done  # unquoted: entries may glob
+  for d in "${SHARED_SHELL[@]}"; do rm -rf "${out:?}/ios/$d"; done
   cp "$ROOT/scripts/apply-openpocketcine-overlays.py" "$out/scripts/"
   /usr/bin/python3 "$out/scripts/apply-openpocketcine-overlays.py"
   rm -rf "$out/scripts"

@@ -72,6 +72,26 @@ Nothing is meant to look different. Underneath:
   head-tracking, zoom chip or timecode rows on iPhone (nothing is declared yet; Android already
   behaved this way). No
   Multiview entry: the app qualifies no multicam budget.
+- Shared connection flow (SHELL-02): the cameras page, the pair page, connect progress and
+  failures come from OpenCine's app shell (`OpenCineAppKit` `CamerasScreen` / `PairScreen` /
+  `CamerasModel`, Android `:appkit`) over the Luna integration (`LunaIntegration`, which connects
+  through the app's session). Saved cameras move to a versioned document (iOS UserDefaults
+  `OpenInstaCine.Cameras`, Android prefs `openpocketcine.cameras`/`document`) merged on every
+  launch with the old records (`OpenInstaCine.SavedCameras`, `openpocketcine.saved-cameras`/
+  `records-json`), which stay mirrored so an older build still reads current cameras. Keychain,
+  Keystore, approval identity, media and EV keys are untouched. Visible differences: the pair
+  page rail is "Find your camera" then the four connect-card steps (was four Luna pages), with the
+  step name as title, one instruction card per prompt and no per-step Luna body text, check list
+  or VPN banner during an attempt (the pre-check, still-looking and VPN tips and a Bluetooth
+  problem show while choosing); Pair on a nearby card opens the pair page with it selected
+  (Continue starts it); a nearby card reads "Ready to pair" with "Luna Ultra · nearby" on iOS
+  (was "Insta360 · nearby") and "Insta360 Luna Ultra · nearby" on Android (was "Pocket · ...");
+  Android's offline card copy is the shared "Not found. Power it on to reconnect"; the
+  connecting card's caption is the prompt ("Tap Join when iOS asks...") instead of the phase
+  label; iOS now offers Open Settings when Bluetooth is off or not allowed; one undecodable saved
+  record no longer empties the list on the next save; Android forget also drops the camera's
+  saved Wi-Fi (as iOS always did); iOS "on the camera network" now tests the Luna's
+  192.168.42.x (Pocket's 192.168.2.x test never matched).
 
 ## Physical device checklist (Luna Ultra, iOS and Android)
 
@@ -110,6 +130,16 @@ Nothing below has run on hardware.
     head; no AUDIO tile, assist, meter or Clean view pin anywhere live; the live timecode runs
     time of day and matches the camera clock after connect; zoom chip and FOCUS tile as before,
     no APERTURE; record start and stop from the record button with and without confirmation.
+
+15. SHELL-02 (iPhone and Android): first pair from an empty install (approve on the camera, join
+    its Wi-Fi, picture); reconnect a saved camera with no new approval; quick join from saved
+    Wi-Fi (camera powered on after a while, Bluetooth advert not seen yet); Bluetooth off and
+    Bluetooth not allowed show the Bluetooth card with Open Settings, and the list fills after
+    returning; Cancel during each step; forget (the camera's Wi-Fi password goes with it, the
+    approval stays: re-pair without a new Allow); a failed connect shows the same copy as before
+    ("The camera didn't respond in time..."). Upgrade from the current TestFlight or Play build
+    keeps every camera, name and Wi-Fi; downgrade to it shows them too, an edit there (rename,
+    forget) survives the next upgrade.
 
 Known limits: two Luna cameras at once cannot be tested (LunaWiFi joins one camera access point,
 192.168.42.x); the two-session gate is simulated only. Android reports no serial on this path,
