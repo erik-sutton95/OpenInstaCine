@@ -216,7 +216,7 @@
 
         /// Uses Luna's actual report decoding and capability projection. UI writes fail locally,
         /// so these fixtures can exercise confirmation/editing without a camera or ACK-as-report.
-        private static func simulatedSession(status: CameraStatus) -> LunaCameraSession {
+        static func simulatedSession(status: CameraStatus) -> LunaCameraSession {
             let session = LunaCameraSession(send: { _ in throw CancellationError() },
                 functionMode: { LunaFunctionMode.normalVideo.rawValue }, readSettings: {}, readCapture: {})
             session.linkChanged(.streaming, serial: nil)

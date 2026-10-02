@@ -24,6 +24,11 @@ final class CapturePanelRenderComparisonTests: XCTestCase {
         status.focusMode = .continuous
         status.focusTrack = .subjectLock
         model.session.status = status
+        #if targetEnvironment(simulator)
+            // The production drawers now use common reports/descriptors. Bind the same
+            // isolated, report-decoding SIMULATED session used by rendered UI reviews.
+            model.control.bind(MonitorUIReview.simulatedSession(status: status))
+        #endif
         let size = CGSize(width: 874, height: 402)
         let host = UIHostingController(
             rootView: CaptureComparisonCanvas(model: model, held: false, size: size))
@@ -36,6 +41,7 @@ final class CapturePanelRenderComparisonTests: XCTestCase {
             model.captureDrum = nil
             window.isHidden = true
             window.rootViewController = nil
+            model.control.unbind()
             model.session.disconnect()
         }
         let background = try CaptureComparisonPixels(await render(host.view))

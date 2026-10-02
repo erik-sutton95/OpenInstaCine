@@ -38,6 +38,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -1450,7 +1451,8 @@ fun AuxCircleButton(modifier: Modifier = Modifier, enabled: Boolean = true, onCl
             .size(side.dp)
             .alpha(if (enabled) 1f else 0.4f)
             .monitorGlass(RoundedCornerShape(14.dp))
-            .chromeClickable(enabled = enabled, onClick = onClick)
+            .then(if (enabled) Modifier.chromeClickable(onClick = onClick)
+                else Modifier.semantics { disabled() })
             .semantics { role = Role.Button },
         glyph = glyph,
     )
