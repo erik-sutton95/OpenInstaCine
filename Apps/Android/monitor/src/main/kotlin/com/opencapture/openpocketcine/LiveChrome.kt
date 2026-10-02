@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
@@ -1463,7 +1464,8 @@ internal fun LiveCaptureButton(
     diameter: Float,
     modifier: Modifier = Modifier,
 ) {
-    val photo = CaptureShutterPolicy.isStillCapture(model.session.status.value.shootingMode)
+    val status by model.session.status.collectAsState()
+    val photo = CaptureShutterPolicy.isStillCapture(status.shootingMode)
     com.opencapture.opencine.appkit.MonitorCaptureButton(
         control = model.session.control, diameter = diameter,
         enabled = enabled && (!photo || model.session.phase == com.opencapture.opencine.insta360.shell.ConnectionPhase.LIVE),
