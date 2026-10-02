@@ -213,8 +213,9 @@ internal class FeedIncidentRecorder(
                 current.header.worstGapSeconds = gap
                 current.header.failingStage = stage
             }
-            if (verdict.kind == FeedIncidentKind.DECODER_ERROR && current.header.errorClass == null) {
-                current.header.kind = verdict.kind
+            val kind = verdict.kind
+            if (kind == FeedIncidentKind.DECODER_ERROR && current.header.errorClass == null) {
+                current.header.kind = kind
                 current.header.errorClass = snapshot.decoder.errorClass
             }
         }
