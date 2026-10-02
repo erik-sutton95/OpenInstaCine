@@ -1,7 +1,7 @@
 pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
 dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
 rootProject.name = "OpenInstaCine"
-include(":app", ":core-api", ":monitor", ":luna-adapter")
+include(":app", ":monitor")
 
 // Shared Compose UI from the sibling OpenCineUI checkout (candidate wiring
 // until OpenCineUI publishes a release): ~/Work/OpenCineUI next to this repo.
@@ -18,5 +18,15 @@ includeBuild("../../../OpenCineCore/Android") {
     dependencySubstitution {
         substitute(module("com.opencapture.opencine:core")).using(project(":core"))
         substitute(module("com.opencapture.opencine:media")).using(project(":media"))
+    }
+}
+// Candidate (CORE-API): the Insta360 shell contract and the Kotlin Luna adapter from a sibling
+// checkout of OpenCineInsta360, pinned by SHA in opencine-pins.txt. It includes ../OpenCineCore
+// under the same name, so both resolve one Core build. Replace with Maven coordinates once published.
+includeBuild("../../../OpenCineInsta360/Android") {
+    name = "opencineinsta360"
+    dependencySubstitution {
+        substitute(module("com.opencapture.opencine:insta360-shell")).using(project(":insta360-shell"))
+        substitute(module("com.opencapture.opencine:insta360-luna")).using(project(":insta360-luna"))
     }
 }

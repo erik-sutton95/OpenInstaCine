@@ -1,6 +1,6 @@
 package com.opencapture.openpocketcine
 
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.feed.FeedUpscaler
 import com.opencapture.openpocketcine.session.CameraCommands
 import kotlin.test.Test

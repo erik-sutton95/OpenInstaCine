@@ -1,16 +1,16 @@
 package com.opencapture.openpocketcine.session
 
-import com.opencapture.openpocketcine.core.CameraColorProfile
-import com.opencapture.openpocketcine.core.CameraExposure
-import com.opencapture.openpocketcine.core.CameraFocusMode
-import com.opencapture.openpocketcine.core.CameraGimbalMode
-import com.opencapture.openpocketcine.core.CameraGimbalSpeed
-import com.opencapture.openpocketcine.core.CameraReadout
-import com.opencapture.openpocketcine.core.CameraRecordFormat
-import com.opencapture.openpocketcine.core.CameraShootingMode
-import com.opencapture.openpocketcine.core.CameraStorage
-import com.opencapture.openpocketcine.core.CameraTrackFrame
-import com.opencapture.openpocketcine.core.CameraTrackState
+import com.opencapture.opencine.insta360.shell.CameraColorProfile
+import com.opencapture.opencine.insta360.shell.CameraExposure
+import com.opencapture.opencine.insta360.shell.CameraFocusMode
+import com.opencapture.opencine.insta360.shell.CameraGimbalMode
+import com.opencapture.opencine.insta360.shell.CameraGimbalSpeed
+import com.opencapture.opencine.insta360.shell.CameraReadout
+import com.opencapture.opencine.insta360.shell.CameraRecordFormat
+import com.opencapture.opencine.insta360.shell.CameraShootingMode
+import com.opencapture.opencine.insta360.shell.CameraStorage
+import com.opencapture.opencine.insta360.shell.CameraTrackFrame
+import com.opencapture.opencine.insta360.shell.CameraTrackState
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.media.MediaFile
 import kotlin.test.*

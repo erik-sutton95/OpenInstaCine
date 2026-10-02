@@ -46,7 +46,7 @@ From the repo root:
 
 ```bash
 just android-build    # debug APK
-just android-check    # debug APK, unit tests and lint for app, monitor and luna-adapter
+just android-check    # debug APK, unit tests and lint for app and monitor
 ```
 
 The app is **arm64-v8a only**, Android 10 or newer. The debug build is named

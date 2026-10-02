@@ -63,7 +63,7 @@ class ShootingModePolishTest {
         )
         val live = CaptureShutterPolicy.request(
             CameraCommands.SHOOT_VIDEO, recording = false, locked = false, busy = false,
-            phase = com.opencapture.openpocketcine.core.ConnectionPhase.LIVE,
+            phase = com.opencapture.opencine.insta360.shell.ConnectionPhase.LIVE,
         )
         val slowMo = live.copy(shootingMode = CameraCommands.SHOOT_SLOWMO)
         val photo = live.copy(shootingMode = CameraCommands.SHOOT_PHOTO)

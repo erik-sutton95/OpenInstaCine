@@ -45,7 +45,7 @@ import com.opencapture.monitorui.MonitorTypography
 import com.opencapture.openpocketcine.AppModel
 import com.opencapture.openpocketcine.AppPanel
 import com.opencapture.openpocketcine.OpcIcon
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.monitor.MonitorIconButton
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.openpocketcine.multiview.SharedWiFi

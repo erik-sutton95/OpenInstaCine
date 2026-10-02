@@ -1,7 +1,7 @@
 package com.opencapture.openpocketcine.media
 
 import com.opencapture.openpocketcine.bridge.SwiftCore
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.session.DatalinkDriver
 import com.opencapture.openpocketcine.session.DumlFrame
 import com.opencapture.openpocketcine.session.PocketCameraSession

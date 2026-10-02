@@ -7,8 +7,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.opencapture.openpocketcine.core.CameraMediaStore
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.CameraMediaStore
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.lut.ClipColorProfile
 import com.opencapture.openpocketcine.session.DumlFrame

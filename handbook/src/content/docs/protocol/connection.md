@@ -22,8 +22,8 @@ BLE scan → GATT connect → key exchange → owner approval → read Wi-Fi cre
 
 Framing, crypto and messages live in the Foundation-only Swift package
 `Adapters/Insta360Protocol/`. Platform adapters own Bluetooth, crypto, the Wi-Fi
-join and sockets: `Adapters/Insta360Apple/` on iOS, `Apps/Android/luna-adapter/`
-on Android.
+join and sockets: `Insta360Apple` on iOS and `insta360-luna` on Android, both in the
+OpenCineInsta360 package.
 
 ## Evidence levels
 

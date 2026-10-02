@@ -12,7 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.monitorui.MonitorQuickControl
 import com.opencapture.openpocketcine.session.ApertureStrategy
 import com.opencapture.openpocketcine.session.CameraCommands

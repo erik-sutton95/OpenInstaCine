@@ -60,7 +60,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.session.CameraCommands
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -1518,7 +1518,7 @@ internal fun RecordButton(
         recording = recording,
         locked = !enabled,
         busy = !enabled,
-        phase = com.opencapture.openpocketcine.core.ConnectionPhase.LIVE,
+        phase = com.opencapture.opencine.insta360.shell.ConnectionPhase.LIVE,
     ),
     onClick: () -> Unit,
 ) {

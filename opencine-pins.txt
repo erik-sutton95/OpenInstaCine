@@ -4,4 +4,4 @@
 # Temporary: replaced by SwiftPM url + version and Maven coordinates once published.
 OpenCineUI 54bcbb31283f6cf028268b382cb82eb6c156ac94
 OpenCineCore 132d4e0b477cc6a3aa7e791ce390367060af595f
-OpenCineInsta360 807a4be833d04237c472492a82ab23fa68aa2b77
+OpenCineInsta360 11ee6213aa8f42d0836688ca158a2381c86af70d

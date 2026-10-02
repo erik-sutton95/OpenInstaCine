@@ -82,12 +82,19 @@ service `org.opencine.openinstacine.camera` (saved camera authorization and Wi-F
 and the account names are unchanged. Device check: a phone with a camera saved by the previous
 build reconnects over its saved Wi-Fi without new Bluetooth approval.
 
-The Kotlin `luna-adapter` stays in `Apps/Android`: it implements this app's shell contract
-(`:core-api`: `CameraBackend`, `CameraControls`, `CameraMediaStore`, `CoreSessionSource`, `CameraReadout`
-and about fifteen value types), which `:app` and `:monitor` also use and which has no OpenCineCore
-equivalent. Moving it first needs that shell contract in a shared module (OpenCineCore or a shared
-app-shell package), not in the Luna package. Its SharedPreferences name
-(`openinstacine.client-identity`) and the SDK 36/37 metadata exemption are unchanged.
+The Kotlin side moved too (CORE-API): `:core-api` and `luna-adapter` are gone from `Apps/Android`.
+OpenCineInsta360 `Android/` builds `com.opencapture.opencine:insta360-shell` (the shell contract:
+`CameraBackend`, `CameraControls`, `CameraMediaStore`, `CoreSessionSource`, `ConnectionPhase`,
+`CameraReadout` and the other Luna-shaped values, package `com.opencapture.opencine.insta360.shell`)
+and `com.opencapture.opencine:insta360-luna` (`LunaBackend`, `LunaCameraSession`, package
+`com.opencapture.opencine.insta360.luna`), substituted from the included build `opencineinsta360`
+(`../../../OpenCineInsta360/Android`, pinned with the Swift package). `:monitor` depends on the
+contract, `:app` on the adapter. `BrandIdentity` is app-owned and now lives next to
+`MonitorConfiguration`; the legacy `CameraSession` seam (phase/startScan/disconnect) is retired.
+The SharedPreferences name `openinstacine.client-identity` stays the `LunaBackend` default (pinned
+by a package test). The library builds with compileSdk 37 and needs no AAR-metadata exemption.
+Device check: a phone that approved the camera with the previous build reconnects without a new
+approval on the camera screen.
 
 ## Publishing prerequisite
 

@@ -46,7 +46,7 @@ import com.opencapture.monitorui.MonitorTypography
 import com.opencapture.openpocketcine.AppModel
 import com.opencapture.openpocketcine.LegalDocumentScreen
 import com.opencapture.openpocketcine.LegalKind
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.openpocketcine.diagnostics.ManualProblemReportDialog
 import com.opencapture.openpocketcine.session.FoundCamera

@@ -9,7 +9,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.opencine.media.LivePipelineCadence
 import com.opencapture.openpocketcine.session.SessionRecoveryUi

@@ -16,7 +16,7 @@ sockets.
 | Luna Apple adapter | `Adapters/Insta360Apple/` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, Network.framework TCP and session lifetime. |
 | iOS app | `ios/OpenInstaCine/` | The OpenPocketCine shell plus the Luna session (`CameraSession*.swift`, `LunaShellMapping.swift`). |
 | Watch companion | `ios/OpenInstaCineWatch/` | watchOS remote; the phone stays the radio. |
-| Android app | `Apps/Android/` | OpenPocketCine's Compose shell (`:monitor`) on OpenCineUI `monitor-ui`, with `:core-api` and a Kotlin `:luna-adapter`. |
+| Android app | `Apps/Android/` | OpenPocketCine's Compose shell (`:monitor`) on OpenCineUI `monitor-ui`, with the Kotlin shell contract and Luna adapter from OpenCineInsta360 (`insta360-shell`, `insta360-luna`). |
 | Android facade | `Sources/OpenPocketCineAndroidFacade/`, `Sources/CJNI/` | JNI exports for the shared decoder, LUT and assist code. |
 | Lab tools | `tools/` | Python BLE and TCP research clients, the Mac live-view lab, `tools/LunaProbe` (Swift CLI) and the DEBUG remote client. |
 | Tests | `Tests/`, `Adapters/Insta360Protocol/Tests/`, `ios/OpenInstaCineTests/` | Core, protocol and app tests. |

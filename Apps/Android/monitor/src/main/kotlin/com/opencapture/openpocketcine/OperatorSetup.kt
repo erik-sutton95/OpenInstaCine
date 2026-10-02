@@ -90,7 +90,7 @@ import com.opencapture.openpocketcine.assists.WaveformMode
 import com.opencapture.openpocketcine.assists.ZebraEditor
 import com.opencapture.openpocketcine.assists.ZebraPaint
 import com.opencapture.openpocketcine.assists.ZebraUnit
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.openpocketcine.diagnostics.ManualProblemReport
 import com.opencapture.openpocketcine.diagnostics.ManualProblemReportDialog

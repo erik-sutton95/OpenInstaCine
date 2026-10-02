@@ -181,9 +181,10 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
-      # OpenCineUI (UI-03) and OpenCineCore (CORE-02, MEDIA-01) candidate wiring.
-      # Apps/Android/settings.gradle.kts includes ../../../OpenCineUI/Android and
-      # ../../../OpenCineCore/Android, and the Swift Android core links OpenCineMedia from
+      # OpenCineUI (UI-03), OpenCineCore (CORE-02, MEDIA-01) and OpenCineInsta360 (CORE-API)
+      # candidate wiring. Apps/Android/settings.gradle.kts includes ../../../OpenCineUI/Android,
+      # ../../../OpenCineCore/Android and ../../../OpenCineInsta360/Android (Luna adapter and
+      # shell contract; its tests run in that package's CI), and the Swift Android core links OpenCineMedia from
       # ../OpenCineCore: sibling checkouts pinned by SHA in opencine-pins.txt. Works only once
       # those remotes exist (owner/URL not final).
       - name: Check out pinned OpenCine packages next to the repository
@@ -200,7 +201,7 @@ jobs:
         working-directory: Apps/Android
         env:
           SWIFT_ANDROID_SDK_ID: swift-6.3.3-RELEASE_android
-        run: ./gradlew :app:assembleDebug :monitor:testDebugUnitTest :luna-adapter:testDebugUnitTest :app:lintDebug :monitor:lintDebug :luna-adapter:lintDebug
+        run: ./gradlew :app:assembleDebug :monitor:testDebugUnitTest :app:lintDebug :monitor:lintDebug
 
   handbook:
     name: Handbook

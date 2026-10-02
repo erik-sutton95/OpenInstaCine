@@ -82,7 +82,7 @@ import com.opencapture.monitorui.MonitorOptionGroup
 import com.opencapture.monitorui.MonitorPalette
 import com.opencapture.monitorui.MonitorSwitchGraphic
 import com.opencapture.monitorui.MonitorValueDrum
-import com.opencapture.openpocketcine.core.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.session.GimbalHudCopy
 import com.opencapture.openpocketcine.session.GimbalMode
 import com.opencapture.openpocketcine.session.GimbalMoveEngine
