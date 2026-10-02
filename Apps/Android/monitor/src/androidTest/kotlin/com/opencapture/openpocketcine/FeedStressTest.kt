@@ -81,7 +81,7 @@ class FeedStressTest {
                 check(model.savedCameras.size == 1) { "Exactly one saved camera is required" }
                 check(!model.session.status.value.isRecording) { "Existing recording is not allowed" }
                 model.session.debugVideoPacketAdmission = fault::admit
-                model.reconnect(model.savedCameras.single())
+                model.cameras.connect(model.savedCameras.single())
             }
             val deadline = SystemClock.elapsedRealtime() + seconds * 1000
             waitHealthy(30_000, minOf(deadline, SystemClock.elapsedRealtime() + 120_000))

@@ -13,7 +13,7 @@ class MainActivity : com.opencapture.openpocketcine.MainActivity() {
         val brand = BrandIdentity("OpenInstaCine", "OPENINSTACINE", 0xFFFFCF00, "Insta360 Luna Ultra", sourceLabel = if (replay) "LOCAL REPLAY · NOT A LIVE CAMERA" else null)
         MonitorConfiguration.install(brand, cameraLooks = LunaCameraLooks.entries) { context ->
             if (replay) Class.forName("com.opencapture.openinstacine.LocalReplayBackend").getConstructor(android.content.Context::class.java).newInstance(context) as com.opencapture.opencine.insta360.shell.CameraBackend
-            else CameraWifiCredentialStore(context).let { wifi -> LunaBackend(context, savedWifi = wifi::load, saveWifi = wifi::save) }
+            else CameraWifiCredentialStore(context).let { wifi -> LunaBackend(context, savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove) }
         }
         super.onCreate(savedInstanceState)
     }

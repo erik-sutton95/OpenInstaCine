@@ -199,6 +199,8 @@ dependencies {
     api(libs.opencine.insta360.shell)
     // The Luna session's layout projection and host-derived timecode (SHELL-01).
     implementation(libs.opencine.insta360.luna)
+    // Cameras and pairing pages, the connection model and the saved-camera store (SHELL-02).
+    implementation(libs.opencine.appkit)
     api(libs.opencine.monitor.ui)
     implementation("com.opencapture.opencine:media:0.1.0-SNAPSHOT")
     // Live-view MediaCodec decoder (HevcDecoder), shared with OpenPocketCine.

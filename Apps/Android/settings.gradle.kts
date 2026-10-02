@@ -5,7 +5,8 @@ include(":app", ":monitor")
 
 // Candidate: the OpenCine platform build from a sibling checkout (~/Work/OpenCine next to this
 // repository), pinned by SHA in opencine-pins.txt: shared Compose UI, common camera contracts,
-// media policy, the Vulkan renderer, the Insta360 shell contract and the Kotlin Luna adapter.
+// media policy, the Vulkan renderer, the Insta360 shell contract, the Kotlin Luna adapter and
+// the shared cameras and pairing flow (appkit).
 // Named because its directory is also called Android. Replace with Maven coordinates once
 // published.
 includeBuild("../../../OpenCine/Android") {
@@ -18,5 +19,6 @@ includeBuild("../../../OpenCine/Android") {
         substitute(module("com.opencapture.opencine:monitor-ui")).using(project(":monitor-ui"))
         substitute(module("com.opencapture.opencine:insta360-shell")).using(project(":insta360-shell"))
         substitute(module("com.opencapture.opencine:insta360-luna")).using(project(":insta360-luna"))
+        substitute(module("com.opencapture.opencine:appkit")).using(project(":appkit"))
     }
 }

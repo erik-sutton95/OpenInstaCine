@@ -11,7 +11,6 @@ import com.opencapture.openpocketcine.GamepadShutterSync
 import com.opencapture.openpocketcine.EvComp
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.bridge.SwiftCore
-import com.opencapture.opencine.insta360.shell.CoreSessionSource
 import com.opencapture.opencine.core.CameraCommand
 import com.opencapture.opencine.core.CameraCommandIntent
 import com.opencapture.opencine.core.CameraSession as CoreCameraSession
@@ -19,6 +18,7 @@ import com.opencapture.opencine.core.CameraSnapshot as CoreSnapshot
 import com.opencapture.opencine.core.CapabilitySnapshot
 import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.opencine.insta360.luna.LunaCameraSession
+import com.opencapture.opencine.insta360.luna.LunaConnectPort
 import com.opencapture.opencine.core.CommandPreconditions
 import com.opencapture.opencine.core.CommandReceipt
 import com.opencapture.opencine.core.CommandStage
@@ -57,13 +57,9 @@ import com.opencapture.openpocketcine.diagnostics.RecoveryReason
 import com.opencapture.openpocketcine.BuildConfig
 import android.os.Build
 import java.util.UUID
-import com.opencapture.openpocketcine.pairing.CameraConnectionSetup
 import com.opencapture.openpocketcine.ShutterAngle
 import com.opencapture.opencine.insta360.shell.CameraTrackFrame
 import com.opencapture.opencine.insta360.shell.CameraTrackState
-import com.opencapture.openpocketcine.pairing.CameraWifiCredentialStore
-import com.opencapture.openpocketcine.pairing.CameraWifiResolution
-import com.opencapture.openpocketcine.pairing.WifiLowLatencyLock
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -100,9 +96,6 @@ import com.opencapture.opencine.insta360.shell.CameraIdentity
 import com.opencapture.opencine.insta360.shell.CameraMediaStore
 import com.opencapture.opencine.insta360.shell.CameraReadout
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import com.opencapture.opencine.media.LivePipelineCadence
 
@@ -140,8 +133,6 @@ class PocketCameraSession(
     val phase: ConnectionPhase get() = backend.phase.value
     val phaseFlow: StateFlow<ConnectionPhase> get() = backend.phase
     val failure: StateFlow<String?> get() = backend.failure
-    val found: StateFlow<List<FoundCamera>> =
-        backend.found.map { cameras -> cameras.map(::displayCamera) }.stateIn(scope, SharingStarted.Eagerly, emptyList())
     val radioOn: StateFlow<Boolean> get() = backend.radioOn
 
     private val _status = MutableStateFlow(CameraStatus())
@@ -212,9 +203,6 @@ class PocketCameraSession(
 
     var connectedCamera: FoundCamera? = null
     var joinedSSID: String? = null
-    /** Luna joins only its own access point: the shared Wi-Fi and Hotspot setups (#406) are DJI station mode. */
-    val connectionSetup: CameraConnectionSetup get() = CameraConnectionSetup.CAMERA_WIFI
-    val setupProgress: StateFlow<String?> = MutableStateFlow<String?>(null).asStateFlow()
     /** iOS `supportsFocusMode`: AF-S, AF-C and Product Showcase (option 93). */
     val supportsFocusMode: Boolean get() = can(CameraCapability.CAMERA_SETTINGS)
     val supportsTapFocus: Boolean get() = can(CameraCapability.FOCUS)
@@ -246,8 +234,6 @@ class PocketCameraSession(
 
     private val _recoveryState = MutableStateFlow<SessionRecoveryUi>(SessionRecoveryUi.Idle)
     val recoveryState: StateFlow<SessionRecoveryUi> = _recoveryState.asStateFlow()
-    private val _connectionTargetId = MutableStateFlow<String?>(null)
-    val connectionTargetId: StateFlow<String?> = _connectionTargetId.asStateFlow()
     val isFormatPinActive: Boolean get() = false
     @Volatile var zoomColorHopPending = false
     var zoomPinchPreview: Double? = null
@@ -293,7 +279,6 @@ class PocketCameraSession(
     }
     private val _trackingHud = MutableStateFlow(TrackingHud())
     val trackingHud: StateFlow<TrackingHud> = _trackingHud.asStateFlow()
-    val isReconnecting: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
     val isFeedRecovering: Boolean get() = recoveryState.value.isRecovering
     val isTrackingActive: Boolean get() = _trackingHud.value.isTracking
     /** iOS: the focus key shows once the focus point is off centre or Deep Track runs. */
@@ -384,13 +369,20 @@ class PocketCameraSession(
 
     // Connection.
     fun startScan() = backend.startScan()
-    fun startScan(reconnect: String?) { if (reconnect == null) startScan() else reconnect(reconnect) }
-    fun reconnect(id: String) { _connectionTargetId.value = id; openCore(); backend.connect(id) }
-    fun connect(camera: FoundCamera) {
-        decoder.reset(); videoPackets = 0; hasVideoFormat = false
-        _connectionTargetId.value = camera.id
-        openCore()
-        backend.connect(camera.id)
+
+    /**
+     * The backend as the Luna integration's port (SHELL-02): the integration drives discovery and
+     * each attempt; this session follows it, attaching the attempt's Core session and starting a
+     * fresh picture. `null` for a backend that is not a Luna port (the debug local replay).
+     */
+    val lunaPort: LunaConnectPort? = (backend as? LunaConnectPort)?.let { port ->
+        object : LunaConnectPort by port {
+            override fun openSession(): CoreCameraSession = port.openSession().also(::attachCore)
+            override fun connect(id: String) {
+                decoder.reset(); videoPackets = 0; hasVideoFormat = false
+                port.connect(id)
+            }
+        }
     }
 
     /**
@@ -401,9 +393,8 @@ class PocketCameraSession(
         (core as? LunaCameraSession)?.layout(base) ?: MonitorLayoutCapabilities(CapabilitySnapshot(), base)
 
     /** A fresh Core session per connection; recovery keeps it (its epoch advances on LIVE). */
-    private fun openCore() {
+    private fun attachCore(session: CoreCameraSession) {
         closeCore()
-        val session = (backend as? CoreSessionSource)?.openSession() ?: return
         core = session
         coreFeed = scope.launch { session.snapshots.collect(::applyCoreSnapshot) }
     }
@@ -431,7 +422,6 @@ class PocketCameraSession(
         closeCore()
         backend.disconnect(); decoder.reset()
         holdsMonitor = false; hasVideoFormat = false
-        _connectionTargetId.value = null
         showTrack(LunaTrackBoxes())
     }
     fun close() { closeCore(); backend.close(); decoder.reset(); scope.cancel() }

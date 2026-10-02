@@ -843,16 +843,18 @@ private fun LinkRows(model: AppModel, isLive: Boolean, phaseLabel: String, bars:
             }
         }
     }
+    val saved = model.cameras.state.collectAsState().value.saved
     SettingsRowCard(title = "Your cameras") {
-        if (model.savedCameras.isEmpty()) {
+        if (saved.isEmpty()) {
             SettingsInlineRow("Saved", SettingsHelpCopy.SAVED_CAMERAS, showTopDivider = false) {
                 SettingsValueText("None")
             }
         } else {
-            model.savedCameras.forEachIndexed { index, camera ->
-                val help = camera.modelName + (camera.lastSSID?.let { " · $it" } ?: "")
+            saved.forEachIndexed { index, camera ->
+                val network = camera.routes.firstOrNull { it.kind == com.opencapture.opencine.core.RouteKind.CAMERA_ACCESS_POINT }?.network
+                val help = camera.model + (network?.let { " · $it" } ?: "")
                 SettingsInlineRow(camera.displayName, help, showTopDivider = index > 0) {
-                    SettingsValueText(camera.lastSSID ?: "Saved")
+                    SettingsValueText(network ?: "Saved")
                 }
             }
         }

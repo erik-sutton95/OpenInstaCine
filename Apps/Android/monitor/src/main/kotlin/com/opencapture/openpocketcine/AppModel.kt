@@ -11,17 +11,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
-import com.opencapture.openpocketcine.pairing.CameraConnectionSetup
-import com.opencapture.openpocketcine.pairing.SavedCamera
-import com.opencapture.openpocketcine.pairing.SavedCameras
-import com.opencapture.openpocketcine.pairing.SharedPreferencesSavedCameraStore
-import com.opencapture.openpocketcine.pairing.isBusy
+import com.opencapture.opencine.appkit.AppIntegration
+import com.opencapture.opencine.appkit.BodyRecordsV0
+import com.opencapture.opencine.appkit.CamerasModel
+import com.opencapture.opencine.appkit.IntegrationSlots
+import com.opencapture.opencine.appkit.SavedCamerasStore
+import com.opencapture.opencine.appkit.StoredString
+import com.opencapture.opencine.appkit.stored
+import com.opencapture.opencine.core.SavedCamera
+import com.opencapture.opencine.insta360.luna.LunaFailures
+import com.opencapture.opencine.insta360.luna.LunaIntegration
+import com.opencapture.openpocketcine.pairing.LocalPairingCallouts
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.GimbalDoubleTap
 import com.opencapture.openpocketcine.session.GimbalRamp
-import com.opencapture.openpocketcine.session.FoundCamera
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import com.opencapture.openpocketcine.session.VideoFormat
 import kotlinx.coroutines.CoroutineScope
@@ -40,13 +45,28 @@ class AppModel(
         DiagnosticCenter.install(appContext)
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val store = SharedPreferencesSavedCameraStore(context)
     val session = PocketCameraSession(context, borrowing, controlLease)
     val assist = LiveAssistState.from(appContext)
 
-    var savedCameras by mutableStateOf(store.load())
-        private set
-    var isPairingNewCamera by mutableStateOf(false)
+    /**
+     * Cameras and pairing through the shared OpenCine flow (SHELL-02): the Luna integration over
+     * the session's port, its pairing callouts from the activity. No integration for a backend that
+     * is not a Luna port (the debug local replay starts itself on the first scan).
+     */
+    val cameras = CamerasModel(
+        listOfNotNull(
+            session.lunaPort?.let { AppIntegration(LunaIntegration(it), IntegrationSlots(pairing = { LocalPairingCallouts.current() })) },
+        ),
+        camerasStore(
+            appContext.getSharedPreferences("openpocketcine.cameras", Context.MODE_PRIVATE).stored("document"),
+            appContext.getSharedPreferences(LEGACY_CAMERAS, Context.MODE_PRIVATE).stored("records-json"),
+        ),
+        scope,
+    ).also { it.onConnected = { pairing = false } }
+
+    val savedCameras: List<SavedCamera> get() = cameras.state.value.saved
+    /** The operator opened the pair page from the cameras page. */
+    var pairing by mutableStateOf(false)
     var showsLaunchSplash by mutableStateOf(true)
     /** Long-press on the tap-focus box locks it: feed taps no longer move focus. */
     var focusBoxLocked by mutableStateOf(false)
@@ -417,9 +437,6 @@ class AppModel(
 
     fun endGimbalStick() = session.endGimbalStick()
 
-    val shouldShowWizard: Boolean
-        get() = SavedCameras.launchShowsWizard(savedCameras) || isPairingNewCamera
-
     val isLive: Boolean
         get() = session.phaseFlow.value == ConnectionPhase.LIVE || session.holdsMonitor
 
@@ -430,94 +447,18 @@ class AppModel(
             !isEditingChrome &&
             !session.browsingMedia
 
-    val isBusy: Boolean
-        get() = session.phase.isBusy() || session.isReconnecting.value
-
     fun prepareStartup() {
-        savedCameras = store.load()
         coreVersion =
             if (SwiftCore.isAvailable) runCatching { SwiftCore.coreVersion() }.getOrNull() else null
-        isPairingNewCamera = SavedCameras.launchShowsWizard(savedCameras)
         scope.launch {
-            session.phaseFlow.collect { phase ->
-                if (phase == ConnectionPhase.LIVE) {
-                    persistConnectedCameraIfNeeded()
-                    noteBecameLive()
-                }
-            }
+            session.phaseFlow.collect { phase -> if (phase == ConnectionPhase.LIVE) noteBecameLive() }
         }
-    }
-
-    fun pairNewCamera() {
-        isPairingNewCamera = true
-        session.startScan()
-    }
-
-    fun connectDiscovered(camera: FoundCamera) {
-        isPairingNewCamera = true
-        session.connect(camera)
-    }
-
-    fun cancelPairing() {
-        session.disconnect()
-        isPairingNewCamera = false
-        session.startScan()
-    }
-
-    fun reconnect(camera: SavedCamera) {
-        reconnect(camera, camera.preferredSetup)
-    }
-
-    fun reconnect(camera: SavedCamera, setup: CameraConnectionSetup) {
-        // Switching setups is a new connection, never a live-session no-op.
-        if (session.connectedCamera?.id == camera.id && session.connectionSetup != setup) session.disconnect()
-        if (setup.movesCamera) {
-            savedCameras = SavedCameras.stamping(setup, camera.id, savedCameras)
-            store.save(savedCameras)
-        }
-        session.reconnect(camera.id)
-    }
-
-    fun forgetSetup(setup: CameraConnectionSetup, camera: SavedCamera) {
-        savedCameras = SavedCameras.setting(setup, null, camera.id, savedCameras)
-        store.save(savedCameras)
-    }
-
-    fun forget(camera: SavedCamera) {
-        savedCameras = SavedCameras.removing(camera.id, savedCameras)
-        store.save(savedCameras)
-        if (savedCameras.isEmpty()) {
-            isPairingNewCamera = true
-            session.startScan()
-        }
-    }
-
-    fun rename(camera: SavedCamera, name: String?) {
-        savedCameras = SavedCameras.renaming(camera.id, name, savedCameras)
-        store.save(savedCameras)
-    }
-
-    fun persistConnectedCameraIfNeeded() {
-        val found = session.connectedCamera ?: return
-        if (session.phaseFlow.value != ConnectionPhase.LIVE) return
-        val record =
-            SavedCamera(
-                id = found.id,
-                advertisedName = found.name,
-                modelName = found.model.name,
-                lastSSID = session.joinedSSID,
-                lastConnectedAt = System.currentTimeMillis(),
-                lastSetup = session.connectionSetup,
-            )
-        savedCameras = SavedCameras.upserting(record, savedCameras)
-        store.save(savedCameras)
-        isPairingNewCamera = false
     }
 
     fun disconnect() {
         focusBoxLocked = false
         session.disconnect()
-        if (!SavedCameras.launchShowsWizard(savedCameras)) session.startScan()
+        cameras.sessionEnded()
     }
 
     fun close() {
@@ -531,4 +472,15 @@ class AppModel(
     }
 
     fun borrowedLutEnabled(): Boolean = assist.lutOn
+
+    companion object {
+        /** The records every earlier build reads, kept mirrored (SHELL-02 D11). */
+        const val LEGACY_CAMERAS = "openpocketcine.saved-cameras"
+
+        /** The saved-camera document over the legacy records, as this app stores them. */
+        fun camerasStore(document: StoredString, legacy: StoredString) = SavedCamerasStore(
+            document,
+            SavedCamerasStore.Legacy(legacy, BodyRecordsV0(LunaFailures.INTEGRATION, BodyRecordsV0.Dates.EPOCH_MILLISECONDS), LEGACY_CAMERAS),
+        )
+    }
 }
