@@ -42,11 +42,12 @@ let package = Package(
             dependencies: ["OpenPocketViewCore", .product(name: "Insta360Apple", package: "OpenCine")],
             exclude: ["Fixtures"]
         ),
-        // Header-only shim exposing the NDK's <jni.h> to Swift; empty on Darwin.
-        .target(name: "CJNI"),
         .target(
             name: "OpenPocketCineAndroidFacade",
-            dependencies: ["OpenPocketViewCore", "CJNI"]
+            dependencies: [
+                "OpenPocketViewCore",
+                .product(name: "OpenCineJNISupport", package: "OpenCine"),
+            ]
         ),
         .testTarget(
             name: "OpenPocketCineAndroidFacadeTests",

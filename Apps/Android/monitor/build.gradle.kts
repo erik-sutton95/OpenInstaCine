@@ -164,6 +164,8 @@ val stageSwiftCore =
                     "Sources/OpenCineMotion/**",
                     "Sources/OpenCineRelay/**",
                     "Sources/OpenCineCore/**",
+                    "Sources/OpenCineJNISupport/**",
+                    "Sources/OpenCineJNI/**",
                 )
             },
             stageSwiftCoreScript,
