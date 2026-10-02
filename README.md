@@ -137,8 +137,8 @@ A shared Swift business core from OpenPocketCine, Luna protocol adapters and nat
 
 `OpenPocketViewCore` and the Luna protocol codec stay portable (Foundation only, no SwiftUI,
 UIKit or Android dependencies). Platform shells own sockets, permissions, lifecycle, rendering and
-UI. The shell is
-re-synced from OpenPocketCine with `just sync-openpocketcine`, which leaves the Luna files alone.
+UI. The iOS presentation shell is re-synced from OpenPocketCine with `just sync-openpocketcine`,
+which leaves the Luna files, the Swift core and everything shared OpenCine packages own alone.
 The contract between the two apps is [`docs/SHARED-MONITOR-ENGINE.md`](docs/SHARED-MONITOR-ENGINE.md).
 
 ### Build from source

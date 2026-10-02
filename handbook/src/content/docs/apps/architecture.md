@@ -21,8 +21,8 @@ sockets.
 | Lab tools | `tools/` | Python BLE and TCP research clients, the Mac live-view lab, `tools/LunaProbe` (Swift CLI) and the DEBUG remote client. |
 | Tests | `Tests/`, `Adapters/Insta360Protocol/Tests/`, `ios/OpenInstaCineTests/` | Core, protocol and app tests. |
 
-The shell is re-synced from OpenPocketCine with `just sync-openpocketcine`,
-which leaves the Luna files alone. Boundary tests keep DUML and UCD2 wire APIs
+The iOS presentation shell is re-synced from OpenPocketCine with `just sync-openpocketcine`,
+which leaves the Luna files, the Swift core and anything a shared OpenCine package owns alone. Boundary tests keep DUML and UCD2 wire APIs
 out of the shared monitor modules, and the monitor engine does not import Luna
 wire types. Adding a control means extending the neutral backend contract first,
 then the Luna mapping.

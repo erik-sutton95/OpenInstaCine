@@ -15,6 +15,9 @@ CI until the shared repositories are published (see the end of this page).
 | OPTIONAL-02: gimbal programs and head-track math from OpenCineMotion (`MotionCapabilities.lunaUltra`) | `opencine/motion` | 1b67ba7 |
 | OPTIONAL-02: watcher relay wire v1, control lease and pacing from OpenCineRelay | `opencine/relay` | 0aaac91 |
 | MEDIA-02 step 4: VideoToolbox decoder runtime and decoded-frame leases from OpenCineApple (stacked) | `opencine/apple` | see `git log` |
+| CORE-API: Kotlin shell contract and Luna adapter from OpenCineInsta360 `Android/` | `opencine/core-api-shared` | 9f5ee09 |
+| MEDIA-02 step 3: Android Vulkan renderer from OpenCineCore `:vulkan` | on this branch | e3e03ce |
+| RELEASE-01: sync narrowed to the iOS shell; three unreachable core types dropped | on this branch | 705d316, 764da0e |
 
 ### Merged branches
 
@@ -24,10 +27,13 @@ Merged into `opencine/integration` with `--no-ff` on 2026-10-02, in this order:
 - `opencine/relay` 0aaac91 (merge 32aef1b; `Package.swift`, the Android Swift staging inputs,
   `ios/project.yml` and pins merged as a union)
 
-Not merged: `opencine/core-api-shared` (still in progress). Pins after these merges:
-OpenCineUI 54bcbb3, OpenCineCore 6f578ce (main, contains motion and relay), OpenCineInsta360
-11ee621 (main; adds the Kotlin Luna adapter under `Android/`, which this branch does not include
-yet, so the Swift package is unchanged from 807a4be).
+- `opencine/core-api-shared` 9f5ee09 (merge cc9de6f; only `opencine-pins.txt` conflicted, resolved
+  to each sibling's current main; `settings.gradle.kts` includes `opencinecore`,
+  `opencineinsta360` and OpenCineUI once each; build identity hashes the union)
+
+Pins now (`opencine-pins.txt`, each sibling's `main`): OpenCineUI 54bcbb3, OpenCineCore 1c648a6
+(motion, relay, Apple runtime, harness fixes, `:vulkan`), OpenCineInsta360 e90a11a (Swift
+products plus `Android/` shell contract and Luna adapter, harness fixes).
 
 Base is `opencine/state-01-luna`; the other two are merged with `--no-ff`. Pinned siblings
 (`opencine-pins.txt`): OpenCineUI 54bcbb3, OpenCineCore 28a0196 (contains the MEDIA-01
@@ -98,13 +104,36 @@ lends a `DecodedFrameLease`. The refactor is identical to OpenPocketCine's, so t
 carries it. App-side: the log subsystem, `SimulatorLiveFeed.isConfigured` and the watch preview guard.
 Pins OpenCineCore on its `apple` branch until that merges to Core main.
 
+## MEDIA-02 step 3: Android Vulkan renderer
+
+`libopc_vulkan.so` (C++, CMake, 15 shaders) and its JNI facade `feed.OpcVulkan` come from
+OpenCineCore's `:vulkan` module (`com.opencapture.opencine:vulkan`, substituted from the
+`opencinecore` included build), as in OpenPocketCine a76488ad. The deleted `:monitor` copy was
+byte-identical to OpenPocketCine's pre-move renderer (with the #482 upright-raster fix); the
+facade keeps its fully qualified name. Debug APK before and after: same 22 native libraries, one
+`libopc_vulkan.so` of the same size with the same 786 dynamic symbols (21 `Java_` exports) and
+the same NEEDED list. `LiveVulkanSession`, the present gate, crash guard and window attach stay in
+`:monitor`. The present-batch regression runs in OpenCineCore
+(`scripts/android-vulkan-sync-test.sh`); this app never had a recipe for it.
+
+Device check (Android, Luna): live picture through Vulkan with LUT, scopes, peaking and the glass
+backdrop; background return, rotation and surface recreation keep the picture.
+
+## RELEASE-01: sync scope
+
+`scripts/sync-openpocketcine.sh` now copies only the iOS presentation shell and three neutral
+tools. The Swift core (`Package.swift`, `Sources/`, `Tests/`), `Apps/Android`, the package graph
+(`ios/project.yml`) and everything a shared package owns are never copied, so the STATE-01 core
+edits are safe. Details, the first-sync base to use after publishing and the Atlas edge:
+`openpocketcine-foundation.md`, "Sync scope".
+
 ## Risks before merging
 
-- Sync divergence: STATE-01 changed `Sources/OpenPocketViewCore` (`CameraProfile`,
-  `MediaHTTP.Route`, `label(in:)`, the `CamFov` ceiling). `scripts/sync-openpocketcine.sh` copies
-  that directory from OpenPocketCine and would overwrite these changes. Port them upstream or move
-  them into OpenCineCore/OpenCineUI before the next sync.
-- Kotlin `ScopeExposureCeiling` is still a process-wide object on Android (MEDIA-01 remaining).
+- First sync after publishing: set `openpocketcine-sync-commit.txt` to OpenPocketCine's
+  post-integration `main` commit, and decide Frame.io (OpenPocketCine moved its client into
+  OpenCineFrameIO; this app keeps its own until it adopts the product).
+- The Kotlin `ScopeExposureCeiling` risk listed here before is closed: each feed owns its
+  ceiling since 7bdb55c.
 
 ## VENDOR-03: Luna integration package
 

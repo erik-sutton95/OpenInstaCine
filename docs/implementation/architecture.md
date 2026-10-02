@@ -22,7 +22,7 @@ read as references and were not modified by this extraction.
 | OpenCineUI `MonitorUI`, `MonitorPresentation` | Shared SwiftUI design system (theme, Sora, Lucide/assist icons, canvas, pages, controls) and Foundation-only presentation/layout policy. Separate repository, a sibling checkout at `../OpenCineUI` that `ios/project.yml` names as a path package (candidate until a versioned release). No camera, vendor or app dependency. Its tests run in OpenCineUI |
 | `ios/OpenInstaCineWatch` | watchOS remote over WatchConnectivity; depends on `OpenPocketViewCore` |
 | `Sources/MonitorContracts` | Foundation-only Apple backend seam: capabilities, discovery, phases, information, encoded frames, media descriptors and network handoff. Camera commands and reported camera state are not here: they go through the integration's OpenCineCore `CameraSession` |
-| `Sources/OpenPocketViewCore` | Portable core vendored from OpenPocketCine with small Luna hooks (I-Log, Luna resolutions, `.lrv` proxy): color science, LUTs, media manifest, saved cameras, plus the inherited Osmo models and DUML codecs |
+| `Sources/OpenPocketViewCore` | Portable core, forked from OpenPocketCine and OpenInstaCine-owned since RELEASE-01 (no longer synced; upstream's copy depends on OpenCineDJI), with Luna hooks (I-Log, Luna resolutions, `.lrv` proxy, per-session `CameraProfile`): color science, LUTs, media manifest, saved cameras, plus the inherited Osmo models and DUML codecs |
 | `Adapters/Insta360Protocol` | Independent Swift package for UCD2, bounded reassembly/checksum, protobuf, scheme-3 envelopes and verified Luna read/live commands. Foundation only, no network/BLE/crypto implementation |
 | `Adapters/Insta360Apple` | CoreBluetooth, CryptoKit, Keychain, hotspot join, Network.framework TCP and Luna session lifetime. `LunaCameraSession` implements OpenCineCore `CameraSession` for ISO, shutter, white balance and record (settle and readback included). Built as the `Insta360Apple` framework target in `ios/project.yml`; depends on `MonitorContracts`, `Insta360Protocol` and OpenCineCore |
 | `Apps/Android/app` | Thin branded activity, app manifest and DEBUG replay selection. Installs the brand identity (accent `0xFFFFCF00`) and Luna backend factory through `MonitorConfiguration` |
@@ -139,9 +139,11 @@ until that is lifted and qualified on hardware.
 
 1. **Sibling adoption:** the design system (`MonitorUI`, `MonitorPresentation`,
    Android `monitor-ui`) is now one implementation in OpenCineUI, consumed by
-   OpenPocketCine and OpenInstaCine candidate branches. The rest of the engine
-   is still vendored from OpenPocketCine; no Nikon adapter or other sibling
-   target migration is claimed here.
+   OpenPocketCine and OpenInstaCine candidate branches. Media, motion, relay,
+   the Apple decode runtime and the Android Vulkan renderer come from OpenCineCore.
+   Only the iOS presentation shell is still synced from OpenPocketCine (scope in
+   `openpocketcine-foundation.md`); no Nikon adapter or other sibling target
+   migration is claimed here.
 2. **Compatibility models:** `MonitorLUT`, `MediaFile`, status/control enums,
    saved-camera records and several rendering bridges still use inherited
    names/types. Native view facades translate where needed. Osmo wire bytes
