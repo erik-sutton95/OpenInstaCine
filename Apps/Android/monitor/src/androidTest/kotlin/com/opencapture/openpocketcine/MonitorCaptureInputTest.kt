@@ -52,19 +52,22 @@ import org.junit.runner.RunWith
 /** Reuses the existing native activity/instrumentation harness; no Compose test dependency. */
 @RunWith(AndroidJUnit4::class)
 class MonitorCaptureInputTest {
-    @Test fun recordHasOnlyShutterActionAndRespectsLock() {
+    @Test fun captureHasOnlyShutterActionAndRespectsLock() {
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
             var shutters = 0
             var enabled by mutableStateOf(true)
             scenario.onActivity { activity ->
                 activity.setContent {
                     Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                        RecordButton(recording = false, enabled = enabled, confirm = false, onClick = { shutters++ })
+                        val scope = androidx.compose.runtime.rememberCoroutineScope()
+                        val control = remember(scope) { com.opencapture.opencine.appkit.MonitorControlModel(scope) }
+                        com.opencapture.opencine.appkit.MonitorCaptureButton(control, diameter = 56f, enabled = enabled,
+                            photo = true, confirm = false, takePhoto = { shutters++ })
                     }
                 }
             }
             settle()
-            val target = nativeControlRect(scenario, "Start recording")
+            val target = nativeControlRect(scenario, "Take photo")
             fun hold() {
                 val down = SystemClock.uptimeMillis()
                 event(scenario, MotionEvent.ACTION_DOWN, target.center.x, target.center.y, down)
@@ -395,14 +398,24 @@ private fun NavigationFixture(model: AppModel, probe: NavigationProbe, layoutPro
             val floor = height - 100f
             // Production portrait controls and production picker host in their original sibling order.
             Box(Modifier.fillMaxSize()) {
-                Box(Modifier.offset(y = floor.dp).size(width.dp, 100.dp).onGloballyPositioned {
+                Box(Modifier.fillMaxSize().onGloballyPositioned {
                     layoutProbe.top = it.boundsInWindow()
                     layoutProbe.lower = it.boundsInWindow()
                 }) {
-                    LivePortraitSystemBar(model, model.assist, CameraStatus(), uiLocked = false,
-                        onLock = {}, chromeInteractive = probe.navigationEnabled, showsLock = true,
-                        showsRecord = true, showsMedia = probe.showsNavigation,
-                        showsSettings = probe.showsNavigation, controlBusy = false)
+                    val field = com.opencapture.monitorui.MonitorLayoutPolicy.fieldMonitor(width, height)
+                    com.opencapture.monitorui.MonitorSystemControls(field,
+                        com.opencapture.monitorui.MonitorSystemControlsVisibility(lock = false, record = false,
+                            display = false, media = probe.showsNavigation, settings = probe.showsNavigation),
+                        interactive = probe.navigationEnabled, navigationHidden = false,
+                        lock = {}, record = {}, display = {},
+                        settings = { enabled -> AuxCircleButton(enabled = enabled,
+                            onClick = { model.shell.open(ShellModel.Cover.SETTINGS) }) {
+                            OpcIcon(OpcIcon.SETTINGS, "Settings", Modifier.fillMaxSize(), it)
+                        } },
+                        media = { enabled -> AuxCircleButton(enabled = enabled,
+                            onClick = { model.shell.open(ShellModel.Cover.MEDIA) }) {
+                            OpcIcon(OpcIcon.FILM, "Media", Modifier.fillMaxSize(), it)
+                        } })
                 }
             }
             Box(Modifier.offset(2.dp, maxHeight - 6.dp).size(4.dp)

@@ -13,6 +13,7 @@ import android.view.SurfaceView
 import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
+import com.opencapture.opencine.appkit.statusPresentation
 import com.opencapture.opencine.appkit.ShellModel
 import androidx.compose.foundation.Canvas
 import com.opencapture.monitorui.monitorReadoutShadow
@@ -131,6 +132,7 @@ import kotlinx.coroutines.isActive
 fun LiveViewScreen(model: AppModel) {
     val cover = model.liveCover()
     val status by model.session.chromeStatus.collectAsState()
+    val capabilities = model.monitorLayout()
     val cameraGalleryOpen by model.session.cameraGalleryOpen.collectAsState()
     var followedGallery by remember { mutableStateOf(cameraGalleryOpen) }
     LaunchedEffect(cameraGalleryOpen) {
@@ -252,7 +254,9 @@ fun LiveViewScreen(model: AppModel) {
         }
     }
 
-    var captureQuickActive by remember { mutableStateOf(false) }
+    var topQuickActive by remember { mutableStateOf(false) }
+    var stripQuickActive by remember { mutableStateOf(false) }
+    val captureQuickActive = topQuickActive || stripQuickActive
     val chromeInteractive = !model.isEditingChrome && model.liveChromeInteractive && cover == null
     val showsBottomBars =
         model.chromeSectionMounts(PocketDispSection.TOOL_BAR) ||
@@ -566,14 +570,19 @@ fun LiveViewScreen(model: AppModel) {
             LocalLiveCanvasOrigin provides canvasOrigin,
             LocalGpuLive provides if (useVulkan) vulkanSession else null,
         ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .then(if (cover != null) Modifier.clearAndSetSemantics { } else Modifier)
-                .onGloballyPositioned {
-                    if (!useVulkan) canvasOrigin = it.positionInRoot()
-                },
-        ) {
+        com.opencapture.opencine.appkit.MonitorScreen(
+            control = model.session.control, layout = checkNotNull(layout.field),
+            presentation = com.opencapture.opencine.appkit.MonitorScreenPresentation(
+                visible = cover == null, interactive = chromeInteractive,
+                statusMounted = model.chromeSectionMounts(PocketDispSection.STATUS_BAR),
+                powerMounted = model.chromeSectionMounts(PocketDispSection.BATTERIES),
+                captureMounted = model.chromeSectionMounts(PocketDispSection.CAMERA_VALUES),
+                captureHidden = hidesLowerCaptureValues(sheet, stripQuickActive, topQuickActive),
+                captureInteractive = sheet == null || sheet?.isTopAnchored == true,
+                locked = uiLocked, popupInteractive = chromeInteractive && !uiLocked,
+                recovering = recovery.isRecovering),
+            modifier = Modifier.onGloballyPositioned { if (!useVulkan) canvasOrigin = it.positionInRoot() },
+            picture = {
             if (useVulkan) {
                 VulkanLivePresenter(
                     session = checkNotNull(vulkanSession),
@@ -624,6 +633,65 @@ fun LiveViewScreen(model: AppModel) {
                     (pictureContent.maxY - layout.onFeed.y) * density.density), mirrored = liveViewFlip,
                 flippedVertically = flipV))
 
+            }, status = { accepts ->
+                if (portrait) {
+                    LivePortraitStatus(model, layout, status, uiLocked, accepts && chromeInteractive,
+                        sheet, { sheet = it }, fpsLabel, bars, { topQuickActive = it })
+                } else {
+                LiveTopDeck(
+                    model = model,
+                    status = status,
+                    fps = fpsLabel,
+                    bars = bars,
+                    enabled = accepts && !uiLocked && chromeInteractive,
+                    active = sheet,
+                    showStorageDuration = showStorageDuration,
+                    onToggleStorage = { showStorageDuration = !showStorageDuration },
+                    onOpen = {
+                        if (!uiLocked && chromeInteractive) {
+                            val next = CaptureShutterPolicy.opening(it, status.shootingMode)
+                            sheet = if (sheet == next) null else next
+                        }
+                    },
+                    maxWidth = layout.topDeck.width,
+                    viewportWidth = layout.viewportWidth,
+                    readoutTrailingInset = com.opencapture.monitorui.MonitorLayoutPolicy.recordingReadoutTrailingInset(
+                        layout.topDeck.maxX, layout.picture.maxX),
+                    showsTimecode = capabilities.timecode,
+                    fieldLayout = checkNotNull(layout.field),
+                    editing = model.chromeEditorMode,
+                    onChipFrame = { key, rect -> statusChipFrames[key] = rect },
+                    onPickerFrame = { _, _ -> },
+                    onQuickActiveChange = {
+                        topQuickActive = it
+                        if (it) sheet = null
+                    },
+                )
+                }
+            }, power = {
+                com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
+                    model.phoneBatteryPercent, status.batteryPercent,
+                    horizontal = portrait && !checkNotNull(layout.field).tablet,
+                    showsLink = !portrait || checkNotNull(layout.field).tablet)
+            }, capture = { accepts ->
+                LiveCaptureStrip(status, sheet, accepts && !controlBusy,
+                    modifier = Modifier.chromeEditStroke(model.chromeEditorMode != null, true), model = model,
+                    portrait = portrait, onQuickActiveChange = { stripQuickActive = it; if (it) sheet = null },
+                    quickBottomClearanceDp = if (portrait && zones != null) layout.viewportHeight - zones.systemBar.minY + 12f else layout.safeBottom,
+                    showFocus = capabilities.focus, showAperture = capabilities.iris,
+                    facePriority = model.facePriorityExposureEnabled, shutterUsesAngle = model.shutterUsesAngle,
+                    onOpen = { next -> if (!uiLocked && accepts) {
+                        val target = CaptureShutterPolicy.opening(next, status.shootingMode)
+                        sheet = if (sheet == target) null else target
+                    } })
+            }, system = { accepts ->
+            LiveSystemChrome(model, layout, uiLocked, onLock = { setLocked(!uiLocked) },
+                capturePresented = sheet != null || captureQuickActive,
+                navigationHidden = if (portrait) captureQuickActive else sheet != null || captureQuickActive,
+                interactive = accepts && chromeInteractive, controlBusy = controlBusy,
+                onDisplay = { setClean(!model.assistClean) })
+
+            }, tools = { _ ->
             // iOS `LiveZoomPinchWell` sits under chip + scopes so direct drag
             // on WAVE / PARADE / HISTO / VECTOR still reaches MovableAssistPanel.
             val gestureFrame = if (desqueezeVisible) pictureContent else layout.onFeed
@@ -814,7 +882,7 @@ fun LiveViewScreen(model: AppModel) {
                     bars = bars,
                     sourceIsVertical = verticalPicture,
                     onAssistBoundsChanged = { assistPaletteBounds = it },
-                    onCaptureActivityChange = { captureQuickActive = it },
+                    captureQuickActive = captureQuickActive,
                 )
                 }
             } else {
@@ -845,23 +913,9 @@ fun LiveViewScreen(model: AppModel) {
                     zoomPinching = zoomPinching,
                     onStatusChipFrame = { section, rect -> statusChipFrames[section] = rect },
                     onAssistBoundsChanged = { assistPaletteBounds = it },
-                    onCaptureActivityChange = { captureQuickActive = it },
+                    captureQuickActive = captureQuickActive,
                 )
                 }
-            }
-
-            LiveSystemChrome(model, layout, uiLocked, onLock = { setLocked(!uiLocked) },
-                capturePresented = sheet != null || captureQuickActive,
-                navigationHidden = if (portrait) captureQuickActive else sheet != null || captureQuickActive,
-                interactive = chromeInteractive, controlBusy = controlBusy,
-                onDisplay = { setClean(!model.assistClean) })
-
-            if (status.isRecording) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .border(4.dp, LiveDesign.rec, RoundedCornerShape(32.dp)),
-                )
             }
 
             val toast = chromeNote ?: controlNote
@@ -900,8 +954,7 @@ fun LiveViewScreen(model: AppModel) {
                             .chipGlass(RoundedCornerShape(50))
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                 )
-            }
-        }
+            }            }, panels = { _ ->
 
             if (chromeInteractive && sheet != null && !uiLocked) {
                 LivePickerHost(
@@ -950,6 +1003,7 @@ fun LiveViewScreen(model: AppModel) {
                 }
             }
 
+            }, cover = {
             val panel = cover
             LaunchedEffect(panel) {
                 assist.configureTool = null
@@ -984,6 +1038,7 @@ fun LiveViewScreen(model: AppModel) {
                 }
             }
 
+            }, recovery = {
             if (recovery.isRecovering) {
                 MonitorRecoveryOverlay(
                     state = recovery,
@@ -992,6 +1047,8 @@ fun LiveViewScreen(model: AppModel) {
                     onOperatorMenu = { model.disconnect() },
                 )
             }
+
+            })
 
             val editing = model.chromeEditorMode
             if (editing != null) {
@@ -1051,7 +1108,7 @@ private fun LiveFaceFramePump(
             delay(LiveFaceDetector.INTERVAL_MS)
             // Vulkan: identity 720p RGB, same space as iOS Vision / 0xA6.
             // PixelCopy of the swapchain is already mirrored when TT180/MIRROR
-            // is on, and the overlay mirrors again \u2014 box on the opposite side.
+            // is on, and the overlay mirrors again , box on the opposite side.
             val session = vulkan
             if (session != null) {
                 // Take a fresh readback first, then ask for the next only when the
@@ -1128,7 +1185,7 @@ private fun VulkanLivePresenter(
                 isFocusable = false
                 setZOrderMediaOverlay(false)
                 // API 34+ default destroys this surface when Settings / Media
-                // cover it. Pocket has no periodic GOP \u2014 keep the surface while
+                // cover it. Pocket has no periodic GOP , keep the surface while
                 // the view stays attached (#248).
                 if (Build.VERSION.SDK_INT >= 34) {
                     setSurfaceLifecycle(SurfaceView.SURFACE_LIFECYCLE_FOLLOWS_ATTACHMENT)
@@ -1375,76 +1432,19 @@ internal fun LandscapeChrome(
     onStatusChipFrame: (PocketDispSection, ChromeRect) -> Unit = { _, _ -> },
     capabilities: com.opencapture.opencine.core.MonitorLayoutCapabilities = model.monitorLayout(),
     onAssistBoundsChanged: (ChromeRect?) -> Unit = {},
-    onCaptureActivityChange: (Boolean) -> Unit = {},
+    captureQuickActive: Boolean = false,
 ) {
     val cover = model.liveCover()
-    var stripQuick by remember { mutableStateOf(false) }
-    var topQuick by remember { mutableStateOf(false) }
-    val captureOpen = sheet != null || stripQuick || topQuick
-    LaunchedEffect(stripQuick, topQuick) { onCaptureActivityChange(stripQuick || topQuick) }
-    DisposableEffect(Unit) { onDispose { onCaptureActivityChange(false) } }
-    val hidesCaptureValues = hidesLowerCaptureValues(sheet, stripQuick, topQuick)
+    val captureOpen = sheet != null || captureQuickActive
     val editing = model.chromeEditorMode
-    val showsStatus = model.chromeSectionMounts(PocketDispSection.STATUS_BAR)
-    val showsLock = model.chromeSectionMounts(PocketDispSection.LOCK_BUTTON) || uiLocked
-    val showsBatteries = model.chromeSectionMounts(PocketDispSection.BATTERIES)
-    val showsSettings = !captureOpen && (model.chromeSectionMounts(PocketDispSection.RAIL_SETTINGS) || status.isRecording)
     // Media browsing is not adapted to shared Wi-Fi; a borrowed Multiview tile hides it.
-    val showsMedia = !captureOpen && model.chromeSectionMounts(PocketDispSection.RAIL_MEDIA) &&
-        !model.session.isMultiviewBorrowed
     val showsRecord = model.chromeSectionMounts(PocketDispSection.RAIL_RECORD) || status.isRecording
     val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR) &&
         cover == null && assist.configureTool == null
-    val showsCapture = model.chromeSectionMounts(PocketDispSection.CAMERA_VALUES)
     val hits = chromeInteractive
 
     Box(Modifier.fillMaxSize()) {
-        if (showsStatus) {
-            Box(
-                Modifier
-                    .liveModuleFrame(layout.topDeck)
-                    .chromeEditStroke(
-                        editing != null,
-                        model.chrome(editing ?: model.currentDispMode).isVisible(PocketDispSection.STATUS_BAR),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                LiveTopDeck(
-                    model = model,
-                    status = status,
-                    fps = fpsLabel,
-                    bars = bars,
-                    enabled = !uiLocked && hits,
-                    active = sheet,
-                    showStorageDuration = showStorageDuration,
-                    onToggleStorage = onToggleStorage,
-                    onOpen = {
-                        if (!uiLocked && hits) {
-                            val next = CaptureShutterPolicy.opening(it, status.shootingMode)
-                            onSheet(if (sheet == next) null else next)
-                        }
-                    },
-                    maxWidth = layout.topDeck.width,
-                    viewportWidth = layout.viewportWidth,
-                    readoutTrailingInset = com.opencapture.monitorui.MonitorLayoutPolicy.recordingReadoutTrailingInset(
-                        layout.topDeck.maxX, layout.picture.maxX),
-                    showsTimecode = capabilities.timecode,
-                    editing = editing,
-                    onChipFrame = onStatusChipFrame,
-                    onPickerFrame = onTileFrame,
-                    onQuickActiveChange = {
-                        topQuick = it
-                        if (it) onSheet(null)
-                    },
-                )
-            }
-        }
-        if (showsBatteries) {
-            Box(Modifier.liveModuleFrame(layout.battery).chromeEditStroke(editing != null, true)) {
-                com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
-                    model.phoneBatteryPercent, status.batteryPercent, horizontal = false)
-            }
-        }
+
         if (!captureOpen && capabilities.zoom && model.chromeSectionMounts(PocketDispSection.ZOOM_CHIP) && !zoom.isEmpty) {
             val zoomBlocked =
                 CamFov.zoomNeedsColorHopWhileRecording(
@@ -1534,26 +1534,7 @@ internal fun LandscapeChrome(
                 )
             }
         }
-        if (showsCapture) {
-            Box(Modifier.liveModuleFrame(layout.capture, Alignment.BottomCenter)
-                .alpha(if (hidesCaptureValues) 0f else if (uiLocked) .4f else 1f)
-                .then(if (hidesCaptureValues) Modifier.clearAndSetSemantics { } else Modifier)) {
-                LiveCaptureStrip(status, sheet, !uiLocked && !controlBusy && hits && (sheet == null || sheet.isTopAnchored), model = model,
-                    portrait = false,
-                    onQuickActiveChange = {
-                        stripQuick = it
-                        if (it) onSheet(null)
-                    },
-                    quickBottomClearanceDp = layout.safeBottom,
-                    showFocus = capabilities.focus,
-                    showAperture = capabilities.iris,
-                    facePriority = model.facePriorityExposureEnabled, shutterUsesAngle = model.shutterUsesAngle,
-                    onOpen = {
-                        val next = CaptureShutterPolicy.opening(it, status.shootingMode)
-                        onSheet(if (sheet == next) null else next)
-                    }, onTileFrame = onTileFrame)
-            }
-        }
+
     }
 }
 
@@ -1572,6 +1553,7 @@ private fun LiveTopDeck(
     viewportWidth: Float,
     readoutTrailingInset: Float,
     showsTimecode: Boolean = true,
+    fieldLayout: com.opencapture.monitorui.MonitorFieldLayout,
     editing: PocketDispMode? = null,
     onChipFrame: (PocketDispSection, ChromeRect) -> Unit = { _, _ -> },
     onPickerFrame: (LiveSheet, ChromeRect) -> Unit = { _, _ -> },
@@ -1616,12 +1598,15 @@ private fun LiveTopDeck(
                 if (picker != null) onPickerFrame(picker, rect)
             }
     }
-    androidx.compose.foundation.layout.Row(
-        Modifier.fillMaxWidth().monitorReadoutShadow(), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val common by model.session.control.state.collectAsState()
+    common
+    com.opencapture.monitorui.MonitorStatusChrome(fieldLayout,
+        model.session.control.statusPresentation(status.recordElapsedSec),
+        showsRecording = CaptureShutterPolicy.showsVideoTransport(status.shootingMode) && model.chromeSectionMounts(PocketDispSection.REC_READOUT),
+        showsTimecode = CaptureShutterPolicy.showsVideoTransport(status.shootingMode) && showsTimecode && model.chromeSectionMounts(PocketDispSection.TIMECODE),
+        recordingModifier = chipMod(PocketDispSection.REC_READOUT), clockModifier = chipMod(PocketDispSection.TIMECODE),
+        modifier = Modifier.monitorReadoutShadow(),
+        storage = {
         if (model.chromeSectionMounts(PocketDispSection.STORAGE)) {
             androidx.compose.foundation.layout.Row(
                 chipMod(PocketDispSection.STORAGE).chromeClickable(onClick = onToggleStorage),
@@ -1631,39 +1616,26 @@ private fun LiveTopDeck(
                     style = LiveType.mono(topFont, FontWeight.SemiBold), maxLines = 1)
             }
         }
+        }, format = {
         if (model.chromeSectionMounts(PocketDispSection.FORMAT) &&
             !CameraCommands.isPhotoMode(status.shootingMode)
         ) {
             Text(CaptureLists.recFormatChipLabel(status), style = LiveType.mono(topFont, FontWeight.Medium), maxLines = 1,
                 modifier = chipMod(PocketDispSection.FORMAT, LiveSheet.FORMAT).topCapture(LiveSheet.FORMAT))
         }
+        }, color = {
         if (model.chromeSectionMounts(PocketDispSection.COLOR) &&
             CaptureShutterPolicy.showsColorReadout(status.shootingMode)
         ) {
             Text(CameraCommands.colorLabel(status.colorMode, family, model.session.profile), style = LiveType.ui(topFont, FontWeight.Medium), maxLines = 1,
                 modifier = chipMod(PocketDispSection.COLOR, LiveSheet.COLOR).topCapture(LiveSheet.COLOR))
         }
+        }, mode = {
         if (model.chromeSectionMounts(PocketDispSection.FORMAT)) {
             Text(CameraCommands.shootingModeLabel(status.shootingMode, model.session.connectedCamera?.model?.name, model.session.profile) ?: "\u2014",
                 color = LiveDesign.accent, style = LiveType.ui(topFont, FontWeight.Medium), maxLines = 1,
                 modifier = Modifier.reportChromeFrame { onPickerFrame(LiveSheet.MODE, it) }.topCapture(LiveSheet.MODE))
-        }
-        }
-        androidx.compose.foundation.layout.Row(Modifier.padding(end = readoutTrailingInset.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-        if (CaptureShutterPolicy.showsVideoTransport(status.shootingMode) &&
-            model.chromeSectionMounts(PocketDispSection.REC_READOUT)
-        ) {
-            Box(chipMod(PocketDispSection.REC_READOUT)) { RecChip(status.isRecording, status.recordElapsedSec) }
-        }
-        if (CaptureShutterPolicy.showsVideoTransport(status.shootingMode) &&
-            showsTimecode && model.chromeSectionMounts(PocketDispSection.TIMECODE)
-        ) {
-            Box(chipMod(PocketDispSection.TIMECODE)) { TimecodeReadout(status.timecode) }
-        }
-        }
-    }
+        }        })
 }
 
 /**

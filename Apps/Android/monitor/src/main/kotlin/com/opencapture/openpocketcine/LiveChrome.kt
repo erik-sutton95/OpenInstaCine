@@ -159,7 +159,7 @@ fun Modifier.liveModuleFrame(rect: ChromeRect, alignment: Alignment): Modifier {
 }
 
 /**
- * Measures unbounded then scales down to [maxWidth] \u2014 iOS `minimumScaleFactor` for the
+ * Measures unbounded then scales down to [maxWidth] , iOS `minimumScaleFactor` for the
  * info-pill so chips compress instead of wrapping when the deck is tight.
  */
 @Composable
@@ -418,7 +418,7 @@ internal fun bottomBarSplit(barsWidth: Float, gap: Float, captureHug: Float): Bo
 }
 
 /**
- * The iPhone Dynamic Island's landscape leading safe-area inset, in points/dp \u2014
+ * The iPhone Dynamic Island's landscape leading safe-area inset, in points/dp ,
  * the canonical iOS geometry throughout the layout tests (`LiveMonitorLayout`
  * 874×402 with leading 59). `feedFrame` turns it into a left chrome lane: the
  * feed starts at x = 59 while the fixed-margin lock button (chrome insets
@@ -458,7 +458,7 @@ internal const val PORTRAIT_SYSTEM_RAIL_BOTTOM_INSET_DP = 30f
  * Devices whose punch-hole resolves below the core's 50dp cutout threshold
  * would otherwise run the feed edge-to-edge, putting the lock button and
  * battery rail ON the image. Flooring the cutout at the iPhone island lane
- * synthesizes the iOS composition \u2014 feed right of the chrome \u2014 as a
+ * synthesizes the iOS composition , feed right of the chrome , as a
  * platform-adapter decision, keeping the layout math platform-blind. The
  * floor is a MINIMUM under the physical cutout only; a transient bar on this
  * edge still ADDS its lane on top so the feed clears the overlay.
@@ -468,7 +468,7 @@ internal fun monitorLeadingInsetDp(
     transientBarDp: Float,
     chromeScale: Float = 1f,
 ): Float {
-    // Island floor is geometry, not chrome scale \u2014 compact phones still get
+    // Island floor is geometry, not chrome scale , compact phones still get
     // the iPhone lane. `chromeScale` is unused here (callers pass it).
     return maxOf(cutoutDp, IOS_ISLAND_LANE_DP) + maxOf(0f, transientBarDp - cutoutDp)
 }
@@ -548,7 +548,7 @@ fun Modifier.reportChromeFrame(onFrame: (ChromeRect) -> Unit): Modifier =
 /**
  * OpenZCine live-view popup geometry (`PanelHost.topPickerBody` / `bottomPickerBody`):
  * a glass card 8dp below a top chip or 10dp above a bottom bar, clamped into the
- * safe viewport \u2014 never a full-bleed or centred sheet.
+ * safe viewport , never a full-bleed or centred sheet.
  */
 object LivePopupPlacement {
     data class Box(val x: Float, val y: Float, val width: Float, val maxHeight: Float)
@@ -657,7 +657,7 @@ object LiveChromeReadout {
 }
 
 /**
- * Pocket mapping onto OpenZCine's FPS chip labels. SoftAP live view is ~25 fps \u2014
+ * Pocket mapping onto OpenZCine's FPS chip labels. SoftAP live view is ~25 fps ,
  * that is the delivery target for bars, not `CameraStatus.fps` (record format).
  */
 object LiveViewLink {
@@ -1167,7 +1167,7 @@ data class LiveMonitorLayout(
 
         /**
          * Center the displayed raster in the cinema well. A 9:16 Pocket flip
-         * pillarboxes here so the rail \u2014 keyed off the 16:9 well \u2014 never moves.
+         * pillarboxes here so the rail , keyed off the 16:9 well , never moves.
          */
         fun pictureFrame(
             aspect: Float,
@@ -1586,91 +1586,21 @@ fun CameraBatteryReadout(percent: Int, modifier: Modifier = Modifier) {
     }
 }
 
+/** Compatibility adapter for native timecode text used by remaining app surfaces. */
 @Composable
 fun TimecodeReadout(timecode: String?, modifier: Modifier = Modifier, portrait: Boolean = false) {
     val config = LocalConfiguration.current
-    val tablet = min(config.screenWidthDp, config.screenHeightDp) >= 600
-    val incoming = timecode?.takeIf { it.isNotBlank() }
-    val clock = com.opencapture.openpocketcine.session.timecodeClock(incoming)
-        ?: if (portrait) "00:00:00" else "--:--:--"
-    val raw = clock
-    val colon = raw.lastIndexOf(':')
-    val head = if (colon >= 0) raw.substring(0, colon + 1) else raw
-    val tail = if (colon >= 0) raw.substring(colon + 1) else ""
-    // Nothing on screen says these digits are a timecode, and the placeholder
-    // is punctuation that speech drops entirely.
-    val spoken = if (incoming == null) "Timecode not available" else "Timecode $raw"
-    if (portrait) {
-        Text(
-            raw,
-            color = LiveDesign.text,
-            style = LiveType.mono(15f, FontWeight.Normal),
-            maxLines = 1,
-            softWrap = false,
-            modifier = modifier.semantics { contentDescription = spoken },
-        )
-        return
-    }
-    Text(
-        buildAnnotatedString {
-            withStyle(SpanStyle(color = LiveDesign.text)) { append(head) }
-            withStyle(SpanStyle(color = LiveDesign.accent)) { append(tail) }
-        },
-        style = LiveType.mono(if (tablet) 25f else 23f, FontWeight.Medium)
-            ,
-        maxLines = 1,
-        softWrap = false,
-        modifier =
-            modifier
-                .wrapContentWidth(align = Alignment.Start, unbounded = true)
-                .semantics { contentDescription = spoken },
-    )
+    com.opencapture.monitorui.MonitorClock(
+        com.opencapture.openpocketcine.session.timecodeClock(timecode?.takeIf { it.isNotBlank() }),
+        tablet = min(config.screenWidthDp, config.screenHeightDp) >= 600,
+        modifier = modifier, compact = portrait)
 }
 
-/** "02:14" reads as digits; speech wants the units named. */
-private fun spokenElapsed(seconds: Int): String {
-    val minutes = seconds / 60
-    val rest = seconds % 60
-    val m = if (minutes == 1) "1 minute" else "$minutes minutes"
-    val s = if (rest == 1) "1 second" else "$rest seconds"
-    return when {
-        minutes == 0 -> s
-        rest == 0 -> m
-        else -> "$m $s"
-    }
-}
-
-/** Elapsed time comes from camera telemetry; this view never starts a timer. */
 @Composable
-fun RecChip(recording: Boolean, elapsedSeconds: Int = 0) {
-    val config = LocalConfiguration.current
-    val size = if (min(config.screenWidthDp, config.screenHeightDp) >= 600) 11.5f else 10.5f
-    val pulse = com.opencapture.monitorui.monitorPulsePhase(1600, enabled = recording)
-    val elapsed = elapsedSeconds.coerceAtLeast(0)
-    val duration = "%02d:%02d".format(java.util.Locale.ROOT, elapsed / 60, elapsed % 60)
-    Row(Modifier.graphicsLayer { alpha = 1f - .75f * pulse }
-        .background(if (recording) LiveDesign.rec.copy(alpha = .9f) else Color(0xFF060708).copy(alpha = .72f), RoundedCornerShape(percent = 50))
-        .padding(horizontal = 9.dp, vertical = 4.dp)
-        // "REC" and "02:14" are two nodes and read as fragments. Whether the
-        // chip also *announces* a start or stop is a live-region question the
-        // coverage rules in ARCHITECTURE.md have to settle first; this only
-        // makes the chip legible to someone who reaches it.
-        .clearAndSetSemantics {
-            val spoken = spokenElapsed(elapsed)
-            contentDescription =
-                when {
-                    recording -> "Recording, $spoken"
-                    elapsed > 0 -> "Standby, $spoken"
-                    else -> "Standby"
-                }
-        }, verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        if (recording) Box(Modifier.size(6.dp).background(Color.White, CircleShape))
-        Text(if (recording) "REC" else "STBY", color = LiveDesign.text,
-            style = LiveType.ui(size, FontWeight.Medium).copy(letterSpacing = .6.sp), maxLines = 1)
-        Text(duration, color = Color.White.copy(alpha = .75f),
-            style = LiveType.mono(size, FontWeight.Medium), maxLines = 1)
-    }
+fun RecChip(recording: Boolean?, elapsedSeconds: Int = 0) {
+    com.opencapture.monitorui.MonitorRecordingReadout(
+        com.opencapture.monitorui.MonitorStatusPresentation(recording,
+            if (recording == null) null else elapsedSeconds))
 }
 
 @Composable

@@ -1,11 +1,12 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineAppKit
 import Observation
 import SwiftUI
 import XCTest
 
 @MainActor
-final class MonitorCanvasObservationTests: XCTestCase {
+final class MonitorScreenObservationTests: XCTestCase {
     func testTelemetryReevaluatesOnlyItsSlotWithoutInvalidatingTheGeometryOwner() async throws {
         let inputs = CanvasInputs()
         let recorder = CanvasRecorder()
@@ -55,6 +56,8 @@ final class MonitorCanvasObservationTests: XCTestCase {
             FieldMonitorLayout(width: 400, height: 800, fill: true),
             FieldMonitorLayout(width: 400, height: 800, sourceAspect: 9 / 16),
             FieldMonitorLayout(width: 400, height: 800),
+            FieldMonitorLayout(width: 1024, height: 1366),
+            FieldMonitorLayout(width: 1366, height: 1024),
         ]
         for (index, layout) in layouts.enumerated() {
             let parentCount = recorder.parentEvaluations
@@ -140,6 +143,7 @@ private final class CanvasInputs {
     var layout = FieldMonitorLayout(width: 400, height: 800)
     var aspect = 16.0 / 9
     var covered = false
+    let control = MonitorControlModel()
 
     func setTelemetry(_ value: Int, for slot: CanvasSlot) {
         switch slot {
@@ -175,14 +179,31 @@ private struct CanvasFixture: View {
     var body: some View {
         recorder.parentEvaluations += 1
         let layout = inputs.layout
-        return MonitorCanvas(layout: layout, sourceAspect: inputs.aspect) {
+        return MonitorScreen(control: inputs.control, layout: layout, sourceAspect: inputs.aspect,
+            presentation: MonitorScreenPresentation(visible: !inputs.covered,
+                statusMounted: false, powerMounted: false, captureMounted: false)) {
             recorder.content(.picture, value: inputs.picture, layout: layout)
         } assists: {
             recorder.content(.assists, value: inputs.assists, layout: layout)
-        } chrome: {
+        } signal: {
+            EmptyView()
+        } status: {
+            EmptyView()
+        } power: {
+            EmptyView()
+        } capture: {
+            EmptyView()
+        } system: {
             recorder.content(.chrome, value: inputs.chrome, layout: layout)
+        } tools: {
+            EmptyView()
+        } panels: {
+            EmptyView()
+        } cover: {
+            if inputs.covered { Color.black }
+        } recovery: {
+            EmptyView()
         }
-        .monitorPresentationVisibility(!inputs.covered)
     }
 }
 

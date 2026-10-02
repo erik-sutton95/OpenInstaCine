@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.appkit.captureField
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -245,6 +247,15 @@ private fun LiveControlSheetContent(
     showsHeader: Boolean = true,
 ) {
     val context = LocalContext.current
+    val captureKey = when (sheet) {
+        LiveSheet.ISO -> com.opencapture.opencine.core.SettingKey.ISO
+        LiveSheet.SHUTTER -> com.opencapture.opencine.core.SettingKey.SHUTTER
+        LiveSheet.WB -> com.opencapture.opencine.core.SettingKey.WHITE_BALANCE
+        else -> null
+    }
+    val commonField = remember(sheet, model.session.control) {
+        captureKey?.let { model.session.control.captureField(it) }
+    }
     val preview = LocalCapturePreview.current
     val effects = CapturePanelEffects(preview != null)
     val enabled = !locked && preview == null
@@ -602,17 +613,18 @@ private fun LiveControlSheetContent(
                                     },
                                 )
                             } else {
-                                CaptureDrumWheel(
-                                    options = CaptureLists.isoDrumLabels(status),
-                                    selection = drumSelection,
-                                    markedValues = CaptureLists.isoMarkedLabels(status),
-                                    interactive = enabled,
-
-                                    onSelect = {
-                                        drumSelection = it
-                                        applyDrum(it)
-                                    },
-                                )
+                                if (commonField != null) {
+                                    val manual = commonField.choices.filter { choice ->
+                                        when (val value = choice.value) {
+                                            is com.opencapture.opencine.core.SettingValue.Iso -> value.value is com.opencapture.opencine.core.ISOValue.Manual
+                                            is com.opencapture.opencine.core.SettingValue.Shutter -> value.value != com.opencapture.opencine.core.ShutterValue.Auto
+                                            is com.opencapture.opencine.core.SettingValue.WhiteBalance -> value.value is com.opencapture.opencine.core.WhiteBalanceValue.Kelvin
+                                            else -> false
+                                        }
+                                    }
+                                    com.opencapture.opencine.appkit.MonitorCaptureDrum(model.session.control, commonField,
+                                        enabled = enabled, choices = manual)
+                                }
                             }
                         }
                         if (model.session.supportsNativeIsoHop) PrefToggle(
@@ -653,16 +665,18 @@ private fun LiveControlSheetContent(
                                     },
                                 )
                             } else {
-                                CaptureDrumWheel(
-                                    options = CaptureLists.shutterLabels(status),
-                                    selection = drumSelection,
-                                    interactive = enabled,
-
-                                    onSelect = {
-                                        drumSelection = it
-                                        applyDrum(it)
-                                    },
-                                )
+                                if (commonField != null) {
+                                    val manual = commonField.choices.filter { choice ->
+                                        when (val value = choice.value) {
+                                            is com.opencapture.opencine.core.SettingValue.Iso -> value.value is com.opencapture.opencine.core.ISOValue.Manual
+                                            is com.opencapture.opencine.core.SettingValue.Shutter -> value.value != com.opencapture.opencine.core.ShutterValue.Auto
+                                            is com.opencapture.opencine.core.SettingValue.WhiteBalance -> value.value is com.opencapture.opencine.core.WhiteBalanceValue.Kelvin
+                                            else -> false
+                                        }
+                                    }
+                                    com.opencapture.opencine.appkit.MonitorCaptureDrum(model.session.control, commonField,
+                                        enabled = enabled, choices = manual)
+                                }
                             }
                         }
                         if (isEvSheet) {
@@ -698,16 +712,18 @@ private fun LiveControlSheetContent(
                         }
                         1 ->
                             Box(Modifier.wrapContentHeight().fillMaxWidth()) {
-                                CaptureDrumWheel(
-                                    options = CaptureLists.kelvinLabels,
-                                    selection = drumSelection,
-                                    interactive = enabled,
-
-                                    onSelect = {
-                                        drumSelection = it
-                                        applyDrum(it)
-                                    },
-                                )
+                                if (commonField != null) {
+                                    val manual = commonField.choices.filter { choice ->
+                                        when (val value = choice.value) {
+                                            is com.opencapture.opencine.core.SettingValue.Iso -> value.value is com.opencapture.opencine.core.ISOValue.Manual
+                                            is com.opencapture.opencine.core.SettingValue.Shutter -> value.value != com.opencapture.opencine.core.ShutterValue.Auto
+                                            is com.opencapture.opencine.core.SettingValue.WhiteBalance -> value.value is com.opencapture.opencine.core.WhiteBalanceValue.Kelvin
+                                            else -> false
+                                        }
+                                    }
+                                    com.opencapture.opencine.appkit.MonitorCaptureDrum(model.session.control, commonField,
+                                        enabled = enabled, choices = manual)
+                                }
                             }
                         else -> {
                             CaptureDrumWheel(

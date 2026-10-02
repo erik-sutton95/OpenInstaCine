@@ -35,7 +35,6 @@ struct LiveViewScreen: View {
     private var showsBottomBars: Bool {
         model.chromeSectionMounts(.toolBar) || model.chromeSectionMounts(.cameraValues)
     }
-    private var showsLock: Bool { model.chromeSectionMounts(.lockButton) || interfaceLocked }
     private var showsBatteries: Bool { model.chromeSectionMounts(.batteries) }
     private var captureControlsPresented: Bool {
         model.captureSheet != nil || model.captureDrum != nil
@@ -251,69 +250,45 @@ struct LiveViewScreen: View {
         let geometry =
             layout.presentation
             ?? FieldMonitorLayout(width: layout.viewport.width, height: layout.viewport.height)
-        MonitorCanvas(layout: geometry, sourceAspect: model.session.pictureAspect) {
-            LiveFeedPane()
-                .opacity(model.session.isFeedWarming ? 0 : 1)
+        MonitorScreen(
+            control: model.control, layout: geometry, sourceAspect: model.session.pictureAspect,
+            presentation: MonitorScreenPresentation(
+                visible: liveChromeVisible,
+                interactive: chromeInteractive && model.liveChromeInteractive,
+                dimmed: zoomDialVisible, transientControlsHidden: zoomDialMounted,
+                pictureWaiting: model.session.isFeedWarming,
+                statusMounted: showsStatusBar, powerMounted: showsBatteries,
+                captureMounted: model.chromeSectionMounts(.cameraValues),
+                captureHidden: hidesCaptureValues,
+                captureInteractive: model.captureSheet == nil || model.captureSheet?.isTopAnchored == true,
+                locked: interfaceLocked, popupInteractive: hasInteractivePopup,
+                panelsRaised: zoomDialMounted, recovering: model.session.sessionRecovery.isRecovering)
+        ) {
+            LiveFeedPane().opacity(model.session.isFeedWarming ? 0 : 1)
                 .transaction { $0.animation = nil }
         } assists: {
             LiveFeedAssistsPane().opacity(model.session.isFeedWarming ? 0 : 1)
-        } chrome: {
-            // Always mounted so the first paint is the waiting plate , an
-            // insert fade used to flash the leftover IDR underneath.
-            ZStack(alignment: .topLeading) {
-                LiveFeedWarmupCover()
-                    .frame(width: layout.onFeed.width, height: layout.onFeed.height)
-                    .offset(x: layout.onFeed.minX, y: layout.onFeed.minY)
-            }
-            .frame(
-                width: layout.viewport.width,
-                height: layout.viewport.height,
-                alignment: .topLeading
-            )
-            .clipped()
-            .opacity(model.session.isFeedWarming ? 1 : 0)
-            .monitorPresentationVisibility(liveChromeVisible)
-            .accessibilityHidden(!model.session.isFeedWarming || !liveChromeVisible)
-            .allowsHitTesting(false)
-
-            chrome(layout)
-                .environment(\.interfaceLocked, interfaceLocked)
-                .opacity(zoomDialVisible ? 0.16 : 1)
-                .animation(MonitorMotion.dim(reduceMotion), value: zoomDialVisible)
-                .monitorPresentationVisibility(liveChromeVisible)
-                .allowsHitTesting(
-                    chromeInteractive && model.liveChromeInteractive && !zoomDialMounted
-                        && liveChromeVisible
-                )
-
-            LiveSystemChrome(
-                locked: $interfaceLocked, layout: geometry,
+        } signal: {
+            LiveFeedWarmupCover()
+        } status: {
+            FieldMonitorStatusChrome(menu: $topMenu, layout: layout)
+                .chromeEditable(.statusBar, editing: editingMode)
+        } power: {
+            FieldMonitorGauges(horizontal: geometry.portrait && !geometry.tablet,
+                showsLink: !geometry.portrait || geometry.tablet)
+                .chromeEditable(.batteries, editing: editingMode)
+        } capture: {
+            LiveCameraControlBar(columns: layout.capture.height > 60 ? 3 : 6)
+                .chromeEditable(.cameraValues, editing: editingMode)
+        } system: {
+            LiveSystemChrome(locked: $interfaceLocked, layout: geometry,
                 capturePresented: captureControlsPresented && chromeInteractive,
                 visible: liveChromeVisible && !zoomDialMounted,
                 interactive: chromeInteractive && model.liveChromeInteractive)
-                .opacity(zoomDialVisible ? 0.16 : 1)
-                .animation(MonitorMotion.dim(reduceMotion), value: zoomDialVisible)
-                .monitorPresentationVisibility(liveChromeVisible)
-
-            // After chrome so the bezel stroke sits on the physical screen, not the feed well.
-            LiveRecordingTallyGate()
-                .frame(width: layout.viewport.width, height: layout.viewport.height)
-                .monitorPresentationVisibility(liveChromeVisible)
-                .accessibilityHidden(true)
-                .allowsHitTesting(false)
-
+        } tools: {
+            nativeTools(layout).environment(\.interfaceLocked, interfaceLocked)
+        } panels: {
             popups(layout)
-                // Clear the container's full-screen hit region as its last
-                // popup leaves; a dismissed picker must not swallow Lock.
-                .zIndex(zoomDialMounted ? 16 : 10)
-                // These hosts position bounded panels inside the viewport.
-                // An AX attachment on the hosts promotes a sole panel to that
-                // full frame (and exposes an empty host above other drawers).
-                // Keep AX on their controls; zero opacity hides covered hosts.
-                // The retained zoom dial owns its dismissal AX gate itself.
-                .monitorPresentationVisibility(liveChromeVisible)
-                .allowsHitTesting(hasInteractivePopup && liveChromeVisible)
-
             // The expanded Motion editor owns its outside-tap minimization
             // region above camera controls, including the stable Record layer.
             if showsGimbalButton, chromeInteractive, !interfaceLocked,
@@ -336,18 +311,12 @@ struct LiveViewScreen: View {
                 .zIndex(15)
             }
 
+        } cover: {
             if let panel = model.shell.cover, !model.isEditingChrome {
                 operatorPanelCover(panel, layout: layout)
-                    .transition(.identity)
-                    .zIndex(20)
             }
-
-            if model.session.sessionRecovery.isRecovering {
-                MonitorRecoveryOverlay()
-                    .frame(width: layout.viewport.width, height: layout.viewport.height)
-                    .zIndex(30)
-                    .animation(.easeOut(duration: 0.2), value: model.session.sessionRecovery)
-            }
+        } recovery: {
+            if model.session.sessionRecovery.isRecovering { MonitorRecoveryOverlay() }
         }
         .coordinateSpace(name: LiveCanvasSpace.name)
         .onPreferenceChange(LiveTopPickerFramesKey.self) { topPickerFrames = $0 }
@@ -421,9 +390,9 @@ struct LiveViewScreen: View {
         return floor - 28
     }
 
-    /// Physical-screen overlay. OpenZCine `canvasLayer` + `ignoresSafeArea` , not the safe-area box.
+    /// Physical-screen overlay. OpenZCine `canvasLayer` + `ignoresSafeArea`; not the safe-area box.
     @ViewBuilder
-    private func chrome(_ layout: LiveMonitorLayout) -> some View {
+    private func nativeTools(_ layout: LiveMonitorLayout) -> some View {
         ZStack(alignment: .topLeading) {
             Color.clear
                 .allowsHitTesting(false)
@@ -500,17 +469,9 @@ struct LiveViewScreen: View {
                     .accessibilityHidden(true)
             }
 
-            if showsStatusBar {
-                FieldMonitorStatusChrome(menu: $topMenu, layout: layout)
-                    .accessibilityHidden(!liveChromeVisible || zoomDialMounted)
-                    .chromeEditable(.statusBar, editing: editingMode)
-                    .frame(maxWidth: layout.topDeck.width)
-                    .position(x: layout.topDeck.midX, y: layout.topDeck.midY)
-            }
+
 
             if let p = layout.presentation, p.portrait {
-                LiveDesign.background.frame(width: p.system.width, height: p.system.height)
-                    .position(x: p.system.midX, y: p.system.midY).allowsHitTesting(false)
                 if !model.session.isVerticalPicture, editingMode == nil,
                     !model.assist.isVisible(.desqueeze)
                 {
@@ -521,24 +482,9 @@ struct LiveViewScreen: View {
                 }
             }
 
-            if showsBatteries {
-                FieldMonitorGauges(
-                    horizontal: layout.presentation?.portrait == true
-                        && layout.presentation?.tablet == false,
-                    showsLink: layout.presentation?.portrait != true
-                        || layout.presentation?.tablet == true
-                )
-                .chromeEditable(.batteries, editing: editingMode)
-                // The portrait row hugs the trailing edge; stacked pills hug the leading.
-                .frame(
-                    width: layout.battery.width, height: layout.battery.height,
-                    alignment: layout.presentation?.portrait == true
-                        && layout.presentation?.tablet == false ? .topTrailing : .topLeading
-                )
-                .position(x: layout.battery.midX, y: layout.battery.midY)
-            }
 
-            // After the scope well , that well covers this chip and used to eat the tap.
+
+            // After the scope well; that well covers this chip and used to eat the tap.
             if OsmoMonitorPresentation.capabilities(model.session).zoom
                 && model.chromeSectionMounts(.zoomChip)
             {
@@ -643,32 +589,18 @@ struct LiveViewScreen: View {
                 .allowsHitTesting(!interfaceLocked)
                 .zIndex(6)
             }
-            if model.chromeSectionMounts(.cameraValues) {
-                LiveCameraControlBar(columns: layout.capture.height > 60 ? 3 : 6)
-                    .chromeEditable(.cameraValues, editing: editingMode)
-                    .liveModuleFrame(layout.capture, alignment: .bottom)
-                    .opacity(hidesCaptureValues ? 0 : (interfaceLocked ? 0.4 : 1))
-                    // A held readout retains its existing pointer until lift;
-                    // persistent pickers own their outside-tap dismissal instead.
-                    .allowsHitTesting(
-                        !interfaceLocked
-                            && (model.captureSheet == nil
-                                || model.captureSheet?.isTopAnchored == true)
-                    )
-                    .accessibilityHidden(
-                        hidesCaptureValues || !liveChromeVisible || zoomDialMounted)
-            }
+
         }
         .frame(width: layout.viewport.width, height: layout.viewport.height)
         // Pin the overlay tree itself. `preferredColorScheme` on the screen is
-        // not enough , iOS 26 glass / vibrancy can still resolve light from the
+        // not enough; iOS 26 glass / vibrancy can still resolve light from the
         // feed. Chrome materials must stay dark glass + light text.
         .environment(\.colorScheme, .dark)
         .preferredColorScheme(.dark)
         .ignoresSafeArea()
     }
 
-    /// Full-screen overlays , not in-flow, not `.sheet` for live capture.
+    /// Full-screen overlays; not in-flow, not `.sheet` for live capture.
     @ViewBuilder
     private func popups(_ layout: LiveMonitorLayout) -> some View {
         let floorY =
@@ -845,7 +777,7 @@ struct LiveViewScreen: View {
         }
     }
 
-    /// Live icon frame while the popup is open , a snapshot at long-press
+    /// Live icon frame while the popup is open; a snapshot at long-press
     /// stays on the old side when the phone rolls landscape-left ↔ right.
     private func liveAssistAnchor(for tool: LiveAssistTool) -> CGRect {
         if let frame = assistIconFrames[tool], frame.width > 1 { return frame }
@@ -1139,18 +1071,8 @@ private struct LiveSessionBanners: View {
     }
 }
 
-private struct LiveRecordingTallyGate: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        if model.session.status.isRecording {
-            LiveRecordingTally()
-        }
-    }
-}
-
 /// Scope panels observe `frameSamples.bundle` themselves (≤25 Hz). This host
-/// only tracks assist on/off flags , not `generation`.
+/// only tracks assist on/off flags; not `generation`.
 private struct LiveScopeOverlays: View {
     @Environment(AppModel.self) private var model
     var layout: LiveMonitorLayout

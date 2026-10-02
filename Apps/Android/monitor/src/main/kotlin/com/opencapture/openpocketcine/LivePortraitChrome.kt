@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.appkit.statusPresentation
+
 import com.opencapture.monitorui.MonitorExposureReadout
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorMaterial
@@ -221,28 +223,17 @@ fun LivePortraitChrome(
     onTileFrame: (LiveSheet, ChromeRect) -> Unit = { _, _ -> },
     readoutFrame: ChromeRect = livePortraitReadoutFrame(layout, zones),
     onAssistBoundsChanged: (ChromeRect?) -> Unit = {},
-    onCaptureActivityChange: (Boolean) -> Unit = {},
+    captureQuickActive: Boolean = false,
 ) {
     val cover = model.liveCover()
-    var stripQuick by remember { mutableStateOf(false) }
-    var topQuick by remember { mutableStateOf(false) }
-    val captureOpen = sheet != null || stripQuick || topQuick
-    LaunchedEffect(stripQuick, topQuick) { onCaptureActivityChange(stripQuick || topQuick) }
-    DisposableEffect(Unit) { onDispose { onCaptureActivityChange(false) } }
-    val hidesCaptureValues = hidesLowerCaptureValues(sheet, stripQuick, topQuick)
+    val captureOpen = sheet != null || captureQuickActive
     val desqueezeVisible = assist.isVisible(LiveAssistTool.DESQ)
     val fill = sourceIsVertical || (!desqueezeVisible && model.portraitFeedAspect == PortraitFeedAspect.FILL)
     val tablet = min(layout.viewportWidth, layout.viewportHeight) >= 600f
     val editing = model.chromeEditorMode
-    val showsStatus = model.chromeSectionMounts(PocketDispSection.STATUS_BAR)
-    val showsLock = model.chromeSectionMounts(PocketDispSection.LOCK_BUTTON) || uiLocked
     val showsRecord = model.chromeSectionMounts(PocketDispSection.RAIL_RECORD) || status.isRecording
-    val showsMedia = !topQuick && !stripQuick && model.chromeSectionMounts(PocketDispSection.RAIL_MEDIA) &&
-        !model.session.isMultiviewBorrowed
-    val showsSettings = !topQuick && !stripQuick && (model.chromeSectionMounts(PocketDispSection.RAIL_SETTINGS) || status.isRecording)
     val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR) &&
         cover == null && assist.configureTool == null
-    val showsCapture = model.chromeSectionMounts(PocketDispSection.CAMERA_VALUES)
     val floorY = zones.assistToolbar.minY
     val showGimbalButton =
         capabilities.gimbal && model.chromeSectionMounts(PocketDispSection.GIMBAL_STICK)
@@ -254,97 +245,6 @@ fun LivePortraitChrome(
     val rail = portraitAssistToolbar(floorY, tablet)
 
     Box(Modifier.fillMaxSize()) {
-        if (showsStatus) {
-            val gaugeTop = if (tablet) 82f else max(4f, zones.topBar.minY - 16f)
-            // Phone: a trailing row of gauge pills. Tablet: a stacked column.
-            Box(Modifier.liveModuleFrame(ChromeRect(if (tablet) 14f else layout.viewportWidth - 200f,
-                gaugeTop, if (tablet) 58f else 186f, if (tablet) 68f else 22f)),
-                contentAlignment = if (tablet) Alignment.TopStart else Alignment.TopEnd) {
-                com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
-                    model.phoneBatteryPercent, status.batteryPercent, horizontal = !tablet, showsLink = tablet)
-            }
-            // iOS portrait phone: storage then the link pill on the leading side, centred on the battery row.
-            Row(Modifier.liveModuleFrame(ChromeRect(14f, if (tablet) 52f else gaugeTop - 4f, if (tablet) 120f else 240f, 28f)),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (model.chromeSectionMounts(PocketDispSection.STORAGE)) {
-                    Row(Modifier.monitorReadoutShadow(), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        SdCardGlyph(LiveDesign.text)
-                        Text(portraitStorageLabel(status).substringBefore(" ·"), style = LiveType.mono(13.5f, FontWeight.SemiBold))
-                    }
-                }
-                if (!tablet) com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
-                    model.phoneBatteryPercent, status.batteryPercent, horizontal = true, showsPower = false)
-            }
-            val recContext = LocalContext.current
-            val recLifetime = rememberCaptureQuickLifetime(model)
-            val recOwner = remember { MonitorQuickGestureOwner() }
-            val recInteractive = !uiLocked && chromeInteractive
-            val notifyTop by rememberUpdatedState<(Boolean) -> Unit> { topQuick = it; if (it) onSheet(null) }
-            LaunchedEffect(recOwner.active) { notifyTop(recOwner.active != null) }
-            DisposableEffect(Unit) { onDispose { notifyTop(false) } }
-            Box(Modifier.liveModuleFrame(readoutFrame).monitorReadoutShadow(), contentAlignment = Alignment.Center) {
-                if (CaptureShutterPolicy.showsVideoTransport(status.shootingMode) &&
-                    capabilities.timecode && model.chromeSectionMounts(PocketDispSection.TIMECODE)
-                ) TimecodeReadout(status.timecode)
-                if (CaptureShutterPolicy.showsVideoTransport(status.shootingMode) &&
-                    model.chromeSectionMounts(PocketDispSection.REC_READOUT)
-                ) {
-                    Box(Modifier.align(Alignment.CenterStart).padding(start = 14.dp)) { RecChip(status.isRecording, status.recordElapsedSec) }
-                }
-                val setupSheet = CaptureShutterPolicy.portraitSetupSheet(status.shootingMode)
-                val setupIsMode = CaptureShutterPolicy.portraitSetupOpensMode(status.shootingMode)
-                val setupValue = CaptureShutterPolicy.portraitSetupLabel(status)
-                val setupCaption = CaptureShutterPolicy.portraitSetupCaption(
-                    status, model.session.connectedCamera?.model?.family ?: "pocket", model.session.profile)
-                val setupTint =
-                    if (sheet == setupSheet || recOwner.active == setupSheet.name) LiveDesign.accent else LiveDesign.text
-                // iOS: the format sits on the timecode line at its size; the color hangs smaller below.
-                Box(
-                    contentAlignment = Alignment.BottomEnd,
-                    modifier = Modifier.align(Alignment.CenterEnd).padding(end = 14.dp)
-                        .monitorReadoutGesture(
-                            captureQuickControl(setupSheet, status, model, recContext, recLifetime),
-                            recInteractive && recLifetime.active && (recOwner.owner == null || recOwner.owner == setupSheet.name),
-                            { onSheet(if (sheet == setupSheet) null else setupSheet) },
-                            { source, value ->
-                                releaseCaptureQuickControl(setupSheet, source, value, model, recContext, recLifetime, recInteractive)
-                            },
-                            0f, recOwner, setupSheet.name,
-                            { preview, maxHeight ->
-                                LiveControlSheet(setupSheet, model, status, locked = false,
-                                    onDismiss = {}, maxHeightDp = maxHeight, preview = preview,
-                                    portrait = true)
-                            },
-                            fromTop = true, ceilingY = readoutFrame.maxY,
-                            onPreviewBegin = { notifyTop(true) },
-                        )
-                        .clearAndSetSemantics {
-                            contentDescription = if (setupIsMode) "Shooting mode" else "Recording options"
-                            stateDescription = setupValue
-                        },
-                ) {
-                    Text(
-                        setupValue,
-                        color = setupTint,
-                        style = if (setupIsMode) LiveType.mono(12f, FontWeight.SemiBold)
-                        else LiveType.mono(if (tablet) 25f else 23f, FontWeight.Medium),
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                    if (setupCaption != null) {
-                        Text(
-                            setupCaption,
-                            color = setupTint,
-                            style = LiveType.ui(11f, FontWeight.SemiBold),
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.offset(y = 18.dp).wrapContentWidth(Alignment.End, unbounded = true),
-                        )
-                    }
-                }
-            }
-        }
 
         if (showsAssist) {
             Box(
@@ -362,41 +262,7 @@ fun LivePortraitChrome(
             }
         }
 
-        if (showsCapture && layout.capture.height > 1f) {
-            Box(
-                Modifier
-                    .liveModuleFrame(layout.capture, Alignment.BottomCenter)
-                    .alpha(if (hidesCaptureValues) 0f else if (uiLocked) 0.4f else 1f)
-                    .then(if (hidesCaptureValues) Modifier.clearAndSetSemantics { } else Modifier)
-                    .chromeEditStroke(editing != null, true),
-            ) {
-                LiveCaptureStrip(
-                    status = status,
-                    model = model,
-                    active = sheet,
-                    enabled = !uiLocked && !controlBusy && chromeInteractive
-                        && (sheet == null || sheet.isTopAnchored),
-                    portrait = true,
-                    onQuickActiveChange = {
-                        stripQuick = it
-                        if (it) onSheet(null)
-                    },
-                    quickBottomClearanceDp = layout.viewportHeight - zones.systemBar.minY + 12f,
-                    showFocus =
-                        capabilities.focus,
-                    showAperture = capabilities.iris,
-                    facePriority = model.facePriorityExposureEnabled,
-                    shutterUsesAngle = model.shutterUsesAngle,
-                    onOpen = {
-                        if (!uiLocked) {
-                            val next = CaptureShutterPolicy.opening(it, status.shootingMode)
-                            onSheet(if (sheet == next) null else next)
-                        }
-                    },
-                    onTileFrame = onTileFrame,
-                )
-            }
-        }
+
 
         if (editing == null && !sourceIsVertical && !desqueezeVisible) {
             LivePortraitAspectToggle(
@@ -490,19 +356,7 @@ fun LivePortraitChrome(
             }
         }
 
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .liveModuleFrame(
-                    ChromeRect(
-                        0f,
-                        zones.systemBar.minY,
-                        layout.viewportWidth,
-                        max(0f, layout.viewportHeight - zones.systemBar.minY),
-                    ),
-                )
-                .background(LiveDesign.background),
-        )
+
 
 
     }
@@ -574,6 +428,7 @@ fun LiveCaptureStrip(
     portrait: Boolean? = null,
 ) {
     val context = LocalContext.current
+    val commonState = model?.session?.control?.state?.collectAsState()?.value
     val auto = status.expoMode == CameraCommands.EXPO_AUTO
     val aeLocked = model?.session?.aeLock?.collectAsState()?.value != null
     val awbLocked = model?.session?.awbLockKelvin?.collectAsState()?.value != null
@@ -589,12 +444,13 @@ fun LiveCaptureStrip(
             sheet.name, label, readout, selected = active == sheet, annotation = annotation,
             valueIcon = valueIcon, badgeIcon = badgeIcon,
         )
+    commonState
     val values = buildList {
-        add(value(LiveSheet.ISO, "ISO", CaptureLists.isoChipValue(status)))
+        add(value(LiveSheet.ISO, "ISO", captureReadoutLabel(LiveSheet.ISO, status, model, CaptureLists.isoChipValue(status))))
         add(value(LiveSheet.SHUTTER,
             if (auto) MonitorExposureReadout.autoEvCaption(status.shutterDenom)
             else "SHUTTER",
-            if (auto) EvComp.fromRaw(status.evComp)?.label ?: "\u2014" else shutter,
+            if (auto) EvComp.fromRaw(status.evComp)?.label ?: "\u2014" else captureReadoutLabel(LiveSheet.SHUTTER, status, model, shutter),
             if (auto && facePriority) CaptureLists.FACE_PRIORITY_TITLE else null,
             badgeIcon = if (auto && facePriority) OpcIcon.SCAN else null))
         add(value(LiveSheet.EXPO, "EXPOSURE", if (aeLocked) CaptureLists.AE_LOCK
@@ -602,7 +458,7 @@ fun LiveCaptureStrip(
         // iOS `LunaMeteringTile`: two values, so a tap toggles in place; hidden until the camera reports it.
         if (faceMetering != null) add(com.opencapture.openpocketcine.monitor.MonitorValue(
             METER_TILE, "METER", if (faceMetering) "Face" else "Matrix"))
-        add(value(LiveSheet.WB, "WB", CaptureLists.wbChipValue(status, awbLocked),
+        add(value(LiveSheet.WB, "WB", captureReadoutLabel(LiveSheet.WB, status, model, CaptureLists.wbChipValue(status, awbLocked)),
             valueIcon = if (CaptureLists.wbIsAuto(status) && !awbLocked) OpcIcon.APERTURE else null))
         if (showFocus) add(value(LiveSheet.FOCUS, "FOCUS", status.focusLabel))
         if (showAperture) add(value(LiveSheet.APERTURE, "APERTURE", ApertureStrategy.tileValue(status)))
@@ -877,3 +733,90 @@ private fun ChevronLeftGlyph(tint: Color, modifier: Modifier = Modifier) {
 
 private fun portraitStorageLabel(status: CameraStatus): String =
     CaptureLists.storageLabel(status, showDuration = false)
+
+/** Native recording options occupy the bounded format slot in the shared status row. */
+@Composable
+internal fun LivePortraitStatus(model: AppModel, layout: LiveMonitorLayout, status: CameraStatus,
+    uiLocked: Boolean, chromeInteractive: Boolean, sheet: LiveSheet?, onSheet: (LiveSheet?) -> Unit,
+    fpsLabel: String, bars: Int, onQuickActivityChange: (Boolean) -> Unit) {
+    val field = checkNotNull(layout.field)
+    val tablet = field.tablet
+    val readoutFrame = layout.topDeck
+    val capabilities = model.monitorLayout()
+            val recContext = LocalContext.current
+            val recLifetime = rememberCaptureQuickLifetime(model)
+            val recOwner = remember { MonitorQuickGestureOwner() }
+            val recInteractive = !uiLocked && chromeInteractive
+            val notifyTop by rememberUpdatedState<(Boolean) -> Unit> { onQuickActivityChange(it); if (it) onSheet(null) }
+            LaunchedEffect(recOwner.active) { notifyTop(recOwner.active != null) }
+            DisposableEffect(Unit) { onDispose { notifyTop(false) } }
+    val common by model.session.control.state.collectAsState()
+    common
+    com.opencapture.monitorui.MonitorStatusChrome(field,
+        model.session.control.statusPresentation(status.recordElapsedSec),
+        showsTimecode = CaptureShutterPolicy.showsVideoTransport(status.shootingMode) && capabilities.timecode && model.chromeSectionMounts(PocketDispSection.TIMECODE),
+        showsRecording = CaptureShutterPolicy.showsVideoTransport(status.shootingMode) && model.chromeSectionMounts(PocketDispSection.REC_READOUT),
+        modifier = Modifier.monitorReadoutShadow(),
+        storage = {
+            if (model.chromeSectionMounts(PocketDispSection.STORAGE)) Row(verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                SdCardGlyph(LiveDesign.text)
+                Text(portraitStorageLabel(status).substringBefore(" ·"), style = LiveType.mono(13.5f, FontWeight.SemiBold))
+            }
+        }, link = {
+            com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
+                model.phoneBatteryPercent, status.batteryPercent, horizontal = true, showsPower = false)
+        }, format = {
+                val setupSheet = CaptureShutterPolicy.portraitSetupSheet(status.shootingMode)
+                val setupIsMode = CaptureShutterPolicy.portraitSetupOpensMode(status.shootingMode)
+                val setupValue = CaptureShutterPolicy.portraitSetupLabel(status)
+                val setupCaption = CaptureShutterPolicy.portraitSetupCaption(
+                    status, model.session.connectedCamera?.model?.family ?: "pocket", model.session.profile)
+                val setupTint =
+                    if (sheet == setupSheet || recOwner.active == setupSheet.name) LiveDesign.accent else LiveDesign.text
+                // iOS: the format sits on the timecode line at its size; the color hangs smaller below.
+                Box(
+                    contentAlignment = Alignment.BottomEnd,
+                    modifier = Modifier
+                        .monitorReadoutGesture(
+                            captureQuickControl(setupSheet, status, model, recContext, recLifetime),
+                            recInteractive && recLifetime.active && (recOwner.owner == null || recOwner.owner == setupSheet.name),
+                            { onSheet(if (sheet == setupSheet) null else setupSheet) },
+                            { source, value ->
+                                releaseCaptureQuickControl(setupSheet, source, value, model, recContext, recLifetime, recInteractive)
+                            },
+                            0f, recOwner, setupSheet.name,
+                            { preview, maxHeight ->
+                                LiveControlSheet(setupSheet, model, status, locked = false,
+                                    onDismiss = {}, maxHeightDp = maxHeight, preview = preview,
+                                    portrait = true)
+                            },
+                            fromTop = true, ceilingY = readoutFrame.maxY,
+                            onPreviewBegin = { notifyTop(true) },
+                        )
+                        .clearAndSetSemantics {
+                            contentDescription = if (setupIsMode) "Shooting mode" else "Recording options"
+                            stateDescription = setupValue
+                        },
+                ) {
+                    Text(
+                        setupValue,
+                        color = setupTint,
+                        style = if (setupIsMode) LiveType.mono(12f, FontWeight.SemiBold)
+                        else LiveType.mono(if (tablet) 25f else 23f, FontWeight.Medium),
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    if (setupCaption != null) {
+                        Text(
+                            setupCaption,
+                            color = setupTint,
+                            style = LiveType.ui(11f, FontWeight.SemiBold),
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.offset(y = 18.dp).wrapContentWidth(Alignment.End, unbounded = true),
+                        )
+                    }
+                }
+        })
+}
