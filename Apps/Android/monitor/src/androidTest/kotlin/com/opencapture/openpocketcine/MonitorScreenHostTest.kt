@@ -7,10 +7,15 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -25,6 +30,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.math.roundToInt
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
@@ -33,6 +39,40 @@ import kotlin.test.assertTrue
 /** SIMULATED native hosts exercise the production shared screen, without a decoder or camera. */
 @RunWith(AndroidJUnit4::class)
 class MonitorScreenHostTest {
+    @Test fun captureContentKeepsItsIntrinsicHeightAboveTheFixedBottom() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val layout = MonitorLayoutPolicy.fieldMonitor(400f, 800f)
+        var captureHeight = 0
+        var captureBottom = 0f
+        var density = 1f
+        var scope: CoroutineScope? = null
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                density = activity.resources.displayMetrics.density
+                val owner = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+                scope = owner
+                val control = MonitorControlModel(owner)
+                activity.setContent {
+                    MonitorScreen(control, layout,
+                        MonitorScreenPresentation(statusMounted = false, powerMounted = false),
+                        picture = {}, capture = {
+                            // Font metrics can make two readout rows taller than the placement frame.
+                            Box(Modifier.fillMaxWidth().height(100.dp).onGloballyPositioned {
+                                captureHeight = it.size.height
+                                captureBottom = it.positionInRoot().y + it.size.height
+                            })
+                        })
+                }
+            }
+            settle()
+            scenario.onActivity {
+                assertEquals((100f * density).roundToInt(), captureHeight)
+                assertEquals((layout.values.y + layout.values.height) * density, captureBottom, 1f)
+            }
+        }
+        instrumentation.runOnMainSync { scope?.cancel() }
+    }
+
     @Test fun nativeHostsRemainMountedThroughOrientationAndOpaqueCovers() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         var layout by mutableStateOf(MonitorLayoutPolicy.fieldMonitor(400f, 800f))
