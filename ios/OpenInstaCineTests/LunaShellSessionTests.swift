@@ -200,9 +200,14 @@ final class LunaLayoutTests: XCTestCase {
         var base = MonitorLayoutCapabilities()
         (base.clipDelete, base.clipStar, base.requiresInternetHop) = (true, true, true)
         XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), base)
-        shell.control.bind(FakeLuna().connectedSession())
+        let camera = FakeLuna()
+        let core = camera.connectedSession()
+        shell.control.bind(core)
         var luna = base
-        (luna.gimbal, luna.headTracking, luna.zoom, luna.focus, luna.timecode) = (true, true, true, true, true)
+        (luna.gimbal, luna.headTracking, luna.focus, luna.timecode) = (true, true, true, true)
+        XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), luna, "unconfigured lens range stays unknown")
+        core.configureLens(zoomDomain: 1...4)
+        luna.zoom = true
         XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), luna, "no audio levels, no iris")
     }
 }

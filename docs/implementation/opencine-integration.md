@@ -288,6 +288,21 @@ by a package test). The library builds with compileSdk 37 and needs no AAR-metad
 Device check: a phone that approved the camera with the previous build reconnects without a new
 approval on the camera screen.
 
+## SHELL-01: common lens commands
+
+Luna zoom and AF-S/AF-C now reach the connected `LunaCameraSession` through
+OpenCine's common setting commands. The configured connection ceiling describes
+zoom; the iOS pinch still coalesces latest values at its existing 80 ms cadence.
+Product Showcase stays in the typed Luna extension. Camera reports alone populate
+the shared lens observations; acknowledgement does not confirm a write.
+
+Physical checks on iOS and Android remain **untested**: pinch/slider/chip zoom
+ramps and settles at every offered stop, configured maximum refuses values above
+the ceiling, AF-S/AF-C match camera readback, Product Showcase keeps its dedicated
+label, recovery rejects old queued controls, and disconnect never stops recording.
+Repeat with a saved camera installed before this change. Simulator/manual-clock
+tests establish admission and receipt behavior only.
+
 ## Publishing prerequisite
 
 The OpenCine repository must exist before CI, Xcode Cloud or another machine can build this
