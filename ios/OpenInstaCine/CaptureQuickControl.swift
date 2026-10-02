@@ -1,5 +1,7 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineAppKit
+import OpenCineCore
 import OpenPocketViewCore
 import SwiftUI
 
@@ -18,6 +20,13 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
     var marked: Set<String> = []
     var context = ""
     var enabled = true
+    var commonField: MonitorCaptureField? = nil
+
+    static func common(_ field: MonitorCaptureField) -> Self {
+        Self(kind: field.key == .iso ? .iso : field.key == .shutter ? .shutter : .kelvin,
+            title: field.title, options: field.choices.map(\.label), selection: field.label ?? "",
+            enabled: field.isEditable, commonField: field)
+    }
 
     var index: Int {
         if let exact = options.firstIndex(of: selection) { return exact }
@@ -108,7 +117,7 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
         supportsFocusMode: Bool = false, facePriorityExposureEnabled: Bool = false,
         shutterUsesAngle: Bool = false, shutterAngleDegrees: Double = 180, aeLocked: Bool = false,
         awbLocked: Bool = false, offersAwbLock: Bool = false,
-        profile: CameraProfile = LunaShellMapping.profile
+        profile: OpenPocketViewCore.CameraProfile = LunaShellMapping.profile
     ) -> Self? {
         switch sheet {
         case .iso:
@@ -225,7 +234,7 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
     }
 
     private static func colorSnapshot(
-        status: CameraStatus, cameraModel: CameraModel?, profile: CameraProfile
+        status: CameraStatus, cameraModel: CameraModel?, profile: OpenPocketViewCore.CameraProfile
     ) -> Self? {
         let family = cameraModel?.family ?? .other
         let modes =
@@ -243,7 +252,7 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
     }
 
     private static func shootingModeSnapshot(
-        status: CameraStatus, cameraModel: CameraModel?, profile: CameraProfile
+        status: CameraStatus, cameraModel: CameraModel?, profile: OpenPocketViewCore.CameraProfile
     ) -> Self {
         let options = CaptureLists.operatorShootingModes(from: status, model: cameraModel).map {
             $0.label(for: cameraModel, in: profile)
@@ -261,6 +270,11 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
     /// preservation, and shutter-angle conversion; there is no protocol mapping here.
     @MainActor func apply(_ value: String, model: AppModel) {
         guard enabled, options.contains(value), value != selection, !model.session.isLocked else {
+            return
+        }
+        if let commonField {
+            guard let choice = commonField.choices.first(where: { $0.label == value }) else { return }
+            model.control.commit(choice, from: commonField)
             return
         }
         let status = model.session.status

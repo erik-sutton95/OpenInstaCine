@@ -1,5 +1,7 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineAppKit
+import OpenCineCore
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -154,6 +156,7 @@ struct CapturePickerPanel: View {
     @State private var deferredDrum = MonitorDeferredSelection<DrumContext>()
     @State private var appeared = false
     @State private var drumInteractionRevision: UInt64 = 0
+    @State private var commonField: MonitorCaptureField?
 
     private struct DrumContext: Hashable {
         let cameraID: UUID?
@@ -179,9 +182,15 @@ struct CapturePickerPanel: View {
             if let prefixContent { prefixContent }
             Group {
                 if let held = preview {
-                    CaptureDrumWheel(
-                        options: held.snapshot.options, selection: .constant(held.selection),
-                        markedValues: held.snapshot.marked, isInteractive: false)
+                    if let field = held.snapshot.commonField {
+                        MonitorCaptureDrum(control: model.control, field: field, enabled: false,
+                            haptics: model.hapticsEnabled, previewPosition: held.position,
+                            previewSelection: held.selection)
+                    } else {
+                        CaptureDrumWheel(
+                            options: held.snapshot.options, selection: .constant(held.selection),
+                            markedValues: held.snapshot.marked, isInteractive: false)
+                    }
                 } else {
                     content
                     if sheet == .resolution, !isPhoto, formatAspects.count > 1 {
@@ -266,6 +275,7 @@ struct CapturePickerPanel: View {
         .simultaneousGesture(TapGesture().onEnded {})
         .onAppear {
             appeared = true
+            captureCommonField()
             seed()
         }
         .onDisappear {
@@ -285,6 +295,7 @@ struct CapturePickerPanel: View {
         ) { _ in cancelDrumSend(reseat: true) }
         .onChange(of: sheet) { _, _ in
             cancelDrumSend()
+            captureCommonField()
             seed()
         }
         .onChange(of: model.session.status.availableShutterDenoms) { _, _ in
@@ -352,9 +363,7 @@ struct CapturePickerPanel: View {
                     CaptureDrumWheel(options: isoAutoDrumLabels, selection: $drumSelection)
                         .id(isoAutoDrumLabels)
                 } else {
-                    CaptureDrumWheel(
-                        options: isoDrumLabels, selection: $drumSelection,
-                        markedValues: isoMarkedLabels)
+                    commonDrum(.iso, manualOnly: true, marked: isoMarkedLabels)
                 }
             }
         case .shutter:
@@ -370,8 +379,7 @@ struct CapturePickerPanel: View {
                 CaptureDrumWheel(options: shutterAngleLabels, selection: $drumSelection)
                     .id(shutterAngleLabels)
             } else {
-                CaptureDrumWheel(options: shutterLabels, selection: $drumSelection)
-                    .id(shutterLabels)
+                commonDrum(.shutter, manualOnly: true)
             }
         case .wb:
             if selectedMode == 0 {
@@ -385,14 +393,13 @@ struct CapturePickerPanel: View {
                     if label == CaptureLists.awbLock {
                         model.session.lockAutoWhiteBalance()
                     } else if label == WhiteBalanceMode.auto.label {
-                        model.session.setWhiteBalanceAuto()
+                        if commitCommon(.whiteBalance(.auto)) { model.session.autoWhiteBalanceLock = nil }
                     } else {
-                        model.session.setWhiteBalanceCustom(
-                            kelvin: currentKelvin, tint: currentTint)
+                        if commitCommon(.whiteBalance(.kelvin(currentKelvin))) { model.session.autoWhiteBalanceLock = nil }
                     }
                 }
             } else if selectedMode == 1 {
-                CaptureDrumWheel(options: CaptureLists.kelvinLabels, selection: $drumSelection)
+                commonDrum(.whiteBalance, manualOnly: true)
             } else {
                 tintPad
             }
@@ -747,7 +754,7 @@ struct CapturePickerPanel: View {
         switch sheet {
         case .iso where offersIsoAuto:
             if index == 0 {
-                model.session.setISO(.auto)
+                _ = commitCommon(.iso(.auto))
                 reseatIsoAutoDrum()
             } else {
                 reseatIsoDiscrete()
@@ -757,11 +764,14 @@ struct CapturePickerPanel: View {
                     lastApplied = first
                     drumSelection = first
                 }
-                if let idx = IsoIndex.allCases.first(where: { $0.label == drumSelection }),
-                    isoIndices.contains(idx)
-                {
-                    model.session.setISO(idx)
+                let target = commonField?.choices.first {
+                    if case .iso(.manual) = $0.value { return $0.label == drumSelection }
+                    return false
+                } ?? commonField?.choices.first {
+                    if case .iso(.manual) = $0.value { return true }
+                    return false
                 }
+                if let target { _ = commitCommon(target.value) }
             }
         case .shutter:
             OperatorPrefs.shutterUsesAngle = index == 1
@@ -788,6 +798,43 @@ struct CapturePickerPanel: View {
         }
     }
 
+    private func captureCommonField() {
+        let key: SettingKey? = switch sheet {
+        case .iso: .iso
+        case .shutter: .shutter
+        case .wb: .whiteBalance
+        default: nil
+        }
+        commonField = key.flatMap { model.control.captureField($0) }
+    }
+
+    @ViewBuilder private func commonDrum(_ key: SettingKey, manualOnly: Bool, marked: Set<String> = []) -> some View {
+        if let field = commonField, field.key == key {
+            let choices = field.choices.filter { choice in
+                if !manualOnly { return true }
+                switch choice.value {
+                case .iso(.manual), .shutter(.duration), .shutter(.angle), .whiteBalance(.kelvin): return true
+                default: return false
+                }
+            }
+            MonitorCaptureDrum(control: model.control, field: field, enabled: canApplyDrum,
+                haptics: model.hapticsEnabled, choices: choices, marked: marked) { value in
+                    if value.key == .whiteBalance { model.session.autoWhiteBalanceLock = nil }
+                }
+        } else {
+            Text("Setting not available").foregroundStyle(MonitorTheme.muted)
+        }
+    }
+
+    @discardableResult private func commitCommon(_ value: SettingValue) -> Bool {
+        guard canApplyDrum, let field = commonField, let editor = field.editor,
+            model.control.captureField(field.key)?.isEditable == true,
+            model.control.captureField(field.key)?.editor == editor
+        else { return false }
+        return model.control.commit(value, from: editor,
+            label: "\(field.title) \(MonitorCapturePresentation.label(value))")
+    }
+
     private func applyDrum(_ value: String) {
         guard canApplyDrum, !value.isEmpty, value != lastApplied else { return }
         if sheet == .color, model.session.status.isRecording {
@@ -807,10 +854,8 @@ struct CapturePickerPanel: View {
                 enqueueDrumSend(value) { model.session.setIsoLimit(limit) }
                 return
             }
-            guard let idx = IsoIndex.allCases.first(where: { $0.label == value }),
-                isoIndices.contains(idx)
-            else { return }
-            enqueueDrumSend(value) { model.session.setISO(idx) }
+            // Manual ISO is owned by MonitorCaptureDrum and its captured descriptor editor.
+            return
         case .shutter:
             if isEvSheet {
                 guard !model.facePriorityExposureEnabled else { return }
@@ -825,13 +870,11 @@ struct CapturePickerPanel: View {
                 }
                 return
             }
-            guard let denom = CamCapShutter.denom(from: value),
-                shutterDenoms.contains(denom)
-            else { return }
-            enqueueDrumSend(value) { model.session.setShutterDenom(denom) }
+            // Native duration is owned by MonitorCaptureDrum.
+            return
         case .wb:
-            guard selectedMode == 1, let kelvin = CaptureLists.kelvin(from: value) else { return }
-            model.session.setWhiteBalanceCustom(kelvin: kelvin, tint: currentTint)
+            // Kelvin is owned by MonitorCaptureDrum; lock/tint remain integration controls.
+            return
         case .resolution:
             guard let rate = VideoFrameRate(drumLabel: value),
                 formatRates.contains(rate)

@@ -1,17 +1,7 @@
 import MonitorUI
+import OpenCineAppKit
 import OpenPocketViewCore
 import SwiftUI
-
-/// Idle = Pocket well + thin coral ring. Recording fills that ring. Stopping dims the face.
-enum LiveRecordChromeState: Equatable {
-    case idle
-    case recording
-    case stopping
-
-    var isRecordingLook: Bool {
-        self == .recording || self == .stopping
-    }
-}
 
 /// A confirmation authorizes the capture state visible when it was opened. Its target is
 /// explicit (start when the camera reported idle, stop when it reported recording); unknown
@@ -30,106 +20,21 @@ struct RecordConfirmationContext: Equatable {
     }
 }
 
-/// Record / shutter on the right rail. Hit target stays `LiveChromeMetrics.recordButtonSize`.
+/// Integration adapter: the shared control owns video capture and confirmation.
 struct LiveRecordButton: View {
     var diameter: CGFloat = LiveChromeMetrics.recordButtonSize
     @Environment(AppModel.self) private var model
     @Environment(\.interfaceLocked) private var locked
 
-    private var state: LiveRecordChromeState {
-        // The shared controls: camera-reported recording and the record operation in flight.
-        if model.control.isRecording == true {
-            return model.control.recordPending ? .stopping : .recording
-        }
-        return .idle
-    }
-
-    @State private var confirmRecord = false
-    @State private var pendingRecord: RecordConfirmationContext?
-
-    private var isPhoto: Bool { model.session.status.isPhoto }
-    private var confirmationContext: RecordConfirmationContext {
-        RecordConfirmationContext(
-            mode: model.session.status.shootingMode,
-            recording: model.control.isRecording,
-            locked: locked || model.session.isLocked,
-            busy: model.session.controlBusy, phase: model.session.phase)
-    }
-
     var body: some View {
-        MonitorRecordLamp(
-            diameter: diameter, recording: state.isRecordingLook,
-            photo: isPhoto
-        )
-        .contentShape(Circle())
-        .gesture(
-            LongPressGesture(minimumDuration: 0.45)
-                .exclusively(before: TapGesture())
-                .onEnded { gesture in
-                    guard !model.session.controlBusy, !locked else { return }
-                    switch gesture {
-                    case .first: model.captureSheet = .mode
-                    case .second: pressShutter()
-                    }
-                }
-        )
-        .disabled(model.session.controlBusy || locked)
-        .opacity(locked ? 0.4 : (state == .stopping ? 0.72 : 1))
-        .sensoryFeedback(
-            model.hapticsEnabled
-                ? .impact(weight: .heavy) : .impact(flexibility: .solid, intensity: 0),
-            trigger: model.session.status.isRecording
-        )
-        .confirmationDialog(
-            state.isRecordingLook ? "Stop recording?" : "Start recording?",
-            isPresented: $confirmRecord,
-            titleVisibility: .visible
-        ) {
-            Button(
-                state.isRecordingLook ? "Stop" : "Start",
-                role: state.isRecordingLook ? .destructive : nil
-            ) {
-                guard let approved = pendingRecord, approved == confirmationContext,
-                    approved.canConfirm, let recording = approved.recording
-                else { return }
-                pendingRecord = nil
-                model.session.setRecording(start: !recording)
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-        .onChange(of: confirmationContext) { _, _ in
-            confirmRecord = false
-            pendingRecord = nil
-        }
-        .accessibilityLabel(accessibility)
-        .accessibilityHidden(false)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction { pressShutter() }
-        .accessibilityAction(named: "Shooting mode") { if !locked { model.captureSheet = .mode } }
-        .accessibilityIdentifier(
-            isPhoto ? "monitor.system.shutter" : "monitor.system.record"
-        )
-    }
-
-    private func pressShutter() {
-        guard !model.session.controlBusy, !locked, !model.session.isLocked else { return }
-        if model.recordConfirmationEnabled, !isPhoto {
-            pendingRecord = confirmationContext
-            confirmRecord = true
-        } else {
-            model.session.pressShutter()
-        }
-    }
-
-    private var accessibility: String {
-        if isPhoto {
-            return "Take photo"
-        }
-        switch state {
-        case .idle: return "Start recording"
-        case .recording: return "Stop recording"
-        case .stopping: return "Stopping recording"
-        }
+        MonitorCaptureButton(
+            control: model.control, diameter: diameter,
+            enabled: !locked && !model.session.isLocked && !model.session.controlBusy
+                && model.session.phase == .live,
+            photo: model.session.status.isPhoto,
+            confirm: model.recordConfirmationEnabled, haptics: model.hapticsEnabled,
+            takePhoto: { model.session.pressShutter() },
+            openMode: { model.captureSheet = .mode })
     }
 }
 
@@ -140,7 +45,7 @@ struct RecordLamp: View {
     var body: some View { MonitorRecordLamp(diameter: diameter, recording: recording) }
 }
 
-/// REC tally on the physical screen bezel — OpenZCine `RecordingBorderModule`.
+/// REC tally on the physical screen bezel \u{2014} OpenZCine `RecordingBorderModule`.
 struct LiveRecordingTally: View {
     var cornerRadius: CGFloat = LiveRecordingTally.displayCornerRadius
     @Environment(\.monitorPresentationIsVisible) private var isVisible
