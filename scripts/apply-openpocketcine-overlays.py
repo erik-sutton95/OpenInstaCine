@@ -55,41 +55,6 @@ def main() -> None:
     if "import MonitorUI" not in text:
         branding.write_text(text.replace("import SwiftUI\n", "import MonitorUI\nimport SwiftUI\n", 1))
 
-    # --- Xcode project: Luna adapter packages, usage copy, official-app XC driver. ---
-    project = ROOT / "ios/project.yml"
-    replace_once(
-        project,
-        "  OpenPocketViewCore:\n    path: ..\n",
-        "  OpenPocketViewCore:\n    path: ..\n"
-        "  OpenCineInsta360:\n    path: ../../OpenCineInsta360\n",
-    )
-    replace_once(project, "  createIntermediateGroups: true\n", "  createIntermediateGroups: false\n")
-    replace_once(
-        project,
-        # Anchored below the package line: upstream takes MonitorPresentation from
-        # OpenPocketViewCore before the OpenCineUI extraction and from OpenCineUI after it.
-        "        product: MonitorPresentation\n"
-        "      - target: OpenInstaCineWatch\n",
-        "        product: MonitorPresentation\n"
-        "      - package: OpenCineInsta360\n        product: Insta360Protocol\n"
-        "      - package: OpenCineInsta360\n        product: Insta360Apple\n"
-        "      - target: OpenInstaCineWatch\n",
-    )
-    replace_once(
-        project,
-        '"OpenInstaCine uses Bluetooth to find and pair with your DJI Osmo Pocket and hand off Wi-Fi."',
-        '"OpenInstaCine uses Bluetooth to find your Insta360 Luna, ask it for approval, and hand off to its Wi-Fi."',
-    )
-    # Upstream test target before and after it linked OpenCineMedia (MEDIA-01).
-    media = "      - package: OpenCineCore\n        product: OpenCineMedia\n"
-    if "OpenCineCore:\n" not in project.read_text():
-        media = ""
-    replace_once(
-        project,
-        "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n" + media + "    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
-        "      - target: OpenInstaCine\n      - package: OpenPocketViewCore\n        product: OpenPocketViewCore\n" + media + "      - package: OpenCineInsta360\n        product: Insta360Protocol\n      - package: OpenCineInsta360\n        product: Insta360AppleTestSupport\n    settings:\n      base:\n        SWIFT_VERSION: \"5.0\"\n        GENERATE_INFOPLIST_FILE: YES\n        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.tests\n",
-    )
-
     startup = APP / "StartupChrome.swift"
     replace_once(
         startup,
@@ -207,14 +172,6 @@ def main() -> None:
     ):
         for old_phrase, new_phrase in pairs:
             replace_phrase(APP / name, old_phrase, new_phrase)
-    # Synced verbatim (not renamed): hash the OpenInstaCine app (Luna code is the sibling
-    # OpenCineInsta360 package, hashed through SIBLING_PACKAGES).
-    replace_once(
-        ROOT / "tools/build-identity.py",
-        '        paths += ["ios/OpenPocketCine", ',
-        '        paths += ["ios/OpenInstaCine", ',
-    )
-
     # --- Launch wiring + gates that assumed a DJI datalink. ---
     replace_once(
         APP / "OpenInstaCineApp.swift",

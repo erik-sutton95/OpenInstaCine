@@ -6,73 +6,108 @@ already drifted from current OpenPocketCine.
 
 ## Parity contract
 
-Until the two products share a monorepo, OpenInstaCine **vendors** the current
-OpenPocketCine shared engine and native shells, then overlays brand identity and
-the Luna adapter.
+Until the two products share a monorepo, OpenInstaCine **vendors** the OpenPocketCine iOS
+presentation shell, then overlays brand identity and the Luna adapter. Everything that has a
+shared OpenCine package comes from that package at the SHA pinned in `opencine-pins.txt`, never
+from a copy:
 
-The design system is not vendored. Since 2026-10-01 (UI-03) `MonitorUI`,
-`MonitorPresentation` (and `MonitorPresentationTests`) and the Android `monitor-ui`
-module come from the OpenCineUI repository, a sibling checkout at `../OpenCineUI`:
-`ios/project.yml` names it as a path package, and `Apps/Android/settings.gradle.kts`
-includes `../../../OpenCineUI/Android` and substitutes
-`com.opencapture.opencine:monitor-ui`. The sync never copies those paths, even
-from an upstream commit that still has them. Change shared UI in OpenCineUI.
+| Shared system | Owner | How OpenInstaCine gets it |
+| --- | --- | --- |
+| Design system (`MonitorUI`, `MonitorPresentation`, Android `monitor-ui`) | OpenCineUI | `ios/project.yml` path package; `includeBuild("../../../OpenCineUI/Android")` |
+| Camera contracts, media math, motion, relay, Apple decode runtime | OpenCineCore (`OpenCineCore`, `OpenCineMedia`, `OpenCineMotion`, `OpenCineRelay`, `OpenCineApple`) | root `Package.swift` and `ios/project.yml` path package |
+| Android core, media and the native Vulkan renderer (`libopc_vulkan.so`, `feed.OpcVulkan`) | OpenCineCore `Android/` (`:core`, `:media`, `:vulkan`) | `includeBuild(".../OpenCineCore/Android")` named `opencinecore` |
+| Luna protocol, Apple I/O, Kotlin shell contract and Luna adapter | OpenCineInsta360 (Swift products, `Android/` `insta360-shell`, `insta360-luna`) | path package; `includeBuild(".../OpenCineInsta360/Android")` |
+| DJI protocol and session | OpenCineDJI | not linked: the Luna build never needs it |
+
+Change shared code in its package, then move the pin.
 
 ```sh
 just sync-openpocketcine
 # or: OPENPOCKETCINE_PATH=/path/to/OpenPocketCine bash scripts/sync-openpocketcine.sh [--dry-run]
 ```
 
+## Sync scope (RELEASE-01, 2026-10-02)
+
+What `scripts/sync-openpocketcine.sh` still copies, and only this:
+
+- `ios/` renamed to OpenInstaCine: the iOS presentation shell (live view, assists and scopes,
+  capture sheets, media library and delivery, settings, the watch app, app and UI tests) and
+  `HevcDecoder`'s presentation side. Reason: this code is still per app in OpenPocketCine and has
+  no shared package yet (MEDIA-02 left presentation orchestration in the apps). It stays synced
+  until it moves into OpenCineUI or an OpenCineCore runtime product.
+- Three neutral tools: `stamp-source-revision.sh`, `pull-control-log.sh`, `analyze-live-log.py`.
+
+What it never copies, and why:
+
+| Path | Reason |
+| --- | --- |
+| `Package.swift`, `Sources/`, `Tests/` (the Swift core, JNI facade and their tests) | OpenInstaCine-owned since RELEASE-01. Upstream's `OpenPocketViewCore` now depends on OpenCineDJI (36 DJI files moved out), and this copy carries the STATE-01 Luna edits (`CameraProfile`, `MediaHTTP.Route`, `label(in:)`, the `CamFov` ceiling) plus the I-Log hooks below. A sync used to rsync or three-way these and would have overwritten them. |
+| `Apps/Android` | Never synced (Android resyncs were always by hand). |
+| `LUNA_OWNED` (Luna seams, brand assets, `project.yml`, `Package.resolved`, `ci_scripts`, `Frameio/`) | App-owned. `project.yml` names this app's package graph (OpenCineInsta360; upstream has OpenCineDJI, OpenCineMulticam). `Frameio/` stays until OpenInstaCine adopts OpenCineFrameIO. Upstream edits are reported, never applied. |
+| `DJI_ONLY` (`BleLink`, `DatalinkDriver`, `Multiview*`, `StationNetworkSetupView`, `CameraSession+DJI*`, their tests) | DJI transport and Multi View app code built on OpenCineDJI/OpenCineMulticam APIs this app does not link. The frozen copies here are compile-reachable from shell code but unreachable for a Luna (`showMultiview` is never set). |
+| Files deleted here that the last synced upstream had | Moved to a shared package, Osmo-only or DJI-only. Never patched or brought back; the script prints a note when upstream changed one. |
+| `RELEASE_OWNED` tooling, incl. `tools/build-identity.py` | Retargeted copies (Sentry projects, `:monitor` paths, this app's sibling packages). Port by hand. |
+
+First sync after the OpenCine integration branches land: set
+`docs/implementation/openpocketcine-sync-commit.txt` to the OpenPocketCine `main` commit that
+contains its OpenCine integration. This branch already carries the same MEDIA-01/02, UI, motion,
+relay and Apple-runtime refactors, so replaying them from 9e306c91 only produces conflicts (a dry
+run against OpenPocketCine `opencine/integration` a76488ad: 43 shell files, 7 with conflicts, no
+core, DJI, project or Android paths). Pocket's Frame.io move to OpenCineFrameIO (6183d949) is the
+one shell change that needs a decision first: adopt the product here (link it in `project.yml`,
+delete `Frameio/FrameioClient`, `FrameioModels`, `FrameioOAuth`) or keep excluding it.
+
+Atlas: the remaining source-copy edge is OpenPocketCine `ios/OpenPocketCine` -> OpenInstaCine
+`ios/OpenInstaCine` (iOS presentation shell, three-way sync, tools above). The former
+OpenPocketCine `Sources/`/`Tests/` -> OpenInstaCine edge is retired: OpenInstaCine owns its core
+copy, and shared systems are package dependency edges.
+
+## How the sync works
+
 `scripts/sync-openpocketcine.sh` is a three-way update, not a copy:
 
 1. Builds the "renamed upstream" tree twice, in temp dirs: at the last synced
    commit (`docs/implementation/openpocketcine-sync-commit.txt`, override with
    `OLD_COMMIT=`) and at OpenPocketCine `HEAD` (override with `NEW_COMMIT=`).
-   Each tree is `Sources/{OpenPocketViewCore,CJNI,OpenPocketCineAndroidFacade}`,
-   `Tests/*` except `Tests/MonitorPresentationTests`, four build-phase `tools/`, and `ios/` renamed to OpenInstaCine,
-   minus the `LUNA_OWNED` and `OSMO_ONLY` lists in the script, with
-   `scripts/apply-openpocketcine-overlays.py` applied.
+   Each tree is `ios/` renamed to OpenInstaCine minus `LUNA_OWNED` and `DJI_ONLY`, plus the
+   three tools, with `scripts/apply-openpocketcine-overlays.py` applied. Files deleted here are
+   then dropped from both trees.
 2. Diffs old to new (`git diff --no-index --binary`) and applies it with
    `git apply --3way`. Our edits to upstream-derived files survive; overlaps
    come out as conflicts and the script exits non-zero without recording the
    new commit. Commit or stash the synced paths first (`--3way` uses the index).
-3. Engine and test dirs identical to the old upstream tree are rsynced from the
-   new one instead. Dirs with local changes print a warning and go through the
-   three-way diff.
-4. Warns when upstream changed a Luna-owned file (never applied; port by hand).
-5. Writes the new commit to `openpocketcine-sync-commit.txt`.
+3. Warns when upstream changed a Luna-owned or release-owned file (never applied; port by hand).
+4. Writes the new commit to `openpocketcine-sync-commit.txt`.
 
 `--dry-run` prints the diff stat, saves the full patch to `$TMPDIR`, and runs
 `git apply --3way --check`. It writes nothing to the repo.
 
-### Core hooks (local changes to the engine)
+### Core hooks (OpenInstaCine-owned core)
 
-These make `Sources/OpenPocketViewCore` (and one facade file) differ from
-upstream, so the sync takes the three-way path for them. Upstream them when
-possible. The brand accent is not an engine hook: OpenCineUI's `MonitorTheme`
-already has a settable `accentRGB` and `onAccent`.
+`Sources/OpenPocketViewCore` started as a copy of OpenPocketCine's and is no longer synced.
+These are the Luna differences from upstream's last shared version:
 
 | File | Hook |
 | --- | --- |
-| `OpenPocketViewCore/CameraControl.swift` | `ColorMode.iLog` / `.dolbyVision`, `IsoIndex.iso160`, `VideoResolution.luna8K/6K/4K_9x16/3K/8K_235/4K_235`, `ShootingMode.labelOverrides`, settable `CamFov.maxFactor` |
+| `OpenPocketViewCore/CameraControl.swift` | `ColorMode.iLog` / `.dolbyVision`, `IsoIndex.iso160`, `VideoResolution.luna8K/6K/4K_9x16/3K/8K_235/4K_235`, `label(in:)` with a per-session `CameraProfile`, constant `CamFov.maxFactor` with a `ceiling:` argument |
+| `OpenPocketViewCore/CameraProfile.swift` | per-session mode, colour, gimbal and focus labels and the media route (STATE-01) |
 | `OpenPocketViewCore/CameraStatus.swift` | `zoomFactorOverride` |
 | `OpenPocketViewCore/LiveColorScience.swift` | `MonitorTransfer.ilog` and the I-Log curve |
 | `OpenPocketViewCore/LogColorTransform.swift`, `CamCap.swift`, `OpenPocketCineAndroidFacade/FeedEffectsWire.swift` | exhaustive `switch` cases for `.ilog` |
 | `OpenPocketViewCore/MonitorLUT.swift` | `lunaILog` LUT source and auto-pick |
-| `OpenPocketViewCore/MediaManifest.swift` | `MediaHTTP.addressing` / settable `.host`, Insta360 filename dates, `.lrv` proxy |
+| `OpenPocketViewCore/MediaManifest.swift` | `MediaHTTP.Route` (host + addressing), Insta360 filename dates, `.lrv` proxy |
+| `OpenPocketViewCore/ExposureMeterReading.swift` | `imageEstimated` provenance |
 | `OpenPocketViewCore/Diagnostics.swift`, `FeedIncidentStore.swift`, `WatchRelayProtocol.swift`, `WatcherRelayMessages.swift` | brand-neutral user copy (no "OpenPocketCine") |
-| `Tests/OpenPocketViewCoreTests/MonitorLUTTests.swift`, `DiagnosticsTests.swift` | tests for the above |
 
-Do **not** edit vendored trees for product features. Change OpenPocketCine, then
-re-sync. OpenInstaCine-owned code is:
+Do **not** edit the vendored shell for product features. Change OpenPocketCine (or the shared
+package), then re-sync. OpenInstaCine-owned code is:
 
 | Owner | Path |
 | --- | --- |
 | Brand storefront | `LUNA_OWNED` files in `ios/OpenInstaCine`, `Apps/Android/app` |
-| Luna protocol | `Adapters/Insta360Protocol` |
-| Luna Apple I/O | `Adapters/Insta360Apple` |
-| Luna Android I/O | `Apps/Android/luna-adapter` |
-| CameraBackend contract | `Sources/MonitorContracts` |
+| Swift core and JNI facade | `Package.swift`, `Sources/`, `Tests/` |
+| Android shell | `Apps/Android` (`:monitor` is the inherited presentation, `:app` the brand) |
+| Luna protocol, Apple I/O, Kotlin shell contract and adapter | sibling OpenCineInsta360 |
 | Overlays / sync | `scripts/sync-openpocketcine.sh`, `scripts/apply-openpocketcine-overlays.py` |
 | Protocol research | `docs/research`, `tools/luna_*` |
 
