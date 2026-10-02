@@ -21,6 +21,23 @@ final class MonitorUIFlowTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
     }
 
+    func testUnknownCoreReportsStayUnknownAndCannotApproveRecording() {
+        app.launchEnvironment["OPV_UI_REVIEW_CORE_UNKNOWN"] = "1"
+        app.launch()
+        let record = app.buttons["monitor.system.record"]
+        XCTAssertTrue(record.waitForExistence(timeout: 10))
+        XCTAssertEqual(record.label, "Recording state unknown")
+        XCTAssertFalse(record.isEnabled)
+        let tally = app.descendants(matching: .any)["monitor.recording.readout"].firstMatch
+        XCTAssertEqual(tally.label, "Recording state unknown")
+        let iso = app.buttons["monitor.capture.iso"]
+        XCTAssertEqual(iso.value as? String, "Not set")
+        XCTAssertFalse(iso.isEnabled)
+        record.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertFalse(app.buttons["Start"].exists)
+        capture("SIMULATED-monitor-core-unknown")
+    }
+
     func testMonitorControlsAcrossBothLandscapeOrientationsAndPortrait() {
         app.launchEnvironment["OPV_UI_REVIEW_FIT"] = "1"
         app.launch()

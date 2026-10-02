@@ -153,9 +153,8 @@
             ]
             status.availableShutterDenoms = [25, 50, 100, 200, 500]
             model.session.status = status
-            // An unconnected Luna session on the shell's monitor: the screens lay out what it
-            // declares, through the same projection as a connected camera. The fixture status
-            // above stays (the session reports no values, so nothing is projected over it).
+            // SIMULATED reports go through the real common session and descriptors. Native
+            // integration-only readouts keep the fixture status above.
             if ["live", "settings", "media"].contains(screen) {
                 presentSimulatedMonitor(model)
                 model.control.onChange = {}
@@ -199,14 +198,47 @@
             if screen == "sequence" { runSequence(model, status: status) }
         }
 
-        /// Puts an unconnected Luna session on the shell's monitor (simulator only: no camera).
+        /// SIMULATED monitor, simulator only: isolated session with no network send path.
         static func presentSimulatedMonitor(_ model: AppModel) {
             let saved =
                 model.cameras.saved.first
                 ?? SavedCamera(
                     id: studioID, integration: LunaCameraSession.integration, advertisedName: "Studio camera",
                     model: "Luna Ultra")
-            model.shell.present(ConnectedCamera(saved: saved, session: model.session.backend.openSession()))
+            let session: LunaCameraSession
+            if isActive {
+                session = simulatedSession(status: model.session.status)
+            } else {
+                session = model.session.backend.openSession()
+            }
+            model.shell.present(ConnectedCamera(saved: saved, session: session))
+        }
+
+        /// Uses Luna's actual report decoding and capability projection. UI writes fail locally,
+        /// so these fixtures can exercise confirmation/editing without a camera or ACK-as-report.
+        private static func simulatedSession(status: CameraStatus) -> LunaCameraSession {
+            let session = LunaCameraSession(send: { _ in throw CancellationError() },
+                functionMode: { LunaFunctionMode.normalVideo.rawValue }, readSettings: {}, readCapture: {})
+            session.linkChanged(.streaming, serial: nil)
+            guard ProcessInfo.processInfo.environment["OPV_UI_REVIEW_CORE_UNKNOWN"] != "1" else { return session }
+            do {
+                var device = try LunaDeviceStatus(response: Data())
+                device.photoSubMode = 100; device.videoSubMode = 0
+                session.ingest(device: device)
+                let exposure = try ProtoMessage.integer(field: 1, value: LunaExposureProgram.manual.rawValue)
+                    + ProtoMessage.integer(field: 2, value: UInt64(status.iso))
+                    + ProtoMessage.double(field: 3, value: 1 / Double(status.shutterDenom))
+                let options = try ProtoMessage.blob(field: 21, value: exposure)
+                    + ProtoMessage.integer(field: 39, value: UInt64(status.whiteBalanceKelvin))
+                session.ingest(settings: try LunaPhotographySettings(response: ProtoMessage.blob(field: 2, value: options)))
+                let capture = try ProtoMessage.integer(field: 1, value: status.isRecording ? 1 : 0)
+                session.ingest(capture: try LunaCaptureStatus(notification: capture))
+                let clock = (status.timecode ?? "").split(separator: ":").compactMap { Int($0) }
+                if clock.count == 4 {
+                    session.ingest(timecode: CameraTimecode(hours: clock[0], minutes: clock[1], seconds: clock[2], frames: clock[3]))
+                }
+            } catch { assertionFailure("Invalid SIMULATED monitor fixture: \(error)") }
+            return session
         }
 
         /// `OPV_UI_REVIEW_SCREEN=sequence`: cameras, live, settings, live, media, live, cameras in

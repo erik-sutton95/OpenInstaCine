@@ -135,7 +135,7 @@ struct LiveCameraControlBar: View {
             }
             .accessibilityIdentifier("monitor.capture.\(sheet.rawValue)")
         } else {
-            MonitorReadout(MonitorCapturePresentation.title(key) ?? "") { Text("\u{2014}") }
+            MonitorReadout(MonitorCapturePresentation.title(key) ?? "") { Text("--") }
                 .accessibilityValue("Not set")
         }
     }

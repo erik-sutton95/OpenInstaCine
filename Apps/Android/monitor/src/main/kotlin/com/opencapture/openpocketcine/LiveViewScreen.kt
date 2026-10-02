@@ -580,6 +580,7 @@ fun LiveViewScreen(model: AppModel) {
                 captureHidden = hidesLowerCaptureValues(sheet, stripQuickActive, topQuickActive),
                 captureInteractive = sheet == null || sheet?.isTopAnchored == true,
                 locked = uiLocked, popupInteractive = chromeInteractive && !uiLocked,
+                capturePresented = sheet != null || captureQuickActive,
                 recovering = recovery.isRecovering),
             modifier = Modifier.onGloballyPositioned { if (!useVulkan) canvasOrigin = it.positionInRoot() },
             picture = {

@@ -30,7 +30,7 @@ struct LiveRecordButton: View {
         MonitorCaptureButton(
             control: model.control, diameter: diameter,
             enabled: !locked && !model.session.isLocked && !model.session.controlBusy
-                && model.session.phase == .live,
+                && (!model.session.status.isPhoto || model.session.phase == .live),
             photo: model.session.status.isPhoto,
             confirm: model.recordConfirmationEnabled, haptics: model.hapticsEnabled,
             takePhoto: { model.session.pressShutter() },

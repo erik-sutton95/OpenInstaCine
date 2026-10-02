@@ -260,6 +260,24 @@ private fun LiveControlSheetContent(
     val effects = CapturePanelEffects(preview != null)
     val enabled = !locked && preview == null
     val isEvSheet = CaptureLists.isEvSheet(sheet, status.expoMode)
+    fun commitCommon(value: com.opencapture.opencine.core.SettingValue): Boolean {
+        val field = commonField ?: return false
+        val editor = field.editor ?: return false
+        val current = model.session.control.captureField(field.key) ?: return false
+        if (!enabled || !current.isEditable || current.editor != editor) return false
+        return model.session.control.commit(value, editor,
+            "${field.title} ${com.opencapture.opencine.appkit.MonitorCapturePresentation.label(value)}")
+    }
+    fun commitIsoIndex(index: Int) {
+        if (index == 0) {
+            commitCommon(com.opencapture.opencine.core.SettingValue.Iso(com.opencapture.opencine.core.ISOValue.Auto))
+        } else {
+            val choice = commonField?.choices?.firstOrNull {
+                it.value is com.opencapture.opencine.core.SettingValue.Iso && it.label == CameraCommands.isoLabel(index)
+            } ?: return
+            commitCommon(choice.value)
+        }
+    }
     val offersIsoAuto = CaptureLists.offersIsoAuto(status)
     var selectedMode by remember(sheet) {
         mutableIntStateOf(initialSelectedMode(sheet, status, model, isEvSheet))
@@ -405,7 +423,7 @@ private fun LiveControlSheetContent(
                 val (state, cmd) = IsoSheetLogic.handleModeChange(index, status, bodyName)
                 applyIsoSeat(state)
                 when (cmd) {
-                    is IsoSheetLogic.Command.SetIndex -> model.setIsoIndex(cmd.index)
+                    is IsoSheetLogic.Command.SetIndex -> commitIsoIndex(cmd.index)
                     is IsoSheetLogic.Command.SetLimit -> model.setIsoLimit(cmd.raw)
                     null -> Unit
                 }
@@ -439,7 +457,7 @@ private fun LiveControlSheetContent(
                     is IsoSheetLogic.Command.SetLimit ->
                         commitDrumValue { model.setIsoLimit(cmd.raw) }
                     is IsoSheetLogic.Command.SetIndex ->
-                        commitDrumValue { model.setIsoIndex(cmd.index) }
+                        commitDrumValue { commitIsoIndex(cmd.index) }
                     null -> return
                 }
             }
@@ -457,7 +475,10 @@ private fun LiveControlSheetContent(
                     is CaptureLists.ShutterDrumCommand.SetEv ->
                         commitDrumValue { model.setEv(cmd.thirds) }
                     is CaptureLists.ShutterDrumCommand.SetShutter ->
-                        commitDrumValue { model.setShutterDenom(cmd.denom) }
+                        commitDrumValue {
+                            commonField?.choices?.firstOrNull { it.label == "1/${cmd.denom}" }
+                                ?.let { commitCommon(it.value) }
+                        }
                     is CaptureLists.ShutterDrumCommand.SetAngle -> {
                         commitDrumValue {
                             preferredAngle = cmd.degrees
@@ -469,7 +490,8 @@ private fun LiveControlSheetContent(
             }
             LiveSheet.WB -> {
                 val custom = CaptureLists.wbKelvinDrumApply(selectedMode, value, status) ?: return
-                model.setWhiteBalance(custom.first, custom.second)
+                commitCommon(com.opencapture.opencine.core.SettingValue.WhiteBalance(
+                    com.opencapture.opencine.core.WhiteBalanceValue.Kelvin(custom.first)))
             }
             LiveSheet.FORMAT -> {
                 commitDrumValue { applyVideoFormat(selectedMode, value, fromDrum = true) }
@@ -703,10 +725,12 @@ private fun LiveControlSheetContent(
                                 if (label == CaptureLists.AWB_LOCK) {
                                     model.session.lockAutoWhiteBalance()
                                 } else if (CaptureLists.wbSendsAuto(label)) {
-                                    model.setWhiteBalanceAuto()
+                                    commitCommon(com.opencapture.opencine.core.SettingValue.WhiteBalance(
+                                        com.opencapture.opencine.core.WhiteBalanceValue.Auto))
                                 } else {
                                     val custom = CaptureLists.wbCustomFromStatus(status)
-                                    model.setWhiteBalance(custom.first, custom.second)
+                                    commitCommon(com.opencapture.opencine.core.SettingValue.WhiteBalance(
+                                        com.opencapture.opencine.core.WhiteBalanceValue.Kelvin(custom.first)))
                                 }
                             }
                         }

@@ -98,7 +98,7 @@ internal fun commonCaptureField(sheet: LiveSheet, status: CameraStatus, model: A
 
 internal fun captureReadoutLabel(sheet: LiveSheet, status: CameraStatus, model: AppModel?, nativeLabel: String): String {
     val field = model?.let { commonCaptureField(sheet, status, it) } ?: return nativeLabel
-    return field.label ?: "\u2014"
+    return field.label ?: "--"
 }
 
 /** Same primary drum the persistent FORMAT / COLOR / MODE pickers use. */

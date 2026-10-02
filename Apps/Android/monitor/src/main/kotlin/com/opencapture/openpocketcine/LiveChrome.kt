@@ -1463,11 +1463,12 @@ internal fun LiveCaptureButton(
     diameter: Float,
     modifier: Modifier = Modifier,
 ) {
+    val photo = CaptureShutterPolicy.isStillCapture(model.session.status.value.shootingMode)
     com.opencapture.opencine.appkit.MonitorCaptureButton(
         control = model.session.control, diameter = diameter,
-        enabled = enabled && model.session.phase == com.opencapture.opencine.insta360.shell.ConnectionPhase.LIVE,
+        enabled = enabled && (!photo || model.session.phase == com.opencapture.opencine.insta360.shell.ConnectionPhase.LIVE),
         modifier = modifier,
-        photo = CaptureShutterPolicy.isStillCapture(model.session.status.value.shootingMode),
+        photo = photo,
         confirm = model.recordConfirmationEnabled,
         takePhoto = model::pressShutter,
     )

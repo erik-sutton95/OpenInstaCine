@@ -11,6 +11,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.lifecycle.Lifecycle
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,22 +48,50 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.junit.Test
+import org.junit.Before
 import org.junit.runner.RunWith
 
 /** Reuses the existing native activity/instrumentation harness; no Compose test dependency. */
 @RunWith(AndroidJUnit4::class)
 class MonitorCaptureInputTest {
+    @Before fun installInstaBackend() {
+        // Library instrumentation does not run the brand launcher. Match its actual adapter
+        // composition before constructing an AppModel; no test connects a camera.
+        MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
+            val wifi = com.opencapture.openpocketcine.pairing.CameraWifiCredentialStore(context)
+            com.opencapture.opencine.insta360.luna.LunaBackend(context,
+                savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
+        }
+    }
+
     @Test fun captureHasOnlyShutterActionAndRespectsLock() {
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
             var shutters = 0
+            var backdropTaps = 0
             var enabled by mutableStateOf(true)
+            var blocked by mutableStateOf(false)
             scenario.onActivity { activity ->
                 activity.setContent {
-                    Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    BoxWithConstraints(Modifier.fillMaxSize()) {
                         val scope = androidx.compose.runtime.rememberCoroutineScope()
                         val control = remember(scope) { com.opencapture.opencine.appkit.MonitorControlModel(scope) }
-                        com.opencapture.opencine.appkit.MonitorCaptureButton(control, diameter = 56f, enabled = enabled,
-                            photo = true, confirm = false, takePhoto = { shutters++ })
+                        val field = com.opencapture.monitorui.MonitorLayoutPolicy.fieldMonitor(maxWidth.value, maxHeight.value)
+                        com.opencapture.opencine.appkit.MonitorScreen(control, field,
+                            com.opencapture.opencine.appkit.MonitorScreenPresentation(
+                                capturePresented = true, popupInteractive = true, transientControlsHidden = blocked),
+                            picture = {}, system = { accepts ->
+                                com.opencapture.monitorui.MonitorSystemControls(field,
+                                    com.opencapture.monitorui.MonitorSystemControlsVisibility(
+                                        lock = false, settings = false, media = false, display = false),
+                                    capturePresented = true, interactive = accepts,
+                                    lock = {}, settings = {}, media = {}, display = {}, record = { acceptsRecord ->
+                                        com.opencapture.opencine.appkit.MonitorCaptureButton(control, diameter = field.record.width,
+                                            enabled = enabled && acceptsRecord, photo = true, confirm = false,
+                                            takePhoto = { shutters++ })
+                                    })
+                            }, panels = {
+                                Box(Modifier.fillMaxSize().clickable { backdropTaps++ })
+                            })
                     }
                 }
             }
@@ -89,7 +118,13 @@ class MonitorCaptureInputTest {
             hold()
             scenario.onActivity {
                 assertEquals(2, shutters, "Locked or busy control cannot operate shutter")
+                assertTrue(backdropTaps > 0, "Disabled capture must return the pointer to the panel backdrop")
+                enabled = true
+                blocked = true
             }
+            settle()
+            hold()
+            scenario.onActivity { assertEquals(2, shutters, "Transient controls cannot operate capture") }
         }
     }
 
@@ -269,38 +304,33 @@ class MonitorCaptureInputTest {
     private fun tap(scenario: ActivityScenario<BackdropRenderActivity>, rect: Rect) {
         assertTrue(rect.width > 0f && rect.height > 0f, "Fixture must have laid out")
         val down = SystemClock.uptimeMillis()
-        // One main-thread pass: 60ms eventTime, no composition/inset restart between down and up.
-        scenario.onActivity { activity ->
-            dispatchOnHost(activity, MotionEvent.ACTION_DOWN, rect.center.x, rect.center.y, down, down)
-            dispatchOnHost(activity, MotionEvent.ACTION_UP, rect.center.x, rect.center.y, down, down + 60)
-        }
+        event(scenario, MotionEvent.ACTION_DOWN, rect.center.x, rect.center.y, down)
+        SystemClock.sleep(60)
+        event(scenario, MotionEvent.ACTION_UP, rect.center.x, rect.center.y, down)
         settle()
     }
 
     private fun event(scenario: ActivityScenario<BackdropRenderActivity>, action: Int,
         x: Float, y: Float, down: Long) {
+        var touch: MotionEvent? = null
         scenario.onActivity { activity ->
-            dispatchOnHost(activity, action, x, y, down, SystemClock.uptimeMillis())
+            val host = composeHost(activity)
+            assertTrue(host.isAttachedToWindow, "Input host must remain attached")
+            val windowOrigin = IntArray(2)
+            val screenOrigin = IntArray(2)
+            host.getLocationInWindow(windowOrigin)
+            host.getLocationOnScreen(screenOrigin)
+            val localX = x - windowOrigin[0]
+            val localY = y - windowOrigin[1]
+            assertTrue(localX in 0f..host.width.toFloat() && localY in 0f..host.height.toFloat(),
+                "Pointer $localX,$localY outside host ${host.width}x${host.height}")
+            touch = obtainTouch(down, SystemClock.uptimeMillis(), action,
+                screenOrigin[0] + localX, screenOrigin[1] + localY)
         }
-    }
-
-    private fun dispatchOnHost(activity: BackdropRenderActivity, action: Int, x: Float, y: Float,
-        down: Long, eventTime: Long) {
-        assertTrue(activity.hasWindowFocus(), "Window must have focus")
-        val host = composeHost(activity)
-        val windowOrigin = IntArray(2)
-        val screenOrigin = IntArray(2)
-        host.getLocationInWindow(windowOrigin)
-        host.getLocationOnScreen(screenOrigin)
-        val localX = x - windowOrigin[0]
-        val localY = y - windowOrigin[1]
-        assertTrue(localX in 0f..host.width.toFloat() && localY in 0f..host.height.toFloat(),
-            "Pointer $localX,$localY outside host ${host.width}x${host.height}")
-        val event = obtainTouch(down, eventTime, action, screenOrigin[0] + localX, screenOrigin[1] + localY)
-        event.offsetLocation(-screenOrigin[0].toFloat(), -screenOrigin[1].toFloat())
+        val event = checkNotNull(touch)
         try {
-            assertTrue(host.dispatchTouchEvent(event),
-                "Compose host must accept $action at $localX,$localY")
+            assertTrue(InstrumentationRegistry.getInstrumentation().uiAutomation.injectInputEvent(event, true),
+                "Android's native dispatcher must accept $action at $x,$y")
         } finally { event.recycle() }
     }
 
@@ -343,11 +373,15 @@ class MonitorCaptureInputTest {
                 val host = runCatching { composeHost(activity) }.getOrNull()
                 host?.requestFocus()
                 if (!activity.hasWindowFocus()) activity.window.decorView.requestFocus()
-                focused = activity.hasWindowFocus() && host != null && host.isAttachedToWindow
+                focused = host != null && host.isAttachedToWindow &&
+                    activity.lifecycle.currentState == Lifecycle.State.RESUMED
                 laidOut = probe.top.width > 0f && probe.lower.width > 0f && probe.blank.width > 0f
                 if (focused && laidOut && probe.top == lastTop) stableFrames++
                 else { stableFrames = 0; lastTop = probe.top }
             }
+            // Verify the actual OS input window, rather than a decor focus callback that may
+            // briefly refer to the previous setContent host during a replacement.
+            focused = focused && instrumentationWindowIsFixture()
             if (focused && laidOut && stableFrames >= 3) return
             Thread.sleep(32)
         }
@@ -355,6 +389,10 @@ class MonitorCaptureInputTest {
         assertTrue(laidOut, "Fixture must have laid out")
         assertTrue(stableFrames >= 3, "Fixture layout must settle before injecting pointer events")
     }
+
+    private fun instrumentationWindowIsFixture(): Boolean =
+        InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow?.packageName ==
+            InstrumentationRegistry.getInstrumentation().targetContext.packageName
 
     private fun settle() {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync()
@@ -396,17 +434,19 @@ private fun NavigationFixture(model: AppModel, probe: NavigationProbe, layoutPro
             val width = maxWidth.value
             val height = maxHeight.value
             val floor = height - 100f
-            // Production portrait controls and production picker host in their original sibling order.
-            Box(Modifier.fillMaxSize()) {
+            val field = com.opencapture.monitorui.MonitorLayoutPolicy.fieldMonitor(width, height)
+            com.opencapture.opencine.appkit.MonitorScreen(model.session.control, field,
+                com.opencapture.opencine.appkit.MonitorScreenPresentation(
+                    popupInteractive = true, capturePresented = probe.sheet != null),
+                picture = {}, system = { accepts ->
                 Box(Modifier.fillMaxSize().onGloballyPositioned {
                     layoutProbe.top = it.boundsInWindow()
                     layoutProbe.lower = it.boundsInWindow()
                 }) {
-                    val field = com.opencapture.monitorui.MonitorLayoutPolicy.fieldMonitor(width, height)
                     com.opencapture.monitorui.MonitorSystemControls(field,
                         com.opencapture.monitorui.MonitorSystemControlsVisibility(lock = false, record = false,
                             display = false, media = probe.showsNavigation, settings = probe.showsNavigation),
-                        interactive = probe.navigationEnabled, navigationHidden = false,
+                        interactive = accepts && probe.navigationEnabled, navigationHidden = false,
                         lock = {}, record = {}, display = {},
                         settings = { enabled -> AuxCircleButton(enabled = enabled,
                             onClick = { model.shell.open(ShellModel.Cover.SETTINGS) }) {
@@ -417,13 +457,14 @@ private fun NavigationFixture(model: AppModel, probe: NavigationProbe, layoutPro
                             OpcIcon(OpcIcon.FILM, "Media", Modifier.fillMaxSize(), it)
                         } })
                 }
-            }
+            }, panels = {
+                probe.sheet?.let {
+                    LivePickerHost(it, width, height, 0f, 0f, 0f, 0f, floor,
+                        model, CameraStatus(), false, { probe.sheet = it })
+                }
+            })
             Box(Modifier.offset(2.dp, maxHeight - 6.dp).size(4.dp)
                 .onGloballyPositioned { layoutProbe.blank = it.boundsInWindow() })
-            probe.sheet?.let {
-                LivePickerHost(it, width, height, 0f, 0f, 0f, 0f, floor,
-                    model, CameraStatus(), false, { probe.sheet = it })
-            }
         }
     }
 }

@@ -262,6 +262,7 @@ struct LiveViewScreen: View {
                 captureHidden: hidesCaptureValues,
                 captureInteractive: model.captureSheet == nil || model.captureSheet?.isTopAnchored == true,
                 locked: interfaceLocked, popupInteractive: hasInteractivePopup,
+                capturePresented: captureControlsPresented && chromeInteractive,
                 panelsRaised: zoomDialMounted, recovering: model.session.sessionRecovery.isRecovering)
         ) {
             LiveFeedPane().opacity(model.session.isFeedWarming ? 0 : 1)
@@ -318,6 +319,7 @@ struct LiveViewScreen: View {
         } recovery: {
             if model.session.sessionRecovery.isRecovering { MonitorRecoveryOverlay() }
         }
+        .environment(\.interfaceLocked, interfaceLocked)
         .coordinateSpace(name: LiveCanvasSpace.name)
         .onPreferenceChange(LiveTopPickerFramesKey.self) { topPickerFrames = $0 }
         .onPreferenceChange(LiveCaptureTileFramesKey.self) { captureTileFrames = $0 }
