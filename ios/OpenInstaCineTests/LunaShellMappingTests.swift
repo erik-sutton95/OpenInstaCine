@@ -141,11 +141,6 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: 3600, timeZoneSeconds: -7200, fps: 24), "23:00:00:00")
     }
 
-    func testCameraNaming() {
-        XCTAssertEqual(LunaCameraNames.title(advertised: "XBQFN7"), "Luna Ultra XBQFN7")
-        XCTAssertEqual(LunaCameraNames.title(advertised: "Luna Ultra XBQFN7"), "Luna Ultra XBQFN7")
-    }
-
     func testInsta360FilenameDates() {
         let file = MediaFile(
             path: "/storage_internal/DCIM/Camera01/VID_20260916_123456_00_001.mp4",

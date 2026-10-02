@@ -97,7 +97,7 @@
                 "phase": s.phase.label,
                 "isLive": model.isLive,
                 "found": s.found.map { ["id": $0.id.uuidString, "name": $0.name] },
-                "saved": model.savedCameras.map { ["id": $0.id.uuidString, "name": $0.displayName] },
+                "saved": model.savedCameras.map { ["id": $0.id, "name": $0.displayName] },
                 "connected": s.connectedCamera?.name ?? "",
                 "joinedSSID": s.joinedSSID != nil,
                 "liveFPS": s.liveFPS,
@@ -161,12 +161,16 @@
             }
             func str(_ key: String) -> String? { cmd[key] as? String }
             switch name {
-            case "scan": s.startScan()
+            case "scan": model.integration.retryDiscovery()
             case "connectFirst":
-                if let camera = s.found.first { s.connect(camera) } else { return ["ok": false, "error": "none found"] }
+                if let sighting = model.cameras.nearby.first {
+                    model.cameras.connect(sighting)
+                } else {
+                    return ["ok": false, "error": "none found"]
+                }
             case "reconnect":
-                if let id = str("id").flatMap(UUID.init(uuidString:)) ?? model.savedCameras.first?.id {
-                    s.reconnect(to: id)
+                if let camera = model.savedCameras.first(where: { $0.id == str("id") }) ?? model.savedCameras.first {
+                    model.reconnect(camera)
                 }
             case "disconnect": model.disconnect()
             case "record": s.pressShutter()

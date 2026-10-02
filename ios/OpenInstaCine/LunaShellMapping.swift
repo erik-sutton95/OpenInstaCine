@@ -389,13 +389,3 @@ extension OperatorPrefs {
         set { UserDefaults.standard.set(newValue, forKey: "OpenInstaCine.luna.flatPreview") }
     }
 }
-
-/// How the pairing list names a Luna: the official app shows "Luna Ultra XBQFN7".
-enum LunaCameraNames {
-    static func title(advertised: String) -> String {
-        let trimmed = advertised.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { return "Luna Ultra" }
-        if trimmed.lowercased().contains("luna") { return trimmed }
-        return "Luna Ultra \(trimmed)"
-    }
-}

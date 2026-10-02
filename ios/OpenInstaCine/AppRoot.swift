@@ -2,18 +2,57 @@ import CoreVideo
 import Insta360Apple
 import MonitorPresentation
 import Observation
+import OpenCineAppKit
+import OpenCineCore
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
 
 /// App-level session object (OpenZCine `NativeAppModel` analogue). Owns the existing
-/// `CameraSession` connection spine and the saved-camera list. Does not rewrite DUML.
+/// `CameraSession` connection spine and the shared cameras model. Does not rewrite DUML.
 @MainActor
 @Observable
 final class AppModel {
     var session: CameraSession
+    /// Saved cameras, nearby sightings, pairing and connect attempts (SHELL-02): the shared
+    /// flow over the Luna integration, which connects through `session`.
+    let cameras: CamerasModel
+    @ObservationIgnored let integration: LunaIntegration
+    /// Why Bluetooth discovery is not running (off or not allowed); the pair page's Luna slot
+    /// shows it with Open Settings.
+    var discoveryFailure: ConnectionFailure?
+
     init(session: CameraSession? = nil) {
-        self.session = session ?? CameraSession(backend: Self.makeBackend())
+        let session = session ?? CameraSession(backend: Self.makeBackend())
+        self.session = session
+        var port: any LunaConnectPort = session
+        var defaults = UserDefaults.standard
+        #if targetEnvironment(simulator)
+            if MonitorUIReview.isActive { (port, defaults) = MonitorUIReview.cameras() }
+        #endif
+        integration = LunaIntegration(port: port)
+        cameras = CamerasModel(
+            integrations: [AppIntegration(integration, slots: IntegrationSlots(pairing: { AnyView(LunaPairingTips()) }))],
+            store: Self.camerasStore(defaults))
+        integration.onDiscoveryFailure = { [weak self] in self?.discoveryFailure = $0 }
+        cameras.onConnected = { [weak self] _ in self?.isPairingNewCamera = false }
+    }
+
+    /// The saved cameras: the shared document `OpenInstaCine.Cameras`, merged on every launch with
+    /// the records older builds read and write (`OpenInstaCine.SavedCameras`), which it keeps
+    /// mirrored. Wi-Fi passwords and the camera approval stay in the Keychain, untouched.
+    static func camerasStore(_ defaults: UserDefaults = .standard) -> SavedCamerasStore {
+        SavedCamerasStore(
+            document: .userDefaults(defaults, key: "OpenInstaCine.Cameras"),
+            legacy: .init(
+                data: .userDefaults(defaults, key: "OpenInstaCine.SavedCameras"),
+                codec: BodyRecordsV0(integration: LunaCameraSession.integration, dates: .secondsSince2001),
+                source: "OpenInstaCine.SavedCameras"))
+    }
+
+    /// Saved cameras, most recently connected first.
+    var savedCameras: [OpenCineCore.SavedCamera] {
+        cameras.saved.sorted { ($0.lastConnected ?? .distantPast) > ($1.lastConnected ?? .distantPast) }
     }
 
     /// The composition root's one backend per camera connection. Simulator has no Bluetooth
@@ -41,7 +80,6 @@ final class AppModel {
             poseViewFlip: session.gimbalPoseViewFlip,
             assistMirror: assist.mirrorsHorizontally)
     }
-    var savedCameras: [SavedCamera] = SavedCameraStore.load()
     /// Operator tapped “Pair new camera” from the saved list.
     var isPairingNewCamera = false
     var showsLaunchSplash = true
@@ -268,7 +306,8 @@ final class AppModel {
     @ObservationIgnored private var internetHopSSID: String?
     @ObservationIgnored private var liveChromeArmTask: Task<Void, Never>?
 
-    var isOnCameraAccessPoint: Bool { WiFiJoiner.isCameraPathReady() }
+    /// On the Luna's own network (192.168.42.x), from the integration (SHELL-02 D10).
+    var isOnCameraAccessPoint: Bool { session.backend.isOnCameraNetwork }
 
     func beginInternetHop() {
         internetHopActive = true
@@ -352,10 +391,8 @@ final class AppModel {
         liveOperatorPanel = .settings
     }
 
-    var shouldShowWizard: Bool {
-        CameraStartupPolicy.launchDestination(savedCameras: savedCameras) == .addCamera
-            || isPairingNewCamera
-    }
+    /// The pair page: no saved camera yet, or the operator chose Pair.
+    var shouldShowWizard: Bool { cameras.saved.isEmpty || isPairingNewCamera }
 
     var isLive: Bool {
         #if targetEnvironment(simulator)
@@ -381,10 +418,6 @@ final class AppModel {
         }
     }
 
-    var isScanning: Bool {
-        if case .scanning = session.phase { true } else { false }
-    }
-
     func prepareStartup() {
         #if targetEnvironment(simulator)
             if MonitorUIReview.isActive {
@@ -393,62 +426,10 @@ final class AppModel {
             }
         #endif
         LiveHDRDisplay.setEnabled(hdrDisplay)
-        savedCameras = SavedCameraStore.load()
-        switch CameraStartupPolicy.launchDestination(savedCameras: savedCameras) {
-        case .addCamera:
-            isPairingNewCamera = true
-            session.startScan()
-        case .savedCameras:
-            isPairingNewCamera = false
-            session.startScan()
-        }
     }
 
-    func pairNewCamera() {
-        isPairingNewCamera = true
-        session.startScan()
-    }
-
-    func cancelPairing() {
-        session.disconnect()
-        isPairingNewCamera = false
-        session.startScan()
-    }
-
-    func reconnect(_ camera: SavedCamera) {
-        reconnect(camera, setup: camera.preferredSetup)
-    }
-
-    func reconnect(_ camera: SavedCamera, setup: CameraConnectionSetup) {
-        // Switching setups is a new connection, never a live-session no-op.
-        if session.connectedCamera?.id == camera.id, session.connectionSetup != setup {
-            session.disconnect()
-        }
-        savedCameras = SavedCameras.startingStation(setup, for: camera.id, in: savedCameras)
-        SavedCameraStore.save(savedCameras)
-        session.connectionSetup = setup
-        session.reconnect(to: camera.id)
-    }
-
-    func forgetSetup(_ setup: CameraConnectionSetup, of camera: SavedCamera) {
-        savedCameras = SavedCameras.setting(setup, ssid: nil, for: camera.id, in: savedCameras)
-        SavedCameraStore.save(savedCameras)
-    }
-
-    func forget(_ camera: SavedCamera) {
-        session.forgetWifiCreds(for: camera)
-        savedCameras = SavedCameras.removing(camera.id, from: savedCameras)
-        SavedCameraStore.save(savedCameras)
-        if savedCameras.isEmpty {
-            isPairingNewCamera = true
-            session.startScan()
-        }
-    }
-
-    func rename(_ camera: SavedCamera, to name: String?) {
-        savedCameras = SavedCameras.renaming(camera.id, to: name, in: savedCameras)
-        SavedCameraStore.save(savedCameras)
-    }
+    /// Connects a saved camera over its preferred setup (debug and stress drivers).
+    func reconnect(_ camera: OpenCineCore.SavedCamera) { cameras.connect(camera) }
 
     /// Connect shows the monitor — never leftover Operator Setup, Media, or Edit view.
     func setShareThisFeed(_ on: Bool) {
@@ -611,7 +592,6 @@ final class AppModel {
             guard !Task.isCancelled else { return }
             self?.liveChromeInteractive = true
         }
-        persistConnectedCameraIfNeeded()
         if shareThisFeed { startRelayHost() }
         relayBrowser.stop()
     }
@@ -631,34 +611,8 @@ final class AppModel {
         session.decoder.onIdentityFrame = nil
         session.decoder.onIdentityOrientation = nil
         watcherRecordConfirm = false
-    }
-
-    func persistConnectedCameraIfNeeded() {
-        guard case .live = session.phase, let found = session.connectedCamera else { return }
-        if let ssid = session.joinedSSID {
-            if CameraWifiResolution.isSSIDOwnedByAnotherCamera(
-                ssid, cameraId: found.id, saved: savedCameras)
-            {
-                return
-            }
-            if CameraBodyFamily.ssidConflictsWithBody(
-                ssid: ssid, modelId: found.modelId, advertisedName: found.name)
-            {
-                return
-            }
-        }
-        var record = SavedCamera(
-            id: found.id,
-            advertisedName: found.name,
-            modelName: found.model.name,
-            lastSSID: session.joinedSSID,
-            lastConnectedAt: Date(),
-            modelId: found.modelId
-        )
-        record.lastSetup = session.connectionSetup
-        savedCameras = SavedCameras.upserting(record, into: savedCameras)
-        SavedCameraStore.save(savedCameras)
-        isPairingNewCamera = false
+        // The live session is over: discovery resumes on the cameras page.
+        cameras.sessionEnded()
     }
 
     func beginMediaBrowse() { session.beginMediaBrowse() }
@@ -669,9 +623,6 @@ final class AppModel {
         focusBoxLocked = false
         session.disconnect()
         frameSamples.reset()
-        if CameraStartupPolicy.launchDestination(savedCameras: savedCameras) == .savedCameras {
-            session.startScan()
-        }
     }
 
     /// Recovery card: leave the held frame for the saved-camera list.
@@ -977,21 +928,5 @@ private struct WatcherRecordConfirmation: ViewModifier {
                 model.watcherRecordConfirm = false
                 model.watcherRecordRequest = nil
             }
-    }
-}
-
-/// Connection home: first-pair wizard, or saved cameras. Mirrors OpenZCine `LinkExperience`.
-struct LinkExperience: View {
-    @Environment(AppModel.self) private var model
-    var body: some View {
-        GeometryReader { proxy in
-            if model.shouldShowWizard {
-                ConnectionSetupView(compact: proxy.size.width < 640)
-            } else {
-                SavedCamerasView(compact: proxy.size.width < 640)
-            }
-        }
-        .background(StartupColors.background.ignoresSafeArea())
-        .foregroundStyle(StartupColors.ink)
     }
 }

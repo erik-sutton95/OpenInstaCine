@@ -559,7 +559,9 @@ enum FeedStressAutomation {
                 lock.withLock { $0.reconnect = "live" }
                 return
             }
-            let matches = model.savedCameras.filter(Self.isPocket4Pro)
+            let matches = model.savedCameras.filter {
+                Self.isPocket4Pro(model: $0.model, modelId: $0.extras["modelId"])
+            }
             if matches.count != 1 {
                 reconnectAttempted = true
                 lock.withLock { $0.reconnect = matches.isEmpty ? "none" : "ambiguous" }
@@ -570,9 +572,9 @@ enum FeedStressAutomation {
             model.reconnect(matches[0])
         }
 
-        private static func isPocket4Pro(_ camera: SavedCamera) -> Bool {
-            if let id = camera.modelId, id == 0x0022 { return true }
-            let name = camera.modelName.lowercased().replacingOccurrences(of: " ", with: "")
+        private static func isPocket4Pro(model: String, modelId: String?) -> Bool {
+            if modelId == "34" { return true }
+            let name = model.lowercased().replacingOccurrences(of: " ", with: "")
             return name.contains("pocket4p") || name.contains("4pro")
         }
 

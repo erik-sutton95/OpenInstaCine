@@ -384,12 +384,13 @@ struct SettingsRootView: View {
                 }
             } else {
                 ForEach(Array(model.savedCameras.enumerated()), id: \.element.id) { index, camera in
+                    let network = camera.routes.first { $0.kind == .cameraAccessPoint }?.network
                     SettingsInlineRow(
                         title: camera.displayName,
-                        help: camera.modelName + (camera.lastSSID.map { " · \($0)" } ?? ""),
+                        help: camera.model + (network.map { " · \($0)" } ?? ""),
                         showTopDivider: index > 0
                     ) {
-                        SettingsValueText(value: camera.lastSSID ?? "Saved")
+                        SettingsValueText(value: network ?? "Saved")
                     }
                 }
             }

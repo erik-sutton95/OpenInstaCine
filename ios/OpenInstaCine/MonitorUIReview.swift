@@ -1,6 +1,8 @@
 #if targetEnvironment(simulator)
     import Foundation
     import Insta360Apple
+    import Insta360Protocol
+    import OpenCineCore
     import OpenPocketViewCore
 
     /// Deterministic simulator-only presentation fixture. Opt-in environment values
@@ -10,6 +12,37 @@
     enum MonitorUIReview {
         static var screen: String? { ProcessInfo.processInfo.environment["OPV_UI_REVIEW_SCREEN"] }
         static var isActive: Bool { screen != nil }
+        /// The connection state the cameras and pair pages show: `empty`, `saved-nearby`,
+        /// `connecting`, `failure`, `pair-choose`, `pair-approve`, `pair-join`, `pair-video`,
+        /// `pair-failure`, `pair-bluetooth`; none is the two saved cameras, idle.
+        static var state: String {
+            let environment = ProcessInfo.processInfo.environment
+            return environment["OPV_UI_REVIEW_STATE"] ?? (environment["OPV_UI_REVIEW_CONNECTING"] == "1" ? "connecting" : "")
+        }
+        static let studioID = "00000000-0000-0000-0000-000000000001"
+
+        /// The shared cameras model's inputs for a review: a scripted Luna backend and a private
+        /// defaults domain holding the two saved cameras as the shipping app stored them.
+        static func cameras() -> (any LunaConnectPort, UserDefaults) {
+            let name = "opc.monitor.presentation.review.cameras"
+            let defaults = UserDefaults(suiteName: name)!
+            defaults.removePersistentDomain(forName: name)
+            if state != "empty" {
+                let past = Date.distantPast.timeIntervalSinceReferenceDate
+                let records: [[String: Any]] = [
+                    [
+                        "id": studioID, "advertisedName": "Studio camera", "modelName": "Luna Ultra",
+                        "lastConnectedAt": past, "wifiSSID": "Studio-5G", "hotspotSSID": "Rig iPhone",
+                    ],
+                    [
+                        "id": "00000000-0000-0000-0000-000000000002", "advertisedName": "Travel camera",
+                        "modelName": "Luna Ultra", "lastConnectedAt": past,
+                    ],
+                ]
+                defaults.set(try? JSONSerialization.data(withJSONObject: records), forKey: "OpenInstaCine.SavedCameras")
+            }
+            return (ReviewLunaPort(state: state), defaults)
+        }
 
         #if DEBUG
             static var zoomControls: Bool {
@@ -131,26 +164,71 @@
             }
             model.session.liveSignalBars = 4
             model.session.liveFPS = "25.00"
-            var studio = SavedCamera(
-                id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-                advertisedName: "Studio camera", modelName: "Luna Ultra",
-                lastConnectedAt: .distantPast, modelId: nil)
-            studio.wifiSSID = "Studio-5G"
-            studio.hotspotSSID = "Rig iPhone"
-            model.savedCameras = [
-                studio,
-                SavedCamera(
-                    id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
-                    advertisedName: "Travel camera", modelName: "Luna Ultra",
-                    lastConnectedAt: .distantPast, modelId: nil),
-            ]
-            if ProcessInfo.processInfo.environment["OPV_UI_REVIEW_CONNECTING"] == "1" {
-                model.session.reviewConnecting(
-                    studio.id, setup: .wifi, progress: "Joining Wi-Fi · attempt 1 of 3")
+            let cameras = model.cameras
+            switch state {
+            case "connecting", "failure":
+                if let studio = cameras.saved.first(where: { $0.id == studioID }) { cameras.connect(studio) }
+            case "pair-approve", "pair-join", "pair-video", "pair-failure":
+                Task {
+                    // The scripted camera appears once discovery starts.
+                    while cameras.nearby.isEmpty { try? await Task.sleep(for: .milliseconds(20)) }
+                    cameras.selection = cameras.nearby[0].id
+                    cameras.connect(cameras.nearby[0])
+                }
+            default: break
             }
             model.isPairingNewCamera = screen == "pair"
             if screen == "settings" { model.liveOperatorPanel = .settings }
             if screen == "media" { model.liveOperatorPanel = .media }
         }
+    }
+
+    /// Simulator review only: a scripted Luna backend, so the shared pages show each connection
+    /// state without a camera. Never connects, never stores anything.
+    @MainActor
+    final class ReviewLunaPort: LunaConnectPort {
+        var eventHandler: ((CameraBackendEvent) -> Void)?
+        var connectedSerial: String? { nil }
+        var joinedNetwork: String? { "LUNA-4D5E6F" }
+        private let state: String
+        private let backend = LunaCameraBackend(useExistingNetwork: true)
+
+        init(state: String) { self.state = state }
+
+        func startScan() async throws {
+            if state == "pair-bluetooth" {
+                throw ConnectionFailure(
+                    reason: .permission(.bluetooth), title: "Couldn’t connect over Camera Wi-Fi",
+                    message: "Bluetooth access is disabled for this app. Enable it in Settings → Privacy & Security → Bluetooth.",
+                    actions: [.openSettings, .retry], code: "review.bluetooth.denied")
+            }
+            guard state == "saved-nearby" || state.hasPrefix("pair-") else { return }
+            eventHandler?(
+                .discovered(
+                    MonitorCamera(
+                        id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!, name: "4D5E6F",
+                        model: LunaProtocol.model, capabilities: [])))
+        }
+
+        func stopScan() {}
+
+        func connect(to camera: MonitorCamera) async throws {
+            switch state {
+            case "connecting", "pair-join": eventHandler?(.phase(.joiningWiFi))
+            case "pair-approve": eventHandler?(.phase(.awaitingApproval))
+            case "pair-video": eventHandler?(.phase(.openingVideo))
+            case "failure", "pair-failure":
+                throw ConnectionFailure(
+                    reason: .notApproved, phase: .awaitingApproval, title: "Couldn’t connect over Camera Wi-Fi",
+                    message: "Approval timed out. Connect again and tap Allow on the camera's screen.",
+                    actions: [.retry], code: "review.approval.timeout")
+            default: break
+            }
+            try await Task.sleep(for: .seconds(3600))
+        }
+
+        func disconnect() {}
+        func openSession() -> LunaCameraSession { backend.openSession() }
+        func forget(cameraID: UUID) {}
     }
 #endif

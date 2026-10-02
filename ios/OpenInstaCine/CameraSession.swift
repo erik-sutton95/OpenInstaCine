@@ -51,20 +51,15 @@ final class CameraSession {
         }
     }
     var found: [FoundCamera] = []
-    /// A scan has run 20 s without a camera. The wizard then lists what to check.
-    var scanLooksEmpty = false
-    @ObservationIgnored private var scanHintTask: Task<Void, Never>?
     /// AE Lock pins the applied Auto exposure as Manual; cleared when status stops holding it.
     var autoExposureLock: AutoExposureLock?
     /// WB Mode AWB Lock. Cleared like `autoExposureLock` when status stops holding it.
     var autoWhiteBalanceLock: AutoWhiteBalanceLock?
     private(set) var connectedCamera: FoundCamera?
     private(set) var joinedSSID: String?
-    /// Luna has one setup: its own camera Wi-Fi. Kept for the shared saved-camera record.
-    var connectionSetup: CameraConnectionSetup = .cameraWiFi
-    private(set) var stationHost: String?
-    private(set) var stationSSID: String?
-    private(set) var setupProgress: String?
+    /// The shared connection flow's port (`LunaIntegration`) listens here: every backend event
+    /// after this session has applied it.
+    @ObservationIgnored var eventHandler: ((CameraBackendEvent) -> Void)?
 
     /// Only for the host's explicit Show Wi-Fi code sheet. Never advertised or logged.
     var watcherWiFiJoinCode: String? {
@@ -360,6 +355,7 @@ final class CameraSession {
         decoder.onParameterSetsChanged = { [weak self] in
             self?.requestKeyframe(reason: "encoder format change")
         }
+        activateBackend()
     }
 
     /// Only the backend's owner binds its callbacks (at scan/connect). A lease never does.
@@ -377,9 +373,8 @@ final class CameraSession {
 
     // MARK: - Discovery and connection
 
-    func startScan() { startScan(reconnect: nil) }
-
-    /// Scan for Luna cameras (BLE BE80). If `id` is set, connect as soon as it appears.
+    /// Scan for Luna cameras (BLE BE80) outside the shared flow (foreground and internet-hop
+    /// reconnects of the live camera). If `id` is set, connect as soon as it appears.
     func startScan(reconnect id: UUID?) {
         guard ownsBackend else { return }
         activateBackend()
@@ -390,16 +385,6 @@ final class CameraSession {
         isReconnecting = id != nil
         phase = .scanning
         found = []
-        scanLooksEmpty = false
-        scanHintTask?.cancel()
-        scanHintTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(20))
-            guard let self, !Task.isCancelled, self.phase == .scanning, self.found.isEmpty else {
-                return
-            }
-            ControlLiveLog.line("ble: no camera after 20 s of scanning")
-            self.scanLooksEmpty = true
-        }
         scanTask?.cancel()
         let token = connectGeneration
         scanTask = Task { [weak self] in
@@ -409,10 +394,8 @@ final class CameraSession {
             } catch {
                 guard token == self.connectGeneration, !Task.isCancelled else { return }
                 // A saved camera can still reconnect over its saved Wi-Fi without BLE.
-                if let id, backend.storedWiFi(cameraID: id) != nil,
-                    let saved = SavedCameraStore.load().first(where: { $0.id == id })
-                {
-                    self.connect(Self.foundCamera(saved: saved))
+                if let id, backend.storedWiFi(cameraID: id) != nil, let camera = self.knownCamera(id) {
+                    self.connect(camera)
                     return
                 }
                 self.phase = .failed(
@@ -422,23 +405,21 @@ final class CameraSession {
         }
         // Give Bluetooth a few seconds (it wakes the camera Wi-Fi); a camera that never
         // advertises can still come back over its saved Wi-Fi.
-        if let id, backend.storedWiFi(cameraID: id) != nil,
-            let saved = SavedCameraStore.load().first(where: { $0.id == id })
-        {
+        if let id, backend.storedWiFi(cameraID: id) != nil, let camera = knownCamera(id) {
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(4))
                 guard let self, token == self.connectGeneration, self.reconnectTarget == id else {
                     return
                 }
-                self.connect(Self.foundCamera(saved: saved))
+                self.connect(camera)
             }
         }
     }
 
-    static func foundCamera(saved: SavedCamera) -> FoundCamera {
-        FoundCamera(
-            id: saved.id, name: saved.advertisedName ?? saved.displayName,
-            model: LunaShellMapping.cameraModel, modelId: nil)
+    /// The camera this session connected or saw, for reconnects that run without a scan hit.
+    private func knownCamera(_ id: UUID) -> FoundCamera? {
+        if let camera = connectedCamera, camera.id == id { return camera }
+        return found.first { $0.id == id }
     }
 
     func reconnect(to id: UUID) {
@@ -459,35 +440,13 @@ final class CameraSession {
             return
         }
         guard ownsBackend else { return }
-        activateBackend()
-        ReliabilityReporting.setCameraSessionActive(true)
-        connectGeneration += 1
-        let generation = connectGeneration
-        LocalVPNProbe.noteIfActive()
-        backend.stopScan()
-        scanTask?.cancel()
-        runTask?.cancel()
-        reconnectTarget = nil
-        isReconnecting = preserveMonitor
-        connectedCamera = camera
-        connectionTargetID = camera.id
-        if !incidentSessionActive { beginFeedIncidentSession() }
-        if !preserveMonitor {
-            statusStorage = CameraStatus()
-            publishStatusNow()
-            resetLinkHealthMeasurements()
-            decoder.reset()
-            attachCore(backend.openSession())
-        } else {
-            decoder.flushForRecovery()
-        }
-        faceAFArmed = false
+        if !preserveMonitor { attachCore(newConnectionSession()) }
+        let generation = prepareConnection(to: camera, preserveMonitor: preserveMonitor)
         let descriptor =
             descriptors[camera.id]
             ?? MonitorCamera(
                 id: camera.id, name: camera.name, model: LunaProtocol.model,
                 capabilities: backend.capabilities)
-        phase = .connectingGatt
         runTask = Task { [weak self] in
             guard let self else { return }
             defer { if generation == self.connectGeneration { self.runTask = nil } }
@@ -508,6 +467,34 @@ final class CameraSession {
                 self.applyLinkPresentation()
             }
         }
+    }
+
+    /// A fresh status, link health and decoder, and the next connection's core session.
+    private func newConnectionSession() -> LunaCameraSession {
+        statusStorage = CameraStatus()
+        publishStatusNow()
+        resetLinkHealthMeasurements()
+        decoder.reset()
+        return backend.openSession()
+    }
+
+    /// What every connect sets before the backend runs; returns its generation.
+    private func prepareConnection(to camera: FoundCamera, preserveMonitor: Bool) -> Int {
+        ReliabilityReporting.setCameraSessionActive(true)
+        connectGeneration += 1
+        LocalVPNProbe.noteIfActive()
+        backend.stopScan()
+        scanTask?.cancel()
+        runTask?.cancel()
+        reconnectTarget = nil
+        isReconnecting = preserveMonitor
+        connectedCamera = camera
+        connectionTargetID = camera.id
+        if !incidentSessionActive { beginFeedIncidentSession() }
+        if preserveMonitor { decoder.flushForRecovery() }
+        faceAFArmed = false
+        phase = .connectingGatt
+        return connectGeneration
     }
 
     func disconnect() {
@@ -531,7 +518,6 @@ final class CameraSession {
         if let ssid = joinedSSID { WiFiJoiner.leave(ssid: ssid) }
         joinedSSID = nil
         connectedCamera = nil
-        connectionSetup = .cameraWiFi
         phase = .idle
         statusFlushTask?.cancel()
         statusFlushTask = nil
@@ -573,19 +559,7 @@ final class CameraSession {
         resetMediaSession()
     }
 
-    func forgetWifiCreds(for camera: SavedCamera) {
-        backend.forget(cameraID: camera.id)
-    }
-
     #if targetEnvironment(simulator)
-        /// UI review only: a connecting card without a camera.
-        func reviewConnecting(_ id: UUID, setup: CameraConnectionSetup, progress: String) {
-            connectionTargetID = id
-            connectionSetup = setup
-            setupProgress = progress
-            phase = .joiningWifi
-        }
-
         /// UI review only: pretend-live state for simulator screenshots.
         func reviewLive(camera: FoundCamera, status: CameraStatus) {
             connectedCamera = camera
@@ -598,11 +572,12 @@ final class CameraSession {
 
     private func receiveBackend(_ event: CameraBackendEvent) {
         guard !expectedDisconnect else { return }
+        defer { eventHandler?(event) }
         switch event {
         case .discovered(let camera):
             descriptors[camera.id] = camera
             let item = FoundCamera(
-                id: camera.id, name: LunaCameraNames.title(advertised: camera.name),
+                id: camera.id, name: LunaIntegration.title(advertised: camera.name),
                 model: LunaShellMapping.cameraModel, modelId: nil)
             if let index = found.firstIndex(where: { $0.id == item.id }) {
                 if found[index].name != item.name { found[index] = item }
@@ -1004,11 +979,7 @@ final class CameraSession {
         FeedIncidentRuntime.noteUnexpectedDisconnect(now: ProcessInfo.processInfo.systemUptime)
         recordFeedRepair("session", phase: .requested, reason: String(describing: trigger))
         recoveryCameraID = cameraID
-        if recoveryDeviceName.isEmpty {
-            recoveryDeviceName =
-                connectedCamera?.name
-                ?? SavedCameraStore.load().first { $0.id == cameraID }?.displayName ?? ""
-        }
+        if recoveryDeviceName.isEmpty { recoveryDeviceName = connectedCamera?.name ?? "" }
         holdsMonitor = true
         endGimbalStick(cancelMove: true)
         decoder.flushForRecovery()
@@ -1132,11 +1103,7 @@ final class CameraSession {
     private func attemptRecoveryConnect() async -> Bool {
         guard let id = recoveryCameraID else { return false }
         isReconnecting = true
-        let saved = SavedCameraStore.load().first { $0.id == id }
-        let camera =
-            connectedCamera ?? found.first { $0.id == id }
-            ?? saved.map(Self.foundCamera(saved:))
-        guard let camera else { return false }
+        guard let camera = knownCamera(id) else { return false }
         let started = Date()
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: Self.recoveryAttemptDeadline)
@@ -1364,4 +1331,45 @@ final class CameraSession {
             onChromePublished?()
         }
     }
+}
+
+/// The shared connection flow's way into this session (SHELL-02): `LunaIntegration` runs pairing
+/// and saved-camera connects through it, so the session prepares the monitor and keeps its phase,
+/// recovery and feed exactly as for its own reconnects.
+extension CameraSession: LunaConnectPort {
+    var connectedSerial: String? { backend.connectedSerial }
+    var joinedNetwork: String? { backend.joinedNetwork }
+
+    func startScan() async throws { try await backend.startScan() }
+
+    func stopScan() { backend.stopScan() }
+
+    func connect(to camera: MonitorCamera) async throws {
+        descriptors[camera.id] = camera
+        let generation = prepareConnection(
+            to: FoundCamera(id: camera.id, name: camera.name, model: LunaShellMapping.cameraModel, modelId: nil),
+            preserveMonitor: false)
+        do {
+            expectedDisconnect = true
+            backend.disconnect()
+            expectedDisconnect = false
+            try await backend.connect(to: camera)
+        } catch {
+            if generation == connectGeneration, !(error is CancellationError), phase != .idle {
+                let why = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+                ControlLiveLog.line("session: connect failed at \(phase.label): \(why)")
+                phase = .failed(why)
+                applyLinkPresentation()
+            }
+            throw error
+        }
+    }
+
+    func openSession() -> LunaCameraSession {
+        let session = newConnectionSession()
+        attachCore(session)
+        return session
+    }
+
+    func forget(cameraID: UUID) { backend.forget(cameraID: cameraID) }
 }

@@ -55,6 +55,10 @@ targets:
         product: Insta360Apple
       - package: OpenCine
         product: OpenCineCore
+      # The shared app shell (SHELL-02): saved-camera store, cameras model and the cameras and
+      # pair screens over the Luna integration.
+      - package: OpenCine
+        product: OpenCineAppKit
       # Apple media runtime (OpenCine plan MEDIA-02): the VideoToolbox decoder runtime under
       # HevcDecoder and decoded-frame leases. iOS app only; the watch never decodes live video.
       - package: OpenCine
@@ -146,6 +150,8 @@ targets:
         product: Insta360AppleTestSupport
       - package: OpenCine
         product: OpenCineCore
+      # OpenCineAppKit comes from the host app: linking it here too would make it a framework
+      # with a second MonitorUI (a second theme accent) inside.
       - package: OpenCine
         product: OpenCineApple
     settings:

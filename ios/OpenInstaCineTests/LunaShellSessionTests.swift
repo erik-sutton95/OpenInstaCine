@@ -152,7 +152,7 @@ final class SessionIsolationTests: XCTestCase {
         let lease = OpenInstaCine.CameraSession(
             backend: owner.backend, borrowing: HevcDecoder(), controlsOnly: true)
         owner.activateBackend()
-        lease.startScan()
+        lease.startScan(reconnect: nil)
         lease.activateBackend()
         XCTAssertEqual(lease.phase, .idle, "a lease never scans or connects")
         let seen = MonitorCamera(id: UUID(), name: "Luna", model: LunaProtocol.model, capabilities: [])
