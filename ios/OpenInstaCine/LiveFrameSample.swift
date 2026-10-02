@@ -101,7 +101,7 @@ final class LiveAssistEngine: @unchecked Sendable {
         transfer: MonitorTransfer? = nil, timeNs: Int64 = 0,
         completion: @escaping @Sendable (Result) -> Void) {
         native.submit(buffer, effects: effects?.nativeAssistPolicy, transfer: transfer,
-            timeNs: timeNs, completion: completion)
+            timeNs: timeNs == 0 ? nil : timeNs, completion: completion)
     }
     func reset() { native.reset() }
 }

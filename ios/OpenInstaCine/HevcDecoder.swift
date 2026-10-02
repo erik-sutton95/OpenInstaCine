@@ -997,10 +997,10 @@ final class HevcDecoder {
         }
         if result.shouldPresent {
             lastDecodedBuffer = result.source
-            lastDecodedTimeNs = result.timeNs
+            lastDecodedTimeNs = result.timeNs ?? 0
             if let onSourceFrame {
                 let lease = vt.fence.lease(
-                    result.source, generation: generation, timeNs: result.timeNs)
+                    result.source, generation: generation, timeNs: result.timeNs ?? 0)
                 vt.fence.publish(lease, to: onSourceFrame)
                 lease.release()
             }

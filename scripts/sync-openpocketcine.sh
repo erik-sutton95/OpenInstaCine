@@ -75,6 +75,9 @@ LUNA_OWNED=(
   OpenInstaCine/LiveMonitorFx.swift
   OpenInstaCine/LiveMonitorLooks.swift
   OpenInstaCine/FeedWorkingRaster.swift
+  OpenInstaCine/FeedPresentScaler.swift
+  OpenInstaCine/FeedSuperResolution.swift
+  OpenInstaCine/FeedUpscale.swift
   OpenInstaCine/LiveAssists.swift
   OpenInstaCine/MonitorVideoBackdrop.swift
   OpenInstaCine/Assists/AssistInspectorImageRenderer.swift
@@ -89,6 +92,7 @@ LUNA_OWNED=(
   OpenInstaCineTests/LiveFrameSampleTests.swift
   OpenInstaCineTests/FalseColorAssistTests.swift
   OpenInstaCineTests/LiveFeedOrientationTests.swift
+  OpenInstaCineTests/FeedPresentationTests.swift
   OpenInstaCineTests/MonitorBackdropLifecycleTests.swift
   OpenInstaCineTests/ScopePublicationOwnershipTests.swift
   OpenInstaCineTests/PlaybackAssistTests.swift
