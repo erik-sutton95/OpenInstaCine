@@ -2,6 +2,7 @@ import AVFoundation
 import ImageIO
 import MonitorPresentation
 import MonitorUI
+import OpenCineAppKit
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -581,7 +582,7 @@ struct MediaLibraryView: View {
         if let onClose {
             onClose()
         } else {
-            model.homePanel = nil
+            model.shell.dismissCover()
         }
     }
 
@@ -993,36 +994,21 @@ private struct MediaCatalogThumbnail: View {
     }
 }
 
-/// Home overlay host. Live chrome may present `MediaLibraryView` / `SettingsRootView` directly.
+/// The shell's cover pages over the cameras and pair pages. The live monitor presents
+/// `MediaLibraryView` / `SettingsRootView` over itself (`LiveViewScreen`).
 struct AppPanelHost: View {
-    @Environment(AppModel.self) private var model
+    let cover: ShellModel.Cover
     @Environment(\.monitorWindowGeometry) private var windowGeometry
 
     var body: some View {
-        switch model.homePanel {
-        case .settings:
-            GeometryReader { proxy in
-                SettingsRootView(
-                    safeArea: OperatorPanelMetrics.standalonePanelSafeArea(
-                        from: OperatorPanelMetrics.resolvedDeviceSafeArea(
-                            proxy.safeAreaInsets, window: windowGeometry.safeArea)
-                    )
-                )
+        GeometryReader { proxy in
+            let safeArea = OperatorPanelMetrics.standalonePanelSafeArea(
+                from: OperatorPanelMetrics.resolvedDeviceSafeArea(
+                    proxy.safeAreaInsets, window: windowGeometry.safeArea))
+            switch cover {
+            case .settings: SettingsRootView(safeArea: safeArea)
+            case .media: MediaLibraryView(safeArea: safeArea)
             }
-        case .media:
-            GeometryReader { proxy in
-                MediaLibraryView(
-                    safeArea: OperatorPanelMetrics.standalonePanelSafeArea(
-                        from: OperatorPanelMetrics.resolvedDeviceSafeArea(
-                            proxy.safeAreaInsets, window: windowGeometry.safeArea)
-                    )
-                )
-            }
-        case .privacy: LegalDocumentView(kind: .privacy)
-        case .terms: LegalDocumentView(kind: .terms)
-        case .licenses: LegalDocumentView(kind: .licenses)
-        case .notice: LegalDocumentView(kind: .notice)
-        case nil: EmptyView()
         }
     }
 }

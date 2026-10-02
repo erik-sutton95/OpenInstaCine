@@ -335,7 +335,7 @@ struct FieldMonitorAssistPalette: View {
     private var shouldCollapse: Bool {
         isLocked || otherOverlayPresented || model.captureSheet != nil
             || model.captureDrum != nil || model.liveGimbalPanel != .none
-            || model.liveOperatorPanel != nil || model.assist.configureTool != nil
+            || model.shell.cover != nil || model.assist.configureTool != nil
             || model.isEditingChrome
     }
 

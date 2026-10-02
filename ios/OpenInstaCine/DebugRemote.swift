@@ -145,8 +145,8 @@
                 "focus": [s.focusPoint.x, s.focusPoint.y],
                 "media": s.mediaFiles.count,
                 "mediaNote": s.mediaNote ?? "",
-                "homePanel": model.homePanel?.rawValue ?? "",
-                "livePanel": model.liveOperatorPanel.map { "\($0)" } ?? "",
+                "route": "\(model.shell.route)",
+                "cover": model.shell.cover.map { "\($0)" } ?? "",
                 "settingsTab": model.operatorSettingsTab.rawValue,
                 "assists": LiveAssistTool.allCases.filter { model.assist.isOn($0) }.map(\.rawValue),
             ]
@@ -401,13 +401,10 @@
             case "lock": s.isLocked = cmd["value"] as? Bool ?? !s.isLocked
             case "panel":
                 switch str("value") {
-                case "settings": model.liveOperatorPanel = .settings
-                case "media": model.liveOperatorPanel = .media
-                case "homeSettings": model.homePanel = .settings
-                case "homeMedia": model.homePanel = .media
-                default:
-                    model.liveOperatorPanel = nil
-                    model.homePanel = nil
+                // One cover over whichever page shows (cameras or monitor).
+                case "settings", "homeSettings": model.shell.open(.settings)
+                case "media", "homeMedia": model.shell.open(.media)
+                default: model.shell.dismissCover()
                 }
             case "settingsTab":
                 if let tab = OperatorSettingsTab.allCases.first(where: { $0.rawValue == str("value") || "\($0)" == str("value") }) {
@@ -427,7 +424,8 @@
                 }
                 if let rec709 = cmd["rec709"] as? Bool { model.assist.falseColorRec709 = rec709 }
             case "clean": model.setDisplayMode(clean: cmd["value"] as? Bool ?? !model.assist.clean)
-            case "pairNew": model.isPairingNewCamera = cmd["value"] as? Bool ?? true
+            case "pairNew":
+                if cmd["value"] as? Bool ?? true { model.shell.beginPairing() } else { model.shell.endPairing() }
             case "mediaBrowse": s.beginMediaBrowse()
             case "mediaEnd": s.endMediaBrowse()
             case "thumb":

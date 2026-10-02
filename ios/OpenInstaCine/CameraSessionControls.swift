@@ -1389,6 +1389,6 @@ extension CameraSession {
         let timecode = LunaShellMapping.cameraTimecode(
             unixSeconds: wall, timeZoneSeconds: TimeZone.current.secondsFromGMT(), fps: status.fps)
         status.timecode = LunaShellMapping.timecodeText(timecode)
-        (core.session as? LunaCameraSession)?.ingest(timecode: timecode)
+        (coreSession as? LunaCameraSession)?.ingest(timecode: timecode)
     }
 }

@@ -4,6 +4,7 @@
     import Insta360Protocol
     import OpenCineCore
     import OpenPocketViewCore
+    import UIKit
 
     /// Deterministic simulator-only presentation fixture. Opt-in environment values
     /// never run on a physical camera or in an App Store build, never persist camera
@@ -62,6 +63,14 @@
                 ReliabilityReportingConsent.setOptedIn(false)
             }
             model.showsLaunchSplash = false
+            // `OPV_UI_REVIEW_ORIENTATION=landscapeLeft|landscapeRight|portrait` turns the scene.
+            if let raw = ProcessInfo.processInfo.environment["OPV_UI_REVIEW_ORIENTATION"] {
+                let mask: UIInterfaceOrientationMask =
+                    raw == "landscapeLeft" ? .landscapeLeft : raw == "landscapeRight" ? .landscapeRight : .portrait
+                for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { _ in }
+                }
+            }
             model.assist.lutEnabled = false
             model.assist.peaking = false
             model.assist.zebra = false
@@ -140,10 +149,13 @@
             ]
             status.availableShutterDenoms = [25, 50, 100, 200, 500]
             model.session.status = status
-            // An unconnected Luna session: the screens lay out what it declares, through the
-            // same projection as a connected camera. Its snapshots are not followed, so the
-            // fixture status above stays.
-            model.session.core.session = model.session.backend.openSession()
+            // An unconnected Luna session on the shell's monitor: the screens lay out what it
+            // declares, through the same projection as a connected camera. The fixture status
+            // above stays (the session reports no values, so nothing is projected over it).
+            if ["live", "settings", "media"].contains(screen) {
+                presentSimulatedMonitor(model)
+                model.control.onChange = {}
+            }
             if ProcessInfo.processInfo.environment["OPV_UI_REVIEW_MOTION"] == "1" {
                 model.session.gimbalProgram = GimbalProgram(
                     a: .init(yawDeg: 0, pitchDeg: 0, zoom: 1, nativePitchDeg: 0),
@@ -177,9 +189,55 @@
                 }
             default: break
             }
-            model.isPairingNewCamera = screen == "pair"
-            if screen == "settings" { model.liveOperatorPanel = .settings }
-            if screen == "media" { model.liveOperatorPanel = .media }
+            if screen == "pair" { model.shell.beginPairing() }
+            if screen == "settings" { model.shell.open(.settings) }
+            if screen == "media" { model.shell.open(.media) }
+            if screen == "sequence" { runSequence(model, status: status) }
+        }
+
+        /// Puts an unconnected Luna session on the shell's monitor (simulator only: no camera).
+        static func presentSimulatedMonitor(_ model: AppModel) {
+            let saved =
+                model.cameras.saved.first
+                ?? SavedCamera(
+                    id: studioID, integration: LunaCameraSession.integration, advertisedName: "Studio camera",
+                    model: "Luna Ultra")
+            model.shell.present(ConnectedCamera(saved: saved, session: model.session.backend.openSession()))
+        }
+
+        /// `OPV_UI_REVIEW_SCREEN=sequence`: cameras, live, settings, live, media, live, cameras in
+        /// one launch, one step every `OPV_UI_REVIEW_STEP` seconds (default 4), logging the
+        /// shell's monitor host count at each step (`SHELL03 step=...`).
+        static func runSequence(_ model: AppModel, status: CameraStatus) {
+            let step = Double(ProcessInfo.processInfo.environment["OPV_UI_REVIEW_STEP"] ?? "") ?? 4
+            Task { @MainActor in
+                @MainActor func note(_ name: String) async {
+                    try? await Task.sleep(for: .seconds(0.5))
+                    let shell = model.shell
+                    NSLog(
+                        "SHELL03 step=%@ route=%@ cover=%@ monitor=%@ mounted=%ld unmounted=%ld", name,
+                        "\(shell.route)", shell.cover.map { "\($0)" } ?? "none",
+                        shell.monitor?.id.uuidString ?? "none", shell.hostsMounted, shell.hostsUnmounted)
+                }
+                await note("1-cameras")
+                let steps: [(String, @MainActor () -> Void)] = [
+                    ("2-live", {
+                        presentSimulatedMonitor(model)
+                        model.control.onChange = {}
+                        model.session.status = status
+                    }),
+                    ("3-settings", { model.shell.open(.settings) }),
+                    ("4-live", { model.shell.dismissCover() }),
+                    ("5-media", { model.shell.open(.media) }),
+                    ("6-live", { model.shell.dismissCover() }),
+                    ("7-cameras", { model.disconnect() }),
+                ]
+                for (name, action) in steps {
+                    try? await Task.sleep(for: .seconds(step - 0.5))
+                    action()
+                    await note(name)
+                }
+            }
         }
     }
 

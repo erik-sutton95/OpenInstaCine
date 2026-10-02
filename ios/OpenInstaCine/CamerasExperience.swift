@@ -5,8 +5,10 @@ import OpenCineCore
 import OpenPocketViewCore
 import SwiftUI
 
-/// Connection home on the shared OpenCine screens (SHELL-02): the pair page while no camera is
-/// saved or the operator chose Pair, else the cameras page. Mirrors OpenZCine `LinkExperience`.
+/// The app root on the shared shell (SHELL-03): `AppShell` shows the cameras or pair page, or
+/// the monitor, from `model.shell`. The existing native monitor (`LiveViewScreen`) is its monitor
+/// slot and still presents Settings and Media over itself (temporary); the cover pages over the
+/// cameras page are `AppPanelHost`. Sheets, the scene and network checks stay app composition.
 struct LinkExperience: View {
     @Environment(AppModel.self) private var model
     @Environment(\.monitorWindowGeometry) private var windowGeometry
@@ -16,31 +18,26 @@ struct LinkExperience: View {
     @State private var showProblemReport = false
 
     var body: some View {
-        GeometryReader { proxy in
-            let safeArea = safeArea(proxy)
-            if model.shouldShowWizard {
-                PairScreen(
-                    model: model.cameras, safeArea: safeArea,
-                    onDone: { model.isPairingNewCamera = false },
-                    onDiagnostics: {
-                        if let url = DiagnosticCenter.shared.beginShare(session: model.session) {
-                            diagnostics = DiagnosticSharePayload(url: url)
-                        }
-                    },
-                    onReportProblem: { showProblemReport = true },
-                    onWatchFeed: { model.openWatcherBrowse() })
-            } else {
-                CamerasScreen(
-                    model: model.cameras, brandName: "OpenInstaCine", safeArea: safeArea,
-                    onPair: { model.isPairingNewCamera = true },
-                    onMedia: { model.homePanel = .media }, onSettings: { model.homePanel = .settings },
-                    // No Multiview entry: this app qualifies no multicam budget (one camera).
-                    onWatchFeed: { if model.cameras.attempts.isEmpty { model.openWatcherBrowse() } })
-            }
+        AppShell(
+            model: model.shell, brand: ShellBrand(name: "OpenInstaCine"),
+            actions: ShellActions(
+                diagnostics: {
+                    if let url = DiagnosticCenter.shared.beginShare(session: model.session) {
+                        diagnostics = DiagnosticSharePayload(url: url)
+                    }
+                },
+                reportProblem: { showProblemReport = true },
+                // No Multiview entry: this app qualifies no multicam budget (one camera).
+                watchFeed: {
+                    if model.shell.route == .pair || model.cameras.attempts.isEmpty { model.openWatcherBrowse() }
+                }),
+            safeArea: safeArea
+        ) { _ in
+            LiveViewScreen()
+        } page: { cover in
+            AppPanelHost(cover: cover)
         }
-        .ignoresSafeArea()
-        .background(StartupColors.background.ignoresSafeArea())
-        .foregroundStyle(StartupColors.ink)
+        .foregroundStyle(model.isLive ? AnyShapeStyle(.primary) : AnyShapeStyle(StartupColors.ink))
         .onAppear { orientation.start() }
         .onDisappear { orientation.stop() }
         .sheet(item: $diagnostics) { payload in DiagnosticActivityShareView(items: [payload.url]) }

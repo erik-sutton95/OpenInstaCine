@@ -179,11 +179,6 @@ struct PocketDispChrome: Equatable, Codable, Sendable {
     }
 }
 
-enum AppPanel: String, Identifiable {
-    case settings, media, privacy, terms, licenses, notice
-    var id: String { rawValue }
-}
-
 enum OpenInstaCineLinks {
     static let source = URL(string: "https://github.com/erik-sutton95/OpenInstaCine")
     static let support = URL(
@@ -197,7 +192,7 @@ enum OpenInstaCineLinks {
     static let terms = URL(string: "https://opencapture.org/openinstacine/terms")
 }
 
-/// Live chrome and home both present this. `onClose` lets a cover dismiss without `homePanel`.
+/// Live chrome and home both present this. `onClose` lets the live monitor dismiss its own cover.
 struct AppSettingsView: View {
     /// OpenZCine `OperatorSettingsPanel.safeArea` — processed landscape insets from the host.
     var safeArea: EdgeInsets = EdgeInsets()

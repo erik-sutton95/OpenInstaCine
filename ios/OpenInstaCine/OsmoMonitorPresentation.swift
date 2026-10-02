@@ -25,7 +25,7 @@ enum OsmoMonitorPresentation {
     /// No session: the Core projection of nothing keeps the base. Simulator reviews open one
     /// (`MonitorUIReview.prepare`), so screenshots show what a Luna operator sees.
     static func capabilities(_ session: CameraSession) -> MonitorLayoutCapabilities {
-        (session.core.session as? LunaCameraSession)?.layout(base: appBase)
+        (session.coreSession as? LunaCameraSession)?.layout(base: appBase)
             ?? MonitorLayoutCapabilities(CapabilitySnapshot(), base: appBase)
     }
 

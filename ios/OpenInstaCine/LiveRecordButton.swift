@@ -37,8 +37,9 @@ struct LiveRecordButton: View {
     @Environment(\.interfaceLocked) private var locked
 
     private var state: LiveRecordChromeState {
-        if model.session.status.isRecording {
-            return model.session.controlBusy ? .stopping : .recording
+        // The shared controls: camera-reported recording and the record operation in flight.
+        if model.control.isRecording == true {
+            return model.control.recordPending ? .stopping : .recording
         }
         return .idle
     }
@@ -50,7 +51,7 @@ struct LiveRecordButton: View {
     private var confirmationContext: RecordConfirmationContext {
         RecordConfirmationContext(
             mode: model.session.status.shootingMode,
-            recording: model.session.reportedRecording,
+            recording: model.control.isRecording,
             locked: locked || model.session.isLocked,
             busy: model.session.controlBusy, phase: model.session.phase)
     }

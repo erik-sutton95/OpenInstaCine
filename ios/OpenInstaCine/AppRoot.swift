@@ -9,7 +9,8 @@ import SwiftUI
 import UIKit
 
 /// App-level session object (OpenZCine `NativeAppModel` analogue). Owns the existing
-/// `CameraSession` connection spine and the shared cameras model. Does not rewrite DUML.
+/// `CameraSession` connection spine; the shared shell (`ShellModel`) owns navigation, covers and
+/// the monitor's camera over the shared cameras model. Does not rewrite DUML.
 @MainActor
 @Observable
 final class AppModel {
@@ -18,6 +19,11 @@ final class AppModel {
     /// flow over the Luna integration, which connects through `session`.
     let cameras: CamerasModel
     @ObservationIgnored let integration: LunaIntegration
+    /// Root navigation, covers and the monitor lifetime (SHELL-03): binds each connected camera's
+    /// common session to the shared controls (`session.control`).
+    let shell: ShellModel
+    /// The shared common controls of the camera on the monitor.
+    var control: MonitorControlModel { shell.control }
     /// Why Bluetooth discovery is not running (off or not allowed); the pair page's Luna slot
     /// shows it with Open Settings.
     var discoveryFailure: ConnectionFailure?
@@ -34,8 +40,14 @@ final class AppModel {
         cameras = CamerasModel(
             integrations: [AppIntegration(integration, slots: IntegrationSlots(pairing: { AnyView(LunaPairingTips()) }))],
             store: Self.camerasStore(defaults))
+        shell = ShellModel(cameras: cameras, control: session.control)
         integration.onDiscoveryFailure = { [weak self] in self?.discoveryFailure = $0 }
-        cameras.onConnected = { [weak self] _ in self?.isPairingNewCamera = false }
+        // One active/inactive per change, however many OS signals report it.
+        shell.onSceneActivity = { [weak self] active in
+            guard let self else { return }
+            self.assist.inspectorSceneActive = active
+            if active { self.session.noteSceneBecameActive() } else { self.session.noteSceneBecameInactive() }
+        }
     }
 
     /// The saved cameras: the shared document `OpenInstaCine.Cameras`, merged on every launch with
@@ -80,8 +92,6 @@ final class AppModel {
             poseViewFlip: session.gimbalPoseViewFlip,
             assistMirror: assist.mirrorsHorizontally)
     }
-    /// Operator tapped “Pair new camera” from the saved list.
-    var isPairingNewCamera = false
     var showsLaunchSplash = true
     /// Long-press on the tap-focus box locks it: feed taps no longer move focus.
     var focusBoxLocked = false
@@ -121,7 +131,6 @@ final class AppModel {
         session.decoder.incomingColorMode = LiveMonitorColorScience.colorMode(
             isPhoto: photo, colorMode: raw)
     }
-    var homePanel: AppPanel?
     var captureSheet: CaptureSheet?
     var captureDrum: CaptureDrumPresentation?
     var keepScreenAwake: Bool = OperatorPrefs.keepScreenAwake {
@@ -238,8 +247,6 @@ final class AppModel {
         didSet { OperatorPrefs.dispClean = dispClean }
     }
     var operatorSettingsTab: OperatorSettingsTab = .link
-    /// Live-monitor Media / Settings overlay. Distinct from `homePanel` (startup cover).
-    var liveOperatorPanel: LiveOperatorPanel?
     /// DISP mode whose chrome the operator is editing on the monitor, or `nil` when live.
     var chromeEditorMode: PocketDispMode?
     /// Section Display settings should reopen on after Done.
@@ -279,7 +286,7 @@ final class AppModel {
         if status == .live, showsWatcherBrowse {
             isWatchingFeed = true
             showsWatcherBrowse = false
-            homePanel = nil
+            shell.dismissCover()
         }
     }
 
@@ -299,7 +306,7 @@ final class AppModel {
     var watcherRecordRequest: RecordConfirmationContext?
     var watcherRecordContext: RecordConfirmationContext {
         RecordConfirmationContext(
-            mode: session.status.shootingMode, recording: session.reportedRecording,
+            mode: session.status.shootingMode, recording: session.control.isRecording,
             locked: session.isLocked, busy: session.controlBusy, phase: session.phase)
     }
     var internetHopActive = false
@@ -377,7 +384,7 @@ final class AppModel {
 
     /// Leaves Settings and switches the monitor to `mode` so badges land on the real thing.
     func beginChromeEditing(_ mode: PocketDispMode) {
-        liveOperatorPanel = nil
+        shell.dismissCover()
         liveGimbalPanel = .none
         setDisplayMode(clean: mode == .clean)
         chromeEditorMode = mode
@@ -388,28 +395,11 @@ final class AppModel {
         chromeEditorReturnMode = chromeEditorMode
         chromeEditorMode = nil
         operatorSettingsTab = .display
-        liveOperatorPanel = .settings
+        shell.open(.settings)
     }
 
-    /// The pair page: no saved camera yet, or the operator chose Pair.
-    var shouldShowWizard: Bool { cameras.saved.isEmpty || isPairingNewCamera }
-
-    var isLive: Bool {
-        #if targetEnvironment(simulator)
-            if let screen = MonitorUIReview.screen {
-                return screen != "cameras" && screen != "pair"
-            }
-        #endif
-        if session.holdsMonitor { return true }
-        if case .live = session.phase { return true }
-        #if targetEnvironment(simulator)
-            // No camera in Simulator: LiveViewScreen plays the D-Log2 clip when one is
-            // configured. Without it the real camera (Mac on its Wi-Fi) drives the phase.
-            return SimulatorLiveFeed.isConfigured
-        #else
-            return false
-        #endif
-    }
+    /// The monitor shows a camera (the shell's monitor lifetime, recovery included).
+    var isLive: Bool { shell.monitor != nil }
 
     var isBusy: Bool {
         switch session.phase {
@@ -424,6 +414,9 @@ final class AppModel {
                 MonitorUIReview.prepare(self)
                 return
             }
+            // No camera in Simulator: the monitor plays the D-Log2 clip when one is configured.
+            // Without it the real camera (Mac on its Wi-Fi) connects through the cameras page.
+            if SimulatorLiveFeed.isConfigured { MonitorUIReview.presentSimulatedMonitor(self) }
         #endif
         LiveHDRDisplay.setEnabled(hdrDisplay)
     }
@@ -579,9 +572,13 @@ final class AppModel {
         }
     }
 
+    /// The monitor's camera changed (shown, replaced or gone): the app's own chrome and relay
+    /// follow. The shell already dropped covers and retired the old camera's controls.
+    func noteMonitorChanged() {
+        if isLive { noteBecameLive() } else { noteLeftLive() }
+    }
+
     func noteBecameLive() {
-        homePanel = nil
-        liveOperatorPanel = nil
         chromeEditorMode = nil
         chromeEditorReturnMode = nil
         captureSheet = nil
@@ -601,7 +598,6 @@ final class AppModel {
         liveChromeArmTask?.cancel()
         liveChromeArmTask = nil
         liveChromeInteractive = true
-        liveOperatorPanel = nil
         chromeEditorMode = nil
         chromeEditorReturnMode = nil
         captureSheet = nil
@@ -611,16 +607,26 @@ final class AppModel {
         session.decoder.onIdentityFrame = nil
         session.decoder.onIdentityOrientation = nil
         watcherRecordConfirm = false
-        // The live session is over: discovery resumes on the cameras page.
-        cameras.sessionEnded()
+    }
+
+    /// The app's own link gave up while the monitor showed it, outside recovery (a reconnect
+    /// that failed, Bluetooth off): the monitor closes as it always did.
+    func noteLinkPhase() {
+        guard isLive, !session.holdsMonitor else { return }
+        switch session.phase {
+        case .idle, .failed: shell.close()
+        default: break
+        }
     }
 
     func beginMediaBrowse() { session.beginMediaBrowse() }
     func endMediaBrowse() { session.endMediaBrowse() }
     func refreshMedia() { Task { await session.refreshMedia() } }
 
+    /// Closes the monitor's camera (never a camera command), then the app's link.
     func disconnect() {
         focusBoxLocked = false
+        shell.close()
         session.disconnect()
         frameSamples.reset()
     }
@@ -714,11 +720,6 @@ final class AppModel {
     }
 }
 
-enum LiveOperatorPanel: Equatable {
-    case media
-    case settings
-}
-
 struct AppRoot: View {
     @State private var model = AppModel()
     @State private var showReliabilityPrompt = false
@@ -729,14 +730,9 @@ struct AppRoot: View {
             WatcherLiveView()
                 .environment(model)
                 .transition(.opacity)
-        } else if model.isLive {
-            LiveViewScreen()
-                .environment(model)
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
         } else {
             LinkExperience()
                 .environment(model)
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
         }
     }
 
@@ -757,13 +753,6 @@ struct AppRoot: View {
                 LaunchSplashOverlay(isVisible: Bindable(model).showsLaunchSplash)
                     .transition(.opacity)
                     .zIndex(100)
-            }
-
-            if model.homePanel != nil, !model.isLive, !model.isWatchingFeed {
-                AppPanelHost()
-                    .environment(model)
-                    .transition(.opacity)
-                    .zIndex(80)
             }
 
             if model.showsWatcherBrowse, !model.isLive {
@@ -843,13 +832,8 @@ struct AppRoot: View {
         .onChange(of: model.gimbalAnalogHeld) { _, held in
             if held { model.relayHost.reclaimControl() }
         }
-        .onChange(of: model.isLive) { _, live in
-            if live {
-                model.noteBecameLive()
-            } else {
-                model.noteLeftLive()
-            }
-        }
+        .onChange(of: model.shell.monitor?.id) { _, _ in model.noteMonitorChanged() }
+        .onChange(of: model.session.phase) { _, _ in model.noteLinkPhase() }
         .onReceive(NotificationCenter.default.publisher(for: .opcWatcherRelayCommand)) { note in
             let command = note.userInfo?["command"] as? WatcherRelayCommand
             let id = note.userInfo?["watcherID"] as? String
@@ -869,33 +853,23 @@ struct AppRoot: View {
             Button("Grant") { model.relayHost.grantControl() }
             Button("Deny", role: .cancel) { model.relayHost.denyControl() }
         }
-        .onAppear { model.assist.inspectorSceneActive = scenePhase == .active }
+        .onAppear {
+            model.shell.setSceneActive(scenePhase == .active)
+            model.assist.inspectorSceneActive = model.shell.sceneActive
+        }
+        // The shell reports each change once (`AppModel.shell.onSceneActivity`).
         .onChange(of: scenePhase) { _, phase in
             ProblemReporting.shared.tick()
-            model.assist.inspectorSceneActive = phase == .active
-            switch phase {
-            case .active:
-                model.session.noteSceneBecameActive()
-            case .inactive, .background:
-                model.session.noteSceneBecameInactive()
-            @unknown default:
-                break
-            }
+            model.shell.setSceneActive(phase == .active)
         }
         // scenePhase can miss a Control Center / app-switcher bounce.
         // UIKit notifications are the same signals OpenZCine uses.
         .onReceive(
             NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)
-        ) { _ in
-            model.assist.inspectorSceneActive = false
-            model.session.noteSceneBecameInactive()
-        }
+        ) { _ in model.shell.setSceneActive(false) }
         .onReceive(
             NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
-        ) { _ in
-            model.assist.inspectorSceneActive = true
-            model.session.noteSceneBecameActive()
-        }
+        ) { _ in model.shell.setSceneActive(true) }
     }
 }
 

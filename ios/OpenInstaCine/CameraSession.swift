@@ -4,6 +4,7 @@ import Foundation
 import Insta360Apple
 import Insta360Protocol
 import Observation
+import OpenCineAppKit
 import OpenPocketViewCore
 import UIKit
 import os
@@ -139,8 +140,13 @@ final class CameraSession {
     var recoveryDeviceName = ""
     private(set) var feedRecovering = false
     private(set) var isFeedWarming = true
-    /// In-flight record / photo. UI disables the rec lamp while true.
-    var controlBusy = false
+    /// In-flight photo. A record start or stop in flight is the shared controls' `recordPending`.
+    var photoBusy = false
+    /// In-flight record or photo. UI disables the rec lamp while true.
+    var controlBusy: Bool {
+        get { photoBusy || control.recordPending }
+        set { photoBusy = newValue }
+    }
     var controlNote: String?
     var isLocked = false
     var isMultiviewBorrowed: Bool { false }
@@ -149,11 +155,9 @@ final class CameraSession {
     @ObservationIgnored var multiviewControlAdmission: (() -> Bool)?
     var multiviewPose: GimbalStickMapping { GimbalStickMapping() }
 
-    /// ISO, shutter, white balance and record go through OpenCineCore (CameraSessionCore.swift).
-    @ObservationIgnored var core = CoreControl()
-    /// Camera-reported recording: nil while unknown. `status.isRecording` shows unknown as idle;
-    /// confirmations need a known value.
-    var reportedRecording: Bool?
+    /// ISO, shutter, white balance and record: the shared monitor controls, bound by the shell
+    /// to the connected camera's common session (CameraSessionCore.swift).
+    @ObservationIgnored let control = MonitorControlModel()
 
     // Luna settings bookkeeping (see LunaShellMapping).
     @ObservationIgnored var lunaSettings = LunaPhotographySettings.empty
@@ -336,6 +340,7 @@ final class CameraSession {
         self.cameraMedia = cameraMedia ?? CameraMedia()
         self.decoder = sharedDecoder ?? HevcDecoder()
         self.backend = backend
+        adoptControl()
         decoder.onPresentedFrame = { [weak self] in self?.noteLiveFrame() }
         decoder.onPictureSizeChanged = { [weak self] in
             guard let self else { return }
@@ -440,7 +445,9 @@ final class CameraSession {
             return
         }
         guard ownsBackend else { return }
-        if !preserveMonitor { attachCore(newConnectionSession()) }
+        // A reconnect of the same camera keeps the common session the shell holds: it follows
+        // the link (recovering, then a new control epoch).
+        if !preserveMonitor { resetForConnection() }
         let generation = prepareConnection(to: camera, preserveMonitor: preserveMonitor)
         let descriptor =
             descriptors[camera.id]
@@ -469,13 +476,12 @@ final class CameraSession {
         }
     }
 
-    /// A fresh status, link health and decoder, and the next connection's core session.
-    private func newConnectionSession() -> LunaCameraSession {
+    /// A fresh status, link health and decoder for the next connection.
+    private func resetForConnection() {
         statusStorage = CameraStatus()
         publishStatusNow()
         resetLinkHealthMeasurements()
         decoder.reset()
-        return backend.openSession()
     }
 
     /// What every connect sets before the backend runs; returns its generation.
@@ -510,7 +516,6 @@ final class CameraSession {
         scanTask?.cancel()
         runTask?.cancel()
         runTask = nil
-        detachCore()
         expectedDisconnect = true
         backend.stopScan()
         backend.disconnect()
@@ -733,7 +738,7 @@ final class CameraSession {
             ? max(Int(capture.captureSeconds), recordStartedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0)
             : 0
         status = next
-        if core.recordOperation == nil, controlBusy, !pins.photoInFlight { controlBusy = false }
+        if photoBusy, !pins.photoInFlight { photoBusy = false }
     }
 
     private func applyNotification(_ note: LunaNotification) {
@@ -1365,10 +1370,10 @@ extension CameraSession: LunaConnectPort {
         }
     }
 
+    /// The attempt's common session; the shell binds it to the monitor once it connects.
     func openSession() -> LunaCameraSession {
-        let session = newConnectionSession()
-        attachCore(session)
-        return session
+        resetForConnection()
+        return backend.openSession()
     }
 
     func forget(cameraID: UUID) { backend.forget(cameraID: cameraID) }

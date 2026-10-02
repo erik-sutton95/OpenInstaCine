@@ -21,33 +21,33 @@ final class CoreRecordControlTests: XCTestCase {
         let camera = FakeLuna()
         camera.captureState = nil
         let shell = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
-        shell.attachCore(camera.connectedSession())
-        try await waitUntil { shell.core.snapshot != nil }
+        shell.control.bind(camera.connectedSession())
+        try await waitUntil { shell.control.snapshot != nil }
         shell.toggleRecording()
         try await waitUntil { !shell.controlBusy }
         XCTAssertTrue(camera.sent.isEmpty, "unknown recording must not send a toggle")
-        XCTAssertNil(shell.reportedRecording)
+        XCTAssertNil(shell.control.isRecording)
         XCTAssertNotNil(shell.controlNote)
 
         camera.captureState = 1
         camera.reportCapture()
-        try await waitUntil { shell.reportedRecording == true }
+        try await waitUntil { shell.control.isRecording == true }
         XCTAssertTrue(shell.status.isRecording)
         shell.toggleRecording()
         XCTAssertTrue(shell.controlBusy, "the lamp holds until the camera reports")
         try await waitUntil { !shell.controlBusy }
         XCTAssertEqual(camera.sent.map(\.command), [.stopCapture])
-        XCTAssertEqual(shell.reportedRecording, false)
+        XCTAssertEqual(shell.control.isRecording, false)
         XCTAssertFalse(shell.status.isRecording)
 
         // A confirmed start while the camera already records sends nothing.
         camera.captureState = 1
         camera.reportCapture()
-        try await waitUntil { shell.reportedRecording == true }
+        try await waitUntil { shell.control.isRecording == true }
         shell.setRecording(start: true)
         try await waitUntil { !shell.controlBusy }
         XCTAssertEqual(camera.sent.count, 1)
-        shell.detachCore()
+        shell.control.unbind()
     }
 }
 
@@ -123,28 +123,30 @@ final class SessionIsolationTests: XCTestCase {
         // Commands and teardown: each Core session drives only its camera; closing A leaves B working.
         let cameraA = FakeLuna()
         let cameraB = FakeLuna()
-        a.attachCore(cameraA.connectedSession())
-        b.attachCore(cameraB.connectedSession())
-        try await waitUntil { a.reportedRecording == false && b.reportedRecording == false }
+        a.control.bind(cameraA.connectedSession())
+        b.control.bind(cameraB.connectedSession())
+        try await waitUntil { a.control.isRecording == false && b.control.isRecording == false }
         a.setRecording(start: true)
         b.setRecording(start: true)
         try await waitUntil { !a.controlBusy && !b.controlBusy }
         XCTAssertEqual(cameraA.sent.map(\.command), [.startCapture])
         XCTAssertEqual(cameraB.sent.map(\.command), [.startCapture])
-        XCTAssertEqual(a.reportedRecording, true)
-        XCTAssertEqual(b.reportedRecording, true)
+        XCTAssertEqual(a.control.isRecording, true)
+        XCTAssertEqual(b.control.isRecording, true)
 
         let closedA = try XCTUnwrap(cameraA.session)
-        a.detachCore()
+        // The shell retires A's controls and closes its session; B is untouched.
+        a.control.unbind()
+        closedA.close(.requested)
         try await waitUntil { closedA.current.connection != .ready }
         b.setRecording(start: false)
         try await waitUntil { !b.controlBusy }
         XCTAssertEqual(cameraB.sent.map(\.command), [.startCapture, .stopCapture])
-        XCTAssertEqual(b.reportedRecording, false)
+        XCTAssertEqual(b.control.isRecording, false)
         XCTAssertEqual(cameraA.sent.map(\.command), [.startCapture], "closing never sends a command")
         let shownB = try XCTUnwrap(cameraB.session).current
         XCTAssertEqual(shownB.connection, .ready)
-        b.detachCore()
+        b.control.unbind()
     }
 
     func testALeaseNeverTakesTheOwnersCallbacks() {
@@ -167,7 +169,7 @@ final class SessionIsolationTests: XCTestCase {
         camera.applyDelay = .milliseconds(150)
         let shell = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
         let core = camera.connectedSession()
-        shell.attachCore(core)
+        shell.control.bind(core)
         let epoch = core.current.epoch
         let command = CameraCommand(
             .set(.iso(.manual(800))), preconditions: CommandPreconditions(core.current))
@@ -185,7 +187,7 @@ final class SessionIsolationTests: XCTestCase {
         let stale = await core.submit(
             CameraCommand(.set(.iso(.manual(400))), preconditions: command.preconditions))
         XCTAssertEqual(stale.stage, .rejected(.staleEpoch))
-        shell.detachCore()
+        shell.control.unbind()
     }
 }
 
@@ -198,7 +200,7 @@ final class LunaLayoutTests: XCTestCase {
         var base = MonitorLayoutCapabilities()
         (base.clipDelete, base.clipStar, base.requiresInternetHop) = (true, true, true)
         XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), base)
-        shell.attachCore(FakeLuna().connectedSession())
+        shell.control.bind(FakeLuna().connectedSession())
         var luna = base
         (luna.gimbal, luna.headTracking, luna.zoom, luna.focus, luna.timecode) = (true, true, true, true, true)
         XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), luna, "no audio levels, no iris")

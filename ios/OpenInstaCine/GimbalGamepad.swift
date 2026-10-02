@@ -97,7 +97,7 @@ final class GimbalGamepadBridge {
         guard let model else { return false }
         if model.session.isLocked { return false }
         if model.session.isBrowsingMedia { return false }
-        if model.liveOperatorPanel != nil { return false }
+        if model.shell.cover != nil { return false }
         if model.isEditingChrome { return false }
         return model.isLive && model.session.hasControlLink
     }

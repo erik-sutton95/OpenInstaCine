@@ -397,7 +397,7 @@ struct CaptureReadoutGesture: ViewModifier {
     private var canBegin: Bool {
         CaptureReadoutAdmission.canBegin(
             locked: locked, sessionLocked: model.session.isLocked,
-            sceneActive: scenePhase == .active, operatorPanel: model.liveOperatorPanel != nil)
+            sceneActive: scenePhase == .active, operatorPanel: model.shell.cover != nil)
     }
 
     private var canCommit: Bool {

@@ -84,7 +84,7 @@ enum OperatorSettingsTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// OpenZCine `OperatorSettingsPanel` chrome. Live chrome presents this; home uses `homePanel`.
+/// OpenZCine `OperatorSettingsPanel` chrome. Live chrome presents this; home uses `AppPanelHost`.
 ///
 /// `safeArea` is the host-processed inset (OpenZCine `fullScreenPanelSafeArea` / standalone
 /// cover): landscape zeros the clean short edge. Do not read `GeometryReader.safeAreaInsets`
@@ -161,7 +161,7 @@ struct SettingsRootView: View {
         if let onClose {
             onClose()
         } else {
-            model.homePanel = nil
+            model.shell.dismissCover()
         }
     }
 

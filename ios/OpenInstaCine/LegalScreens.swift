@@ -69,7 +69,7 @@ struct LegalDocumentView: View {
         if let onClose {
             onClose()
         } else {
-            model.homePanel = nil
+            model.shell.dismissCover()
         }
     }
 

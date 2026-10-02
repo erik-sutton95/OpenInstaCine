@@ -1,5 +1,6 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineAppKit
 import OpenPocketViewCore
 import SwiftUI
 
@@ -29,7 +30,7 @@ struct LiveViewScreen: View {
     /// batteries, rail (DISP / record / media / settings) stay. Lock remounts while locked.
     private var editingMode: PocketDispMode? { model.chromeEditorMode }
     private var chromeInteractive: Bool { !model.isEditingChrome }
-    private var liveChromeVisible: Bool { model.liveOperatorPanel == nil || model.isEditingChrome }
+    private var liveChromeVisible: Bool { model.shell.cover == nil || model.isEditingChrome }
     private var showsStatusBar: Bool { model.chromeSectionMounts(.statusBar) }
     private var showsBottomBars: Bool {
         model.chromeSectionMounts(.toolBar) || model.chromeSectionMounts(.cameraValues)
@@ -53,7 +54,7 @@ struct LiveViewScreen: View {
     private var hasInteractivePopup: Bool {
         guard chromeInteractive, !interfaceLocked else { return false }
         return (showsStatusBar && topMenu != nil)
-            || (model.liveOperatorPanel == nil && !model.assist.gradesClip
+            || (model.shell.cover == nil && !model.assist.gradesClip
                 && model.assist.configureTool != nil)
             || (showsGimbalButton && model.liveGimbalPanel == .sheet)
             || model.captureSheet != nil
@@ -164,16 +165,16 @@ struct LiveViewScreen: View {
         // Camera-body gallery follows DJI Mimo: open Media with it, and close
         // Media (which returns the camera to live) when the body leaves it.
         .onChange(of: model.session.cameraGalleryOpen) { _, open in
-            if open, model.liveOperatorPanel == nil {
-                model.liveOperatorPanel = .media
-            } else if !open, model.liveOperatorPanel == .media {
-                model.liveOperatorPanel = nil
+            if open, model.shell.cover == nil {
+                model.shell.open(.media)
+            } else if !open, model.shell.cover == .media {
+                model.shell.dismissCover()
             }
         }
         .onChange(of: liveChromeVisible, initial: true) { _, visible in
             model.assist.liveCovered = !visible
         }
-        .onChange(of: model.liveOperatorPanel) { oldPanel, panel in
+        .onChange(of: model.shell.cover) { oldPanel, panel in
             model.session.incidentSettingsCovered = panel == .settings
             if oldPanel == .settings { model.session.recordFeedBreadcrumb(.settingsExit) }
             if panel == .settings { model.session.recordFeedBreadcrumb(.settingsEnter) }
@@ -338,7 +339,7 @@ struct LiveViewScreen: View {
             // The expanded Motion editor owns its outside-tap minimization
             // region above camera controls, including the stable Record layer.
             if showsGimbalButton, chromeInteractive, !interfaceLocked,
-                model.liveOperatorPanel == nil
+                model.shell.cover == nil
             {
                 LiveGimbalOverlay(
                     layout: layout, feed: layout.onFeed,
@@ -357,7 +358,7 @@ struct LiveViewScreen: View {
                 .zIndex(15)
             }
 
-            if let panel = model.liveOperatorPanel, !model.isEditingChrome {
+            if let panel = model.shell.cover, !model.isEditingChrome {
                 operatorPanelCover(panel, layout: layout)
                     .transition(.identity)
                     .zIndex(20)
@@ -414,7 +415,7 @@ struct LiveViewScreen: View {
                         model.portraitFeedAspect == .fill ? 1 : 0,
                     ])
             ],
-            enabled: model.liveOperatorPanel == nil && !model.assist.gradesClip
+            enabled: model.shell.cover == nil && !model.assist.gradesClip
                 && !model.isWatchingFeed
                 && !model.session.isFeedWarming
         ) { _ in
@@ -471,7 +472,7 @@ struct LiveViewScreen: View {
                     calibrate: model.headTrackingEnabled
                         && OsmoMonitorPresentation.capabilities(model.session).headTracking
                         ? layout.gimbalCalibrate : .zero,
-                    enabled: !interfaceLocked && model.liveOperatorPanel == nil
+                    enabled: !interfaceLocked && model.shell.cover == nil
                         && chromeInteractive
                 )
             }
@@ -583,7 +584,7 @@ struct LiveViewScreen: View {
             LiveStatusScope { status in
                 if model.chromeSectionMounts(.railSettings) || status.isRecording {
                     LiveSettingsButton(size: layout.settings.width) {
-                        model.liveOperatorPanel = .settings
+                        model.shell.open(.settings)
                     }
                     .chromeEditable(.railSettings, editing: editingMode)
                     .liveModuleFrame(layout.settings)
@@ -594,7 +595,7 @@ struct LiveViewScreen: View {
                 }
             }
             if model.chromeSectionMounts(.railMedia) && !model.session.isMultiviewBorrowed {
-                LiveMediaButton(size: layout.media.width) { model.liveOperatorPanel = .media }
+                LiveMediaButton(size: layout.media.width) { model.shell.open(.media) }
                     .chromeEditable(.railMedia, editing: editingMode)
                     .liveModuleFrame(layout.media)
                     .opacity(captureHidesNavigation ? 0 : 1)
@@ -633,7 +634,7 @@ struct LiveViewScreen: View {
                 && model.chromeSectionMounts(.gimbalStick)
             {
                 LiveGimbalStick(
-                    enabled: !interfaceLocked && model.liveOperatorPanel == nil
+                    enabled: !interfaceLocked && model.shell.cover == nil
                         && chromeInteractive && !captureControlsPresented,
                     frame: Self.cgRect(self.gimbalCluster(layout).stick),
                     feed: layout.feed
@@ -654,7 +655,7 @@ struct LiveViewScreen: View {
             if model.headTrackingEnabled,
                 OsmoMonitorPresentation.capabilities(model.session).headTracking,
                 !interfaceLocked, chromeInteractive,
-                model.liveOperatorPanel == nil
+                model.shell.cover == nil
             {
                 LiveHeadTrackCalibrateButton(
                     title: model.headTrackControlTitle, onTap: { headphones.tapControl() }
@@ -756,7 +757,7 @@ struct LiveViewScreen: View {
             )
         }
 
-        if chromeInteractive, model.liveOperatorPanel == nil, !model.assist.gradesClip,
+        if chromeInteractive, model.shell.cover == nil, !model.assist.gradesClip,
             let tool = model.assist.configureTool, !interfaceLocked
         {
             AssistLongPressOverlay(
@@ -917,24 +918,24 @@ struct LiveViewScreen: View {
         return model.assist.longPressAnchor
     }
 
-    /// Live rail presents the real pages with `onClose`. Home still uses `model.homePanel`.
+    /// Live rail presents the real pages with `onClose` (the shell cover). Home: `AppPanelHost`.
     /// Settings gets OpenZCine `fullScreenPanelSafeArea` from the monitor's real insets —
     /// this overlay sits on an `ignoresSafeArea` canvas, so a child GeometryReader reads 0.
     @ViewBuilder
-    private func operatorPanelCover(_ panel: LiveOperatorPanel, layout: LiveMonitorLayout)
+    private func operatorPanelCover(_ panel: ShellModel.Cover, layout: LiveMonitorLayout)
         -> some View
     {
         switch panel {
         case .settings:
             SettingsRootView(
                 safeArea: settingsSafeArea(from: layout),
-                onClose: { model.liveOperatorPanel = nil }
+                onClose: { model.shell.dismissCover() }
             )
             .frame(width: layout.viewport.width, height: layout.viewport.height)
         case .media:
             MediaLibraryView(
                 safeArea: settingsSafeArea(from: layout),
-                onClose: { model.liveOperatorPanel = nil }
+                onClose: { model.shell.dismissCover() }
             )
             .frame(width: layout.viewport.width, height: layout.viewport.height)
         }

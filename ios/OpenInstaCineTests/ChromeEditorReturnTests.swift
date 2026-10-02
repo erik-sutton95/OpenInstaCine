@@ -1,3 +1,5 @@
+import Insta360Apple
+import OpenCineCore
 import OpenPocketViewCore
 import XCTest
 
@@ -5,46 +7,59 @@ import XCTest
 
 /// OpenZCine `ChromeEditorReturnTests` — Edit view entry, exit, and force-mount.
 final class ChromeEditorReturnTests: XCTestCase {
+    /// A connect presents the monitor through the shell: no leftover cover or Edit view.
     @MainActor
     func testBecomingLiveDismissesSettingsAndHomePanels() {
         let model = AppModel()
-        model.homePanel = .settings
-        model.liveOperatorPanel = .settings
+        model.shell.open(.settings)
         model.operatorSettingsTab = .display
         model.chromeEditorMode = .live
         model.chromeEditorReturnMode = .live
 
-        model.noteBecameLive()
+        model.shell.present(Self.camera(model))
+        model.noteMonitorChanged()
 
-        XCTAssertNil(model.homePanel)
-        XCTAssertNil(model.liveOperatorPanel)
+        XCTAssertTrue(model.isLive)
+        XCTAssertNil(model.shell.cover)
         XCTAssertNil(model.chromeEditorMode)
         XCTAssertNil(model.chromeEditorReturnMode)
         XCTAssertFalse(model.liveChromeInteractive)
+        model.shell.close()
     }
 
     @MainActor
     func testLeavingLiveDismissesOperatorSetup() {
         let model = AppModel()
-        model.liveOperatorPanel = .settings
+        model.shell.present(Self.camera(model))
+        model.shell.open(.settings)
         model.chromeEditorMode = .clean
 
-        model.noteLeftLive()
+        model.shell.close()
+        model.noteMonitorChanged()
 
-        XCTAssertNil(model.liveOperatorPanel)
+        XCTAssertFalse(model.isLive)
+        XCTAssertNil(model.shell.cover)
         XCTAssertNil(model.chromeEditorMode)
         XCTAssertTrue(model.liveChromeInteractive)
+    }
+
+    /// An unconnected Luna session on the monitor, as a connect hands it over.
+    @MainActor
+    static func camera(_ model: AppModel) -> ConnectedCamera {
+        ConnectedCamera(
+            saved: SavedCamera(id: UUID().uuidString, integration: LunaCameraSession.integration, advertisedName: "Luna", model: "Luna Ultra"),
+            session: model.session.backend.openSession())
     }
 
     @MainActor
     func testOpeningTheEditorLeavesSettingsAndSwitchesMode() {
         let model = AppModel()
-        model.liveOperatorPanel = .settings
+        model.shell.open(.settings)
         model.assist.clean = false
 
         model.beginChromeEditing(.clean)
 
-        XCTAssertNil(model.liveOperatorPanel)
+        XCTAssertNil(model.shell.cover)
         XCTAssertTrue(model.assist.clean)
         XCTAssertEqual(model.chromeEditorMode, .clean)
         XCTAssertEqual(model.currentDispMode, .clean)
@@ -58,7 +73,7 @@ final class ChromeEditorReturnTests: XCTestCase {
         model.endChromeEditing()
 
         XCTAssertNil(model.chromeEditorMode)
-        XCTAssertEqual(model.liveOperatorPanel, .settings)
+        XCTAssertEqual(model.shell.cover, .settings)
         XCTAssertEqual(model.operatorSettingsTab, .display)
         XCTAssertEqual(model.chromeEditorReturnMode, .clean)
     }

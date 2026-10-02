@@ -204,7 +204,7 @@
 
         private func handle(_ action: MonitorMediaAction) {
             switch action {
-            case .back: model.liveOperatorPanel = nil
+            case .back: model.shell.dismissCover()
             case .refresh: break
             case .cycleSort: ascending.toggle()
             case .category(let id): category = id
