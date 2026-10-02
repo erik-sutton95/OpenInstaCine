@@ -83,7 +83,7 @@ fun PairingCallouts(model: AppModel, discovery: PermissionGate, onEnableBluetoot
         if (!radioOn) {
             PairingCallout(
                 title = "Bluetooth",
-                body = "Turn Bluetooth on so we can find your Pocket.",
+                body = "Turn Bluetooth on so we can find your camera.",
                 icon = MonitorIcon.RADIO,
                 action = "Turn on",
                 onAction = onEnableBluetooth,
@@ -97,8 +97,8 @@ fun PairingCallouts(model: AppModel, discovery: PermissionGate, onEnableBluetoot
                     discovery.needsSettings ->
                         "Android won’t ask again. Open Settings › Permissions › $name and choose Allow."
                     DiscoveryPermissions.discoveryNeedsLocationServices() ->
-                        "Android 10 and 11 need Location to scan for Bluetooth cameras. It is only used to find your Pocket."
-                    else -> "Allow Nearby devices so we can find your Pocket over Bluetooth. Location isn’t needed."
+                        "Android 10 and 11 need Location to scan for Bluetooth cameras. It is only used to find your camera."
+                    else -> "Allow Nearby devices so we can find your camera over Bluetooth. Location isn’t needed."
                 },
                 icon = MonitorIcon.RADIO,
                 action = if (discovery.needsSettings) "Open Settings" else "Allow",

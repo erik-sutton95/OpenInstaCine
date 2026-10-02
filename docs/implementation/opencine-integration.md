@@ -145,6 +145,28 @@ Known limits: two Luna cameras at once cannot be tested (LunaWiFi joins one came
 192.168.42.x); the two-session gate is simulated only. Android reports no serial on this path,
 so EV keys use the connected camera id.
 
+## SHELL-02 candidate verification
+
+The candidate pins OpenCine `399c3c7` for the shared connection flow. Automated checks on
+2026-10-02 pass: `just check`, 595 root Swift tests, `just android-check` (695 monitor tests,
+including six saved-camera migration cases), and the iOS suite on private iPhone 16 Pro and
+iPad Pro 13-inch simulators (500 tests each: 499 pass, one existing missing D-Log2 cube skip).
+The handbook builds with 27 pages.
+
+The migration fixtures exercise import, repeated import, legacy decoding after edits,
+downgrade edits merged on upgrade, malformed record preservation and an unknown future
+document version. The iOS model test also reconnects a saved camera without a fresh discovery
+advertisement. Simulator installation of the previous and new binaries preserves saved
+records across upgrade, downgrade and another upgrade after legacy edits.
+
+Before/after simulated camera and pairing screens cover saved plus nearby cameras, empty,
+connecting, approval, network join, video link and failure states on iPhone and Android, with
+saved cameras and approval on iPad. The visible differences are listed above; Android's
+optional iOS appearance switch remains unchanged. The shared connection model's Android
+scope is cancelled when the activity closes so its discovery and connection collectors end
+with the monitor. Physical pairing, reconnect, cancellation, recovery and credential
+preservation remain **untested**, pending checklist item 15.
+
 ## MEDIA-02 step 4: Apple runtime
 
 Branch `opencine/apple` (on this candidate) runs `HevcDecoder` on OpenCineCore's `OpenCineApple`

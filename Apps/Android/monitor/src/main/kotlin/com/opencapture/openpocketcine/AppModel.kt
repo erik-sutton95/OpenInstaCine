@@ -32,6 +32,7 @@ import com.opencapture.openpocketcine.session.VideoFormat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /** [borrowing] builds a Live View model over a Multiview tile's decoder (iOS `CameraSession(borrowing:)`). */
@@ -463,6 +464,7 @@ class AppModel(
 
     fun close() {
         gimbalGamepad.stopListening()
+        scope.cancel()
         session.close()
     }
 
