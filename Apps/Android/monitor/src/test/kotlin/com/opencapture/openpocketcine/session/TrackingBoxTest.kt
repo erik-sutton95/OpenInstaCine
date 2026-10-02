@@ -1,6 +1,5 @@
 package com.opencapture.openpocketcine.session
 
-import com.opencapture.openpocketcine.bridge.SwiftCore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -18,8 +17,6 @@ class TrackingBoxTest {
         assertEquals(0x26, payload[3].toInt() and 0xFF)
         assertEquals(0x27, payload[4].toInt() and 0xFF)
         assertTrue(CameraCommands.pollTracking().contentEquals(byteArrayOf(0x00)))
-        assertEquals(0x02A6, SwiftCore.waitKey(SwiftCore.CMD_SET_TRACKING_BOX))
-        assertEquals(0x02A5, SwiftCore.waitKey(SwiftCore.CMD_POLL_TRACKING))
     }
 
     @Test

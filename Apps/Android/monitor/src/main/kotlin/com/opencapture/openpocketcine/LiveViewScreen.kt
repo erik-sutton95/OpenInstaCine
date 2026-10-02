@@ -1423,10 +1423,7 @@ internal fun LandscapeChrome(
                 )
             }
         }
-        val multiviewExit = model.multiviewExit
-        if (multiviewExit != null) {
-            Box(Modifier.liveModuleFrame(layout.lock)) { MultiviewReturnButton(onClick = multiviewExit) }
-        } else if (showsLock) {
+        if (showsLock) {
             Box(Modifier.liveModuleFrame(layout.lock).chromeEditStroke(editing != null, true)) {
                 LockButton(uiLocked, onClick = onLock)
             }

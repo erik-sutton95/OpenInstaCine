@@ -34,7 +34,7 @@ data class SavedCamera(
     val lastSSID: String?,
     val lastConnectedAt: Long,
     val customName: String? = null,
-    /** Network names for the Wi-Fi and Hotspot setups; null means not added. Passwords stay in [com.opencapture.openpocketcine.multiview.MultiviewNetworkStore]. */
+    /** Network names for the Wi-Fi and Hotspot setups; null means not added. Luna never adds them. */
     val wifiSSID: String? = null,
     val hotspotSSID: String? = null,
     /**

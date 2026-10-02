@@ -10,7 +10,6 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
-import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.opencine.media.LivePipelineCadence
 import com.opencapture.openpocketcine.session.SessionRecoveryUi
 import java.io.File
@@ -92,7 +91,7 @@ class FeedStressTest {
             summary.put("camera_model_id", model.session.connectedCamera?.modelId ?: -1)
             scenario.onActivity {
                 model.session.debugCameraSetResult = { key, ok ->
-                    if (key == SwiftCore.waitKey(SwiftCore.CMD_SET_ISO_INDEX)) {
+                    if (key == 0x022A) { // ISO index SET ack key (`0x02/0x2A`)
                         if (ok) acknowledgments.incrementAndGet() else commandFailures.incrementAndGet()
                     }
                 }

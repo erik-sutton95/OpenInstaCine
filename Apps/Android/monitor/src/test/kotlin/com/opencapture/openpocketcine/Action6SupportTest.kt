@@ -4,7 +4,6 @@ import com.opencapture.openpocketcine.session.ApertureStrategy
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraModel
 import com.opencapture.openpocketcine.session.CameraStatus
-import com.opencapture.openpocketcine.session.DatalinkDriver
 import com.opencapture.openpocketcine.session.StatusExtras
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -67,13 +66,6 @@ class Action6SupportTest {
         assertEquals(0, off[1].toInt())
         assertEquals(15, off.size)
         assertEquals(15, CameraCommands.setMediaFavorite(1, true, 9).size) // Pocket keeps its layout
-    }
-
-    @Test fun subscriptionsAppendApertureKeysOnlyForAction6() {
-        val base = DatalinkDriver.subscriptionKeys(CameraModel(name = "Osmo Pocket 4"))
-        val a6 = DatalinkDriver.subscriptionKeys(CameraModel(name = action6))
-        assertEquals(base, a6.take(base.size))
-        assertEquals(listOf(ApertureStrategy.STATE_KEY, ApertureStrategy.CAPABILITY_KEY), a6.drop(base.size))
     }
 
     @Test fun apertureParsing() {

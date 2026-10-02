@@ -41,11 +41,7 @@ class AppModel(
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val store = SharedPreferencesSavedCameraStore(context)
-    /** Wi-Fi and Hotspot passwords, shared with Multiview (iOS `MultiviewNetworkStore`). */
-    private val networkStore = com.opencapture.openpocketcine.multiview.MultiviewNetworkStore(context)
     val session = PocketCameraSession(context, borrowing, controlLease)
-    /** Set while this Live View borrows a Multiview tile; replaces the lock button. */
-    var multiviewExit by mutableStateOf<(() -> Unit)?>(null)
     val assist = LiveAssistState.from(appContext)
 
     var savedCameras by mutableStateOf(store.load())
@@ -56,8 +52,6 @@ class AppModel(
     var focusBoxLocked by mutableStateOf(false)
     var coreVersion by mutableStateOf<String?>(null)
     var homePanel by mutableStateOf<AppPanel?>(null)
-    /** The Multiview stage covers the camera home until it closes. */
-    var showsMultiview by mutableStateOf(false)
     var liveOperatorPanel by mutableStateOf<LiveOperatorPanel?>(null)
     var operatorSettingsTab by mutableStateOf(OperatorSettingsTab.LINK)
     var chromeEditorMode by mutableStateOf<PocketDispMode?>(null)
@@ -481,47 +475,13 @@ class AppModel(
             savedCameras = SavedCameras.stamping(setup, camera.id, savedCameras)
             store.save(savedCameras)
         }
-        val network = camera.ssid(setup)?.takeIf { setup.movesCamera }
-            ?.let { networkStore.load(it, setup == CameraConnectionSetup.PHONE_HOTSPOT) }
-        session.useSetup(setup, network, restoreAccessPoint = camera.lastSetup?.movesCamera == true)
         session.reconnect(camera.id)
-    }
-
-    /** Password goes to the store Multiview also reads; the name stays per camera. */
-    fun addSetup(setup: CameraConnectionSetup, ssid: String, password: String, camera: SavedCamera) {
-        if (!setup.movesCamera) return
-        networkStore.save(ssid, password, setup == CameraConnectionSetup.PHONE_HOTSPOT)
-        savedCameras = SavedCameras.setting(setup, ssid, camera.id, savedCameras)
-        store.save(savedCameras)
-        savedCameras.firstOrNull { it.id == camera.id }?.let { reconnect(it, setup) }
     }
 
     fun forgetSetup(setup: CameraConnectionSetup, camera: SavedCamera) {
         savedCameras = SavedCameras.setting(setup, null, camera.id, savedCameras)
         store.save(savedCameras)
     }
-
-    /** Add setup's camera scan, or null when the camera is not nearby or already in use. */
-    fun networkScan(camera: SavedCamera): (suspend ((String) -> Unit) -> Unit)? {
-        val found = session.found.value.firstOrNull { it.id == camera.id } ?: return null
-        if (session.connectedCamera?.id == camera.id) return null
-        return { onFound ->
-            com.opencapture.openpocketcine.multiview.MultiviewProvisioner(appContext).scanNetworks(
-                found,
-                // Stamped first: the scan moves the camera to station role, so a lost reset
-                // is repaired by the next Camera Wi-Fi connect.
-                beforeStationChange = {
-                    savedCameras = SavedCameras.stamping(CameraConnectionSetup.WIFI, camera.id, savedCameras)
-                    store.save(savedCameras)
-                },
-                onRestored = {},
-                onFound = onFound,
-            )
-        }
-    }
-
-    fun savedNetworks(): List<com.opencapture.openpocketcine.multiview.MultiviewNetworkStore.Network> =
-        networkStore.savedNetworks()
 
     fun forget(camera: SavedCamera) {
         savedCameras = SavedCameras.removing(camera.id, savedCameras)
@@ -552,19 +512,6 @@ class AppModel(
         savedCameras = SavedCameras.upserting(record, savedCameras)
         store.save(savedCameras)
         isPairingNewCamera = false
-    }
-
-    /** iOS `SavedCamerasView.onMultiview`: the single-camera session hands the radio to the stage. */
-    fun openMultiview() {
-        if (session.phaseFlow.value.isBusy() || session.isReconnecting.value) return
-        if (!session.supportsMultiview) return
-        session.disconnect()
-        showsMultiview = true
-    }
-
-    fun closeMultiview() {
-        showsMultiview = false
-        session.startScan()
     }
 
     fun disconnect() {

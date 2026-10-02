@@ -47,15 +47,10 @@ import com.opencapture.openpocketcine.AppPanel
 import com.opencapture.openpocketcine.OpcIcon
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.monitor.MonitorIconButton
-import com.opencapture.openpocketcine.bridge.SwiftCore
-import com.opencapture.openpocketcine.multiview.SharedWiFi
-import com.opencapture.openpocketcine.multiview.appearsInMultiview
 import com.opencapture.openpocketcine.session.FoundCamera
-import androidx.compose.ui.platform.LocalContext
 import com.opencapture.monitorui.MonitorConnectFailure
 import com.opencapture.monitorui.MonitorConnectStep
 import com.opencapture.monitorui.MonitorSetupChip
-import org.json.JSONObject
 
 @Composable
 fun SavedCamerasExperience(model: AppModel) {
@@ -65,9 +60,6 @@ fun SavedCamerasExperience(model: AppModel) {
     val targetId by model.session.connectionTargetId.collectAsState()
     val failureReason by model.session.failure.collectAsState()
     val setupProgress by model.session.setupProgress.collectAsState()
-    val context = LocalContext.current
-    val wifi = remember { SharedWiFi(context) }
-    var addSetup by remember { mutableStateOf<AddSetupTarget?>(null) }
     val busy = phase.isBusy() || reconnecting
     val connectingLabel = if (reconnecting && phase == ConnectionPhase.SCANNING) {
         "Looking for camera…"
@@ -94,7 +86,6 @@ fun SavedCamerasExperience(model: AppModel) {
         emptyMessage = "Pair a new camera to start monitoring.",
         scanning = phase == ConnectionPhase.SCANNING,
         actions = {
-            if (model.session.supportsMultiview) MultiviewHeaderButton(enabled = !busy, onClick = model::openMultiview)
             // Same footprint as Live View's settings/media buttons.
             val side = MonitorLayoutPolicy.systemButtonSize(headerTablet())
             MonitorIconButton(
@@ -120,11 +111,9 @@ fun SavedCamerasExperience(model: AppModel) {
                     val connecting = busy && targetId == camera.id
                     val reason = failureReason
                     val failed = !busy && phase == ConnectionPhase.FAILED && targetId == camera.id && reason != null
+                    // Luna has only the Camera Wi-Fi setup: the Wi-Fi and Hotspot setups are DJI
+                    // station mode, so nothing here adds, edits or switches setups.
                     val setup = model.session.connectionSetup
-                    val appears = remember(camera.modelName, nearby) {
-                        // Wi-Fi and Hotspot setups are Multiview station mode; off where Multiview is.
-                        model.session.supportsMultiview && appearsInMultiview(camera, nearby)
-                    }
                     SavedCameraRow(
                         camera = camera,
                         nearby = nearby,
@@ -137,30 +126,22 @@ fun SavedCamerasExperience(model: AppModel) {
                         onRename = { model.rename(camera, it) },
                         onRemove = { model.forget(camera) },
                         setups = SavedCameraSetupPresentation.chips(camera, setup.takeIf { connecting || failed }),
-                        canAddSetup = SavedCameraSetupPresentation.canAddSetup(camera, appears),
+                        canAddSetup = false,
                         steps = if (connecting) {
                             SavedCameraSetupPresentation.steps(phase, setup, camera, setupProgress, connectingLabel)
                         } else emptyList(),
                         failure = if (failed && reason != null) {
-                            SavedCameraSetupPresentation.failure(reason, setup, camera, wifi.address(true) != null)
+                            SavedCameraSetupPresentation.failure(reason, setup, camera, hotspotActive = false)
                         } else null,
                         onSetup = { chip ->
                             CameraConnectionSetup.fromRaw(chip.id)?.let { model.reconnect(camera, it) }
                         },
-                        onAddSetup = { addSetup = AddSetupTarget(camera) },
+                        onAddSetup = {},
                         onForgetSetup = { chip ->
                             CameraConnectionSetup.fromRaw(chip.id)?.let { model.forgetSetup(it, camera) }
                         },
-                        onFailureAction = { action ->
-                            when (action) {
-                                SavedCameraSetupPresentation.ACTION_EDIT -> addSetup =
-                                    if (setup == CameraConnectionSetup.PHONE_HOTSPOT) AddSetupTarget(camera, "hotspot")
-                                    else AddSetupTarget(camera, "password", camera.wifiSSID.orEmpty())
-                                SavedCameraSetupPresentation.ACTION_CAMERA_WIFI ->
-                                    model.reconnect(camera, CameraConnectionSetup.CAMERA_WIFI)
-                                else -> model.reconnect(camera, setup)
-                            }
-                        },
+                        // A Camera Wi-Fi failure offers only "Try again".
+                        onFailureAction = { model.reconnect(camera, setup) },
                     )
                 }
                 is HomeCamera.Nearby ->
@@ -178,36 +159,7 @@ fun SavedCamerasExperience(model: AppModel) {
             PairNewCameraFooter(enabled = !busy, onClick = model::pairNewCamera)
         },
     )
-    addSetup?.let { target ->
-        StationNetworkSetup(
-            savedNetworks = model.savedNetworks(),
-            currentSsid = wifi::currentSsid,
-            hotspotActive = { wifi.address(true) != null },
-            scan = model.networkScan(target.camera),
-            connect = { network ->
-                val setup = if (network.hotspot) CameraConnectionSetup.PHONE_HOTSPOT else CameraConnectionSetup.WIFI
-                model.addSetup(setup, network.ssid, network.password, target.camera)
-                null
-            },
-            cancel = { addSetup = null },
-            complete = { addSetup = null },
-            camera = target.camera,
-            startPage = target.page,
-            startNetwork = target.network,
-        )
-    }
 }
-
-/** Add setup, or Edit setup reopening a failed setup on its password or hotspot page. */
-private data class AddSetupTarget(val camera: SavedCamera, val page: String = "choose", val network: String = "")
-
-/** Saved records carry no model id; the advertised model name resolves support when not nearby. */
-private fun appearsInMultiview(camera: SavedCamera, nearby: FoundCamera?): Boolean =
-    nearby?.appearsInMultiview ?: runCatching {
-        SwiftCore.isAvailable && JSONObject(
-            SwiftCore.multicamDecision("support", JSONObject().put("name", camera.modelName).toString()) ?: "{}",
-        ).optBoolean("appears")
-    }.getOrDefault(false)
 
 @Composable
 private fun SavedCameraRow(
@@ -433,39 +385,3 @@ private fun headerWindow(): Pair<Float, Float> {
 
 @Composable
 private fun headerTablet(): Boolean = headerWindow().let { (w, h) -> minOf(w, h) >= 600f }
-
-@Composable
-private fun MultiviewHeaderButton(enabled: Boolean, onClick: () -> Unit) {
-    val (width, height) = headerWindow()
-    val tablet = minOf(width, height) >= 600f
-    val fullLabels = tablet || width > height
-    val side = MonitorLayoutPolicy.systemButtonSize(tablet)
-    val shape = RoundedCornerShape(12.dp)
-    Row(
-        Modifier.height(side.dp).widthIn(min = side.dp)
-            .alpha(if (enabled) 1f else 0.38f)
-            .clip(shape)
-            .background(MonitorPalette.accent.copy(alpha = 0.12f))
-            .border(1.dp, MonitorPalette.accent.copy(alpha = 0.3f), shape)
-            .clickable(enabled = enabled, onClick = onClick)
-            .semantics { contentDescription = "Open Multiview" }
-            .padding(horizontal = if (fullLabels) 11.dp else 0.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-    ) {
-        OpcIcon(
-            OpcIcon.LAYOUT_GRID,
-            contentDescription = null,
-            tint = MonitorPalette.accent,
-            modifier = Modifier.size((side * 29f / 54f).dp),
-        )
-        if (fullLabels) {
-            Text(
-                "Multi-view",
-                color = MonitorPalette.text,
-                style = MonitorTypography.text(12.5f, FontWeight.SemiBold),
-                maxLines = 1,
-            )
-        }
-    }
-}

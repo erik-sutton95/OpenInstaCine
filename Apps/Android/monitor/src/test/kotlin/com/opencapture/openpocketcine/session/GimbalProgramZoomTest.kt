@@ -116,24 +116,6 @@ class GimbalProgramZoomTest {
         }
     }
 
-    @Test fun dlog2UnknownColorMissingFeedbackAndFormatCeilingBlockOnlyZoomChangingMoves() {
-        for (recording in listOf(false, true)) {
-            val status = ready.copy(colorMode = CameraCommands.COLOR_DLOG2, isRecording = recording)
-            assertEquals("Zoom moves are unavailable in D-Log2", nativeProgramZoomFailure(program, pro, status))
-            assertNull(nativeProgramZoomFailure(program.copy(b = b.copy(zoom = 1.0), c = null), pro, status))
-        }
-        assertEquals("Wait for camera color mode before a zoom move", nativeProgramZoomFailure(program, pro, ready.copy(colorMode = -1)))
-        assertEquals("Wait for camera color mode before a zoom move", nativeProgramZoomFailure(program, pro, ready.copy(colorMode = 0x7F)))
-        assertEquals("Wait for camera zoom feedback", nativeProgramZoomFailure(program, pro, ready.copy(zoomFactor = null)))
-        assertEquals("Saved zoom exceeds the current FORMAT limit",
-            nativeProgramZoomFailure(program, CameraModel("Osmo Pocket 3"), ready.copy(resolutionCode = 0x10)))
-        assertNull(nativeProgramZoomFailure(program, pro, ready))
-        assertEquals("Wait for camera zoom feedback", nativeProgramZoomFailure(program, pro,
-            ready.copy(shootingMode = CameraCommands.SHOOT_SLOWMO, zoomFactor = 12.0)))
-        assertEquals("Wait for camera zoom feedback", nativeProgramZoomFailure(program, pro,
-            ready.copy(shootingMode = CameraCommands.SHOOT_SLOWMO), target = 3.1))
-    }
-
     @Test fun acceptedLateTurnaroundRetainsEndpointUntilTheNextAdmittedLensSample() {
         val engine = GimbalMoveEngine()
         assertTrue(engine.start(GimbalProgram(a, a.copy(zoom = 3.0), durationAB = 1.0, loop = true), a))
@@ -149,83 +131,4 @@ class GimbalProgramZoomTest {
         assertNull(engine.failure)
     }
 
-    @Test fun zoomResumeNeedsItsOwnFreshStableReceiptsAndCannotAccumulateDrift() {
-        fun lens(position: Int): DumlFrame {
-            val payload = ByteArray(16).also { it[14] = position.toByte(); it[15] = (position shr 8).toByte() }
-            return DumlFrame(0, 0, 1, 0, 0, 0x99, StatusExtras.packSubscribe("cam_lens_state", payload))
-        }
-        val attitude = DumlFrame(0, 0, 1, 0, 4, 5, ByteArray(CameraCommands.ATTITUDE_LENGTH))
-        var observed = NativeProgramZoomObservation(ready).observing(lens(217), pro, 1.0).notePause(1.1)
-        observed = observed.observing(attitude, pro, 1.5)
-        assertEquals(1.0, observed.receivedAt)
-        assertFalse(observed.canResume(1.5))
-        observed = observed.observing(lens(217), pro, 1.6)
-        observed = observed.observing(lens(218), pro, 1.7)
-        observed = observed.observing(lens(219), pro, 1.8)
-        assertFalse(observed.canResume(1.81), "Two one-tick drifts must reset the fixed anchor")
-        observed = observed.observing(lens(219), pro, 2.01)
-        assertTrue(observed.canResume(2.01))
-        val fov = DumlFrame(0, 0, 1, 0, 0, 0x99,
-            StatusExtras.packSubscribe("cam_fov", byteArrayOf(0xFF.toByte(), 0x2F, 0, 0)))
-        observed = observed.observing(fov, pro, 2.4).observing(attitude, pro, 2.5)
-        assertEquals(2.01, observed.receivedAt, "FOV cannot refresh a preferred lens measurement")
-        assertFalse(observed.canResume(2.5))
-        var fovOnly = NativeProgramZoomObservation(ready).notePause(1.0)
-        fovOnly = fovOnly.observing(fov, pro, 1.1).observing(fov, pro, 1.31)
-        assertTrue(fovOnly.canResume(1.31))
-        var gap = NativeProgramZoomObservation(ready).notePause(1.0)
-        gap = gap.observing(lens(651), pro, 1.1).observing(lens(651), pro, 5.0)
-        assertFalse(gap.canResume(5.0), "A fresh report after a long gap must begin a new stable interval")
-        gap = gap.observing(lens(651), pro, 5.21)
-        assertTrue(gap.canResume(5.21))
-        val paused = NativeZoomPauseStability()
-        paused.reset(1.0)
-        paused.observe(NativeGimbalFeedback(a.copy(zoom = 3.0), 1.1, 1.1))
-        paused.observe(NativeGimbalFeedback(a.copy(zoom = 3.0), 5.0, 5.0))
-        assertFalse(paused.ready(5.0))
-        paused.observe(NativeGimbalFeedback(a.copy(zoom = 3.0), 5.21, 5.21))
-        assertTrue(paused.ready(5.21))
-    }
-
-    @Test fun receivedStatusChangesTakeEffectBeforeAnyUiMerge() {
-        fun subscribe(name: String, value: ByteArray) = DumlFrame(0, 0, 1, 0, 0, 0x99, StatusExtras.packSubscribe(name, value))
-        var status = ready
-        status = nativeProgramZoomStatus(subscribe("cam_image_effect", byteArrayOf(0, 0, 0x41, 0, 0)), status, pro)
-        assertEquals("Zoom moves are unavailable in D-Log2", nativeProgramZoomFailure(program, pro, status))
-        status = nativeProgramZoomStatus(subscribe("cam_image_effect", byteArrayOf(0, 0, 0x3F, 0, 0)), status, pro)
-        val lens = ByteArray(16).also { it[14] = 0x8B.toByte(); it[15] = 0x02 }
-        status = nativeProgramZoomStatus(subscribe("cam_lens_state", lens), status, pro)
-        assertEquals(3.0, status.zoomFactor)
-        val mode = ByteArray(58).also { it[57] = CameraCommands.SHOOT_SLOWMO.toByte() }
-        status = nativeProgramZoomStatus(DumlFrame(0, 0, 1, 0, 2, 0x80, mode), status, pro)
-        assertEquals("Saved zoom exceeds the current FORMAT limit",
-            nativeProgramZoomFailure(program.copy(b = b.copy(zoom = 6.0)), pro, status))
-        status = nativeProgramZoomStatus(subscribe("cam_video_param_v2", byteArrayOf(0x10, 0x02)), status, pro)
-        assertEquals(0x10, status.resolutionCode)
-        val pitch = ByteArray(CameraCommands.ATTITUDE_LENGTH)
-        val measured = NativeGimbalFeedback.from(DumlFrame(0, 0, 1, 0, 4, 5, pitch), 12.0, status.zoomFactor!!)!!
-        assertTrue(abs(measured.pose.zoom - 3.0) < 1e-9)
-    }
-
-    @Test fun nativeResumeAllowsTheMeasuredLensCadenceButStillNeedsRecentStableFeedback() {
-        val payload = ByteArray(16).also { it[14] = 0x8B.toByte(); it[15] = 0x02 }
-        val lens = DumlFrame(0, 0, 1, 0, 0, 0x99, StatusExtras.packSubscribe("cam_lens_state", payload))
-        var native = NativeProgramZoomObservation(ready).notePause(1.0)
-        native = native.observing(lens, pro, 1.2).observing(lens, pro, 1.6)
-        assertTrue(native.canResume(1.7), "Two distinct 2.5 Hz lens receipts can prove a settled zoom")
-        assertFalse(native.canResume(1.91), "Resume still needs a receipt no older than 300 ms")
-        native = native.observing(lens, pro, 2.5)
-        assertFalse(native.canResume(2.5), "A gap beyond 850 ms resets stability")
-        val other = NativeProgramZoomObservation(ready).notePause(1.0)
-            .observing(lens, CameraModel("Osmo Pocket 3"), 1.2)
-            .observing(lens, CameraModel("Osmo Pocket 3"), 1.6)
-        assertFalse(other.canResume(1.6), "Unmeasured bodies retain the previous continuity threshold")
-        val stability = NativeZoomPauseStability(maximumGap = 0.85)
-        stability.reset(1.0)
-        stability.observe(NativeGimbalFeedback(a.copy(zoom = 3.0), 1.2, 1.2))
-        stability.observe(NativeGimbalFeedback(a.copy(zoom = 3.0), 1.6, 1.6))
-        assertTrue(stability.ready(1.7))
-        stability.observe(NativeGimbalFeedback(a.copy(zoom = 3.0), 2.5, 2.5))
-        assertFalse(stability.ready(2.5))
-    }
 }

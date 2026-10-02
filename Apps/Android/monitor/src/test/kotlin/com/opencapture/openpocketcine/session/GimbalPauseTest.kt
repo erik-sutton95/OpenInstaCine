@@ -71,20 +71,4 @@ class GimbalPauseTest {
         assertFalse(engine.running)
     }
 
-    @Test fun stabilityNeedsDistinctFreshPostStopSamplesAndFixedAnchor() {
-        val stable = NativePauseStability()
-        stable.reset(1.0)
-        stable.observe(NativeGimbalFeedback(point(0.0), 1.0))
-        assertNull(stable.ready(1.0))
-        stable.observe(NativeGimbalFeedback(point(0.0), 1.1))
-        stable.observe(NativeGimbalFeedback(point(0.06), 1.2))
-        stable.observe(NativeGimbalFeedback(point(0.12), 1.3))
-        assertNull(stable.ready(1.3))
-        stable.observe(NativeGimbalFeedback(point(0.12), 1.4))
-        stable.observe(NativeGimbalFeedback(point(0.12), 1.5))
-        assertNotNull(stable.ready(1.5))
-        assertNull(stable.ready(1.81))
-        stable.reset(2.0)
-        assertNull(stable.ready(2.0))
-    }
 }

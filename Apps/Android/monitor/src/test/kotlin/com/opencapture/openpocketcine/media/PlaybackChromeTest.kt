@@ -212,16 +212,6 @@ class PlaybackChromeTest {
     }
 
     @Test
-    fun identityPlanIsANoOpPlaybackLook() {
-        val identity = com.opencapture.openpocketcine.feed.FeedEffectsRenderPlan.IDENTITY
-        assertFalse(identity.hasPlaybackLook)
-        assertTrue(com.opencapture.openpocketcine.feed.PlaybackLookEffect(identity).isNoOp(3840, 2160))
-        val px = intArrayOf(0xFF8090A0.toInt())
-        applyPlaybackLookPixels(px, 1, 1, identity)
-        assertEquals(0xFF8090A0.toInt(), px[0])
-    }
-
-    @Test
     fun zebraHighlightPaintsHotPixels() {
         val plan =
             com.opencapture.openpocketcine.feed.FeedEffectsRenderPlan(

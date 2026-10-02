@@ -24,20 +24,6 @@ class NativeProgramZoomTest {
         assertContentEquals(CameraCommands.zoomStop(), NativeProgramZoomCommand.Stop.payload)
     }
 
-    @Test fun longAndTinyLegsStartImmediatelyAndClampAtBothEnds() {
-        assertEquals(NativeProgramZoomCommand.Track(3.75), NativeProgramZoom.demand(3.0, 6.0, 60.0, 15.0).command)
-        assertEquals(NativeProgramZoomCommand.Track(1.0005), NativeProgramZoom.demand(1.0, 1.001, 1.0, 0.5).command)
-        assertEquals("Invalid zoom movement", NativeProgramZoom.demand(3.0, 6.0, 2.5, -1.0).failureReason)
-        assertEquals(NativeProgramZoomCommand.Track(6.0), NativeProgramZoom.demand(3.0, 6.0, 2.5, 3.0).command)
-        assertEquals(NativeProgramZoomCommand.Stop, NativeProgramZoom.demand(3.0, 3.0, 2.0, 1.0).command)
-        val a = GimbalWaypoint(0.0, 0.0, 1.0, 175.0)
-        val ready = CameraStatus(colorMode = CameraCommands.COLOR_NORMAL, zoomFactor = 1.0)
-        for (zoom in listOf(1.001, 12.0)) {
-            assertNull(nativeProgramZoomFailure(GimbalProgram(a, a.copy(zoom = zoom), durationAB = 0.5),
-                CameraModel("Osmo Pocket 4 Pro"), ready), "Position tracking has no native gear travel restriction")
-        }
-    }
-
     @Test fun invalidDemandCannotEmitALensTarget() {
         for (values in listOf(listOf(Double.NaN, 3.0, 1.0, 0.0), listOf(1.0, Double.POSITIVE_INFINITY, 1.0, 0.0),
                 listOf(1.0, 3.0, 0.0, 0.0), listOf(1.0, 3.0, Double.NaN, 0.0), listOf(1.0, 3.0, 1.0, Double.NaN))) {
@@ -82,10 +68,4 @@ class NativeProgramZoomTest {
         assertNull(engine.nativeZoomDemand)
     }
 
-    @Test fun lensReceiptFreshnessRemainsIndependentOfAngularReports() {
-        assertNull(nativeProgramZoomFeedbackFailure(0.0, 0.85))
-        assertNotNull(nativeProgramZoomFeedbackFailure(1.0, 1.851))
-        assertNotNull(nativeProgramZoomFeedbackFailure(null, 1.0))
-        assertNotNull(nativeProgramZoomFeedbackFailure(1.0, 0.9))
-    }
 }

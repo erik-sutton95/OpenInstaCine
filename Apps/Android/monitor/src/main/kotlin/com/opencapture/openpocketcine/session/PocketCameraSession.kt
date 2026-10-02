@@ -54,9 +54,7 @@ import com.opencapture.openpocketcine.diagnostics.RecoveryReason
 import com.opencapture.openpocketcine.BuildConfig
 import android.os.Build
 import java.util.UUID
-import com.opencapture.openpocketcine.pairing.CameraApJoiner
 import com.opencapture.openpocketcine.pairing.CameraConnectionSetup
-import com.opencapture.openpocketcine.multiview.MultiviewNetworkStore
 import com.opencapture.openpocketcine.ShutterAngle
 import com.opencapture.opencine.insta360.shell.CameraTrackFrame
 import com.opencapture.opencine.insta360.shell.CameraTrackState
@@ -104,80 +102,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import com.opencapture.opencine.media.LivePipelineCadence
-
-/** Main-thread admission closes before negotiation is dispatched to the IO worker. */
-internal class EndpointCommandAdmission {
-    private var owner: Any? = null
-
-    fun begin(): Any = Any().also { owner = it }
-
-    fun finish(token: Any) {
-        if (owner === token) owner = null
-    }
-
-    fun allows(isClosed: Boolean, isRebuilding: Boolean): Boolean =
-        owner == null && !isClosed && !isRebuilding
-}
-
-/** Keep blocking negotiation and its post-handshake enable owned by the same live link. */
-internal suspend fun <T : Any> repairDatalinkEndpoint(
-    link: T,
-    isCurrent: (T) -> Boolean,
-    reopen: (T) -> Unit,
-    pictureTimeoutMs: Long = LiveViewEnablePolicy.ENDPOINT_PICTURE_GRACE_MS,
-    waitForPicture: suspend () -> Unit = {},
-    recoverSession: () -> Unit = {},
-    commandAdmission: EndpointCommandAdmission = EndpointCommandAdmission(),
-    prepare: () -> Unit = {},
-    ownsPicture: () -> Boolean = { true },
-    enable: () -> Unit,
-) {
-    val commandOwner = commandAdmission.begin()
-    var negotiated = false
-    try {
-        prepare()
-        interruptibleDatalinkOpen { reopen(link) }
-        negotiated = true
-        coroutineContext.ensureActive()
-        if (!isCurrent(link)) return
-        commandAdmission.finish(commandOwner)
-        if (!ownsPicture()) return
-        enable()
-        val presented = kotlinx.coroutines.withTimeoutOrNull(pictureTimeoutMs) {
-            waitForPicture()
-            true
-        } ?: false
-        coroutineContext.ensureActive()
-        if (!presented && isCurrent(link) && ownsPicture()) recoverSession()
-    } catch (error: kotlinx.coroutines.CancellationException) {
-        throw error
-    } catch (_: Exception) {
-        coroutineContext.ensureActive()
-        if (isCurrent(link) && (!negotiated || ownsPicture())) recoverSession()
-    } finally {
-        commandAdmission.finish(commandOwner)
-    }
-}
-
-internal fun acceptsGimbalConfiguration(
-    hasGimbal: Boolean, live: Boolean, sceneActive: Boolean, warming: Boolean,
-    recovering: Boolean, videoStale: Boolean, hasDatalink: Boolean,
-): Boolean = hasGimbal && live && sceneActive && !warming && !recovering && !videoStale && hasDatalink
-
-/** A serialized command chain keeps its original endpoint epoch across every suspension. */
-internal class EndpointCommandEpoch(val generation: Long) :
-    kotlin.coroutines.AbstractCoroutineContextElement(Key) {
-    companion object Key : kotlin.coroutines.CoroutineContext.Key<EndpointCommandEpoch>
-}
-
-internal suspend fun ensureEndpointCommandCurrent(currentGeneration: Long) {
-    coroutineContext.ensureActive()
-    val epoch = coroutineContext[EndpointCommandEpoch]
-    if (epoch != null && epoch.generation != currentGeneration) {
-        throw kotlinx.coroutines.CancellationException("camera command endpoint changed")
-    }
-}
-
 
 /**
  * OpenInstaCine session. Same view-facing surface as OpenPocketCine's DUML session, so every
@@ -290,7 +214,6 @@ class PocketCameraSession(
     /** Luna joins only its own access point: the shared Wi-Fi and Hotspot setups (#406) are DJI station mode. */
     val connectionSetup: CameraConnectionSetup get() = CameraConnectionSetup.CAMERA_WIFI
     val setupProgress: StateFlow<String?> = MutableStateFlow<String?>(null).asStateFlow()
-    fun useSetup(setup: CameraConnectionSetup, network: MultiviewNetworkStore.Network?, restoreAccessPoint: Boolean) = Unit
     /** iOS `supportsFocusMode`: AF-S, AF-C and Product Showcase (option 93). */
     val supportsFocusMode: Boolean get() = can(CameraCapability.CAMERA_SETTINGS)
     val supportsTapFocus: Boolean get() = can(CameraCapability.FOCUS)
@@ -498,12 +421,6 @@ class PocketCameraSession(
         return session.outcome(command.operation) ?: receipt
     }
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
-    // Multiview needs a second DUML datalink; the Luna shell never offers it.
-    fun updateMultiview(camera: FoundCamera?, driver: DatalinkDriver?, status: CameraStatus) = Unit
-    val multiviewPose: GimbalStickMapping get() = GimbalStickMapping()
-    fun adoptMultiviewPose(pose: GimbalStickMapping) = Unit
-    fun receiveMultiview(frame: DumlFrame) = Unit
-    fun releaseMultiview() = Unit
     fun disconnect() {
         closeCore()
         backend.disconnect(); decoder.reset()

@@ -2,10 +2,8 @@ package com.opencapture.openpocketcine.media
 
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
-import com.opencapture.openpocketcine.session.DatalinkDriver
 import com.opencapture.openpocketcine.session.DumlFrame
 import com.opencapture.openpocketcine.session.PocketCameraSession
-import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Session/datalink surface the media browser needs. Live enable goes through
@@ -62,63 +60,15 @@ class PocketCameraMediaLink(
     override val hasVideoFormat: Boolean
         get() = session.hasVideoFormat
 
-    override fun sendCommand(kind: Int) {
-        driver()?.sendCommand(kind)
-    }
+    // The Luna session has no DUML datalink, so the DJI media commands and frames go nowhere
+    // (the upstream link found the driver by reflection on a `datalink` field this session lacks).
+    override fun sendCommand(kind: Int) = Unit
 
-    override fun sendDuml(cmdSet: Int, cmdId: Int, payload: ByteArray) {
-        driver()?.sendDuml(cmdSet, cmdId, payload)
-    }
+    override fun sendDuml(cmdSet: Int, cmdId: Int, payload: ByteArray) = Unit
 
     override fun enableLiveView(): Boolean = session.restartLiveViewAfterMedia()
 
-    override fun addFrameListener(listener: (DumlFrame) -> Unit): () -> Unit {
-        val dl = driver() ?: return {}
-        return FrameFanout.install(dl, listener)
-    }
-
-    private fun driver(): DatalinkDriver? {
-        val field =
-            runCatching {
-                PocketCameraSession::class.java.getDeclaredField("datalink").apply { isAccessible = true }
-            }.getOrNull() ?: return null
-        return runCatching { field.get(session) as? DatalinkDriver }.getOrNull()
-    }
-}
-
-/**
- * Chains extra listeners onto [DatalinkDriver.onStatusFrame] without dropping
- * the session's own ingest.
- */
-internal object FrameFanout {
-    private val lock = Any()
-    private val listeners = CopyOnWriteArrayList<(DumlFrame) -> Unit>()
-    private var hooked: DatalinkDriver? = null
-    private var previous: ((DumlFrame) -> Unit)? = null
-
-    fun install(driver: DatalinkDriver, listener: (DumlFrame) -> Unit): () -> Unit {
-        synchronized(lock) {
-            if (hooked !== driver) {
-                previous = driver.onStatusFrame
-                hooked = driver
-                driver.onStatusFrame = { frame ->
-                    previous?.invoke(frame)
-                    listeners.forEach { it.invoke(frame) }
-                }
-            }
-            listeners.add(listener)
-        }
-        return {
-            synchronized(lock) {
-                listeners.remove(listener)
-                if (listeners.isEmpty() && hooked === driver) {
-                    driver.onStatusFrame = previous
-                    hooked = null
-                    previous = null
-                }
-            }
-        }
-    }
+    override fun addFrameListener(listener: (DumlFrame) -> Unit): () -> Unit = {}
 }
 
 fun MediaSessionLink.sendEnterPlayback() {

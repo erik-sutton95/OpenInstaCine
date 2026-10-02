@@ -565,9 +565,7 @@ fun LivePortraitSystemBar(
         Box(Modifier.fillMaxSize().padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
             Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val multiviewExit = model.multiviewExit
-                if (multiviewExit != null) MultiviewReturnButton(Modifier.size(48.dp), onClick = multiviewExit)
-                else if (showsLock) LockButton(uiLocked, Modifier.size(48.dp), onClick = onLock)
+                if (showsLock) LockButton(uiLocked, Modifier.size(48.dp), onClick = onLock)
                 if (chromeInteractive) DispButton(clean = model.assistClean, modifier = Modifier.size(48.dp), onClick = {
                     if (!uiLocked) { val clean = !model.assistClean; model.setDisplayMode(clean); assist.clean = clean }
                 })
@@ -602,10 +600,7 @@ fun LivePortraitSystemBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Spacer(Modifier.weight(1f))
-                val multiviewExit = model.multiviewExit
-                if (multiviewExit != null) {
-                    MultiviewReturnButton(onClick = multiviewExit)
-                } else if (showsLock) {
+                if (showsLock) {
                     LockButton(uiLocked, onClick = onLock)
                     Spacer(Modifier.weight(1f))
                 }
