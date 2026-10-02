@@ -53,7 +53,9 @@ internal class LiveVulkanSession(
         }
     private val sampleBusy = AtomicBoolean(false)
     private val scopeFrames = InspectorPreviewSource()
-    @Volatile private var scopeSource: ScopeSampleSource? = null
+    private val scopeLifetime = com.opencapture.opencine.runtime.ScopeSourceLifetime(scopeBus,
+        com.opencapture.opencine.runtime.ScopeSampleBus.Role.LIVE)
+    private val scopeSource: ScopeSampleSource? get() = scopeLifetime.source
     @Volatile private var scopeActive = false
     private var scopeAttached = false
     private var scopeReleased = false
@@ -238,13 +240,13 @@ internal class LiveVulkanSession(
         scopeReleased = released
         val changed = scopeAttached != attached
         scopeAttached = attached
-        if (changed || released) resetScopeSource()
+        if (attached) scopeLifetime.attach() else scopeLifetime.detach()
+        if (changed || released) previousBundle = ScopeAssistBundle.EMPTY
     }
 
     @Synchronized private fun resetScopeSource() {
-        scopeBus.closeSource(scopeSource)
         previousBundle = ScopeAssistBundle.EMPTY
-        scopeSource = if (scopeActive && scopeAttached && !scopeReleased) scopeBus.openSource() else null
+        scopeLifetime.invalidate(scopeActive && !scopeReleased)
     }
 
     fun setFeedRect(x: Float, y: Float, w: Float, h: Float, stretchToRect: Boolean = false) {

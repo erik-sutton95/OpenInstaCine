@@ -98,7 +98,7 @@ internal fun PlaybackFrameSample(
 ) {
     LaunchedEffect(textureView, enabled, plan, colorMode, iso) {
         if (!enabled) return@LaunchedEffect
-        val source = scopeBus.openSource()
+        val source = scopeBus.openSource(com.opencapture.opencine.runtime.ScopeSampleBus.Role.PLAYBACK)
         try {
             var previousBundle = ScopeAssistBundle.EMPTY
             val ceiling = ScopeExposureCeiling()

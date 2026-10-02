@@ -158,6 +158,7 @@ enum PlaybackVideoOutput {
 final class PlaybackFeedSession: NSObject {
     let output: AVPlayerItemVideoOutput
     private let assistEngine = LiveAssistEngine()
+    private let workingRaster = FeedWorkingRaster()
     private let linkTarget = DisplayLinkTarget()
     private let pullQueue = DispatchQueue(
         label: "opv.playback-pull", qos: .userInteractive)
@@ -343,14 +344,6 @@ final class PlaybackFeedSession: NSObject {
         if changed {
             host?.ciFeed.resetPresentDedup()
             assistEngine.updatePolicy(effects: effects, transfer: transfer)
-            if effects.falseColor {
-                PocketFalseColorMap.warm(
-                    scale: effects.falseColorScale,
-                    mode: effects.colorMode, rec709: effects.falseColorRec709,
-                    clipByte: sampleSource.exposureCeiling.clipByte(
-                        transfer: MonitorTransfer(effects.colorMode)),
-                    hasLUT: effects.lutDimension >= 2)
-            }
             lastOverlayOnly = effects.needsOverlayFeed
             lastUnmanagedBake = effects.replacesIdentityFeed
             // Drop the previous look (and its in-flight bake) so a stale LUT
@@ -468,7 +461,7 @@ final class PlaybackFeedSession: NSObject {
         if time.isNumeric, output.hasNewPixelBuffer(forItemTime: time),
             let buffer = output.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil)
         {
-            let working = FeedWorkingRaster.prepared(buffer)
+            let working = workingRaster.prepared(buffer)
             if !loggedRaster {
                 loggedRaster = true
                 let w = CVPixelBufferGetWidth(working)

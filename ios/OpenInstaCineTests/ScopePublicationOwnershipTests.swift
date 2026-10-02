@@ -23,6 +23,7 @@ import XCTest
         let liveFrame = ScopeAssistBundle(revision: 1, clipByte: 247)
         XCTAssertTrue(bus.publish(live, source: nil, transfer: .dlog2, bundle: liveFrame))
         let retired = bus.openSource(.playback)
+        XCTAssertEqual(bus.displayBundle, .empty, "A clip without a frame must not show live scope data")
         let successor = bus.openSource(.playback)
         let held = ScopeAssistBundle(revision: 3, clipByte: 200)
         XCTAssertTrue(bus.publish(successor, source: nil, transfer: .dlog2, bundle: held))

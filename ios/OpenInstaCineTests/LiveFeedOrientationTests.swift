@@ -10,6 +10,7 @@ import XCTest
 /// all four versus the clean HEVC layer. `LiveFeedPresent` is gone — the present
 /// is now a plain blit — so the testable seam is the baker's texture orientation.
 final class LiveFeedOrientationTests: XCTestCase {
+    private let mapper = PocketFalseColorMap()
     func testGPUAssistsShareOneFeedFlag() {
         XCTAssertTrue(Self.peaking.needsGPUFeed)
         XCTAssertTrue(Self.zebra.needsGPUFeed)
@@ -50,7 +51,7 @@ final class LiveFeedOrientationTests: XCTestCase {
     }
 
     func testCompositorKeepsVerticalMarkerForEveryGPUAssist() {
-        Self.warmFalseColorCubes()
+        warmFalseColorCubes()
         let source = Self.verticalMarker()
         XCTAssertTrue(Self.bandEdgeIsOnCITop(source))
         for (name, fx) in [
@@ -59,7 +60,7 @@ final class LiveFeedOrientationTests: XCTestCase {
             ("false color", Self.falseColor),
             ("LUT", Self.lut),
         ] {
-            let output = LiveMonitorCompositor.apply(to: source, effects: fx)
+            let output = LiveMonitorCompositor.apply(to: source, effects: fx, mapper: mapper)
             XCTAssertEqual(output.extent, source.extent, "\(name) must not change extent")
             // Luma is the wrong proxy here: IRE false colour remaps paper white/black
             // onto WAVE bands whose luma can invert while the raster stays upright.
@@ -73,7 +74,7 @@ final class LiveFeedOrientationTests: XCTestCase {
             ("zebra overlay", Self.zebra),
             ("false color overlay", Self.falseColor),
         ] {
-            let overlay = LiveMonitorCompositor.assistOverlay(from: source, effects: fx)
+            let overlay = LiveMonitorCompositor.assistOverlay(from: source, effects: fx, mapper: mapper)
             XCTAssertEqual(overlay.extent, source.extent, "\(name) must not change extent")
         }
     }
@@ -86,7 +87,7 @@ final class LiveFeedOrientationTests: XCTestCase {
         var fx = Self.lut
         fx.splitComparison = true
         fx.splitVertical = true
-        let output = LiveMonitorCompositor.apply(to: red, effects: fx)
+        let output = LiveMonitorCompositor.apply(to: red, effects: fx, mapper: mapper)
         XCTAssertEqual(output.extent, red.extent, "50/50 must not change feed extent")
         let context = CIContext(options: [.cacheIntermediates: false])
         let logHalf = Self.meanRGB(
@@ -167,15 +168,15 @@ final class LiveFeedOrientationTests: XCTestCase {
 
     /// False colour cubes are async. Earlier tests in a full suite already warm
     /// them; isolation still needs a short wait so IRE paint actually runs.
-    private static func warmFalseColorCubes() {
+    private func warmFalseColorCubes() {
         // Unstamped effects (the compositor here) read the reference ceiling.
         let clip = ScopeExposureCeiling.referenceClipByte(transfer: .rec709)
-        PocketFalseColorMap.warm(scale: .ire, mode: .normal, rec709: false, clipByte: clip)
+        mapper.warm(scale: .ire, mode: .normal, rec709: false, clipByte: clip)
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
-            if PocketFalseColorMap.overlayPaintData(
+            if mapper.overlayPaintData(
                 scale: .ire, mode: .normal, rec709: false, clipByte: clip) != nil,
-                PocketFalseColorMap.overlayWeightData(
+                mapper.overlayWeightData(
                     scale: .ire, mode: .normal, rec709: false, clipByte: clip) != nil
             {
                 return

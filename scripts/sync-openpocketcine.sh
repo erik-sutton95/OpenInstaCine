@@ -73,6 +73,12 @@ LUNA_OWNED=(
   OpenInstaCine/HevcDecoder.swift
   OpenInstaCine/PlaybackFeed.swift
   OpenInstaCine/LiveMonitorFx.swift
+  OpenInstaCine/LiveMonitorLooks.swift
+  OpenInstaCine/FeedWorkingRaster.swift
+  OpenInstaCine/LiveAssists.swift
+  OpenInstaCine/MonitorVideoBackdrop.swift
+  OpenInstaCine/Assists/AssistInspectorImageRenderer.swift
+  OpenInstaCine/Assists/FalseColorAssist.swift
   OpenInstaCine/MediaPlayer.swift
   OpenInstaCine/WatcherRelayClient.swift
   OpenInstaCine/Assists/AssistInspectorPreview.swift
@@ -81,6 +87,10 @@ LUNA_OWNED=(
   OpenInstaCineTests/DecoderGenerationTests.swift
   OpenInstaCineTests/FirstConnectTests.swift
   OpenInstaCineTests/LiveFrameSampleTests.swift
+  OpenInstaCineTests/FalseColorAssistTests.swift
+  OpenInstaCineTests/LiveFeedOrientationTests.swift
+  OpenInstaCineTests/MonitorBackdropLifecycleTests.swift
+  OpenInstaCineTests/ScopePublicationOwnershipTests.swift
   OpenInstaCineTests/PlaybackAssistTests.swift
   OpenInstaCineTests/VideoDisplayOwnershipTests.swift
   # What is left of upstream's startup chrome once the wizard moved to OpenCineAppKit (SHELL-02).

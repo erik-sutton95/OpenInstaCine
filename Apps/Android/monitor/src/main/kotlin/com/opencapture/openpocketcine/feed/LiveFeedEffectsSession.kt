@@ -90,9 +90,11 @@ internal class LiveFeedEffectsSession(
         }
     private val sampleBusy = AtomicBoolean(false)
     private val previewSource = InspectorPreviewSource()
-    @Volatile private var scopeSource: ScopeSampleSource? = null
+    private val scopeLifetime = com.opencapture.opencine.runtime.ScopeSourceLifetime(scopeBus,
+        if (playback) com.opencapture.opencine.runtime.ScopeSampleBus.Role.PLAYBACK
+        else com.opencapture.opencine.runtime.ScopeSampleBus.Role.LIVE)
+    private val scopeSource: ScopeSampleSource? get() = scopeLifetime.source
     @Volatile private var scopeActive = false
-    private var scopeAttached = false
     @Volatile private var nextScopeAtNs = 0L
     @Volatile private var lastScopeWorkNs = 0L
     @Volatile private var previousBundle = ScopeAssistBundle.EMPTY
@@ -164,14 +166,13 @@ internal class LiveFeedEffectsSession(
     }
 
     @Synchronized private fun setScopeAttached(attached: Boolean) {
-        scopeAttached = attached
-        resetScopeSource()
+        if (attached) scopeLifetime.attach() else scopeLifetime.detach()
+        previousBundle = ScopeAssistBundle.EMPTY
     }
 
     @Synchronized private fun resetScopeSource() {
-        scopeBus.closeSource(scopeSource)
         previousBundle = ScopeAssistBundle.EMPTY
-        scopeSource = if (scopeActive && scopeAttached) scopeBus.openSource() else null
+        scopeLifetime.invalidate(scopeActive)
     }
 
     private fun requestRender() {

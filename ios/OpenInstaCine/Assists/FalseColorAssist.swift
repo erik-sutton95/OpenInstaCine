@@ -123,13 +123,7 @@ enum FalseColorAssist {
     static func selectScale(_ label: String, assist: LiveAssistState) {
         assist.falseColorScale = scale(forMenuLabel: label)
         assist.persist()
-        if assist.falseColor {
-            PocketFalseColorMap.warm(
-                scale: assist.falseColorScale,
-                mode: assist.monitorColorMode ?? .normal,
-                rec709: assist.falseColorRec709, clipByte: nil,
-                hasLUT: assist.effects.lutDimension >= 2)
-        }
+
     }
 
     /// OpenZCine: turning Reference Display on also arms False Color.
@@ -408,8 +402,10 @@ struct FalseColorReference: View {
     static func segments(
         scale: FalseColorScaleKind, transfer: MonitorTransfer, rec709: Bool, clipByte: Int
     ) -> [Segment] {
-        PocketFalseColorMap.bands(
-            scale: scale, transfer: transfer, rec709: rec709, clipByte: clipByte
+        let clip = LiveColorScience.falseColorClip(
+            scale: scale.liveScale, transfer: transfer, rec709: rec709, clipByte: clipByte)
+        return LiveColorScience.falseColorBands(
+            scale.liveScale, transfer: clip.transfer, clipEncoded: clip.ceiling
         ).enumerated().map {
             index, band in
             Segment(

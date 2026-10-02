@@ -461,13 +461,7 @@ final class LiveAssistState {
             playbackVisibleTools.insert(tool)
         }
         OperatorPrefs.playbackVisibleAssistTools = playbackVisibleTools
-        if tool == .falseColor, isPlaybackVisible(.falseColor) {
-            PocketFalseColorMap.warm(
-                scale: falseColorScale,
-                mode: monitorColorMode ?? .normal,
-                rec709: falseColorRec709, clipByte: nil,
-                hasLUT: lutEnabled && lutDimension >= 2)
-        }
+
     }
 
     func toggle(_ tool: LiveAssistTool) {
@@ -483,13 +477,7 @@ final class LiveAssistState {
         case .zebra: zebra.toggle()
         case .falseColor:
             falseColor.toggle()
-            if falseColor {
-                PocketFalseColorMap.warm(
-                    scale: falseColorScale,
-                    mode: monitorColorMode ?? .normal,
-                    rec709: falseColorRec709, clipByte: nil,
-                    hasLUT: lutEnabled && lutDimension >= 2)
-            }
+
         case .waveform: waveform.toggle()
         case .parade: parade.toggle()
         case .histogram: histogram.toggle()
