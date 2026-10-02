@@ -30,8 +30,8 @@ SIBLING_PACKAGES = {
     # OpenCineRelay, OpenCineApple, MonitorUI/MonitorPresentation and the Insta360 products. The
     # Swift Android core (scripts/android-stage-swift-core.sh) compiles OpenCineCore, OpenCineMedia,
     # OpenCineMotion and OpenCineRelay; Apps/Android/settings.gradle.kts includes OpenCine/Android
-    # (core, media, the native Vulkan renderer, monitor-ui, the Insta360 shell contract and Luna
-    # adapter), so a renderer edit changes the Android identity.
+    # (core, media, the live-view decoder, the native Vulkan renderer, monitor-ui, the Insta360
+    # shell contract and Luna adapter), so a renderer edit changes the Android identity.
     "ios": [
         ("OpenCine", ["Package.swift", "Sources"]),
     ],

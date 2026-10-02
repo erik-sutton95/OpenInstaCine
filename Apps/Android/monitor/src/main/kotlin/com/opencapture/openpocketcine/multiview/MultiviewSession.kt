@@ -20,7 +20,7 @@ import com.opencapture.openpocketcine.session.DatalinkDriver
 import com.opencapture.openpocketcine.session.DumlFrame
 import com.opencapture.openpocketcine.session.FoundCamera
 import com.opencapture.openpocketcine.session.GimbalStickMapping
-import com.opencapture.openpocketcine.session.HevcDecoder
+import com.opencapture.opencine.decoder.HevcDecoder
 import com.opencapture.openpocketcine.session.LiveViewEnablePolicy
 import com.opencapture.openpocketcine.session.MultiviewControlLease
 import com.opencapture.openpocketcine.session.StatusExtras
@@ -116,7 +116,7 @@ class MultiviewSession(
     /** Nested, not inner: Compose needs stability metadata on this type (an inner class has none). */
     class Tile(val index: Int, private val app: Context) {
         val id: String = UUID.randomUUID().toString()
-        val decoder = HevcDecoder()
+        val decoder = HevcDecoder(errorJournal = DiagnosticCenter::logDecoderError)
         var liveModel by mutableStateOf<AppModel?>(null)
         /** Settings use their own command model, never the tile's presentation owner. */
         var controlsModel by mutableStateOf<AppModel?>(null)

@@ -30,6 +30,7 @@ import com.opencapture.opencine.core.WhiteBalanceValue
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.feed.FacePriorityExposure
 import com.opencapture.opencine.media.SerialSessionGate
+import com.opencapture.opencine.decoder.HevcDecoder
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.openpocketcine.diagnostics.FeedDecoderErrorOrigin
 import com.opencapture.openpocketcine.diagnostics.FeedIncidentAges
@@ -209,7 +210,7 @@ class PocketCameraSession(
     internal var debugCameraSetResult: ((Int, Boolean) -> Unit)? = null
     internal val pendingCameraSetCount: Int get() = 0
     val isMultiviewBorrowed = borrowing != null
-    val decoder = borrowing ?: HevcDecoder(cadence)
+    val decoder = borrowing ?: HevcDecoder(cadence, errorJournal = DiagnosticCenter::logDecoderError)
 
     val phase: ConnectionPhase get() = backend.phase.value
     val phaseFlow: StateFlow<ConnectionPhase> get() = backend.phase
