@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.lut
 
+import com.opencapture.openpocketcine.feed.colorMode
 import com.opencapture.openpocketcine.session.CameraCommands
 
 /**

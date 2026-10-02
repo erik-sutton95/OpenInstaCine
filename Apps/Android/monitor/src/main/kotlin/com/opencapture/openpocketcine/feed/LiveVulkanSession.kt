@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference
  */
 internal class LiveVulkanSession(
     context: Context,
+    private val scopeBus: LiveScopeSampleBus,
     private val onDecoderSurface: (Surface) -> Unit,
     private val onFirstFrame: () -> Unit,
     private val onFailed: () -> Unit,
@@ -38,6 +39,7 @@ internal class LiveVulkanSession(
      * not observe the tap max, so it stays at table values (it no longer borrows another feed's).
      */
     private val scopeCeiling = ScopeExposureCeiling()
+    private val scopeHz = ScopeTapHzLog()
 
     private val appContext = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
@@ -51,7 +53,7 @@ internal class LiveVulkanSession(
         }
     private val sampleBusy = AtomicBoolean(false)
     private val scopeFrames = InspectorPreviewSource()
-    @Volatile private var scopeSource: LiveScopeSampleBus.Source? = null
+    @Volatile private var scopeSource: ScopeSampleSource? = null
     @Volatile private var scopeActive = false
     private var scopeAttached = false
     private var scopeReleased = false
@@ -240,9 +242,9 @@ internal class LiveVulkanSession(
     }
 
     @Synchronized private fun resetScopeSource() {
-        LiveScopeSampleBus.closeSource(scopeSource)
+        scopeBus.closeSource(scopeSource)
         previousBundle = ScopeAssistBundle.EMPTY
-        scopeSource = if (scopeActive && scopeAttached && !scopeReleased) LiveScopeSampleBus.openSource() else null
+        scopeSource = if (scopeActive && scopeAttached && !scopeReleased) scopeBus.openSource() else null
     }
 
     fun setFeedRect(x: Float, y: Float, w: Float, h: Float, stretchToRect: Boolean = false) {
@@ -281,7 +283,7 @@ internal class LiveVulkanSession(
         uploadCube(0, plan.lutCube, lastLut) { lastLut = it }
         uploadCube(1, plan.falseColorPaint, lastPaint) { lastPaint = it }
         uploadCube(2, plan.falseColorWeight, lastWeight) { lastWeight = it }
-        val transfer = MonitorTransfer.fromColorMode(plan.scopeTap.colorMode)
+        val transfer = plan.scopeTap.transfer
         val ire = WaveformIre.levelTable(transfer, plan.scopeTap.iso, scopeCeiling)
         val luma = LiveColorScience.lumaWeights(transfer)
         OpcVulkan.nativeSetIre(
@@ -294,7 +296,7 @@ internal class LiveVulkanSession(
         )
         OpcVulkan.nativeSetFeedFlags(
             native,
-            if (plan.lutCube != null) plan.lutCube.size.toFloat() else 0f,
+            plan.lutCube?.size?.toFloat() ?: 0f,
             if (plan.falseColorOn) 1f else 0f,
             if (plan.splitComparison) 1f else 0f,
             if (plan.splitVertical) 1f else 0f,
@@ -493,7 +495,7 @@ internal class LiveVulkanSession(
         val currentPlan = lastPlan ?: FeedEffectsRenderPlan.IDENTITY
         val policy = currentPlan.scopeTap
         val scopeOwner = scopeSource
-        val currentSource = scopeFrames.isCurrent(sourceEpoch) && LiveScopeSampleBus.isCurrent(scopeOwner)
+        val currentSource = scopeFrames.isCurrent(sourceEpoch) && scopeBus.isCurrent(scopeOwner)
         val wantSample = currentSource && (policy.needsTap || backdrop?.hasDemand(this) == true)
         val now = System.nanoTime()
         var scopeIntervalNs = PocketScopeSampler.BASE_MIN_INTERVAL_NS
@@ -548,7 +550,7 @@ internal class LiveVulkanSession(
         if (!takeTap) return
         lastSampleNs = now
         if (scopeDue) lastScopeWorkNs = now
-        val transfer = MonitorTransfer.fromColorMode(policy.colorMode)
+        val transfer = policy.transfer
         val includePoints = policy.includePoints
         val includeVectorPoints = policy.includeVectorPoints
         val look = policy.vectorLut
@@ -591,7 +593,7 @@ internal class LiveVulkanSession(
                     } else InspectorPreviewPipeline.cancel(ticket)
                 }
                 if (!scopeDue || !scopeFrames.isCurrent(sourceEpoch) ||
-                    !LiveScopeSampleBus.isCurrent(scopeOwner)) return@execute
+                    !scopeBus.isCurrent(scopeOwner)) return@execute
                 val bundle =
                     if (packed != null) {
                         PocketScopeSampler.sample(
@@ -636,15 +638,15 @@ internal class LiveVulkanSession(
                                 ),
                             transfer = transfer,
                             iso = iso,
-                            ceiling = scopeCeiling,
+                            ceiling = com.opencapture.opencine.media.ScopeClipSnapshot(transfer, scopeCeiling.clipByte(transfer, iso)),
                         )
                     }
                 main.post {
-                    if (scopeFrames.isCurrent(sourceEpoch) && LiveScopeSampleBus.publish(scopeOwner, bundle)) {
+                    if (scopeFrames.isCurrent(sourceEpoch) && scopeBus.publish(scopeOwner, bundle)) {
                         previousBundle = bundle
                     }
                 }
-                ScopeTapHzLog.note(TAG, scopes = scopes, intervalNs = loggedIntervalNs)
+                scopeHz.note(TAG, scopes = scopes, intervalNs = loggedIntervalNs)
             } catch (error: Exception) {
                 if (!previewSubmitted) InspectorPreviewPipeline.cancel(previewTicket)
                 Log.w(TAG, "scope tap failed", error)

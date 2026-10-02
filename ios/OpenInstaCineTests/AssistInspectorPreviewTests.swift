@@ -292,21 +292,21 @@ final class AssistInspectorPreviewTests: XCTestCase {
     }
 
     func testPlaybackPreviewWaitsForTheClipAndNeverFallsBackToCameraSource() throws {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let camera = try Self.buffer(width: 8, height: 8)
         let clip = try Self.buffer(width: 16, height: 8)
-        bus.publish(source: camera, transfer: .rec709, colorMode: .normal, bundle: nil)
-        bus.usesPlaybackSource = true
+        let live = bus.openSource(.live)
+        bus.publish(live, source: camera, transfer: .rec709, reportedTransfer: .rec709, bundle: nil)
+        let playback = bus.openSource(.playback)
         XCTAssertNil(bus.inspectorSource)
-        bus.playbackSourcePixelBuffer = clip
-        bus.playbackSourceTransfer = .dlog2
+        bus.publish(playback, source: clip, transfer: .dlog2, bundle: nil)
         XCTAssertTrue(bus.inspectorSource?.buffer === clip)
         XCTAssertEqual(bus.inspectorSource?.transfer, .dlog2)
-        bus.clearPlaybackSource()
+        bus.clearPlaybackSource(playback)
         XCTAssertNil(bus.inspectorSource)
-        bus.usesPlaybackSource = false
+        bus.closeSource(playback)
         XCTAssertTrue(bus.inspectorSource?.buffer === camera)
-        bus.reset()
+        bus.closeSource(live)
         XCTAssertNil(bus.inspectorSource)
     }
 

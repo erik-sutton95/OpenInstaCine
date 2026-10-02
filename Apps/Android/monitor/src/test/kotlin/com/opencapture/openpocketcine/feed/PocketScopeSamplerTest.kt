@@ -92,7 +92,7 @@ class PocketScopeSamplerTest {
                 includePoints = true,
                 includeVectorPoints = true,
                 iso = 1600,
-            )
+             ceiling = ScopeExposureCeiling.UNOBSERVED)
         val pixels = ((width + 1) / 2) * ((height + 1) / 2)
         assertEquals(pixels, bundle.samples.points.size)
         assertEquals(pixels, bundle.samples.histogramRed.sum())
@@ -115,7 +115,7 @@ class PocketScopeSamplerTest {
                 histogramBlue = IntArray(256).also { it[16] = 40; it[247] = 10 },
                 points = emptyList(),
             )
-        val remapped = WaveformIre.remapHistogram(samples.histogramRed, MonitorTransfer.DLOG2, 1600)
+        val remapped = WaveformIre.remapHistogram(samples.histogramRed, MonitorTransfer.DLOG2, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED)
         assertEquals(50, remapped.sum())
         assertEquals(40, remapped[0])
         assertEquals(10, remapped[255])
@@ -125,6 +125,7 @@ class PocketScopeSamplerTest {
                 ScopeHistogramDisplay.EMPTY,
                 MonitorTransfer.DLOG2,
                 1600,
+                ceiling = ScopeExposureCeiling.UNOBSERVED,
             )
         assertTrue(display.red[0] > 0f)
         assertTrue(display.red[255] > 0f)

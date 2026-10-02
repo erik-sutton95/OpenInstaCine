@@ -31,6 +31,7 @@ import com.opencapture.openpocketcine.feed.LiveFeedEffectsSession
 @Composable
 internal fun PlaybackFeedView(
     player: ExoPlayer,
+    scopeBus: com.opencapture.opencine.runtime.ScopeSampleBus,
     backdrop: MonitorBackdropFeed,
     plan: FeedEffectsRenderPlan,
     mirrored: Boolean,
@@ -48,6 +49,7 @@ internal fun PlaybackFeedView(
         remember {
             LiveFeedEffectsSession(
                 context = context,
+                scopeBus = scopeBus,
                 backdrop = backdrop,
                 onDecoderSurface = { surface ->
                     main.post { player.setVideoSurface(surface) }

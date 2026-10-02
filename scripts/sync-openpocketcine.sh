@@ -66,6 +66,23 @@ LUNA_OWNED=(
   OpenInstaCine/MonitorUIReview.swift
   OpenInstaCineTests/MonitorCanvasObservationTests.swift
   OpenInstaCineUITests/MonitorUIFlowTests.swift
+  # SHELL-03 I-3: shared sampling math and scoped native publication. Keep the
+  # source adapters and generation checks; donor publishers cannot be restored.
+  OpenInstaCine/LiveFrameSample.swift
+  OpenInstaCine/LiveScopes.swift
+  OpenInstaCine/HevcDecoder.swift
+  OpenInstaCine/PlaybackFeed.swift
+  OpenInstaCine/LiveMonitorFx.swift
+  OpenInstaCine/MediaPlayer.swift
+  OpenInstaCine/WatcherRelayClient.swift
+  OpenInstaCine/Assists/AssistInspectorPreview.swift
+  OpenInstaCineTests/AssistInspectorLifecycleTests.swift
+  OpenInstaCineTests/AssistInspectorPreviewTests.swift
+  OpenInstaCineTests/DecoderGenerationTests.swift
+  OpenInstaCineTests/FirstConnectTests.swift
+  OpenInstaCineTests/LiveFrameSampleTests.swift
+  OpenInstaCineTests/PlaybackAssistTests.swift
+  OpenInstaCineTests/VideoDisplayOwnershipTests.swift
   # What is left of upstream's startup chrome once the wizard moved to OpenCineAppKit (SHELL-02).
   OpenInstaCine/StartupChrome.swift
   OpenInstaCine/PictureEVMeter.swift

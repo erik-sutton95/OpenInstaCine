@@ -96,7 +96,7 @@ struct LiveImageEffects: Equatable, Sendable {
     }
 
     /// Stamp the source's curve and its live ceiling together.
-    mutating func stamp(transfer: MonitorTransfer, ceiling: ScopeExposureCeiling) {
+    mutating func stamp(transfer: MonitorTransfer, ceiling: OpenCineMedia.ScopeExposureCeiling) {
         colorMode = transfer.colorMode
         clipByte = ceiling.clipByte(transfer: MonitorTransfer(colorMode))
     }

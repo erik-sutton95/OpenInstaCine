@@ -41,7 +41,7 @@ final class DecoderGenerationTests: XCTestCase {
 
     func testCurrentGenerationStillPublishesNewSourceHealthAfterReset() async {
         let decoder = HevcDecoder()
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         decoder.sampleBus = bus
         decoder.reset()
         let delivered = expectation(description: "Current source reaches processing")
@@ -74,7 +74,7 @@ final class DecoderGenerationTests: XCTestCase {
 
     private func assertRejectsQueuedResult(_ invalidate: (HevcDecoder) -> Void) async {
         let decoder = HevcDecoder()
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         decoder.sampleBus = bus
         let old = ScopeTestBuffers.makeFlatBuffer(code: 40, width: 16, height: 16)
         let sentinel = ScopeTestBuffers.makeFlatBuffer(code: 180, width: 16, height: 16)

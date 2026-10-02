@@ -39,7 +39,7 @@ final class PlaybackAssistTests: XCTestCase {
             session.attach(host: host, player: player)
             var effects = LiveImageEffects()
             effects.zebra = true
-            session.setEffects(effects, transfer: .rec709, sampleBus: LiveFrameSampleBus())
+            session.setEffects(effects, transfer: .rec709, sampleBus: LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile))
             try? await Task.sleep(for: .milliseconds(150))
             session.shutdown()
             XCTAssertEqual(player.seekCount, 0, "A ready output must still wait for a numeric time")
@@ -57,7 +57,7 @@ final class PlaybackAssistTests: XCTestCase {
         session.attach(host: host, player: player)
         var effects = LiveImageEffects()
         effects.zebra = true
-        session.setEffects(effects, transfer: .rec709, sampleBus: LiveFrameSampleBus())
+        session.setEffects(effects, transfer: .rec709, sampleBus: LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile))
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while player.seekCount == 0, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(10))
@@ -378,7 +378,7 @@ final class PlaybackAssistTests: XCTestCase {
         session.attach(host: host, player: player)
         var fx = LiveImageEffects()
         fx.zebra = true
-        session.setEffects(fx, transfer: .rec709, sampleBus: LiveFrameSampleBus())
+        session.setEffects(fx, transfer: .rec709, sampleBus: LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile))
         XCTAssertFalse(host.ciFeed.hasPresentedFrame)
         XCTAssertFalse(host.playerLayer.isHidden)
         session.shutdown()

@@ -1,4 +1,5 @@
 import Foundation
+import OpenCineMedia
 
 // DJI integration side of the color science. Curve math, the scope axis, traffic lights
 // and the false-colour scales live in OpenCineMedia (re-exported by this module). This file
@@ -71,181 +72,27 @@ extension MonitorTransfer {
 /// early. DJI papers: below native EI the output cannot reach saturation;
 /// at/above native an S-curve holds the code. D-Log2 native = 1600; D-Log
 /// native = 400.
-public final class ScopeExposureCeiling: @unchecked Sendable {
+public final class ScopeExposureCeiling: OpenCineMedia.ScopeExposureCeiling, @unchecked Sendable {
     public static let referenceEI = 1600
-    /// Pocket D-Log native / base ISO. Hold the live-tap ceiling from here up.
     public static let dlogReferenceEI = 400
-    /// Measured live-tap max at ISO 1600. Do not replace with recording ~847/1023.
     public static let dlog2LiveTapByteAt1600: UInt8 = 247
-    /// Same blast also logged 248: treat as the same ceiling, not a new curve.
     public static let dlog2LiveTapByteAt1600High: UInt8 = 248
-    /// Measured D-Log live-tap max (ISO 400–6400 hold). Independent of D-Log2.
     public static let dlogLiveTapByteAtNative: UInt8 = 223
-    /// Same blast also logged 224: treat as the same ceiling, not a new curve.
     public static let dlogLiveTapByteAtNativeHigh: UInt8 = 224
+    public static let sourceProfile = ScopeClipProfile(calibrations: [
+        .dlog2: ScopeClipCalibration(referenceISO: referenceEI,
+            referenceByte: dlog2LiveTapByteAt1600, refinementMaximumByte: dlog2LiveTapByteAt1600High),
+        .dlog: ScopeClipCalibration(referenceISO: dlogReferenceEI,
+            referenceByte: dlogLiveTapByteAtNative, refinementMaximumByte: dlogLiveTapByteAtNativeHigh,
+            refinementAtOrAboveReference: true),
+    ], defaultISO: referenceEI)
 
-    /// Clipped detail sits on a shelf under the ceiling, not on the ceiling byte
-    /// itself, and white balance moves it: device journals show 242–247 on clipped
-    /// highlights at D-Log2 ISO 1600 (a blown window read 242–244 on 2026-09-29) and
-    /// 219–223 on D-Log. See ``ScopeAnchors/clipShelfCodes``.
-    public static let clipShelfCodes = ScopeAnchors.clipShelfCodes
-
-    private struct State {
-        var iso = ScopeExposureCeiling.referenceEI
-        var refined1600 = ScopeExposureCeiling.dlog2LiveTapByteAt1600
-        var refinedDlog = ScopeExposureCeiling.dlogLiveTapByteAtNative
-        var observedByEI: [Key: UInt8] = [:]
-        var lastLoggedMax: UInt8 = 0
-    }
-
-    private struct Key: Hashable {
-        var transfer: MonitorTransfer
-        var ei: Int
-    }
-
-    private var state = State()
-    private let lock = NSLock()
-
-    public init() {}
-
-    private func withLock<T>(_ body: (inout State) -> T) -> T {
-        lock.lock()
-        defer { lock.unlock() }
-        return body(&state)
-    }
-
-    /// Last `cam_expo_param` ISO. Unknown / 0 keeps the measured 1600 point.
-    public func setISO(_ iso: Int) {
-        guard (50...102_400).contains(iso) else { return }
-        withLock { $0.iso = iso }
-    }
-
-    /// No-op when the session has not published an ISO yet.
-    public func syncISO(_ iso: Int) {
-        if iso > 0 { setISO(iso) }
-    }
-
-    public func resolvedISO() -> Int {
-        withLock { $0.iso }
-    }
-
-    public func reset() {
-        withLock { $0 = State() }
-    }
-
-    /// First byte of the clip shelf (D-Log2 ISO 1600 → 240).
-    public func clipShelfByte(transfer: MonitorTransfer, iso: Int? = nil) -> Int {
-        ScopeAnchors.clipShelfByte(clipByte: clipByte(transfer: transfer, iso: iso))
-    }
-
-    /// Encoded curve fraction of the live-tap clip (D-Log2 → 247/255, D-Log → 223/255).
-    public func clipEncoded(transfer: MonitorTransfer, iso: Int? = nil) -> Double {
-        Double(clipByte(transfer: transfer, iso: iso)) / 255.0
-    }
-
-    public func clipByte(transfer: MonitorTransfer, iso: Int? = nil) -> Int {
-        withLock { s in
-            let ei = iso ?? s.iso
-            let table = Self.tableByte(
-                transfer: transfer, iso: ei,
-                refined1600: s.refined1600, refinedDlog: s.refinedDlog)
-            let seen = s.observedByEI[Key(transfer: transfer, ei: ei)] ?? 0
-            return Int(max(UInt8(table), seen))
-        }
-    }
-
-    /// Scope anchors of `transfer` on this source's ceiling.
-    public func anchors(transfer: MonitorTransfer, iso: Int? = nil) -> ScopeAnchors {
-        ScopeAnchors.make(transfer: transfer, clipByte: clipByte(transfer: transfer, iso: iso))
-    }
-
-    /// Ratchet the live-tap ceiling from a scope-tap `max=`. Ignores 0 and 255
-    /// (do not stretch a full-range leak onto the 100 line). Returns the clip
-    /// byte now in force, and whether the rolling max rose (for the control log).
-    @discardableResult
-    public func observeTapMax(
-        _ byte: UInt8, transfer: MonitorTransfer
-    ) -> (clip: UInt8, maxRose: Bool) {
-        guard transfer == .dlog || transfer == .dlog2, byte > 0, byte < 255 else {
-            return (UInt8(clipByte(transfer: transfer)), false)
-        }
-        return withLock { s in
-            if transfer == .dlog2, s.iso == Self.referenceEI, byte > s.refined1600,
-                byte <= Self.dlog2LiveTapByteAt1600High
-            {
-                s.refined1600 = byte
-            }
-            if transfer == .dlog,
-                s.iso == 0 || s.iso >= Self.dlogReferenceEI,
-                byte > s.refinedDlog,
-                byte <= Self.dlogLiveTapByteAtNativeHigh
-            {
-                s.refinedDlog = byte
-            }
-            let ei = s.iso
-            let key = Key(transfer: transfer, ei: ei)
-            let table = UInt8(
-                Self.tableByte(
-                    transfer: transfer, iso: ei,
-                    refined1600: s.refined1600, refinedDlog: s.refinedDlog))
-            let previous = s.observedByEI[key] ?? 0
-            // Allow a couple of codes of preview noise; never 255 (full-range leak).
-            let raised = min(max(previous, byte), UInt8(min(254, Int(table) + 2)))
-            if raised > table { s.observedByEI[key] = raised }
-            let clip = max(table, s.observedByEI[key] ?? 0)
-            let maxRose = byte > s.lastLoggedMax
-            if maxRose { s.lastLoggedMax = byte }
-            return (clip, maxRose)
-        }
-    }
-
-    /// Ceiling of a source with no ISO or tap history yet (reference EI, measured bytes).
-    /// For values that were never stamped by a source, for example a default effects value.
+    public init() { super.init(profile: Self.sourceProfile) }
     public static func referenceClipByte(transfer: MonitorTransfer) -> Int {
-        tableByte(
-            transfer: transfer, iso: referenceEI,
-            refined1600: dlog2LiveTapByteAt1600, refinedDlog: dlogLiveTapByteAtNative)
+        ScopeExposureCeiling().clipByte(transfer: transfer)
     }
-
-    /// Scene-linear live-tap ceiling at D-Log2 EI 1600. Rec.709 / HLG do not
-    /// use this. D-Log has its own code-space ceiling (``dlogLiveTapByteAtNative``).
     public static var linearCeilingAt1600: Double {
-        LiveColorScience.linearize(
-            Double(dlog2LiveTapByteAt1600) / 255.0, transfer: .dlog2)
-    }
-
-    private static func tableByte(
-        transfer: MonitorTransfer, iso: Int, refined1600: UInt8, refinedDlog: UInt8
-    ) -> Int {
-        switch transfer {
-        case .rec709, .hdr, .dlogm, .ilog:
-            return 255
-        case .dlog2:
-            let ei = iso > 0 ? iso : referenceEI
-            let refLinear = LiveColorScience.linearize(
-                Double(refined1600) / 255.0, transfer: .dlog2)
-            // Paper: below 1600 the code cannot reach saturation (scale linear
-            // by EI/1600). At/above 1600 the S-curve holds the preview at the
-            // measured live-tap saturation, not encoded 1.0.
-            let linear =
-                ei >= referenceEI
-                ? refLinear
-                : refLinear * Double(ei) / Double(referenceEI)
-            let encoded = LiveColorScience.encode(linear, transfer: .dlog2)
-            return Int(min(254, max(1, (encoded * 255).rounded())))
-        case .dlog:
-            let ei = iso > 0 ? iso : dlogReferenceEI
-            let refLinear = LiveColorScience.linearize(
-                Double(refinedDlog) / 255.0, transfer: .dlog)
-            // Pocket native EI is 400. Hold the measured *code* ceiling from
-            // 400 up. Independent of the D-Log2 247 point.
-            let linear =
-                ei >= dlogReferenceEI
-                ? refLinear
-                : refLinear * Double(ei) / Double(dlogReferenceEI)
-            let encoded = LiveColorScience.encode(linear, transfer: .dlog)
-            return Int(min(254, max(1, (encoded * 255).rounded())))
-        }
+        LiveColorScience.linearize(Double(dlog2LiveTapByteAt1600) / 255, transfer: .dlog2)
     }
 }
 

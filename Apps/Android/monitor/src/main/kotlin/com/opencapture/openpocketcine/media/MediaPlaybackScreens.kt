@@ -2,6 +2,8 @@
 
 package com.opencapture.openpocketcine.media
 
+import com.opencapture.openpocketcine.feed.colorMode
+
 import com.opencapture.monitorui.LocalMonitorBackdrops
 import com.opencapture.monitorui.monitorBackdropSource
 import com.opencapture.openpocketcine.feed.rememberMonitorBackdropFeed
@@ -710,6 +712,7 @@ fun MediaPlayerScreen(
             ) {
                 PlaybackFeedView(
                     player = player,
+                    scopeBus = model.scopeBus,
                     backdrop = backdrop,
                     plan = effectsPlan,
                     mirrored = mirror < 0f,
@@ -832,10 +835,11 @@ fun MediaPlayerScreen(
                 )
                 LiveAssistLayer(
                     state = assist,
+                    scopeBus = model.scopeBus,
                     status = status,
                     focus = null,
                     playback = true,
-                    colorMode = effectsPlan.scopeTap.colorMode,
+                    colorMode = effectsPlan.scopeTap.transfer.colorMode,
                     modifier = Modifier.fillMaxSize(),
                     onOpenOptions = { tool, frame ->
                         assist.longPressAnchor = frame

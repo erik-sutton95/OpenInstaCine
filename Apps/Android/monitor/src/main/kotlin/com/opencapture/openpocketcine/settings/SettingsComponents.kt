@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine.settings
 
+import com.opencapture.openpocketcine.feed.fromColorMode
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -55,6 +57,7 @@ import com.opencapture.openpocketcine.assists.FalseColorReference
 import com.opencapture.openpocketcine.assists.FalseColorScale
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeExposureCeiling
+import com.opencapture.opencine.media.ScopeClipSource
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -1027,7 +1030,7 @@ fun PanelCloseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
 fun SettingsFalseColorKey(
     scale: FalseColorScale,
     colorMode: Int,
-    ceiling: ScopeExposureCeiling = ScopeExposureCeiling.UNOBSERVED,
+    ceiling: ScopeClipSource = ScopeExposureCeiling.UNOBSERVED,
 ) {
     val transfer = MonitorTransfer.fromColorMode(colorMode)
     val segments = FalseColorReference.segments(scale, transfer, ceiling = ceiling)

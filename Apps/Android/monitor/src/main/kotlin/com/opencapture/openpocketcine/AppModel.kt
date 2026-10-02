@@ -52,6 +52,7 @@ class AppModel(
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val session = PocketCameraSession(context, borrowing, controlLease)
+    val scopeBus = com.opencapture.opencine.runtime.ScopeSampleBus()
     val assist = LiveAssistState.from(appContext)
 
     /**

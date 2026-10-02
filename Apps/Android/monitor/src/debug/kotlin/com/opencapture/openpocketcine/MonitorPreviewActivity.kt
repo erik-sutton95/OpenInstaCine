@@ -139,7 +139,7 @@ private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabiliti
         if (image != null) Image(image.asImageBitmap(), null,
             Modifier.liveModuleFrame(layout.onFeed).monitorBackdropSource(backdrop), contentScale = ContentScale.FillBounds)
         else Box(Modifier.liveModuleFrame(layout.onFeed).background(Color(0xFF4A4C48)))
-        com.opencapture.openpocketcine.assists.LiveAssistLayer(model.assist, status, focus = null,
+        com.opencapture.openpocketcine.assists.LiveAssistLayer(model.assist, status = status, scopeBus = model.scopeBus, focus = null,
             feedFrame = layout.onFeed, placementFrame = ChromeRect(6f, safeTop + 6f, width - 12f,
                 (zones?.systemBar?.minY ?: (height - safeBottom)) - safeTop - 12f), locked = locked,
             onOpenOptions = { tool, frame -> model.assist.longPressAnchor = frame; model.assist.configureTool = tool })

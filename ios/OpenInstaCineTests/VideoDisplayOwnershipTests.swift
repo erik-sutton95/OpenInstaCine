@@ -59,7 +59,7 @@ final class VideoDisplayOwnershipTests: XCTestCase {
     ) -> VideoDisplayRepresentable {
         VideoDisplayRepresentable(
             decoder: decoder, effects: LiveImageEffects(), assistMirror: false,
-            pictureFlip: false, sampleBus: LiveFrameSampleBus(), transfer: nil,
+            pictureFlip: false, sampleBus: LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile), transfer: nil,
             feedUpscaler: decoder.feedUpscaler, hdrDisplay: hdrDisplay)
     }
 }

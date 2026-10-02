@@ -43,6 +43,7 @@ private const val DEFAULT_SOURCE_HEIGHT = 720
  */
 internal class LiveFeedEffectsSession(
     context: Context,
+    private val scopeBus: LiveScopeSampleBus,
     private val onDecoderSurface: (Surface) -> Unit,
     private val onGpuFailed: () -> Unit,
     private val onFirstFrame: () -> Unit = {},
@@ -54,6 +55,7 @@ internal class LiveFeedEffectsSession(
 ) {
     /** This feed's clip ceiling; never shared with another feed or playback. */
     private val scopeCeiling = ScopeExposureCeiling()
+    private val scopeHz = ScopeTapHzLog()
 
     @Volatile private var stretchToRect = false
 
@@ -88,7 +90,7 @@ internal class LiveFeedEffectsSession(
         }
     private val sampleBusy = AtomicBoolean(false)
     private val previewSource = InspectorPreviewSource()
-    @Volatile private var scopeSource: LiveScopeSampleBus.Source? = null
+    @Volatile private var scopeSource: ScopeSampleSource? = null
     @Volatile private var scopeActive = false
     private var scopeAttached = false
     @Volatile private var nextScopeAtNs = 0L
@@ -167,9 +169,9 @@ internal class LiveFeedEffectsSession(
     }
 
     @Synchronized private fun resetScopeSource() {
-        LiveScopeSampleBus.closeSource(scopeSource)
+        scopeBus.closeSource(scopeSource)
         previousBundle = ScopeAssistBundle.EMPTY
-        scopeSource = if (scopeActive && scopeAttached) LiveScopeSampleBus.openSource() else null
+        scopeSource = if (scopeActive && scopeAttached) scopeBus.openSource() else null
     }
 
     private fun requestRender() {
@@ -199,7 +201,7 @@ internal class LiveFeedEffectsSession(
         if (now < nextScopeAtNs) return
         val sourceEpoch = previewSource.captureEpoch() ?: return
         val scopeOwner = scopeSource
-        if (!LiveScopeSampleBus.isCurrent(scopeOwner)) return
+        if (!scopeBus.isCurrent(scopeOwner)) return
         if (!sampleBusy.compareAndSet(false, true)) return
         val previewTicket = InspectorPreviewPipeline.acquire(policy.previewOwner, playback, now)?.takeIf {
             if (previewSource.isCurrent(sourceEpoch)) true
@@ -259,9 +261,9 @@ internal class LiveFeedEffectsSession(
                         previewSubmitted = true
                     }
                     if (!scopeDue || !previewSource.isCurrent(sourceEpoch) ||
-                        !LiveScopeSampleBus.isCurrent(scopeOwner)) return@execute
-                    var transfer = MonitorTransfer.fromColorMode(policy.colorMode)
-                    scopeCeiling.syncISO(policy.iso)
+                        !scopeBus.isCurrent(scopeOwner)) return@execute
+                    var transfer = policy.transfer
+                    policy.iso?.let(scopeCeiling::syncISO)
                     val (minC, maxC) = PocketScopeSampler.minMaxRGB(packed)
                     if (policy.allowsTransferInference) {
                         transfer = MonitorTransfer.inferred(minC, maxC, transfer)
@@ -282,11 +284,11 @@ internal class LiveFeedEffectsSession(
                             ceiling = scopeCeiling,
                         )
                     mainHandler.post {
-                        if (previewSource.isCurrent(sourceEpoch) && LiveScopeSampleBus.publish(scopeOwner, sampled)) {
+                        if (previewSource.isCurrent(sourceEpoch) && scopeBus.publish(scopeOwner, sampled)) {
                             previousBundle = sampled
                         }
                     }
-                    ScopeTapHzLog.note(
+                    scopeHz.note(
                         TAG,
                         scopes = policy.activeScopeCount,
                         intervalNs = policy.minIntervalNs(thermal),

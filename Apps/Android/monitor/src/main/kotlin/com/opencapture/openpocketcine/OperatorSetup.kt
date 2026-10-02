@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.openpocketcine.feed.fromColorMode
+
 import com.opencapture.monitorui.MonitorTab
 import com.opencapture.monitorui.monitorScrollFade
 import com.opencapture.monitorui.monitorTabStrip

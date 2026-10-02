@@ -50,7 +50,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testImageInspectorReceivesLatestRawPictureWithAllScopesOff() async throws {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         let effects = LiveImageEffects().withInspectorDemand(.peaking)
         decoder.attach(sampleBus: bus, effects: { effects }, transfer: { .dlog2 })
@@ -74,7 +74,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testFailedPresentationDoesNotEmitPictureHeartbeat() async throws {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         decoder.effects.histogram = true
         decoder.unlockHardwareDecoder()
@@ -97,7 +97,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testHandleDecodedFramePublishesScopes() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.histogram = true
@@ -134,7 +134,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testHandleDecodedFrameIncrementsGenerationEachCall() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.histogram = true
@@ -195,7 +195,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testLUTOffAfterDecodedFrameDoesNotFlushOrHoldIDR() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         let feed = CIFeedView(frame: CGRect(x: 0, y: 0, width: 64, height: 64))
         decoder.processedFeed = feed
@@ -353,7 +353,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testLUTOnlyPresentDoesNotTickScopeGeneration() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         let cube = BuiltInLook.mono.cube()
         var fx = LiveImageEffects()
@@ -383,20 +383,20 @@ final class LiveFrameSampleTests: XCTestCase {
     func testTwoSourcesKeepIndependentExposureCeilings() async {
         var fx = LiveImageEffects()
         fx.waveform = true
-        func feed(_ bus: LiveFrameSampleBus, max: UInt8) -> HevcDecoder {
+        func feed(_ bus: LiveFrameSampleBus, max: UInt8, iso: Int? = nil) -> HevcDecoder {
             let decoder = HevcDecoder()
             decoder.attach(sampleBus: bus, effects: { fx }, transfer: { .dlog2 })
             decoder.effects = fx
             decoder.incomingTransfer = .dlog2
+            if let iso { bus.exposureCeiling.setISO(iso) }
             decoder.handleDecodedFrame(
                 ScopeTestBuffers.makeBGRA { x, _ in x < 64 ? 78 : max },
                 effects: fx, transfer: .dlog2)
             return decoder
         }
-        let a = LiveFrameSampleBus()
-        let b = LiveFrameSampleBus()
-        a.exposureCeiling.setISO(800)
-        let decoders = [feed(a, max: 233), feed(b, max: 160)]
+        let a = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        let b = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        let decoders = [feed(a, max: 233, iso: 800), feed(b, max: 160)]
         let deadline = Date().addingTimeInterval(2)
         while Date() < deadline, a.publishedScopes < 1 || b.publishedScopes < 1 {
             try? await Task.sleep(for: .milliseconds(20))
@@ -411,7 +411,7 @@ final class LiveFrameSampleTests: XCTestCase {
     // MARK: - Transfer plumbing
 
     func testDLog2TransferRidesWithSample() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.histogram = true
@@ -471,7 +471,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testDLog2TapSignaturePromotesDefaultRec709Transfer() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.waveform = true
@@ -684,7 +684,7 @@ final class LiveFrameSampleTests: XCTestCase {
         let buffer = try XCTUnwrap(
             Self.makeLiveLikeBuffer(width: 64, height: 48),
             "need a 10-bit / IOSurface / 420v buffer")
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.histogram = true
@@ -708,7 +708,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testHandleDecodedFramePublishesScopesFrom420v() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.histogram = true

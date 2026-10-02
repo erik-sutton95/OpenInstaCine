@@ -1,57 +1,14 @@
 package com.opencapture.openpocketcine.feed
 
 import android.util.Log
-import androidx.compose.runtime.getValue
 import java.util.Locale
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 
-/**
- * Latest scope tap published off the GLES thread (main-thread). Compose
- * observes [bundle]; WAVE / PARADE / HISTO / VECTOR / LIGHTS / ND read it.
- */
-object LiveScopeSampleBus {
-    /** A replaced source cannot publish a queued sample or clear its successor. */
-    internal class Source
-    private var source: Source? = null
-    var bundle by mutableStateOf(ScopeAssistBundle.EMPTY)
-        private set
-
-    var generation by mutableIntStateOf(0)
-        private set
-
-    @Synchronized internal fun openSource(): Source = Source().also {
-        source = it
-        reset()
-    }
-
-    @Synchronized internal fun isCurrent(candidate: Source?): Boolean =
-        candidate != null && candidate === source
-
-    @Synchronized internal fun publish(candidate: Source?, next: ScopeAssistBundle): Boolean {
-        if (!isCurrent(candidate)) return false
-        bundle = next
-        generation += 1
-        return true
-    }
-
-    @Synchronized internal fun closeSource(candidate: Source?) {
-        if (!isCurrent(candidate)) return
-        source = null
-        reset()
-    }
-
-    private fun reset() {
-        bundle = ScopeAssistBundle.EMPTY
-        generation = 0
-        ScopeTapHzLog.reset()
-    }
-}
+typealias LiveScopeSampleBus = com.opencapture.opencine.runtime.ScopeSampleBus
+internal typealias ScopeSampleSource = com.opencapture.opencine.runtime.ScopeSampleBus.Source
 
 /** 2 s delivered-Hz breadcrumb vs [PocketScopeSampler.minIntervalNs]. */
-internal object ScopeTapHzLog {
-    private const val WINDOW_NS = 2_000_000_000L
+internal class ScopeTapHzLog {
+    private val windowNs = 2_000_000_000L
     private var windowStartNs = 0L
     private var taps = 0
 
@@ -60,7 +17,7 @@ internal object ScopeTapHzLog {
         if (windowStartNs == 0L) windowStartNs = now
         taps += 1
         val elapsed = now - windowStartNs
-        if (elapsed < WINDOW_NS) return
+        if (elapsed < windowNs) return
         val hz = taps * 1_000_000_000.0 / elapsed
         val budget = 1_000_000_000.0 / intervalNs.coerceAtLeast(1)
         Log.i(
@@ -77,56 +34,4 @@ internal object ScopeTapHzLog {
     }
 }
 
-/** Which scopes the GLES present path should tap, and the VECTOR look. */
-internal data class ScopeTapPolicy(
-    val inspectorOnly: Boolean = false,
-    val previewOwner: Any? = null,
-    val playback: Boolean = false,
-    val waveform: Boolean = false,
-    val parade: Boolean = false,
-    val histogram: Boolean = false,
-    val vectorscope: Boolean = false,
-    val trafficLights: Boolean = false,
-    val ndMeter: Boolean = false,
-    /** EV meter reading the picture: the scope tap must run. */
-    val evMeter: Boolean = false,
-    val trafficThreshold: Double = 0.0,
-    val colorMode: Int = com.opencapture.openpocketcine.session.CameraCommands.COLOR_NORMAL,
-    val iso: Int = ScopeExposureCeiling.REFERENCE_EI,
-    val vectorLut: FeedEffectsCube? = null,
-    val allowsTransferInference: Boolean = true,
-) {
-    val activeScopeCount: Int
-        get() = listOf(waveform, parade, histogram, vectorscope, trafficLights, ndMeter, evMeter).count { it }
-
-    val needsTap: Boolean
-        get() = activeScopeCount > 0 || previewOwner != null
-
-    val includePoints: Boolean
-        get() = waveform || parade
-
-    val includeVectorPoints: Boolean
-        get() = vectorscope
-
-    fun minIntervalNs(thermalMultiplier: Double): Long {
-        val existing = PocketScopeSampler.minIntervalNs(activeScopeCount, thermalMultiplier)
-        return if (inspectorOnly) maxOf(existing, (200_000_000L * thermalMultiplier.coerceAtLeast(1.0)).toLong()) else existing
-    }
-
-    /**
-     * Raw tap cadence for both schedulers. An inspector-only scope never drives it past
-     * 5 Hz; visible backdrop chrome may still ask for the faster 213×120 tap.
-     */
-    fun tapIntervalNs(thermalMultiplier: Double, backdropDemand: Boolean): Long =
-        PocketScopeSampler.chromeSampleIntervalNs(
-            if (inspectorOnly) 0 else activeScopeCount, thermalMultiplier, backdropDemand)
-
-    /** Scope accumulation admission, independent of a faster backdrop-driven raw tap. */
-    fun scopeWorkDue(nowNs: Long, lastScopeWorkNs: Long, thermalMultiplier: Double): Boolean =
-        activeScopeCount > 0 &&
-            (lastScopeWorkNs == 0L || nowNs - lastScopeWorkNs >= minIntervalNs(thermalMultiplier))
-
-    companion object {
-        val IDLE = ScopeTapPolicy()
-    }
-}
+internal typealias ScopeTapPolicy = com.opencapture.opencine.media.ScopeTapPolicy

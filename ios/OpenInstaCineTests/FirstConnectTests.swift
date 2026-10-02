@@ -9,7 +9,7 @@ import XCTest
 final class FirstConnectTests: XCTestCase {
     func testCachedFrameRedrawDoesNotAdvanceSourceFreshness() async throws {
         let decoder = HevcDecoder()
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         decoder.effects.histogram = true
         decoder.unlockHardwareDecoder()
         decoder.sampleBus = bus

@@ -10,7 +10,7 @@ import androidx.compose.runtime.setValue
 import com.opencapture.openpocketcine.NDFilterNotation
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.feed.ScopeAssistBundle
-import com.opencapture.openpocketcine.feed.ScopeExposureCeiling
+import com.opencapture.opencine.media.ScopeClipSource
 import com.opencapture.openpocketcine.lut.LutExposureCompensation
 import org.json.JSONArray
 import org.json.JSONObject
@@ -234,7 +234,7 @@ class LiveAssistState(
     var scopeBundle by mutableStateOf(ScopeAssistBundle.EMPTY)
 
     /** Clip ceiling of the shown scope source; changes only when the source does, not per tap. */
-    val scopeCeiling: ScopeExposureCeiling by derivedStateOf { scopeBundle.ceiling }
+    val scopeCeiling: ScopeClipSource by derivedStateOf { scopeBundle.ceiling }
 
     fun acceptScopeBundle(bundle: ScopeAssistBundle) {
         scopeBundle = bundle

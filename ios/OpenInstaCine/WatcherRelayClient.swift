@@ -21,7 +21,7 @@ final class WatcherRelayClient {
     var token = WatcherRelayControlToken(holderName: "Host", holderIsRecipient: false)
     var hostTitle = ""
     let decoder = HevcDecoder()
-    let samples = LiveFrameSampleBus()
+    let samples = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
 
     private var conn: NWConnection?
     private var reader: WatcherRelayReader?
