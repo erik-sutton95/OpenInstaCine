@@ -335,78 +335,14 @@ final class HistogramAssistStore {
 struct HistogramLongPressMenu: View {
     @Binding var options: HistogramAssist.Options
     var compact: Bool = false
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SettingsSwitchInlineRow(
-                title: HistogramAssist.trafficLightsTitle,
-                help: HistogramAssist.trafficLightsHelp,
-                showTopDivider: false,
-                stacked: compact,
-                isOn: options.trafficLights
-            ) {
-                HistogramAssistHaptics.selection()
-                options.trafficLights.toggle()
-            }
-            SettingsInlineRow(
-                title: HistogramAssist.compensationTitle,
-                help: HistogramAssist.compensationHelp,
-                stacked: compact
-            ) {
-                HistogramCrushClipSegmented(
-                    selected: options.crushClipCompensation,
-                    compact: compact
-                ) { match in
-                    guard match != options.crushClipCompensation else { return }
-                    HistogramAssistHaptics.selection()
-                    options.crushClipCompensation = match
-                }
-            }
-        }
-    }
-}
-
-/// OpenZCine `SettingsCrushClipSegmented` — fraction glyphs, 46pt floor.
-private struct HistogramCrushClipSegmented: View {
-    let selected: HistogramAssist.CrushClipCompensation
-    var compact: Bool = false
-    let onSelect: (HistogramAssist.CrushClipCompensation) -> Void
-
-    var body: some View {
-        HStack(spacing: 4) {
-            MonitorSnapshotRows(HistogramAssist.CrushClipCompensation.allCases) { option in
-                let active = option == selected
-                Button {
-                    onSelect(option)
-                } label: {
-                    Text(option.compactLabel)
-                        .font(
-                            LiveType.ui(
-                                size: compact ? 12 : 11, weight: active ? .semibold : .medium)
-                        )
-                        .foregroundStyle(active ? LiveDesign.text : LiveDesign.muted)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-                        .frame(minWidth: 46, minHeight: 34)
-                        .background(
-                            active ? LiveDesign.surface : Color.clear,
-                            in: RoundedRectangle(
-                                cornerRadius: DesignTokens.cornerRadius, style: .continuous))
-                }
-                .buttonStyle(.zcTapTarget)
-                .accessibilityLabel(option.label)
-            }
-        }
-        .padding(4)
-        .background(
-            LiveDesign.background.opacity(0.5),
-            in: RoundedRectangle(cornerRadius: DesignTokens.cornerRadius, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DesignTokens.cornerRadius, style: .continuous)
-                .stroke(LiveDesign.hairline, lineWidth: 1)
-        )
-        .frame(maxWidth: .infinity)
+        MonitorHistogramMenu(trafficLights: $options.trafficLights,
+            compensation: Binding(get: { options.crushClipCompensation }, set: {
+                guard $0 != options.crushClipCompensation else { return }
+                HistogramAssistHaptics.selection(); options.crushClipCompensation = $0
+            }), trafficHelp: HistogramAssist.trafficLightsHelp,
+            compensationHelp: HistogramAssist.compensationHelp, compact: compact,
+            trafficFeedback: { HistogramAssistHaptics.selection() })
     }
 }
 

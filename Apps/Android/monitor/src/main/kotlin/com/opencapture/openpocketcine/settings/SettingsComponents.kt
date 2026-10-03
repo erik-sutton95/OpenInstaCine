@@ -337,48 +337,8 @@ fun SettingsSegmented(
     accentSelection: Boolean = false,
     testTag: String? = null,
     onSelect: (String) -> Unit,
-) {
-    BoxWithConstraints {
-        val labelSize = if (compact && fillWidth && options.size >= 4 && maxWidth < 260.dp) 9.5f else if (compact) 11f else 11.5f
-        Row(
-            Modifier
-                .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
-                .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
-                .background(LiveDesign.background.copy(alpha = 0.5f), ChromeShape)
-                .border(1.dp, LiveDesign.hairline, ChromeShape)
-                .padding(3.dp)
-                .selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            options.forEach { option ->
-                val active = option == selected
-                Box(
-                    Modifier
-                        .then(if (fillWidth) Modifier.weight(1f) else Modifier)
-                        .defaultMinSize(minHeight = if (compact) 32.dp else 30.dp)
-                        .background(
-                            if (active) { if (accentSelection) LiveDesign.accent else LiveDesign.surface } else Color.Transparent,
-                            ChromeShape,
-                        )
-                        .selectable(
-                            selected = active,
-                            role = Role.RadioButton,
-                            onClick = { if (!active) onSelect(option) },
-                        )
-                        .padding(horizontal = if (compact && fillWidth) 2.dp else if (compact) 8.dp else 11.dp, vertical = 6.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        option,
-                        style = chromeStyle(labelSize, if (active) FontWeight.SemiBold else FontWeight.Medium),
-                        color = if (active) { if (accentSelection) Color(0xFF08191F) else LiveDesign.text } else LiveDesign.muted,
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
-    }
-}
+) =
+    com.opencapture.monitorui.settings.MonitorSettingsSegmented(options, selected, compact, fillWidth, accentSelection, testTag, onSelect)
 
 /**
  * iOS `SettingsColorDots`: real colour circles (not text labels), selected with
@@ -391,41 +351,11 @@ fun SettingsColorDots(
     compact: Boolean = true,
     enabled: Boolean = true,
     onSelect: (String) -> Unit,
-) {
-    val diameter = if (compact) 15.dp else 13.dp
-    val hit = 44.dp
-    Row(horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 6.dp)) {
-        dots.forEach { dot ->
-            val active = dot.name == selectedName
-            Box(
-                Modifier
-                    .size(hit)
-                    .settingsClickable(role = Role.RadioButton) {
-                        if (enabled && !active) onSelect(dot.name)
-                    }
-                    .semantics { contentDescription = dot.name; if (!enabled) disabled() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .background(LiveDesign.background.copy(alpha = 0.5f), CircleShape)
-                        .border(
-                            width = if (active) 2.dp else 1.dp,
-                            color = if (active) dot.color else LiveDesign.hairline,
-                            shape = CircleShape,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(Modifier.size(diameter).background(dot.color, CircleShape))
-                }
-            }
-        }
-    }
-}
+) =
+    com.opencapture.monitorui.settings.MonitorSettingsColorDots(dots, selectedName, compact, enabled, onSelect)
 
 /** One named swatch for [SettingsColorDots] (iOS `SettingsColorDots.Dot`). */
-data class SettingsColorDot(val name: String, val color: Color)
+typealias SettingsColorDot = com.opencapture.monitorui.settings.MonitorSettingsColorDot
 
 /** iOS `SettingsPalette` — zone-scoped stripe/peaking colours. */
 object SettingsPalette {
@@ -466,9 +396,8 @@ fun SettingsPercentSlider(
     value: Int,
     range: IntRange,
     onChange: (Int) -> Unit,
-) {
-    SettingsValueSlider(value = value, range = range, label = "$value%", onChange = onChange)
-}
+) =
+    com.opencapture.monitorui.settings.MonitorSettingsPercentSlider(value, range, onChange)
 
 /** Thin accent track + white thumb, matching iOS `Slider` in Operator Setup. */
 @Composable
@@ -479,79 +408,13 @@ fun SettingsValueSlider(
     onChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
     labelWidth: Int = 40,
-) {
-    Row(
-        modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        GlassPillSlider(
-            value = value,
-            range = range,
-            onChange = onChange,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            label,
-            style = chromeStyle(12f, FontWeight.Medium, mono = true),
-            color = LiveDesign.text,
-            textAlign = TextAlign.End,
-            modifier = Modifier.width(labelWidth.dp),
-        )
-    }
-}
+) =
+    com.opencapture.monitorui.settings.MonitorSettingsValueSlider(value, range, label, onChange, modifier, labelWidth)
 
 /** Existing assist values adapt to a compact iOS-like track rather than the 44dp drum slider. */
 @Composable
-fun GlassPillSlider(value: Int, range: IntRange, onChange: (Int) -> Unit, modifier: Modifier = Modifier) {
-    val currentOnChange by rememberUpdatedState(onChange)
-    val start = range.first.toFloat()
-    val endInclusive = range.last.toFloat().coerceAtLeast(start)
-    val span = (endInclusive - start).coerceAtLeast(1f)
-    var widthPx by remember { mutableFloatStateOf(1f) }
-    val density = LocalDensity.current
-    fun atX(x: Float): Int {
-        val inset = with(density) { 10.dp.toPx() }
-        val t = ((x - inset) / (widthPx - 2f * inset).coerceAtLeast(1f)).coerceIn(0f, 1f)
-        return (start + t * span).roundToInt().coerceIn(range)
-    }
-    Canvas(
-        modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .onSizeChanged { widthPx = it.width.toFloat() }
-            .semantics {
-                progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), start..endInclusive)
-                setProgress {
-                    val next = it.roundToInt().coerceIn(range)
-                    if (next != value) onChange(next)
-                    true
-                }
-            }
-            .pointerInput(range) { detectTapGestures { currentOnChange(atX(it.x)) } }
-            .pointerInput(range) {
-                detectHorizontalDragGestures { change, _ ->
-                    change.consume()
-                    currentOnChange(atX(change.position.x))
-                }
-            },
-    ) {
-        val y = size.height / 2f
-        val inset = 10.dp.toPx()
-        val track = 2.dp.toPx()
-        val t = ((value.toFloat() - start) / span).coerceIn(0f, 1f)
-        val thumbX = inset + t * (size.width - 2f * inset)
-        drawLine(
-            LiveDesign.hairlineStrong,
-            Offset(inset, y),
-            Offset(size.width - inset, y),
-            track,
-            StrokeCap.Round,
-        )
-        drawLine(LiveDesign.accent, Offset(inset, y), Offset(thumbX, y), track, StrokeCap.Round)
-        drawCircle(Color.White, 10.dp.toPx(), Offset(thumbX, y))
-    }
-}
+fun GlassPillSlider(value: Int, range: IntRange, onChange: (Int) -> Unit, modifier: Modifier = Modifier) =
+    com.opencapture.monitorui.settings.MonitorSettingsPillSlider(value, range, onChange, modifier)
 
 /**
  * iOS `SettingsCrushClipSegmented`: five equal stop segments with fraction
@@ -563,46 +426,8 @@ fun SettingsCrushClipSegmented(
     selectedLabel: String,
     accentSelection: Boolean = false,
     onSelect: (String) -> Unit,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(LiveDesign.background.copy(alpha = 0.5f), ChromeShape)
-            .border(1.dp, LiveDesign.hairline, ChromeShape)
-            .padding(4.dp)
-            .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        options.forEach { (label, compact) ->
-            val active = label == selectedLabel
-            Box(
-                Modifier
-                    .weight(1f)
-                    .defaultMinSize(minHeight = 34.dp)
-                    .background(
-                        if (active) { if (accentSelection) LiveDesign.accent else LiveDesign.surface } else Color.Transparent,
-                        ChromeShape,
-                    )
-                    .selectable(
-                        selected = active,
-                        role = Role.RadioButton,
-                        onClick = { if (!active) onSelect(label) },
-                    )
-                    // The segment shows a fraction glyph; the full stop value is what a screen
-                    // reader has to say, so it announces the label rather than "¼".
-                    .semantics { contentDescription = label },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    compact,
-                    style = chromeStyle(12f, if (active) FontWeight.SemiBold else FontWeight.Medium),
-                    color = if (active) { if (accentSelection) Color(0xFF08191F) else LiveDesign.text } else LiveDesign.muted,
-                    maxLines = 1,
-                )
-            }
-        }
-    }
-}
+) =
+    com.opencapture.monitorui.settings.MonitorSettingsCrushClipSegmented(options, selectedLabel, accentSelection, onSelect)
 
 /** iOS `SettingsSwitchGraphic`: 39×22 capsule, cyan thumb on dim track when on. */
 @Composable

@@ -293,70 +293,19 @@ final class VectorscopeAssistStore {
 struct VectorscopeLongPressMenu: View {
     @Binding var options: VectorscopeAssist.Options
     var compact: Bool = false
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SettingsInlineRow(
-                title: "Trace Zoom",
-                help:
-                    "Magnifies only the chroma trace; the graticule stays at unity. The vectorscope reads the monitor image (your active LUT, or the built-in display tone map), where chroma is meaningful.",
-                showTopDivider: false,
-                stacked: compact
-            ) {
-                SettingsSegmented(
-                    options: VectorscopeAssist.Zoom.allCases.map(\.rawValue),
-                    selected: options.zoom.rawValue,
-                    compact: compact,
-                    stacked: compact
-                ) {
-                    guard let zoom = VectorscopeAssist.Zoom(rawValue: $0), zoom != options.zoom
-                    else { return }
-                    VectorscopeAssistHaptics.selection()
-                    options.zoom = zoom
-                }
-            }
-            SettingsInlineRow(
-                title: "Brightness",
-                help: "Raise trace intensity when the chroma plot is hard to read.",
-                stacked: compact
-            ) {
-                VectorscopePercentSlider(
-                    value: Binding(
-                        get: { options.brightness },
-                        set: {
-                            let next = VectorscopeAssist.Options.clampedBrightness($0)
-                            guard next != options.brightness else { return }
-                            VectorscopeAssistHaptics.selection()
-                            options.brightness = next
-                        }),
-                    range: VectorscopeAssist.brightnessRange)
-            }
-        }
-    }
-}
-
-/// OpenZCine `SettingsPercentSlider`.
-private struct VectorscopePercentSlider: View {
-    @Binding var value: Int
-    let range: ClosedRange<Int>
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Slider(
-                value: Binding(
-                    get: { Double(value) },
-                    set: { value = Int($0.rounded()) }),
-                in: Double(range.lowerBound)...Double(range.upperBound),
-                step: 1
-            )
-            .tint(LiveDesign.accent)
-            .frame(minWidth: 120, idealWidth: 190)
-            Text("\(value)%")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(LiveDesign.text)
-                .frame(width: 40, alignment: .trailing)
-                .monospacedDigit()
-        }
+        MonitorVectorscopeMenu(zoom: Binding(get: { options.zoom }, set: {
+            guard $0 != options.zoom else { return }
+            VectorscopeAssistHaptics.selection(); options.zoom = $0
+        }), brightness: Binding(get: { options.brightness }, set: {
+            let next = VectorscopeAssist.Options.clampedBrightness($0)
+            guard next != options.brightness else { return }
+            VectorscopeAssistHaptics.selection(); options.brightness = next
+        }), zoomHelp: "Magnifies only the chroma trace; the graticule stays at unity. The vectorscope reads the monitor image (your active LUT, or the built-in display tone map), where chroma is meaningful.",
+            brightnessHelp: "Raise trace intensity when the chroma plot is hard to read.",
+            brightnessRange: VectorscopeAssist.brightnessRange, compact: compact,
+            zoomFeedback: { OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled) })
+            .buttonStyle(.zcTapTarget)
     }
 }
 
