@@ -28,6 +28,7 @@ enum LiveAssistTool: String, CaseIterable, Identifiable {
     case magnification = "MAG"
 
     var id: String { rawValue }
+    var sharedTool: MonitorAssistTool? { MonitorAssistTool(rawValue: rawValue) }
 
     var isRetired: Bool { self == .magnification }
     var isPhotographyOnly: Bool { self == .instantReview }
@@ -64,97 +65,18 @@ enum LiveAssistTool: String, CaseIterable, Identifiable {
     static var cleanPinCases: [LiveAssistTool] { settingsCases.filter { $0 != .evMeter } }
 
     /// Compact label for the Display ▸ DISP 2 pin grid.
-    var displaySettingsTitle: String {
-        switch self {
-        case .parade: "Parade"
-        case .ndMeter: "ND"
-        case .audioMeters: "Audio Levels"
-        default: title
-        }
-    }
+    var displaySettingsTitle: String { sharedTool?.displaySettingsTitle ?? title }
 
-    var hasConfiguration: Bool {
-        switch self {
-        // Audio options affect presentation only.
-        case .instantReview, .magnification, .level, .evMeter:
-            false
-        default: true
-        }
-    }
+    var hasConfiguration: Bool { sharedTool?.hasConfiguration ?? false }
 
     /// The approved prototype owns these tool glyphs; app-only tools retain
     /// Lucide fallbacks without inventing a new visual language.
-    var monitorIcon: MonitorAssistIcon? {
-        switch self {
-        case .lut: .lut
-        case .peaking: .peaking
-        case .falseColor: .falseColor
-        case .zebra: .zebra
-        case .waveform: .waveform
-        case .parade: .rgbParade
-        case .histogram: .histogram
-        case .vectorscope: .vectorscope
-        case .trafficLights: .trafficLights
-        case .guides: .frameGuide
-        case .grid: .grid
-        case .crosshair: .crosshair
-        case .mirror: .mirror
-        case .audioMeters: .audioMeters
-        case .level: .level
-        default: nil
-        }
-    }
+    var monitorIcon: MonitorAssistIcon? { sharedTool?.monitorIcon }
 
     /// Existing app-only assist glyphs use the shared Lucide catalog.
-    var opcIcon: OpcIcon? {
-        switch self {
-        case .lut: .blend
-        case .peaking: .mountain
-        case .falseColor: .contrast
-        case .zebra: nil
-        case .waveform: .audioWaveform
-        case .parade: .chartColumn
-        case .histogram: .audioLines
-        case .vectorscope: .crosshair
-        case .trafficLights: .sun
-        case .ndMeter: .aperture
-        case .evMeter: nil
-        case .audioMeters: .slidersVertical
-        case .guides: .squareDashed
-        case .grid: .grid3x3
-        case .crosshair: .plus
-        case .level: .circle
-        case .desqueeze: .chevronsUpDown
-        case .mirror: .flipHorizontal2
-        case .magnification: .zoomIn
-        case .instantReview: .image
-        }
-    }
+    var opcIcon: OpcIcon? { sharedTool?.fallbackIcon ?? (self == .instantReview ? .image : self == .magnification ? .zoomIn : nil) }
 
-    var title: String {
-        switch self {
-        case .lut: "LUT"
-        case .peaking: "Peaking"
-        case .falseColor: "False Color"
-        case .zebra: "Zebra"
-        case .waveform: "Waveform"
-        case .parade: "RGB Parade"
-        case .histogram: "Histogram"
-        case .vectorscope: "Vectorscope"
-        case .trafficLights: "Traffic Lights"
-        case .ndMeter: "ND Suggestion"
-        case .evMeter: "EV Meter"
-        case .audioMeters: "Audio Levels"
-        case .guides: "Guides"
-        case .grid: "Grid"
-        case .crosshair: "Crosshair"
-        case .level: "Level"
-        case .desqueeze: "Anamorphic Desqueeze"
-        case .mirror: "Mirror"
-        case .magnification: "Magnify"
-        case .instantReview: "Instant Playback"
-        }
-    }
+    var title: String { sharedTool?.title ?? (self == .instantReview ? "Instant Playback" : "Magnify") }
 }
 
 typealias GuideFamily = MonitorGuideFamily
@@ -1693,15 +1615,10 @@ struct AssistToolIcon: View {
     var size: CGFloat? = 19
 
     var body: some View {
-        if tool == .evMeter {
-            Text("EV")
-                .font(MonitorTheme.font(size.map { $0 * 0.7 } ?? 17, weight: .semibold))
-                .frame(width: size, height: size)
-        } else if let icon = tool.monitorIcon {
-            icon.frame(width: size, height: size)
+        if let shared = tool.sharedTool {
+            MonitorAssistToolGlyph(tool: shared, size: size)
         } else if let icon = tool.opcIcon {
             icon.frame(width: size, height: size)
-                .rotationEffect(.degrees(tool == .desqueeze ? 90 : 0))
         }
     }
 }
