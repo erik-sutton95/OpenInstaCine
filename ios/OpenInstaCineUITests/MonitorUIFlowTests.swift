@@ -923,6 +923,49 @@ final class MonitorUIFlowTests: XCTestCase {
         capture("SIMULATED-common-display-restored-landscape")
     }
 
+    func testCommonSharingChoicesPersistWithoutStartingTheRelay() throws {
+        app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "settings"
+        app.launch()
+        func openSharing() {
+            let tabs = app.scrollViews["monitor.settings.tabs"]
+            XCTAssertTrue(tabs.waitForExistence(timeout: 10))
+            let tab = app.buttons["monitor.settings.tab.Sharing"]
+            reveal(tab, in: tabs, portrait: true)
+            tab.tap()
+        }
+        func revealChoice(_ button: XCUIElement) {
+            for _ in 0..<8 where !button.isHittable { app.swipeUp() }
+            XCTAssertTrue(button.isHittable)
+        }
+        openSharing()
+        let requests = app.buttons["Control requests"]
+        revealChoice(requests)
+        let originalRequests = try XCTUnwrap(requests.value as? String)
+        XCTAssertTrue(["On", "Off"].contains(originalRequests))
+        requests.tap()
+        let changedRequests = originalRequests == "On" ? "Off" : "On"
+        XCTAssertEqual(requests.value as? String, changedRequests)
+        let priorities = ["Quality", "High", "Medium", "Steady"]
+        revealChoice(app.buttons["Steady"])
+        let originalPriority = try XCTUnwrap(priorities.first { app.buttons[$0].isSelected })
+        let changedPriority = originalPriority == "Steady" ? "Quality" : "Steady"
+        app.buttons[changedPriority].tap()
+        XCTAssertTrue(app.buttons[changedPriority].isSelected)
+        capture("SIMULATED-common-sharing-choices")
+        app.terminate()
+        app.launch()
+        openSharing()
+        let restoredRequests = app.buttons["Control requests"]
+        revealChoice(restoredRequests)
+        XCTAssertEqual(restoredRequests.value as? String, changedRequests)
+        restoredRequests.tap()
+        XCTAssertEqual(restoredRequests.value as? String, originalRequests)
+        revealChoice(app.buttons["Steady"])
+        XCTAssertTrue(app.buttons[changedPriority].isSelected)
+        app.buttons[originalPriority].tap()
+        XCTAssertTrue(app.buttons[originalPriority].isSelected)
+    }
+
     func testCommonCachePreferenceSurvivesRelaunchAndClearCanBeCancelled() throws {
         app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "settings"
         app.launch()
