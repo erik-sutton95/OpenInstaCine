@@ -9,6 +9,33 @@ import SwiftUI
 
 @MainActor
 final class VideoDisplayOwnershipTests: XCTestCase {
+    func testSharedAspectMaskLeavesBothGuideArmsClearAndOnlyDimsTheirExterior() throws {
+        let feed = CGRect(x: 20, y: 20, width: 320, height: 180)
+        let renderer = ImageRenderer(content: ZStack(alignment: .topLeading) {
+            Color.blue
+            MonitorAspectGuideFrames(selectedRatios: [.cinema, .vertical], maskEnabled: true, feed: feed)
+        }.frame(width: 360, height: 220))
+        renderer.scale = 1
+        let image = try XCTUnwrap(renderer.uiImage?.cgImage)
+        var rgba = [UInt8](repeating: 0, count: 360 * 220 * 4)
+        let context = try XCTUnwrap(CGContext(data: &rgba, width: 360, height: 220,
+            bitsPerComponent: 8, bytesPerRow: 360 * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.translateBy(x: 0, y: 220)
+        context.scaleBy(x: 1, y: -1)
+        context.draw(image, in: CGRect(x: 0, y: 0, width: 360, height: 220))
+        func blue(_ x: Int, _ y: Int) -> UInt8 { rgba[(y * 360 + x) * 4 + 2] }
+        XCTAssertTrue((95...110).contains(blue(32, 32)))
+        XCTAssertGreaterThan(blue(180, 110), 240)
+        XCTAssertGreaterThan(blue(180, 22), 240)
+        XCTAssertGreaterThan(blue(30, 110), 240)
+        XCTAssertGreaterThan(blue(5, 5), 240)
+        let attachment = XCTAttachment(image: UIImage(cgImage: image))
+        attachment.name = "shared-guide-union-mask"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     @MainActor private final class PanelProbe: UIView {
         var expectedSize = CGSize.zero
         var laidOut: XCTestExpectation?

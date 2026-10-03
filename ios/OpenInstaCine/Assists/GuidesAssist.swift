@@ -36,24 +36,9 @@ enum GuidesAssist {
         return selected.isEmpty ? "—" : "\(selected.count) ratios"
     }
 
-    /// OpenZCine `rectForRatio` — letterbox when the guide is wider than the feed,
-    /// pillarbox when narrower.
+    /// Centered guide geometry comes from the common monitor UI.
     static func rectForRatio(_ feed: CGRect, _ ratio: CGFloat) -> CGRect {
-        let width: CGFloat
-        let height: CGFloat
-        if feed.width / feed.height > ratio {
-            height = feed.height
-            width = feed.height * ratio
-        } else {
-            width = feed.width
-            height = feed.width / ratio
-        }
-        return CGRect(
-            x: feed.minX + (feed.width - width) / 2,
-            y: feed.minY + (feed.height - height) / 2,
-            width: width,
-            height: height
-        )
+        MonitorGuideGeometry.rectForRatio(feed, ratio)
     }
 }
 
@@ -101,53 +86,8 @@ private struct GuidesLongPressMenu: View {
     }
 }
 
-/// One selected aspect resolved to its centred frame within the feed rect.
-private struct GuideFrame: Identifiable {
-    let ratio: GuideAspect
-    let rect: CGRect
-    var id: String { ratio.rawValue }
-}
-
-/// OpenZCine `AspectGuideFrameView` — gold frames, corner tags, optional union mask.
-struct AspectGuideFrameView: View {
-    let selectedRatios: Set<GuideAspect>
-    var maskEnabled = false
-    let feed: CGRect
-
-    var body: some View {
-        let frames =
-            selectedRatios
-            .sorted { $0.ratio < $1.ratio }
-            .map { GuideFrame(ratio: $0, rect: GuidesAssist.rectForRatio(feed, $0.ratio)) }
-        ZStack {
-            if maskEnabled, !frames.isEmpty {
-                Canvas { context, _ in
-                    context.fill(Path(feed), with: .color(.black.opacity(0.6)))
-                    context.blendMode = .destinationOut
-                    for frame in frames {
-                        context.fill(Path(frame.rect), with: .color(.black))
-                    }
-                }
-            }
-            MonitorSnapshotRows(frames) { frame in
-                Rectangle()
-                    .stroke(LiveDesign.accent.opacity(0.85), lineWidth: 1)
-                    .frame(width: frame.rect.width, height: frame.rect.height)
-                    .position(x: frame.rect.midX, y: frame.rect.midY)
-                Text(frame.ratio.rawValue)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .kerning(1.2)
-                    .foregroundStyle(LiveDesign.accent)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(.black.opacity(0.42), in: RoundedRectangle(cornerRadius: 5))
-                    .fixedSize()
-                    .position(x: frame.rect.minX, y: frame.rect.minY)
-                    .offset(x: 34, y: 13)
-            }
-        }
-    }
-}
+/// Native guide rendering and the union mask belong to the common monitor UI.
+typealias AspectGuideFrameView = MonitorAspectGuideFrames
 
 /// OpenZCine `GlassChoice`.
 private struct GuidesGlassChoice: View {

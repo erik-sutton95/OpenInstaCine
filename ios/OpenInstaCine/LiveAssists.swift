@@ -157,43 +157,9 @@ enum LiveAssistTool: String, CaseIterable, Identifiable {
     }
 }
 
-enum GuideFamily: String, CaseIterable, Codable, Identifiable {
-    case film = "Film"
-    case social = "Social"
-    var id: String { rawValue }
-}
+typealias GuideFamily = MonitorGuideFamily
 
-enum GuideAspect: String, CaseIterable, Identifiable, Codable {
-    case cinema276 = "2.76:1"
-    case cinema = "2.39:1"
-    case cinema235 = "2.35:1"
-    case twoK = "2.00:1"
-    case wide = "1.85:1"
-    case hd = "16:9"
-    case euro = "1.66:1"
-    case imax = "1.43:1"
-    case academy = "4:3"
-    case vertical = "9:16"
-    case social = "4:5"
-    case square = "1:1"
-    case portrait = "2:3"
-    case feed = "1.91:1"
-
-    var id: String { rawValue }
-
-    var ratio: CGFloat {
-        let parts = rawValue.split(separator: ":").compactMap { Double($0) }
-        guard parts.count == 2, parts[1] > 0 else { return 1 }
-        return CGFloat(parts[0] / parts[1])
-    }
-
-    static func ratios(for family: GuideFamily) -> [GuideAspect] {
-        switch family {
-        case .film: [.cinema276, .cinema, .cinema235, .twoK, .wide, .hd, .euro, .imax, .academy]
-        case .social: [.vertical, .social, .square, .portrait, .hd, .feed]
-        }
-    }
-}
+typealias GuideAspect = MonitorGuideAspect
 
 @Observable
 final class LiveAssistState {
@@ -1590,80 +1556,11 @@ private struct FocusBoxView: View {
     }
 }
 
-struct FeedGridView: View {
-    let feed: CGRect
-    var thirds = true
-    var phi = false
-    var diagonal = false
+typealias FeedGridView = MonitorFeedGrid
 
-    var body: some View {
-        Path { path in
-            if thirds { fractions(&path, [1.0 / 3, 2.0 / 3]) }
-            if phi { fractions(&path, [0.382, 0.618]) }
-            if diagonal {
-                path.move(to: CGPoint(x: feed.minX, y: feed.minY))
-                path.addLine(to: CGPoint(x: feed.maxX, y: feed.maxY))
-                path.move(to: CGPoint(x: feed.maxX, y: feed.minY))
-                path.addLine(to: CGPoint(x: feed.minX, y: feed.maxY))
-            }
-        }
-        .stroke(Color.white.opacity(0.22), lineWidth: 1)
-    }
+typealias FeedCrosshairView = MonitorFeedCrosshair
 
-    private func fractions(_ path: inout Path, _ fractions: [CGFloat]) {
-        for fraction in fractions {
-            let x = feed.minX + feed.width * fraction
-            let y = feed.minY + feed.height * fraction
-            path.move(to: CGPoint(x: x, y: feed.minY))
-            path.addLine(to: CGPoint(x: x, y: feed.maxY))
-            path.move(to: CGPoint(x: feed.minX, y: y))
-            path.addLine(to: CGPoint(x: feed.maxX, y: y))
-        }
-    }
-}
-
-struct FeedCrosshairView: View {
-    let feed: CGRect
-
-    var body: some View {
-        ZStack {
-            Rectangle().fill(Color.white.opacity(0.65)).frame(width: 1.4, height: 40)
-            Rectangle().fill(Color.white.opacity(0.65)).frame(width: 40, height: 1.4)
-        }
-        .position(x: feed.midX, y: feed.midY)
-    }
-}
-
-struct FeedSplitComparisonMarks: View {
-    let vertical: Bool
-    let feed: CGRect
-
-    var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(Color.white.opacity(0.5))
-                .frame(width: vertical ? 1 : feed.width, height: vertical ? feed.height : 1)
-                .position(x: feed.midX, y: feed.midY)
-            label("LOG")
-                .position(
-                    x: vertical ? feed.midX - 16 : feed.minX + feed.width * 0.16,
-                    y: vertical ? feed.minY + feed.height * 0.16 : feed.midY - 10)
-            label("LUT")
-                .position(
-                    x: vertical ? feed.midX + 16 : feed.minX + feed.width * 0.16,
-                    y: vertical ? feed.minY + feed.height * 0.16 : feed.midY + 10)
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func label(_ text: String) -> some View {
-        Text(text)
-            .font(MonitorTheme.font(8, weight: .semibold)).monospacedDigit()
-            .kerning(0.5)
-            .foregroundStyle(Color.white.opacity(0.85))
-            .shadow(color: .black.opacity(0.8), radius: 1.5, y: 0.5)
-    }
-}
+typealias FeedSplitComparisonMarks = MonitorFeedComparisonMarks
 
 /// LEVEL: camera world attitude (`LevelReading`), not this phone. Gauges show
 /// picture roll and look-up tilt from the horizon (OpenZCine `LevelGaugeView`);

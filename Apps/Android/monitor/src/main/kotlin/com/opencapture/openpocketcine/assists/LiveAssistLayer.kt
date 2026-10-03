@@ -348,72 +348,18 @@ private fun scopePanelShape() = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.d
 
 @Composable
 private fun GuidesOverlay(state: LiveAssistState, feed: AssistRect) {
-    val selected = state.selectedGuides.ifEmpty { setOf(state.guideAspect) }
-    val frames =
-        selected.sortedBy { it.ratio }.map { it to GuidesAssist.rectForRatio(feed, it.ratio) }
-    Canvas(Modifier.fillMaxSize()) {
-        if (state.guideMask && frames.isNotEmpty()) {
-            val mask = Color.Black.copy(alpha = 0.6f)
-            val holes = frames.map { it.second }
-            val minL = holes.minOf { it.minX }
-            val maxR = holes.maxOf { it.maxX }
-            val minT = holes.minOf { it.minY }
-            val maxB = holes.maxOf { it.maxY }
-            drawRect(mask, Offset(feed.minX, feed.minY), Size(feed.width, (minT - feed.minY).coerceAtLeast(0f)))
-            drawRect(mask, Offset(feed.minX, maxB), Size(feed.width, (feed.maxY - maxB).coerceAtLeast(0f)))
-            drawRect(mask, Offset(feed.minX, minT), Size((minL - feed.minX).coerceAtLeast(0f), (maxB - minT).coerceAtLeast(0f)))
-            drawRect(mask, Offset(maxR, minT), Size((feed.maxX - maxR).coerceAtLeast(0f), (maxB - minT).coerceAtLeast(0f)))
-        }
-        for ((aspect, frame) in frames) {
-            drawRect(
-                LiveDesign.accent.copy(alpha = 0.85f),
-                Offset(frame.minX, frame.minY),
-                Size(frame.width, frame.height),
-                style = Stroke(1.dp.toPx()),
-            )
-        }
-    }
-    frames.forEach { (aspect, frame) ->
-        Text(
-            aspect.label,
-            color = LiveDesign.accent,
-            fontSize = 10.sp,
-            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.2.sp,
-            modifier =
-                Modifier
-                    .offset { IntOffset((frame.minX + 34f).roundToInt(), (frame.minY + 13f).roundToInt()) }
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(Color.Black.copy(alpha = 0.42f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-        )
-    }
+    com.opencapture.monitorui.MonitorAspectGuideFrames(
+        state.selectedGuides.ifEmpty { setOf(state.guideAspect) }, feed, state.guideMask)
 }
 
 @Composable
 private fun GridOverlay(state: LiveAssistState, feed: AssistRect) {
-    val lines = GridAssist.segments(feed, state.gridThirds, state.gridPhi, state.gridDiagonal)
-    Canvas(Modifier.fillMaxSize()) {
-        val stroke = GridAssist.STROKE_WIDTH_DP.dp.toPx()
-        val color = Color.White.copy(alpha = GridAssist.STROKE_OPACITY)
-        for (segment in lines) {
-            drawLine(color, Offset(segment.from.x, segment.from.y), Offset(segment.to.x, segment.to.y), stroke)
-        }
-    }
+    com.opencapture.monitorui.MonitorFeedGrid(feed, state.gridThirds, state.gridPhi, state.gridDiagonal)
 }
 
 @Composable
 private fun CrosshairOverlay(feed: AssistRect) {
-    Canvas(Modifier.fillMaxSize()) {
-        val color = Color.White.copy(alpha = CrosshairAssist.OPACITY)
-        val arm = CrosshairAssist.ARM_LENGTH_DP.dp.toPx()
-        val stroke = CrosshairAssist.STROKE_WIDTH_DP.dp.toPx()
-        val cx = feed.midX
-        val cy = feed.midY
-        drawRect(color, Offset(cx - stroke / 2f, cy - arm / 2f), Size(stroke, arm))
-        drawRect(color, Offset(cx - arm / 2f, cy - stroke / 2f), Size(arm, stroke))
-    }
+    com.opencapture.monitorui.MonitorFeedCrosshair(feed)
 }
 
 @Composable

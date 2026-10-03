@@ -22,77 +22,13 @@ typealias StoredCenter = com.opencapture.monitorui.MonitorScopeStoredCenter
 typealias ScopeGuides = com.opencapture.monitorui.MonitorScopeGuides
 typealias ScopePanelSize = com.opencapture.monitorui.MonitorScopePanelSize
 
-data class GridSegment(val from: AssistPoint, val to: AssistPoint)
+typealias GridSegment = com.opencapture.monitorui.MonitorGridSegment
 
-object GridAssist {
-    val thirdsFractions = floatArrayOf(1f / 3f, 2f / 3f)
-    val phiFractions = floatArrayOf(0.382f, 0.618f)
-    const val STROKE_OPACITY = 0.22f
-    const val STROKE_WIDTH_DP = 1f
-    val optionLabels = listOf("Thirds", "Phi Grid", "Diagonal")
+typealias GridAssist = com.opencapture.monitorui.MonitorGridGeometry
 
-    fun segments(
-        feed: AssistRect,
-        thirds: Boolean,
-        phi: Boolean,
-        diagonal: Boolean,
-    ): List<GridSegment> {
-        val lines = ArrayList<GridSegment>(12)
-        if (thirds) appendFractions(feed, thirdsFractions, lines)
-        if (phi) appendFractions(feed, phiFractions, lines)
-        if (diagonal) {
-            lines +=
-                GridSegment(
-                    AssistPoint(feed.minX, feed.minY),
-                    AssistPoint(feed.maxX, feed.maxY),
-                )
-            lines +=
-                GridSegment(
-                    AssistPoint(feed.maxX, feed.minY),
-                    AssistPoint(feed.minX, feed.maxY),
-                )
-        }
-        return lines
-    }
+typealias GuidesAssist = com.opencapture.monitorui.MonitorGuideGeometry
 
-    private fun appendFractions(feed: AssistRect, fractions: FloatArray, lines: MutableList<GridSegment>) {
-        for (fraction in fractions) {
-            val x = feed.minX + feed.width * fraction
-            val y = feed.minY + feed.height * fraction
-            lines += GridSegment(AssistPoint(x, feed.minY), AssistPoint(x, feed.maxY))
-            lines += GridSegment(AssistPoint(feed.minX, y), AssistPoint(feed.maxX, y))
-        }
-    }
-}
-
-object GuidesAssist {
-    /** Letterbox when the guide is wider than the feed, pillarbox when narrower. */
-    fun rectForRatio(feed: AssistRect, ratio: Float): AssistRect {
-        val width: Float
-        val height: Float
-        if (feed.height <= 0f || ratio <= 0f) return feed
-        if (feed.width / feed.height > ratio) {
-            height = feed.height
-            width = feed.height * ratio
-        } else {
-            width = feed.width
-            height = feed.width / ratio
-        }
-        return AssistRect(
-            feed.minX + (feed.width - width) / 2f,
-            feed.minY + (feed.height - height) / 2f,
-            width,
-            height,
-        )
-    }
-}
-
-object CrosshairAssist {
-    const val ARM_LENGTH_DP = 40f
-    const val STROKE_WIDTH_DP = 1.4f
-    const val OPACITY = 0.65f
-    const val HELP = "Tap the toolbar button to show or hide the centre crosshair."
-}
+typealias CrosshairAssist = com.opencapture.monitorui.MonitorCrosshairGeometry
 
 object MirrorAssist {
     const val EXPLANATION =

@@ -89,57 +89,9 @@ enum class LiveAssistTool {
     }
 }
 
-enum class GuideFamily(val label: String) {
-    FILM("Film"),
-    SOCIAL("Social"),
-    ;
+typealias GuideFamily = com.opencapture.monitorui.MonitorGuideFamily
 
-    companion object {
-        fun fromPersisted(raw: String): GuideFamily =
-            entries.firstOrNull { it.label == raw || it.name == raw } ?: FILM
-    }
-}
-
-enum class GuideAspect(val label: String) {
-    CINEMA_276("2.76:1"),
-    CINEMA("2.39:1"),
-    CINEMA_235("2.35:1"),
-    TWO_K("2.00:1"),
-    WIDE("1.85:1"),
-    HD("16:9"),
-    EURO("1.66:1"),
-    IMAX("1.43:1"),
-    ACADEMY("4:3"),
-    VERTICAL("9:16"),
-    SOCIAL("4:5"),
-    SQUARE("1:1"),
-    PORTRAIT("2:3"),
-    FEED("1.91:1"),
-    ;
-
-    val ratio: Float
-        get() {
-            val parts = label.split(':')
-            val a = parts.getOrNull(0)?.toFloatOrNull() ?: return 1f
-            val b = parts.getOrNull(1)?.toFloatOrNull() ?: return 1f
-            return if (b > 0f) a / b else 1f
-        }
-
-    companion object {
-        val film: List<GuideAspect> =
-            listOf(CINEMA_276, CINEMA, CINEMA_235, TWO_K, WIDE, HD, EURO, IMAX, ACADEMY)
-        val social: List<GuideAspect> = listOf(VERTICAL, SOCIAL, SQUARE, PORTRAIT, HD, FEED)
-
-        fun ratios(family: GuideFamily): List<GuideAspect> =
-            when (family) {
-                GuideFamily.FILM -> film
-                GuideFamily.SOCIAL -> social
-            }
-
-        fun fromPersisted(raw: String): GuideAspect =
-            entries.firstOrNull { it.label == raw || it.name == raw } ?: CINEMA
-    }
-}
+typealias GuideAspect = com.opencapture.monitorui.MonitorGuideAspect
 
 enum class PeakingColor(val label: String) {
     WHITE("White"),

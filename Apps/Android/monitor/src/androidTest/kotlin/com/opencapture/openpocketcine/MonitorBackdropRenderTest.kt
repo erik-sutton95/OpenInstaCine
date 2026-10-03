@@ -43,6 +43,38 @@ import org.junit.runner.RunWith
 /** Pixel evidence from the real HWUI/RenderEffect modifier, not an emulated blur model. */
 @RunWith(AndroidJUnit4::class)
 class MonitorBackdropRenderTest {
+    @Test fun sharedAspectMaskLeavesTheUnionClearAndDimsItsCorners() {
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            val masked = androidx.compose.runtime.mutableStateOf(false)
+            var density = 1f
+            var origin = Rect.Zero
+            scenario.onActivity { activity ->
+                density = activity.resources.displayMetrics.density
+                activity.setContent {
+                    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Blue)
+                        .onGloballyPositioned { origin = it.boundsInWindow() }) {
+                        com.opencapture.monitorui.MonitorAspectGuideFrames(
+                            setOf(com.opencapture.monitorui.MonitorGuideAspect.CINEMA,
+                                com.opencapture.monitorui.MonitorGuideAspect.VERTICAL),
+                            com.opencapture.monitorui.MonitorScopeRect(20 * density, 20 * density,
+                                320 * density, 180 * density), masked.value)
+                    }
+                }
+            }
+            fun blue(image: Bitmap, x: Float, y: Float): Int = Color.blue(image.getPixel(
+                (origin.left + x * density).roundToInt(), (origin.top + y * density).roundToInt()))
+            val clear = capture(scenario, "shared-guides-clear")
+            assertTrue(blue(clear, 32f, 32f) > 240)
+            scenario.onActivity { masked.value = true }
+            val image = capture(scenario, "shared-guides-union-mask")
+            assertTrue(blue(image, 32f, 32f) in 95..110, "The corner outside both selected frames must be masked")
+            assertTrue(blue(image, 180f, 110f) > 240, "The overlap stays clear")
+            assertTrue(blue(image, 180f, 22f) > 240, "The tall guide's independent arm stays clear")
+            assertTrue(blue(image, 30f, 110f) > 240, "The wide guide's independent arm stays clear")
+            assertTrue(blue(image, 5f, 5f) > 240, "The mask cannot escape the picture rect")
+        }
+    }
+
     @Test fun sharedMovablePanelDragsResizesHoldsAndHonorsLock() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
