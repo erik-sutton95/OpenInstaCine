@@ -6,6 +6,8 @@ import OpenPocketViewCore
 import SwiftUI
 
 enum OperatorPrefs {
+    private static let toolUsage = MonitorToolUsagePreferences(
+        storage: .standard, key: "OpenInstaCine.AssistToolUsage.v1")
     private static let display = MonitorDisplayPreferences(
         storage: .standard,
         keys: .init(live: "OpenInstaCine.DispChrome.Live", clean: "OpenInstaCine.DispChrome.Clean"))
@@ -47,7 +49,6 @@ enum OperatorPrefs {
     private static let shareThisFeedKey = "OpenInstaCine.ShareThisFeed"
     private static let controlRequestsKey = "OpenInstaCine.ControlRequests"
     private static let broadcastPriorityKey = "OpenInstaCine.BroadcastPriority"
-    private static let assistToolUsageKey = "OpenInstaCine.AssistToolUsage.v1"
 
     static var shareThisFeed: Bool {
         get { UserDefaults.standard.bool(forKey: shareThisFeedKey) }
@@ -99,17 +100,8 @@ enum OperatorPrefs {
     }
 
     static var assistToolUsage: MonitorToolUsage {
-        get {
-            guard let data = UserDefaults.standard.data(forKey: assistToolUsageKey),
-                let value = try? JSONDecoder().decode(MonitorToolUsage.self, from: data)
-            else { return MonitorToolUsage() }
-            return value
-        }
-        set {
-            if let data = try? JSONEncoder().encode(newValue) {
-                UserDefaults.standard.set(data, forKey: assistToolUsageKey)
-            }
-        }
+        get { toolUsage.value }
+        set { toolUsage.value = newValue }
     }
 
     static var headTrackingEnabled: Bool {
