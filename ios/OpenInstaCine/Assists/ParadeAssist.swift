@@ -36,12 +36,7 @@ enum ParadeAssist {
     static let gripVisualSize: CGFloat = 14
     static let gripExteriorGap: CGFloat = 2
 
-    enum Mode: String, CaseIterable, Codable, Equatable, Sendable, Identifiable {
-        case rgb = "RGB"
-        case yrgb = "YRGB"
-        var id: String { rawValue }
-        var laneCount: Int { self == .yrgb ? 4 : 3 }
-    }
+    typealias Mode = MonitorParadeMode
 
     static let brightnessHelp =
         "Raise trace intensity when channel separation is hard to see."

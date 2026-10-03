@@ -111,73 +111,11 @@ extension MonitorTransfer {
 /// BT.709 chroma used by BOTH the vectorscope trace binning and the graticule
 /// targets — one function so plot and targets can never disagree.
 /// OpenZCine `VectorscopeSampler.chroma` / `VectorscopeColor.traceTint`.
-enum ScopeChroma {
-    static func rec709(red: Double, green: Double, blue: Double) -> (cb: Double, cr: Double) {
-        let y = 0.2126 * red + 0.7152 * green + 0.0722 * blue
-        return ((blue - y) / 1.8556, (red - y) / 1.5748)
-    }
-
-    static func rec709(red: UInt8, green: UInt8, blue: UInt8) -> (cb: Double, cr: Double) {
-        rec709(red: Double(red) / 255, green: Double(green) / 255, blue: Double(blue) / 255)
-    }
-
-    /// OpenZCine `VectorscopeColor.traceTint` — neutrals become white; saturated
-    /// bins keep hue while the strongest channel rides full ramp brightness.
-    static func traceTint(
-        red: Double, green: Double, blue: Double
-    ) -> (red: Double, green: Double, blue: Double) {
-        let low = min(red, green, blue)
-        let high = max(red, green, blue)
-        let span = high - low
-        guard high > 0.000_001, span > 0.000_001 else {
-            return (1, 1, 1)
-        }
-        let saturation = min(1, max(0, span / high))
-        func tint(_ component: Double) -> Double {
-            let pure = (component - low) / span
-            return (1 - saturation) + pure * saturation
-        }
-        return (tint(red), tint(green), tint(blue))
-    }
-}
+typealias ScopeChroma = OpenCineMedia.ScopeChroma
 
 /// OpenZCine `drawVectorscopeGraticule` constants — outer ring, crosshair,
 /// I-phase skin line at 123°, six 75% SMPTE boxes. Always on (no popup toggle).
-enum VectorscopeGraticule {
-    static let skinAngleDegrees = 123.0
-    static let skinLength = 0.92
-    static let boxSide: CGFloat = 7
-    static let labelPush: CGFloat = 10
-    static let crossArm: CGFloat = 8
-    static let ring = ScopePalette.rgba(220, 235, 225, 0.55)
-    static let faint = ScopePalette.rgba(220, 235, 225, 0.30)
-    static let box = ScopePalette.rgba(220, 235, 225, 0.6)
-    static let label = ScopePalette.rgba(220, 235, 225, 0.55)
-    /// 75% bars: 191 = 0.75 × 255. Same codes OpenZCine feeds `VectorscopeSampler.chroma`.
-    static let targets: [(label: String, red: UInt8, green: UInt8, blue: UInt8)] = [
-        ("R", 191, 0, 0), ("Mg", 191, 0, 191), ("B", 0, 0, 191),
-        ("Cy", 0, 191, 191), ("G", 0, 191, 0), ("Yl", 191, 191, 0),
-    ]
-
-    static var skinAngleRadians: Double { skinAngleDegrees * .pi / 180 }
-
-    static func skinEnd(in rect: CGRect) -> CGPoint {
-        let radius = rect.width / 2
-        let angle = skinAngleRadians
-        return CGPoint(
-            x: rect.midX + CGFloat(cos(angle)) * radius * skinLength,
-            y: rect.midY - CGFloat(sin(angle)) * radius * skinLength)
-    }
-
-    static func targetCenter(
-        red: UInt8, green: UInt8, blue: UInt8, in rect: CGRect
-    ) -> CGPoint {
-        let chroma = ScopeChroma.rec709(red: red, green: green, blue: blue)
-        return CGPoint(
-            x: rect.midX + CGFloat(chroma.cb) * rect.width,
-            y: rect.midY - CGFloat(chroma.cr) * rect.height)
-    }
-}
+typealias VectorscopeGraticule = MonitorVectorscopeGraticule
 
 // MARK: - WAVE
 
@@ -202,32 +140,11 @@ struct WaveformOverlay: View {
                 // every scope on 5 Hz telemetry pushes (DESIGN §2.3).
                 let transfer = assist.transfer
                 // Traces first; 0 / 100 and the dotted 5 / 95 buffers sit on top.
-                ZStack(alignment: .topLeading) {
-                    if ScopeTraceMetal.isAvailable {
-                        let plot = WaveformAxis.plotRect(in: size)
-                        ScopeTraceMetalView(
-                            samples: assist.samples, trail: assist.trailSamples,
-                            mode: .waveform(options.mode), transfer: transfer,
-                            clipByte: assist.clipByte,
-                            revision: assist.revision, opacity: intensity,
-                            layoutSize: plot.size
-                        )
-                        .frame(width: plot.width, height: plot.height)
-                        .offset(x: plot.minX, y: plot.minY)
-                    } else {
-                        WaveformScopePlot(
-                            samples: assist.samples, trail: assist.trailSamples,
-                            mode: options.mode, transfer: transfer,
-                            clipByte: assist.clipByte, opacity: intensity
-                        )
-                        .frame(width: size.width, height: size.height)
-                    }
-                    WaveformGuideOverlay(
-                        clip: options.guides.clip, crush: options.guides.crush,
-                        middle: options.guides.middle, transfer: transfer
-                    )
-                    .frame(width: size.width, height: size.height)
-                }
+                MonitorWaveformScopePlot(samples: assist.samples, trail: assist.trailSamples,
+                    mode: .waveform(options.mode), transfer: transfer, clipByte: assist.clipByte,
+                    revision: assist.revision, intensity: intensity,
+                    guides: MonitorScopeGuides(clip: options.guides.clip, crush: options.guides.crush,
+                        middle: options.guides.middle), size: size, configureDisplay: scopeDisplay)
             }
         }
         .accessibilityLabel(options.mode == .rgb ? "RGB waveform" : "Luma waveform")
@@ -243,109 +160,9 @@ struct WaveformOverlay: View {
     }
 }
 
-private struct WaveformScopePlot: View, Equatable {
-    var samples: ScopeSamples
-    var trail: ScopeSamples = .empty
-    var mode: WaveformAssist.Mode = .rgb
-    var transfer: MonitorTransfer = .rec709
-    var clipByte: Int
-    var opacity: Double = 1
-
-    var body: some View {
-        Canvas { context, size in
-            let rect = WaveformAxis.plotRect(in: size)
-            let table = WaveformAxis.levelTable(for: transfer, clipByte: clipByte)
-            var traces = context
-            traces.clip(to: Path(scopeTraceClipRect(rect)))
-            drawTrace(
-                trail.points, rect: rect, table: table, context: traces,
-                opacity: opacity * ScopeTraceMetal.trailDecay)
-            drawTrace(
-                samples.points, rect: rect, table: table, context: traces, opacity: opacity)
-        }
-    }
-
-    private func drawTrace(
-        _ points: [ScopePoint], rect: CGRect, table: [Float],
-        context: GraphicsContext, opacity: Double
-    ) {
-        guard !points.isEmpty, opacity > 0 else { return }
-        var ctx = context
-        ctx.opacity = opacity
-        ctx.blendMode = .plusLighter
-        func y(_ byte: UInt8) -> CGFloat { WaveformAxis.plotY(Double(table[Int(byte)]), rect) }
-        switch mode {
-        case .luma:
-            for (index, point) in points.enumerated() {
-                let x = rect.minX + CGFloat(point.xRatio) * rect.width
-                let tickY = y(point.luma)
-                ctx.fill(
-                    Path(CGRect(x: x, y: tickY - 1, width: 2, height: 2)),
-                    with: .color(ScopePalette.lumaGhost.color))
-                ctx.fill(
-                    Path(CGRect(x: x, y: tickY - 0.5, width: 1, height: 1)),
-                    with: .color(ScopePalette.luma.color))
-                if index % 4 == 0 {
-                    ctx.fill(
-                        Path(CGRect(x: x, y: tickY - 0.5, width: 1, height: 1)),
-                        with: .color(ScopePalette.lumaHot.color))
-                }
-            }
-        case .rgb:
-            let channels: [(Color, (ScopePoint) -> UInt8)] = [
-                (ScopePalette.overlayRed.color, { $0.red }),
-                (ScopePalette.overlayGreen.color, { $0.green }),
-                (ScopePalette.overlayBlue.color, { $0.blue }),
-            ]
-            for point in points {
-                let x = rect.minX + CGFloat(point.xRatio) * rect.width
-                for channel in channels {
-                    ctx.fill(
-                        Path(CGRect(x: x, y: y(channel.1(point)) - 0.5, width: 1, height: 1)),
-                        with: .color(channel.0))
-                }
-            }
-        }
-    }
-}
-
 /// Solid 0 / 100 on the plot edges. Dotted 5 / 95 safe borders. Solid middle
 /// gray at the log paper IRE (not 50).
-private struct WaveformGuideOverlay: View {
-    var clip = true
-    var crush = true
-    var middle = true
-    var transfer: MonitorTransfer = .rec709
 
-    var body: some View {
-        Canvas { context, size in
-            let rect = WaveformAxis.plotRect(in: size)
-            func line(_ y: CGFloat, _ color: Color, _ style: StrokeStyle) {
-                var path = Path()
-                path.move(to: CGPoint(x: rect.minX, y: y))
-                path.addLine(to: CGPoint(x: rect.maxX, y: y))
-                context.stroke(path, with: .color(color), style: style)
-            }
-            let grayIRE = WaveformAxis.middleGrayIRE(transfer: transfer)
-            for stroke in WaveformAxis.guideStrokes(
-                clip: clip, crush: crush, middle: middle, transfer: transfer)
-            {
-                let y = WaveformAxis.scaleLineY(stroke.ire, rect)
-                let isGray = abs(stroke.ire - grayIRE) < 0.05
-                let color: Color =
-                    stroke.usesCrushClipColor
-                    ? ScopePalette.clip
-                    : (isGray ? ScopePalette.middle : ScopePalette.boundary)
-                let style =
-                    stroke.dashed
-                    ? StrokeStyle(lineWidth: 1.25, dash: WaveformAxis.crushClipDash)
-                    : StrokeStyle(lineWidth: isGray ? 1 : 1.25)
-                line(y, color, style)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
 
 // MARK: - PARADE
 
@@ -368,32 +185,11 @@ struct ParadeOverlay: View {
         ) {
             ScopeBundleScope { assist in
                 let transfer = assist.transfer
-                ZStack(alignment: .topLeading) {
-                    if ScopeTraceMetal.isAvailable {
-                        let plotRect = WaveformAxis.plotRect(in: size)
-                        ScopeTraceMetalView(
-                            samples: assist.samples, trail: assist.trailSamples,
-                            mode: .parade(options.mode), transfer: transfer,
-                            clipByte: assist.clipByte,
-                            revision: assist.revision, opacity: intensity,
-                            layoutSize: plotRect.size
-                        )
-                        .frame(width: plotRect.width, height: plotRect.height)
-                        .offset(x: plotRect.minX, y: plotRect.minY)
-                    } else {
-                        ParadeScopePlot(
-                            samples: assist.samples, trail: assist.trailSamples,
-                            mode: options.mode, transfer: transfer,
-                            clipByte: assist.clipByte, opacity: intensity
-                        )
-                        .frame(width: size.width, height: size.height)
-                    }
-                    WaveformGuideOverlay(
-                        clip: options.guides.clip, crush: options.guides.crush,
-                        middle: options.guides.middle, transfer: transfer
-                    )
-                    .frame(width: size.width, height: size.height)
-                }
+                MonitorWaveformScopePlot(samples: assist.samples, trail: assist.trailSamples,
+                    mode: .parade(options.mode), transfer: transfer, clipByte: assist.clipByte,
+                    revision: assist.revision, intensity: intensity,
+                    guides: MonitorScopeGuides(clip: options.guides.clip, crush: options.guides.crush,
+                        middle: options.guides.middle), size: size, configureDisplay: scopeDisplay)
             }
         }
         .accessibilityLabel(ParadeAssist.accessibilityLabel(options.mode))
@@ -405,57 +201,6 @@ struct ParadeOverlay: View {
             }
         } else {
             plot
-        }
-    }
-}
-
-private struct ParadeScopePlot: View, Equatable {
-    var samples: ScopeSamples
-    var trail: ScopeSamples = .empty
-    var mode: ParadeAssist.Mode = .rgb
-    var transfer: MonitorTransfer = .rec709
-    var clipByte: Int
-    var opacity: Double = 1
-
-    var body: some View {
-        Canvas { context, size in
-            let rect = WaveformAxis.plotRect(in: size)
-            let table = WaveformAxis.levelTable(for: transfer, clipByte: clipByte)
-            var traces = context
-            traces.clip(to: Path(scopeTraceClipRect(rect)))
-            drawLanes(
-                trail.points, rect: rect, table: table, context: traces,
-                opacity: opacity * ScopeTraceMetal.trailDecay)
-            drawLanes(
-                samples.points, rect: rect, table: table, context: traces, opacity: opacity)
-        }
-    }
-
-    private func drawLanes(
-        _ points: [ScopePoint], rect: CGRect, table: [Float],
-        context: GraphicsContext, opacity: Double
-    ) {
-        guard !points.isEmpty, opacity > 0 else { return }
-        let lumaLane: [(Color, (ScopePoint) -> UInt8)] =
-            mode == .yrgb ? [(ScopePalette.luma.color, { $0.luma })] : []
-        let lanes: [(Color, (ScopePoint) -> UInt8)] =
-            lumaLane + [
-                (ScopePalette.paradeRed.color, { $0.red }),
-                (ScopePalette.paradeGreen.color, { $0.green }),
-                (ScopePalette.paradeBlue.color, { $0.blue }),
-            ]
-        var ctx = context
-        ctx.opacity = opacity
-        ctx.blendMode = .plusLighter
-        for (index, lane) in lanes.enumerated() {
-            for point in points {
-                let x = ParadeAssist.laneX(
-                    xRatio: point.xRatio, lane: index, mode: mode, plot: rect)
-                let y = WaveformAxis.plotY(Double(table[Int(lane.1(point))]), rect)
-                ctx.fill(
-                    Path(CGRect(x: x, y: y - 0.5, width: 1, height: 1)),
-                    with: .color(lane.0))
-            }
         }
     }
 }
@@ -520,26 +265,10 @@ struct VectorscopeOverlay: View {
                 canvas: canvas, clearance: chromeClearance)
         ) {
             ScopeBundleScope { assist in
-                ZStack {
-                    if ScopeTraceMetal.isAvailable {
-                        Canvas { context, size in
-                            drawVectorscopeGraticule(
-                                in: context, rect: vectorscopePlotSquare(in: size))
-                        }
-                        VectorscopeMetalView(
-                            points: assist.vectorscopePoints,
-                            trailPoints: assist.trailVectorscopePoints,
-                            zoom: options.zoom,
-                            brightness: options.brightness,
-                            revision: assist.revision)
-                    } else {
-                        VectorscopePlot(
-                            points: assist.vectorscopePoints,
-                            trailPoints: assist.trailVectorscopePoints,
-                            zoom: options.zoom,
-                            brightness: options.brightness)
-                    }
-                }
+                MonitorVectorscopeScopePlot(points: assist.vectorscopePoints,
+                    trail: assist.trailVectorscopePoints, zoom: options.zoom,
+                    brightness: options.brightness, revision: assist.revision,
+                    configureDisplay: scopeDisplay)
             }
         }
         .accessibilityLabel("Vectorscope")
@@ -555,129 +284,11 @@ struct VectorscopeOverlay: View {
     }
 }
 
-private struct VectorscopePlot: View, Equatable {
-    var points: [ScopePoint]
-    var trailPoints: [ScopePoint] = []
-    var zoom: VectorscopeAssist.Zoom = .x1
-    var brightness: Int = VectorscopeAssist.defaultBrightness
-
-    nonisolated static func == (lhs: VectorscopePlot, rhs: VectorscopePlot) -> Bool {
-        lhs.points == rhs.points && lhs.trailPoints == rhs.trailPoints && lhs.zoom == rhs.zoom
-            && lhs.brightness == rhs.brightness
-    }
-
-    var body: some View {
-        Canvas { context, size in
-            let rect = vectorscopePlotSquare(in: size)
-            let side = rect.width
-            drawVectorscopeGraticule(in: context, rect: rect)
-            let intensity = VectorscopeAssist.intensity(brightness)
-            if !trailPoints.isEmpty,
-                let trail = VectorscopeRaster.image(
-                    from: trailPoints, gain: zoom.gain, intensity: intensity)
-            {
-                var ghost = context
-                ghost.blendMode = .plusLighter
-                ghost.opacity = ScopeTraceMetal.trailDecay
-                ghost.addFilter(.blur(radius: side / CGFloat(VectorscopeRaster.bins) * 1.1))
-                ghost.draw(Image(decorative: trail, scale: 1), in: rect)
-            }
-            if let image = VectorscopeRaster.image(
-                from: points, gain: zoom.gain, intensity: intensity)
-            {
-                // OpenZCine: soft blob ≈ one bin, then a 0.35 crisp core.
-                var blur = context
-                blur.blendMode = .plusLighter
-                blur.addFilter(.blur(radius: side / CGFloat(VectorscopeRaster.bins) * 1.1))
-                blur.draw(Image(decorative: image, scale: 1), in: rect)
-                var crisp = context
-                crisp.blendMode = .plusLighter
-                crisp.opacity = 0.35
-                crisp.draw(Image(decorative: image, scale: 1), in: rect)
-            }
-        }
-    }
-}
-
 /// Shared CbCr density raster for VECTOR. Points are already monitor-domain
 /// (through the operator LUT or the official DJI display cube) — the only math
 /// here is ``ScopeChroma`` and the density ramp. One binning path feeds both
 /// the Metal texture and the Canvas fallback so they can never disagree.
-enum VectorscopeRaster {
-    /// OpenZCine bin count — 128 EVERYWHERE (Metal and CPU fallback alike).
-    static let bins = 128
-
-    /// Storage-row CbCr bin (row 0 = most negative Cr). `nil` when gain
-    /// pushes the sample off the plot — OpenZCine drops overshoot, no clamp.
-    static func binIndex(
-        red: UInt8, green: UInt8, blue: UInt8, gain: Double = 1
-    ) -> (column: Int, row: Int)? {
-        let chroma = ScopeChroma.rec709(red: red, green: green, blue: blue)
-        let x = chroma.cb * gain + 0.5
-        let y = chroma.cr * gain + 0.5
-        guard x >= 0, x <= 1, y >= 0, y <= 1 else { return nil }
-        let scale = Double(bins - 1)
-        return (Int((x * scale).rounded()), Int((y * scale).rounded()))
-    }
-
-    /// OpenZCine `VectorscopeDensityRasterizer.premultipliedRGBA`: log density
-    /// alpha `(0.4 + 0.6·density) × intensity`, `traceTint` colour, +Cr flipped
-    /// up. `nil` when nothing lands.
-    static func pixels(from points: [ScopePoint], gain: Double, intensity: Double) -> [UInt8]? {
-        guard !points.isEmpty else { return nil }
-        let n = bins
-        var counts = [UInt32](repeating: 0, count: n * n)
-        var sumRed = [UInt32](repeating: 0, count: n * n)
-        var sumGreen = [UInt32](repeating: 0, count: n * n)
-        var sumBlue = [UInt32](repeating: 0, count: n * n)
-        for point in points {
-            guard
-                let bin = binIndex(
-                    red: point.red, green: point.green, blue: point.blue, gain: gain)
-            else { continue }
-            let idx = bin.row * n + bin.column
-            counts[idx] &+= 1
-            sumRed[idx] &+= UInt32(point.red)
-            sumGreen[idx] &+= UInt32(point.green)
-            sumBlue[idx] &+= UInt32(point.blue)
-        }
-        let peak = counts.max() ?? 0
-        guard peak > 0 else { return nil }
-        let logPeak = log(1 + Double(peak))
-        var pixels = [UInt8](repeating: 0, count: n * n * 4)
-        for index in 0..<(n * n) where counts[index] > 0 {
-            let count = Double(counts[index])
-            let density = log(1 + count) / logPeak
-            let alpha = min(1, max(0, (0.4 + 0.6 * density) * intensity))
-            let tint = ScopeChroma.traceTint(
-                red: Double(sumRed[index]) / (count * 255),
-                green: Double(sumGreen[index]) / (count * 255),
-                blue: Double(sumBlue[index]) / (count * 255))
-            let row = n - 1 - index / n
-            let column = index % n
-            let offset = (row * n + column) * 4
-            pixels[offset] = UInt8(255 * tint.red * alpha)
-            pixels[offset + 1] = UInt8(255 * tint.green * alpha)
-            pixels[offset + 2] = UInt8(255 * tint.blue * alpha)
-            pixels[offset + 3] = UInt8(255 * alpha)
-        }
-        return pixels
-    }
-
-    /// CPU-fallback face of ``pixels(from:gain:intensity:)``.
-    static func image(from points: [ScopePoint], gain: Double, intensity: Double) -> CGImage? {
-        guard let pixels = pixels(from: points, gain: gain, intensity: intensity) else {
-            return nil
-        }
-        let n = bins
-        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
-        return CGImage(
-            width: n, height: n, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: n * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
-    }
-}
+typealias VectorscopeRaster = OpenCineMedia.VectorscopeRaster
 
 // MARK: - LIGHTS
 
@@ -902,36 +513,3 @@ private struct ScopeMiniChrome<Content: View>: View {
 /// OpenZCine `drawVectorscopeGraticule` — ring, crosshair, dashed I-phase
 /// skin line, 75% boxes. Geometry lives on ``VectorscopeGraticule`` so the
 /// Metal overlay and Canvas fallback cannot drift.
-func drawVectorscopeGraticule(in context: GraphicsContext, rect: CGRect) {
-    let centre = CGPoint(x: rect.midX, y: rect.midY)
-    context.stroke(Path(ellipseIn: rect), with: .color(VectorscopeGraticule.ring), lineWidth: 1.25)
-    let arm = VectorscopeGraticule.crossArm
-    var cross = Path()
-    cross.move(to: CGPoint(x: centre.x - arm, y: centre.y))
-    cross.addLine(to: CGPoint(x: centre.x + arm, y: centre.y))
-    cross.move(to: CGPoint(x: centre.x, y: centre.y - arm))
-    cross.addLine(to: CGPoint(x: centre.x, y: centre.y + arm))
-    context.stroke(cross, with: .color(VectorscopeGraticule.faint), lineWidth: 1)
-    var skin = Path()
-    skin.move(to: centre)
-    skin.addLine(to: VectorscopeGraticule.skinEnd(in: rect))
-    context.stroke(
-        skin, with: .color(ScopePalette.middle), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-    let boxSide = VectorscopeGraticule.boxSide
-    let push = VectorscopeGraticule.labelPush
-    for target in VectorscopeGraticule.targets {
-        let point = VectorscopeGraticule.targetCenter(
-            red: target.red, green: target.green, blue: target.blue, in: rect)
-        let box = CGRect(
-            x: point.x - boxSide / 2, y: point.y - boxSide / 2, width: boxSide, height: boxSide)
-        context.stroke(Path(box), with: .color(VectorscopeGraticule.box), lineWidth: 1)
-        let dx = point.x - centre.x
-        let dy = point.y - centre.y
-        let length = max(1, (dx * dx + dy * dy).squareRoot())
-        context.draw(
-            Text(target.label)
-                .font(.system(size: 6.5, weight: .bold, design: .monospaced))
-                .foregroundStyle(VectorscopeGraticule.label),
-            at: CGPoint(x: point.x + dx / length * push, y: point.y + dy / length * push))
-    }
-}

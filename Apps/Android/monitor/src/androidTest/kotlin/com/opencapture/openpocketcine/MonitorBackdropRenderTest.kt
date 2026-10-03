@@ -42,6 +42,90 @@ import org.junit.runner.RunWith
 /** Pixel evidence from the real HWUI/RenderEffect modifier, not an emulated blur model. */
 @RunWith(AndroidJUnit4::class)
 class MonitorBackdropRenderTest {
+    @Test fun sharedScopeBrightnessZeroClearsRetainedTraceAndKeepsGuides() {
+        for (kind in listOf("wave", "parade", "vector")) {
+            ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+                val intensity = androidx.compose.runtime.mutableStateOf(1.0)
+                val samples = com.opencapture.opencine.media.ScopeSamples.EMPTY.copy(points =
+                    List(76) { index -> com.opencapture.opencine.media.ScopePoint(
+                        index / 76.0, 0.5, 191, 30, 30, 80) })
+                val bundle = com.opencapture.opencine.media.ScopeAssistBundle.EMPTY.copy(
+                    revision = 1, samples = samples, vectorscopePoints = samples.points)
+                val publication = androidx.compose.runtime.mutableStateOf(bundle)
+                val table = com.opencapture.opencine.media.WaveformIre.levelTable(
+                    com.opencapture.opencine.media.MonitorTransfer.REC709)
+                var bounds = Rect.Zero
+                var density = 1f
+                scenario.onActivity { activity ->
+                    density = activity.resources.displayMetrics.density
+                    activity.setContent {
+                        Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black),
+                            contentAlignment = Alignment.Center) {
+                            val modifier = Modifier.size(if (kind == "vector") 190.dp else 250.dp,
+                                if (kind == "vector") 190.dp else 153.dp).onGloballyPositioned {
+                                    bounds = it.boundsInWindow()
+                                }
+                            val transfer = com.opencapture.opencine.media.MonitorTransfer.REC709
+                            val guides = com.opencapture.monitorui.MonitorScopeGuides(false, false, false)
+                            when (kind) {
+                                "wave" -> com.opencapture.monitorui.MonitorWaveformScopePlot(publication.value,
+                                    transfer, table, intensity = intensity.value, guides = guides, modifier = modifier)
+                                "parade" -> com.opencapture.monitorui.MonitorParadeScopePlot(publication.value,
+                                    transfer, table, intensity = intensity.value, guides = guides, modifier = modifier)
+                                else -> com.opencapture.monitorui.MonitorVectorscopeScopePlot(publication.value,
+                                    brightness = (intensity.value * 100).toInt(), modifier = modifier)
+                            }
+                        }
+                    }
+                }
+                fun redPixels(image: Bitmap): Int =
+                    (bounds.top.roundToInt() until bounds.bottom.roundToInt()).sumOf { y ->
+                        (bounds.left.roundToInt() until bounds.right.roundToInt()).count { x ->
+                            val color = image.getPixel(x, y)
+                            Color.red(color) > 40 && Color.red(color) > Color.green(color) * 1.8 &&
+                                Color.red(color) > Color.blue(color) * 1.8
+                        }
+                    }
+                val shown = capture(scenario, "shared-$kind-shown")
+                assertTrue(redPixels(shown) > 1, "The actual $kind trace must be visible")
+                scenario.onActivity { intensity.value = 0.0 }
+                val hidden = capture(scenario, "shared-$kind-zero")
+                assertEquals(0, redPixels(hidden), "Zero brightness must clear the retained signal")
+                var guidePixels = 0
+                for (y in bounds.top.roundToInt() until bounds.bottom.roundToInt()) {
+                    for (x in bounds.left.roundToInt() until bounds.right.roundToInt()) {
+                        val color = hidden.getPixel(x, y)
+                        if (Color.red(color) > 100 && abs(Color.red(color) - Color.green(color)) < 25) guidePixels += 1
+                    }
+                }
+                assertTrue(guidePixels > 80, "The scope chrome remains visible")
+                if (kind != "vector") {
+                    val guideX = (bounds.left + 6 * density).roundToInt() until
+                        (bounds.right - 6 * density).roundToInt()
+                    for (lineY in listOf(bounds.top + 27 * density, bounds.bottom - 3 * density)) {
+                        val y = lineY.roundToInt()
+                        val kept = guideX.count { x ->
+                            (y - 1..y + 1).any { row ->
+                                val color = hidden.getPixel(x, row)
+                                Color.red(color) > 100 && abs(Color.red(color) - Color.green(color)) < 25
+                            }
+                        }
+                        assertTrue(kept > guideX.count() * 0.8, "The actual $kind 0/100 guide remains visible")
+                    }
+                }
+                scenario.onActivity { intensity.value = 1.0 }
+                val restored = capture(scenario, "shared-$kind-restored")
+                assertEquals(redPixels(shown), redPixels(restored), "Restoring brightness rebuilds the same measured signal")
+                scenario.onActivity {
+                    publication.value = bundle.copy(revision = 2,
+                        samples = com.opencapture.opencine.media.ScopeSamples.EMPTY, vectorscopePoints = emptyList())
+                }
+                val retired = capture(scenario, "shared-$kind-retired")
+                assertEquals(0, redPixels(retired), "An empty successor publication cannot keep the retired signal")
+            }
+        }
+    }
+
     @Test fun nativeTextureHostRetiresOldWindowWithoutReleasingCurrentSurface() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {

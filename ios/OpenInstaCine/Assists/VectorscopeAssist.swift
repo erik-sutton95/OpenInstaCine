@@ -1,4 +1,5 @@
 import MonitorPresentation
+import MonitorUI
 import SwiftUI
 import UIKit
 
@@ -31,21 +32,7 @@ enum VectorscopeAssist {
     static let gripExteriorGap: CGFloat = 2
 
     /// OpenZCine `AssistConfiguration.Scopes.VectorscopeZoom`.
-    enum Zoom: String, CaseIterable, Codable, Equatable, Sendable, Identifiable {
-        case x1 = "1x"
-        case x2 = "2x"
-        case x4 = "4x"
-        var id: String { rawValue }
-
-        /// Multiplier applied to plotted chroma before binning. Graticule stays at unity.
-        var gain: Double {
-            switch self {
-            case .x1: 1
-            case .x2: 2
-            case .x4: 4
-            }
-        }
-    }
+    typealias Zoom = MonitorVectorscopeZoom
 
     /// OpenZCine `MovablePanelStoredCenter` — centre as a fraction of the overlay bounds.
     struct StoredCenter: Codable, Equatable, Sendable {

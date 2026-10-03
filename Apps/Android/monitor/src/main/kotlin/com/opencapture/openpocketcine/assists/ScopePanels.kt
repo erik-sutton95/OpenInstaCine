@@ -59,6 +59,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.opencapture.monitorui.MonitorWaveformScopePlot
+import com.opencapture.monitorui.MonitorParadeScopePlot
+import com.opencapture.monitorui.MonitorVectorscopeScopePlot
+import com.opencapture.monitorui.MonitorScopeGuides
 import com.opencapture.openpocketcine.ChromeRect
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.NDFilterRecommendation
@@ -69,7 +73,6 @@ import com.opencapture.openpocketcine.feed.LocalGpuLive
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeAssistBundle
 import com.opencapture.openpocketcine.feed.ScopeChannelLight
-import com.opencapture.openpocketcine.feed.ScopePoint
 import com.opencapture.openpocketcine.feed.ScopeTrafficLightsReading
 import com.opencapture.openpocketcine.feed.WaveformIre
 import kotlin.math.roundToInt
@@ -78,21 +81,6 @@ import kotlinx.coroutines.withContext
 
 private val PanelShape = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
 private val ChipShape = RoundedCornerShape(percent = 50)
-private val Boundary = Color(220 / 255f, 235 / 255f, 225 / 255f, 0.8f)
-private val ClipColor = Color(255 / 255f, 150 / 255f, 142 / 255f, 0.8f)
-private val MiddleColor = Color(246 / 255f, 241 / 255f, 226 / 255f, 0.8f)
-private val GridFaint = Color(220 / 255f, 235 / 255f, 225 / 255f, 0.10f)
-private val LumaGhost = Color(182 / 255f, 190 / 255f, 186 / 255f, 0.08f)
-private val LumaTrace = Color(222 / 255f, 230 / 255f, 224 / 255f, 1f)
-private val LumaHot = Color(1f, 1f, 1f, 1f)
-private val OverlayRed = Color(255 / 255f, 64 / 255f, 54 / 255f, 0.55f)
-private val OverlayGreen = Color(70 / 255f, 240 / 255f, 110 / 255f, 0.55f)
-private val OverlayBlue = Color(72 / 255f, 148 / 255f, 255 / 255f, 0.62f)
-private val ParadeRed = Color(255 / 255f, 86 / 255f, 78 / 255f, 1f)
-private val ParadeGreen = Color(102 / 255f, 232 / 255f, 132 / 255f, 1f)
-private val ParadeBlue = Color(92 / 255f, 156 / 255f, 255 / 255f, 1f)
-private val VectorRing = Color(220 / 255f, 235 / 255f, 225 / 255f, 0.55f)
-private val VectorFaint = Color(220 / 255f, 235 / 255f, 225 / 255f, 0.30f)
 private val MeterRed = Color(255 / 255f, 92 / 255f, 82 / 255f)
 private val MeterGreen = Color(86 / 255f, 235 / 255f, 132 / 255f)
 private val MeterBlue = Color(96 / 255f, 158 / 255f, 255 / 255f)
@@ -306,58 +294,23 @@ internal fun MovableAssistPanel(
 @Composable
 internal fun WaveformPanel(state: LiveAssistState, colorMode: Int, modifier: Modifier = Modifier,
     previewBundle: com.opencapture.openpocketcine.feed.ScopeAssistBundle? = null) {
-    val measurer = rememberTextMeasurer()
     val bundle = previewBundle ?: state.scopeBundle
     val transfer = bundle.resolvedTransfer(colorMode)
     val table = remember(transfer, bundle.iso, bundle.ceiling) { WaveformIre.levelTable(transfer, bundle.iso, bundle.ceiling) }
-    val intensity = WaveformAssist.intensity(state.waveBrightness)
-    var trace by remember { mutableStateOf<ImageBitmap?>(null) }
-    val layers = remember { ScopeTraceRaster.TraceLayers() }
-    LaunchedEffect(bundle.revision, state.waveMode, intensity, table) {
-        val live = bundle.samples.points
-        val trail = bundle.trailSamples.points
-        val mode = state.waveMode
-        val next =
-            withContext(Dispatchers.Default) {
-                layers.waveform(live, trail, table, mode, intensity)
-            }
-        if (next != null) trace = next
-    }
-    Canvas(modifier.fillMaxSize()) {
-        val livePlot = WaveformAxis.plotRect(this.size.width, this.size.height, this.density)
-        blitScopePlot(trace, livePlot)
-        drawWaveGuides(livePlot, state.waveGuides, colorMode, this.density)
-        drawScopeTitle(measurer, "WAVE", state.waveMode.label.uppercase())
-    }
+    MonitorWaveformScopePlot(bundle, transfer, table, state.waveMode,
+        WaveformAssist.intensity(state.waveBrightness),
+        MonitorScopeGuides(state.waveGuides.clip, state.waveGuides.crush, state.waveGuides.middle), modifier)
 }
 
 @Composable
 internal fun ParadePanel(state: LiveAssistState, colorMode: Int, modifier: Modifier = Modifier,
     previewBundle: com.opencapture.openpocketcine.feed.ScopeAssistBundle? = null) {
-    val measurer = rememberTextMeasurer()
     val bundle = previewBundle ?: state.scopeBundle
     val transfer = bundle.resolvedTransfer(colorMode)
     val table = remember(transfer, bundle.iso, bundle.ceiling) { WaveformIre.levelTable(transfer, bundle.iso, bundle.ceiling) }
-    val intensity = ParadeAssist.intensity(state.paradeBrightness)
-    var trace by remember { mutableStateOf<ImageBitmap?>(null) }
-    val layers = remember { ScopeTraceRaster.TraceLayers() }
-    LaunchedEffect(bundle.revision, state.paradeMode, intensity, table) {
-        val live = bundle.samples.points
-        val trail = bundle.trailSamples.points
-        val mode = state.paradeMode
-        val next =
-            withContext(Dispatchers.Default) {
-                layers.parade(live, trail, table, mode, intensity)
-            }
-        if (next != null) trace = next
-    }
-    Canvas(modifier.fillMaxSize()) {
-        val livePlot = WaveformAxis.plotRect(this.size.width, this.size.height, this.density)
-        blitScopePlot(trace, livePlot)
-        // iOS ParadeOverlay does not paint lane letters or vertical dividers.
-        drawWaveGuides(livePlot, state.paradeGuides, colorMode, this.density)
-        drawScopeTitle(measurer, "PARADE", ParadeAssist.chip(state.paradeMode))
-    }
+    MonitorParadeScopePlot(bundle, transfer, table, state.paradeMode,
+        ParadeAssist.intensity(state.paradeBrightness),
+        MonitorScopeGuides(state.paradeGuides.clip, state.paradeGuides.crush, state.paradeGuides.middle), modifier)
 }
 
 @Composable
@@ -371,63 +324,7 @@ internal fun HistogramPanel(state: LiveAssistState, modifier: Modifier = Modifie
 @Composable
 internal fun VectorscopePanel(state: LiveAssistState, modifier: Modifier = Modifier,
     previewBundle: com.opencapture.openpocketcine.feed.ScopeAssistBundle? = null) {
-    val measurer = rememberTextMeasurer()
-    val bundle = previewBundle ?: state.scopeBundle
-    val intensity = VectorscopeAssist.intensity(state.vectorBrightness)
-    val gain = state.vectorZoom.gain
-    var trace by remember { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(bundle.revision, gain, intensity) {
-        val trailPts = bundle.trailVectorscopePoints
-        val livePts = bundle.vectorscopePoints
-        val next =
-            withContext(Dispatchers.Default) {
-                ScopeTraceRaster.vectorscope(livePts, trailPts, gain, intensity)
-            }
-        if (next != null) trace = next
-    }
-    Canvas(modifier.fillMaxSize()) {
-        val d = density
-        val plot = VectorscopeGraticule.plotSquare(this.size.width, this.size.height, d)
-        blitScopePlot(trace, plot)
-        val arm = VectorscopeGraticule.CROSS_ARM * d
-        drawCircle(VectorRing, radius = plot.width / 2f, center = Offset(plot.midX, plot.midY), style = Stroke(1.25f))
-        drawLine(
-            VectorFaint,
-            Offset(plot.midX - arm, plot.midY),
-            Offset(plot.midX + arm, plot.midY),
-            1f,
-        )
-        drawLine(
-            VectorFaint,
-            Offset(plot.midX, plot.midY - arm),
-            Offset(plot.midX, plot.midY + arm),
-            1f,
-        )
-        val skin = VectorscopeGraticule.skinEnd(plot)
-        drawLine(
-            MiddleColor,
-            Offset(plot.midX, plot.midY),
-            Offset(skin.x, skin.y),
-            1f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
-        )
-        val box = VectorscopeGraticule.BOX_SIDE * d
-        for (target in VectorscopeGraticule.targets) {
-            val pt = VectorscopeGraticule.targetCenter(target.red, target.green, target.blue, plot)
-            drawRect(VectorRing, Offset(pt.x - box / 2f, pt.y - box / 2f), Size(box, box), style = Stroke(1f))
-            val dx = pt.x - plot.midX
-            val dy = pt.y - plot.midY
-            val len = maxOf(1f, kotlin.math.hypot(dx, dy))
-            val push = VectorscopeGraticule.LABEL_PUSH * d
-            drawText(
-                measurer,
-                target.label,
-                Offset(pt.x + dx / len * push - 4f * d, pt.y + dy / len * push - 4f * d),
-                TextStyle(color = VectorRing, fontSize = 6.5.sp, fontFamily = com.opencapture.openpocketcine.OpcFonts.sora, fontWeight = FontWeight.Bold),
-            )
-        }
-        drawScopeTitle(measurer, "VECTOR", VectorscopeAssist.chip(state.vectorZoom))
-    }
+    MonitorVectorscopeScopePlot(previewBundle ?: state.scopeBundle, state.vectorZoom, state.vectorBrightness, modifier)
 }
 
 @Composable
@@ -491,17 +388,7 @@ internal fun NDMeterPanel(state: LiveAssistState, modifier: Modifier = Modifier)
     }
 }
 
-private fun DrawScope.drawWaveGuides(plot: AssistRect, guides: ScopeGuides, colorMode: Int, density: Float) {
-    val gray = WaveformAxis.middleGrayIRE(colorMode)
-    val dash = floatArrayOf(WaveformAxis.crushClipDash[0] * density, WaveformAxis.crushClipDash[1] * density)
-    for (stroke in WaveformAxis.guideStrokes(guides.clip, guides.crush, guides.middle, colorMode)) {
-        val y = WaveformAxis.plotY(stroke.ire, plot, density)
-        val isGray = kotlin.math.abs(stroke.ire - gray) < 0.05
-        val color = if (stroke.crushClip) ClipColor else if (isGray) MiddleColor else Boundary
-        val effect = if (stroke.dashed) PathEffect.dashPathEffect(dash) else null
-        drawLine(color, Offset(plot.minX, y), Offset(plot.maxX, y), if (isGray) 1f else 1.25f, pathEffect = effect)
-    }
-}
+
 
 /**
  * Traces into [dstPlot] over the shared scope material (same rect as the 0 / 100 IRE
@@ -509,20 +396,7 @@ private fun DrawScope.drawWaveGuides(plot: AssistRect, guides: ScopeGuides, colo
  * it does not stack a second plate (the black square) and L-scale cannot
  * drift IRE 100.
  */
-private fun DrawScope.blitScopePlot(trace: ImageBitmap?, dstPlot: AssistRect) {
-    if (trace == null) return
-    drawImage(
-        trace,
-        dstOffset = IntOffset(dstPlot.minX.roundToInt(), dstPlot.minY.roundToInt()),
-        dstSize =
-            IntSize(
-                dstPlot.width.roundToInt().coerceAtLeast(1),
-                dstPlot.height.roundToInt().coerceAtLeast(1),
-            ),
-        filterQuality = FilterQuality.None,
-        blendMode = BlendMode.Plus,
-    )
-}
+
 
 private fun DrawScope.drawScopeTitle(measurer: TextMeasurer, title: String, chip: String) {
     val padX = 8.dp.toPx()
@@ -541,67 +415,10 @@ private fun DrawScope.drawScopeTitle(measurer: TextMeasurer, title: String, chip
     drawText(chipLayout, topLeft = Offset(size.width - chipLayout.size.width - padX, 5.dp.toPx()))
 }
 
-private fun DrawScope.drawWaveformTrace(
-    points: List<ScopePoint>,
-    plot: AssistRect,
-    table: FloatArray,
-    mode: WaveformMode,
-    intensity: Double,
-    density: Float,
-) {
-    if (points.isEmpty() || intensity <= 0) return
-    val alpha = intensity.toFloat()
-    fun y(byte: Int): Float = WaveformAxis.plotY(table[byte].toDouble(), plot, density)
-    when (mode) {
-        WaveformMode.LUMA -> {
-            points.forEachIndexed { index, point ->
-                val x = plot.minX + point.xRatio.toFloat() * plot.width
-                val tickY = y(point.luma)
-                drawRect(LumaGhost, Offset(x, tickY - 1f), Size(2f, 2f), alpha = alpha, blendMode = BlendMode.Plus)
-                drawRect(LumaTrace, Offset(x, tickY - 0.5f), Size(1f, 1f), alpha = alpha, blendMode = BlendMode.Plus)
-                if (index % 4 == 0) {
-                    drawRect(LumaHot, Offset(x, tickY - 0.5f), Size(1f, 1f), alpha = alpha, blendMode = BlendMode.Plus)
-                }
-            }
-        }
-        WaveformMode.RGB -> {
-            for (point in points) {
-                val x = plot.minX + point.xRatio.toFloat() * plot.width
-                drawRect(OverlayRed, Offset(x, y(point.red) - 0.5f), Size(1f, 1f), alpha = alpha, blendMode = BlendMode.Plus)
-                drawRect(OverlayGreen, Offset(x, y(point.green) - 0.5f), Size(1f, 1f), alpha = alpha, blendMode = BlendMode.Plus)
-                drawRect(OverlayBlue, Offset(x, y(point.blue) - 0.5f), Size(1f, 1f), alpha = alpha, blendMode = BlendMode.Plus)
-            }
-        }
-    }
-}
 
-private fun DrawScope.drawParadeTrace(
-    points: List<ScopePoint>,
-    plot: AssistRect,
-    table: FloatArray,
-    mode: ParadeMode,
-    intensity: Double,
-    density: Float,
-) {
-    if (points.isEmpty() || intensity <= 0) return
-    val alpha = intensity.toFloat()
-    val lanes =
-        buildList {
-            if (mode == ParadeMode.YRGB) add(ParadeLuma to { p: ScopePoint -> p.luma })
-            add(ParadeRed to { p: ScopePoint -> p.red })
-            add(ParadeGreen to { p: ScopePoint -> p.green })
-            add(ParadeBlue to { p: ScopePoint -> p.blue })
-        }
-    for ((index, lane) in lanes.withIndex()) {
-        for (point in points) {
-            val x = ParadeAssist.laneX(point.xRatio, index, mode, plot)
-            val y = WaveformAxis.plotY(table[lane.second(point)].toDouble(), plot, density)
-            drawRect(lane.first, Offset(x, y - 0.5f), Size(1f, 1f), alpha = alpha, blendMode = BlendMode.Plus)
-        }
-    }
-}
 
-private val ParadeLuma = LumaTrace
+
+
 
 private fun DrawScope.drawGoalPost(
     x: Float,

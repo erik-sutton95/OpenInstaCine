@@ -36,11 +36,7 @@ enum WaveformAssist {
     static let brightnessHelp =
         "Raise trace intensity when the waveform is hard to read in bright light."
 
-    enum Mode: String, CaseIterable, Codable, Equatable, Sendable, Identifiable {
-        case luma = "Luma"
-        case rgb = "RGB"
-        var id: String { rawValue }
-    }
+    typealias Mode = MonitorWaveformMode
 
     struct GuideLines: Codable, Equatable, Sendable {
         var clip: Bool

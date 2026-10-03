@@ -297,59 +297,25 @@ object VectorscopeAssist {
 }
 
 object VectorscopeGraticule {
-    const val SKIN_ANGLE_DEGREES = 123.0
-    const val SKIN_LENGTH = 0.92
-    const val BOX_SIDE = 7f
-    const val LABEL_PUSH = 10f
-    const val CROSS_ARM = 8f
-    data class Target(val label: String, val red: Int, val green: Int, val blue: Int)
-
-    val targets =
-        listOf(
-            Target("R", 191, 0, 0),
-            Target("Mg", 191, 0, 191),
-            Target("B", 0, 0, 191),
-            Target("Cy", 0, 191, 191),
-            Target("G", 0, 191, 0),
-            Target("Yl", 191, 191, 0),
-        )
-
-    fun plotSquare(width: Float, height: Float, density: Float = 1f): AssistRect {
-        val sidePad = 6f * density
-        val title = 26f * density
-        val bottom = 8f * density
-        val plot =
-            AssistRect(
-                sidePad,
-                title,
-                width - sidePad * 2f,
-                maxOf(1f, height - title - bottom),
-            )
-        val side = minOf(plot.width, plot.height)
-        return AssistRect(plot.midX - side / 2f, plot.midY - side / 2f, side, side)
-    }
-
-    fun skinEnd(rect: AssistRect): AssistPoint {
-        val radius = rect.width / 2f
-        val angle = Math.toRadians(SKIN_ANGLE_DEGREES)
-        return AssistPoint(
-            rect.midX + (cos(angle) * radius * SKIN_LENGTH).toFloat(),
-            rect.midY - (sin(angle) * radius * SKIN_LENGTH).toFloat(),
-        )
-    }
-
-    fun rec709Chroma(red: Double, green: Double, blue: Double): Pair<Double, Double> {
-        val y = 0.2126 * red + 0.7152 * green + 0.0722 * blue
-        return (blue - y) / 1.8556 to (red - y) / 1.5748
-    }
-
-    fun targetCenter(red: Int, green: Int, blue: Int, rect: AssistRect): AssistPoint {
-        val chroma = rec709Chroma(red / 255.0, green / 255.0, blue / 255.0)
-        return AssistPoint(
-            rect.midX + chroma.first.toFloat() * rect.width,
-            rect.midY - chroma.second.toFloat() * rect.height,
-        )
-    }
+    const val SKIN_ANGLE_DEGREES = com.opencapture.monitorui.MonitorVectorscopeGraticule.SKIN_ANGLE_DEGREES
+    const val SKIN_LENGTH = com.opencapture.monitorui.MonitorVectorscopeGraticule.SKIN_LENGTH
+    const val BOX_SIDE = com.opencapture.monitorui.MonitorVectorscopeGraticule.BOX_SIDE
+    const val LABEL_PUSH = com.opencapture.monitorui.MonitorVectorscopeGraticule.LABEL_PUSH
+    const val CROSS_ARM = com.opencapture.monitorui.MonitorVectorscopeGraticule.CROSS_ARM
+    val targets = com.opencapture.monitorui.MonitorVectorscopeGraticule.targets
+    fun plotSquare(width: Float, height: Float, density: Float = 1f): AssistRect =
+        com.opencapture.monitorui.MonitorVectorscopeGraticule.plotSquare(width, height, density).let {
+            AssistRect(it.x, it.y, it.width, it.height)
+        }
+    fun skinEnd(rect: AssistRect): AssistPoint =
+        com.opencapture.monitorui.MonitorVectorscopeGraticule.skinEnd(rect.scopeRect()).let { AssistPoint(it.x, it.y) }
+    fun rec709Chroma(red: Double, green: Double, blue: Double): Pair<Double, Double> =
+        com.opencapture.opencine.media.ScopeChroma.rec709(red, green, blue)
+    fun targetCenter(red: Int, green: Int, blue: Int, rect: AssistRect): AssistPoint =
+        com.opencapture.monitorui.MonitorVectorscopeGraticule.targetCenter(red, green, blue, rect.scopeRect()).let {
+            AssistPoint(it.x, it.y)
+        }
+    private fun AssistRect.scopeRect() = com.opencapture.monitorui.MonitorScopeRect(x, y, width, height)
 }
 
 object TrafficLightsAssist {

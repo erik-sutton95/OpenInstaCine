@@ -262,42 +262,11 @@ enum class ZebraPaint(val label: String) {
     }
 }
 
-enum class WaveformMode(val label: String) {
-    LUMA("Luma"),
-    RGB("RGB"),
-    ;
+typealias WaveformMode = com.opencapture.monitorui.MonitorWaveformMode
 
-    companion object {
-        fun fromPersisted(raw: String): WaveformMode =
-            entries.firstOrNull { it.label == raw || it.name == raw } ?: RGB
-    }
-}
+typealias ParadeMode = com.opencapture.monitorui.MonitorParadeMode
 
-enum class ParadeMode(val label: String) {
-    RGB("RGB"),
-    YRGB("YRGB"),
-    ;
-
-    val laneCount: Int
-        get() = if (this == YRGB) 4 else 3
-
-    companion object {
-        fun fromPersisted(raw: String): ParadeMode =
-            entries.firstOrNull { it.label == raw || it.name == raw } ?: RGB
-    }
-}
-
-enum class VectorscopeZoom(val label: String, val gain: Double) {
-    X1("1x", 1.0),
-    X2("2x", 2.0),
-    X4("4x", 4.0),
-    ;
-
-    companion object {
-        fun fromPersisted(raw: String): VectorscopeZoom =
-            entries.firstOrNull { it.label == raw || it.name == raw } ?: X1
-    }
-}
+typealias VectorscopeZoom = com.opencapture.monitorui.MonitorVectorscopeZoom
 
 /** OpenZCine `AssistConfiguration.CrushClipCompensation` — shared HISTO + LIGHTS. */
 enum class CrushClipCompensation(val raw: Int, val label: String, val compactLabel: String) {
