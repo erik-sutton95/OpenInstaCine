@@ -79,6 +79,14 @@ import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.panelGlass
 import kotlinx.coroutines.launch
 
+internal fun mediaColorOptions(
+    colors: Iterable<String?>,
+    profile: com.opencapture.openpocketcine.session.CameraProfile,
+): List<Pair<Int, String>> = colors.mapNotNull { it?.toIntOrNull() }.toSet().sorted().mapNotNull { mode ->
+    val label = com.opencapture.openpocketcine.session.CameraCommands.colorLabel(mode, profile = profile)
+    if (label == "\u2014") null else mode to label
+}
+
 @Composable
 fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
     val controller = model.mediaPlayback
@@ -119,8 +127,8 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
     val filterSource = library.records(state.category).map { it.payload.file }
     val formatOptions = filterSource.map { it.fileExtension }.filter { it.isNotEmpty() }.toSet().sorted()
     val resolutionOptions = filterSource.mapNotNull { it.resolution }.filter { it.isNotEmpty() }.toSet().sorted()
-    val colorOptions = library.records(state.category).mapNotNull { it.facts.color?.toIntOrNull() }
-        .toSet().sorted().map { mode -> mode to com.opencapture.openpocketcine.session.CameraCommands.colorLabel(mode, profile = model.session.profile) }
+    val colorOptions = mediaColorOptions(
+        library.records(state.category).map { it.facts.color }, model.session.profile)
     val hasDates = filterSource.any { it.dateKey.isNotEmpty() }
     val displayedRecords = library.displayedRecords
     val displayed = displayedRecords.map { it.payload.file.copy(isStarred = it.favorite) }
