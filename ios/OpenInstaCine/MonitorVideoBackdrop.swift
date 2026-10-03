@@ -58,7 +58,7 @@ final class MonitorVideoBackdropRenderer: @unchecked Sendable {
             let maps =
                 effects.falseColor
                 ? imageRenderer.falseColorMapper.overlayPairData(
-                    scale: effects.falseColorScale, mode: effects.colorMode,
+                    scale: effects.falseColorScale.liveScale, transfer: effects.transfer,
                     rec709: effects.falseColorRec709, clipByte: effects.resolvedClipByte)?
                     .clipByte ?? -1
                 : 0

@@ -6,6 +6,7 @@ import XCTest
 @testable import OpenInstaCine
 
 /// OpenZCine `ChromeEditorReturnTests` — Edit view entry, exit, and force-mount.
+@MainActor
 final class ChromeEditorReturnTests: XCTestCase {
     /// A connect presents the monitor through the shell: no leftover cover or Edit view.
     @MainActor

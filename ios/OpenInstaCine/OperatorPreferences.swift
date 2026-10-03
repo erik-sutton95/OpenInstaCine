@@ -22,7 +22,6 @@ enum OperatorPrefs {
     private static let customDLogFileKey = "OpenInstaCine.CustomDLogFile"
     private static let customDLog2FileKey = "OpenInstaCine.CustomDLog2File"
     private static let selectedCustomFileKey = "OpenInstaCine.SelectedCustomLUTFile"
-    private static let assistKey = "OpenInstaCine.Assist.v1"
     private static let headTrackingKey = "OpenInstaCine.HeadTrackingEnabled"
     private static let gimbalStickSensitivityKey = "OpenInstaCine.GimbalStickSensitivity"
     private static let virtualJoystickInvertPanKey = "OpenInstaCine.VirtualJoystickInvertPan"
@@ -369,12 +368,7 @@ enum OperatorPrefs {
         }
     }
 
-    static func load(into state: LiveAssistState) {
-        if let data = UserDefaults.standard.data(forKey: assistKey),
-            let snap = try? JSONDecoder().decode(Snapshot.self, from: data)
-        {
-            snap.apply(to: state)
-        }
+    @MainActor static func load(into state: LiveAssistState) {
         migrateLegacyLUTIfNeeded(into: state)
         var migrated = lutSelection.migratedToDJICatalog
         // This app bundles no DJI cubes: a stale locked DJI pick falls back to Auto.
@@ -386,7 +380,7 @@ enum OperatorPrefs {
     }
 
     /// One-shot: old Built-in looks become Auto; a stored custom file becomes Custom D-Log.
-    private static func migrateLegacyLUTIfNeeded(into state: LiveAssistState) {
+    @MainActor private static func migrateLegacyLUTIfNeeded(into state: LiveAssistState) {
         guard UserDefaults.standard.object(forKey: lutSelectionKey) == nil else { return }
         if lastLUTWasCustom, let file = lastCustomFileName,
             CustomLUTIndex.isSafeFileName(file)
@@ -400,143 +394,9 @@ enum OperatorPrefs {
         UserDefaults.standard.set(LUTSelection.djiAuto.rawValue, forKey: lutSelectionKey)
     }
 
-    static func save(_ state: LiveAssistState) {
-        write(encoded(state))
+    @MainActor static func encoded(_ state: LiveAssistState) -> Data? {
+        state.encodedSnapshot()
     }
 
-    static func encoded(_ state: LiveAssistState) -> Data? {
-        try? JSONEncoder().encode(Snapshot(state))
-    }
-
-    static func write(_ data: Data?) {
-        guard let data else { return }
-        UserDefaults.standard.set(data, forKey: assistKey)
-    }
-
-    /// OpenZCine `operatorPreferences.v1` / `assistConfiguration.v1` analogue — one blob.
-    struct Snapshot: Codable {
-        var tools: [String]
-        var guideAspect: String
-        var guideFamily: String
-        var selectedGuides: [String]
-        var guideMask: Bool
-        var gridThirds: Bool
-        var gridPhi: Bool
-        var gridDiagonal: Bool
-        var peakingColor: String
-        var peakingSensitivity: String
-        var falseColorScale: String
-        var falseColorReference: Bool
-        /// Optional so settings saved before the LOG / 709 choice still decode.
-        var falseColorRec709: Bool?
-        var zebraHighlight: Bool
-        var zebraMidtone: Bool
-        var zebraHighlightIRE: Double
-        var zebraMidtoneIRE: Double
-        var zebraHighlightColor: String
-        var zebraMidtoneColor: String
-        var desqueezeFactor: Double
-        var desqueezeCustom: Bool?
-        var desqueezeCustomFactor: Double?
-        var desqueezeHorizontal: Bool
-        var splitComparison: Bool
-        var splitVertical: Bool
-        var lutArmed: Bool
-        var lutExposureStops: Double?
-        var crushClipCompensation: Int?
-        var mirrorHorizontal: Bool?
-        var mirrorVertical: Bool?
-
-        init(_ s: LiveAssistState) {
-            tools = LiveAssistTool.allCases.filter { s.isOn($0) }.map(\.rawValue)
-            guideAspect = s.guideAspect.rawValue
-            guideFamily = s.guideFamily.rawValue
-            selectedGuides = s.selectedGuides.map(\.rawValue)
-            guideMask = s.guideMask
-            gridThirds = s.gridThirds
-            gridPhi = s.gridPhi
-            gridDiagonal = s.gridDiagonal
-            peakingColor = s.peakingColor.rawValue
-            peakingSensitivity = s.peakingSensitivity.rawValue
-            falseColorScale = s.falseColorScale.rawValue
-            falseColorReference = s.falseColorReference
-            falseColorRec709 = s.falseColorRec709
-            zebraHighlight = s.zebraHighlight
-            zebraMidtone = s.zebraMidtone
-            zebraHighlightIRE = s.zebraHighlightIRE
-            zebraMidtoneIRE = s.zebraMidtoneIRE
-            zebraHighlightColor = s.zebraHighlightColor.rawValue
-            zebraMidtoneColor = s.zebraMidtoneColor.rawValue
-            desqueezeCustom = s.desqueezeCustom
-            desqueezeCustomFactor = s.desqueezeCustomFactor
-            desqueezeFactor = s.desqueezeFactor
-            desqueezeHorizontal = s.desqueezeHorizontal
-            splitComparison = s.splitComparison
-            splitVertical = s.splitVertical
-            lutArmed = s.lutEnabled
-            lutExposureStops = s.lutExposureStops
-            crushClipCompensation = s.crushClipCompensation.rawValue
-            mirrorHorizontal = s.mirrorHorizontal
-            mirrorVertical = s.mirrorVertical
-        }
-
-        func apply(to s: LiveAssistState) {
-            let on = Set(tools)
-            s.peaking = on.contains(LiveAssistTool.peaking.rawValue)
-            s.zebra = on.contains(LiveAssistTool.zebra.rawValue)
-            s.falseColor = on.contains(LiveAssistTool.falseColor.rawValue)
-            s.histogram = on.contains(LiveAssistTool.histogram.rawValue)
-            s.waveform = on.contains(LiveAssistTool.waveform.rawValue)
-            s.parade = on.contains(LiveAssistTool.parade.rawValue)
-            s.vectorscope = on.contains(LiveAssistTool.vectorscope.rawValue)
-            s.trafficLights = on.contains(LiveAssistTool.trafficLights.rawValue)
-            s.ndMeter = on.contains(LiveAssistTool.ndMeter.rawValue)
-            s.evMeter = on.contains(LiveAssistTool.evMeter.rawValue)
-            s.audioMeters = on.contains(LiveAssistTool.audioMeters.rawValue)
-            s.guides = on.contains(LiveAssistTool.guides.rawValue)
-            s.grid = on.contains(LiveAssistTool.grid.rawValue)
-            s.crosshair = on.contains(LiveAssistTool.crosshair.rawValue)
-            s.level = on.contains(LiveAssistTool.level.rawValue)
-            s.desqueeze = on.contains(LiveAssistTool.desqueeze.rawValue)
-            s.mirror = on.contains(LiveAssistTool.mirror.rawValue)
-            s.instantReview = on.contains(LiveAssistTool.instantReview.rawValue)
-            s.guideAspect = GuideAspect(rawValue: guideAspect) ?? .cinema
-            s.guideFamily = GuideFamily(rawValue: guideFamily) ?? .film
-            let restored = Set(selectedGuides.compactMap(GuideAspect.init(rawValue:)))
-            s.selectedGuides = restored.isEmpty ? [s.guideAspect] : restored
-            s.guideMask = guideMask
-            s.gridThirds = gridThirds
-            s.gridPhi = gridPhi
-            s.gridDiagonal = gridDiagonal
-            s.peakingColor = PeakingPaint(rawValue: peakingColor) ?? .red
-            s.peakingSensitivity = PeakingSense(rawValue: peakingSensitivity) ?? .medium
-            s.falseColorScale = FalseColorScaleKind(rawValue: falseColorScale) ?? .sceneStops
-            s.falseColorReference = falseColorReference
-            s.falseColorRec709 = falseColorRec709 ?? false
-            s.zebraHighlight = zebraHighlight
-            s.zebraMidtone = zebraMidtone
-            s.zebraHighlightIRE = zebraHighlightIRE
-            s.zebraMidtoneIRE = zebraMidtoneIRE
-            s.zebraHighlightColor = ZebraPaint(rawValue: zebraHighlightColor) ?? .white
-            s.zebraMidtoneColor = ZebraPaint(rawValue: zebraMidtoneColor) ?? .amber
-            s.desqueezeFactor = DesqueezeAssist.snap(desqueezeFactor)
-            s.desqueezeCustom =
-                desqueezeCustom ?? (DesqueezeRatio.matching(s.desqueezeFactor) == nil)
-            s.desqueezeCustomFactor = DesqueezeAssist.snap(desqueezeCustomFactor ?? desqueezeFactor)
-            s.desqueezeHorizontal = desqueezeHorizontal
-            s.splitComparison = splitComparison
-            s.splitVertical = splitVertical
-            if let stops = lutExposureStops {
-                s.lutExposureStops = LUTExposureCompensation.snap(stops)
-            }
-            if let raw = crushClipCompensation,
-                let value = TrafficLightsAssist.CrushClipCompensation(rawValue: raw)
-            {
-                s.crushClipCompensation = value
-            }
-            s.lutEnabled = lutArmed
-            s.mirrorHorizontal = mirrorHorizontal ?? true
-            s.mirrorVertical = mirrorVertical ?? false
-        }
-    }
+    typealias Snapshot = MonitorAssistSnapshot
 }

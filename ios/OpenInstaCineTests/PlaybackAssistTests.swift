@@ -4,12 +4,15 @@ import CoreVideo
 import Metal
 import OpenPocketViewCore
 import XCTest
+import OpenCineAppKit
+import MonitorPresentation
 
 @testable import OpenInstaCine
 
 /// Playback LUT / PEAK / FALSE / ZEBRA must follow live present order:
 /// identity on `AVPlayerLayer`, assist image on `CIFeedView` only after a bake
 /// lands. `AVVideoComposition` after `replaceCurrentItem` never showed the look.
+@MainActor
 final class PlaybackAssistTests: XCTestCase {
     /// Sentry OPENPOCKETCINE-IOS-2Q: Main waited on a busy pull during a clip
     /// change until the watchdog killed the app.
@@ -614,4 +617,56 @@ private final class UnreadyPlaybackPlayer: AVPlayer {
 
 private final class ReadyPlaybackItem: AVPlayerItem {
     override var status: AVPlayerItem.Status { .readyToPlay }
+}
+
+@MainActor
+final class LiveAssistStateOwnershipTests: XCTestCase {
+    func testActualLegacySnapshotBytesAndSavedNamespaceRemainCompatible() throws {
+        let domain = "opc-assist-native-codec." + UUID().uuidString
+        let storage = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { storage.removePersistentDomain(forName: domain) }
+        let keys = MonitorAssistPreferenceKeys(assist: "OpenInstaCine.Assist.v1",
+            cleanPins: "OpenInstaCine.CleanViewPins.v1", playback: "OpenInstaCine.PlaybackAssists.v1")
+        // Produced by the actual pre-extraction Snapshot codec at 1c3d29c.
+        // Canonical key order makes byte comparison independent of JSONEncoder's key ordering.
+        let legacy = try XCTUnwrap(Data(base64Encoded: "eyJjcnVzaENsaXBDb21wZW5zYXRpb24iOjAsImRlc3F1ZWV6ZUN1c3RvbSI6dHJ1ZSwiZGVzcXVlZXplQ3VzdG9tRmFjdG9yIjoxLjcxLCJkZXNxdWVlemVGYWN0b3IiOjEuNzEsImRlc3F1ZWV6ZUhvcml6b250YWwiOnRydWUsImZhbHNlQ29sb3JSZWM3MDkiOnRydWUsImZhbHNlQ29sb3JSZWZlcmVuY2UiOnRydWUsImZhbHNlQ29sb3JTY2FsZSI6IkNpbmVTdG9wIiwiZ3JpZERpYWdvbmFsIjpmYWxzZSwiZ3JpZFBoaSI6ZmFsc2UsImdyaWRUaGlyZHMiOnRydWUsImd1aWRlQXNwZWN0IjoiMi4zOToxIiwiZ3VpZGVGYW1pbHkiOiJGaWxtIiwiZ3VpZGVNYXNrIjpmYWxzZSwibHV0QXJtZWQiOnRydWUsImx1dEV4cG9zdXJlU3RvcHMiOi0xLjUsIm1pcnJvckhvcml6b250YWwiOmZhbHNlLCJtaXJyb3JWZXJ0aWNhbCI6dHJ1ZSwicGVha2luZ0NvbG9yIjoiUmVkIiwicGVha2luZ1NlbnNpdGl2aXR5IjoiTWVkIiwic2VsZWN0ZWRHdWlkZXMiOlsiMi4zOToxIl0sInNwbGl0Q29tcGFyaXNvbiI6ZmFsc2UsInNwbGl0VmVydGljYWwiOnRydWUsInRvb2xzIjpbIkxVVCIsIlBFQUsiLCJXQVZFIiwiR1VJREVTIiwiTUlSUk9SIiwiUExBWSJdLCJ6ZWJyYUhpZ2hsaWdodCI6dHJ1ZSwiemVicmFIaWdobGlnaHRDb2xvciI6IldoaXRlIiwiemVicmFIaWdobGlnaHRJUkUiOjk5LCJ6ZWJyYU1pZHRvbmUiOnRydWUsInplYnJhTWlkdG9uZUNvbG9yIjoiQW1iZXIiLCJ6ZWJyYU1pZHRvbmVJUkUiOjU1fQ=="))
+        let canonicalLegacy = try canonical(legacy)
+        storage.set(legacy, forKey: keys.assist)
+        let restored = LiveAssistState(looks: AppMonitorLooks(), storage: storage, keys: keys,
+            cleanPinCases: LiveAssistTool.cleanPinCases)
+        XCTAssertEqual(storage.data(forKey: keys.assist), legacy, "Opening must not rewrite the historical blob")
+        XCTAssertEqual(try canonical(XCTUnwrap(restored.encodedSnapshot())), canonicalLegacy)
+        XCTAssertTrue(restored.instantReview)
+        XCTAssertEqual(restored.falseColorScale, .stops)
+        XCTAssertEqual(restored.lutExposureStops, -1.5)
+        XCTAssertFalse(restored.isOn(.magnification))
+    }
+    func testHistoricalMissingFieldsKeepTheirOriginalFallbacks() throws {
+        let domain = "opc-assist-native-legacy." + UUID().uuidString
+        let storage = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { storage.removePersistentDomain(forName: domain) }
+        let keys = MonitorAssistPreferenceKeys(assist: "OpenInstaCine.Assist.v1",
+            cleanPins: "OpenInstaCine.CleanViewPins.v1", playback: "OpenInstaCine.PlaybackAssists.v1")
+        let fixture = try XCTUnwrap(Data(base64Encoded: "eyJjcnVzaENsaXBDb21wZW5zYXRpb24iOjAsImRlc3F1ZWV6ZUN1c3RvbSI6dHJ1ZSwiZGVzcXVlZXplQ3VzdG9tRmFjdG9yIjoxLjcxLCJkZXNxdWVlemVGYWN0b3IiOjEuNzEsImRlc3F1ZWV6ZUhvcml6b250YWwiOnRydWUsImZhbHNlQ29sb3JSZWM3MDkiOnRydWUsImZhbHNlQ29sb3JSZWZlcmVuY2UiOnRydWUsImZhbHNlQ29sb3JTY2FsZSI6IkNpbmVTdG9wIiwiZ3JpZERpYWdvbmFsIjpmYWxzZSwiZ3JpZFBoaSI6ZmFsc2UsImdyaWRUaGlyZHMiOnRydWUsImd1aWRlQXNwZWN0IjoiMi4zOToxIiwiZ3VpZGVGYW1pbHkiOiJGaWxtIiwiZ3VpZGVNYXNrIjpmYWxzZSwibHV0QXJtZWQiOnRydWUsImx1dEV4cG9zdXJlU3RvcHMiOi0xLjUsIm1pcnJvckhvcml6b250YWwiOmZhbHNlLCJtaXJyb3JWZXJ0aWNhbCI6dHJ1ZSwicGVha2luZ0NvbG9yIjoiUmVkIiwicGVha2luZ1NlbnNpdGl2aXR5IjoiTWVkIiwic2VsZWN0ZWRHdWlkZXMiOlsiMi4zOToxIl0sInNwbGl0Q29tcGFyaXNvbiI6ZmFsc2UsInNwbGl0VmVydGljYWwiOnRydWUsInRvb2xzIjpbIkxVVCIsIlBFQUsiLCJXQVZFIiwiR1VJREVTIiwiTUlSUk9SIiwiUExBWSJdLCJ6ZWJyYUhpZ2hsaWdodCI6dHJ1ZSwiemVicmFIaWdobGlnaHRDb2xvciI6IldoaXRlIiwiemVicmFIaWdobGlnaHRJUkUiOjk5LCJ6ZWJyYU1pZHRvbmUiOnRydWUsInplYnJhTWlkdG9uZUNvbG9yIjoiQW1iZXIiLCJ6ZWJyYU1pZHRvbmVJUkUiOjU1fQ=="))
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: fixture) as? [String: Any])
+        for key in ["falseColorRec709", "desqueezeCustom", "desqueezeCustomFactor", "lutExposureStops",
+            "crushClipCompensation", "mirrorHorizontal", "mirrorVertical"] { json.removeValue(forKey: key) }
+        json["tools"] = ["PLAY", "MAG", "UNKNOWN"]
+        let legacy = try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
+        storage.set(legacy, forKey: keys.assist)
+        let state = LiveAssistState(looks: AppMonitorLooks(), storage: storage, keys: keys,
+            cleanPinCases: LiveAssistTool.cleanPinCases)
+        XCTAssertEqual(storage.data(forKey: keys.assist), legacy)
+        XCTAssertTrue(state.instantReview && state.desqueezeCustom && state.mirrorHorizontal)
+        XCTAssertFalse(state.isOn(.magnification) || state.falseColorRec709 || state.mirrorVertical)
+        XCTAssertEqual(state.desqueezeCustomFactor, 1.71)
+        XCTAssertEqual(state.lutExposureStops, 0)
+        XCTAssertEqual(state.crushClipCompensation, .zero)
+        XCTAssertEqual(LiveAssistTool.toolbarCases.count, 17)
+        XCTAssertEqual(LiveAssistTool.settingsCases.count, 18)
+        XCTAssertEqual(MonitorAssistTool.allCases.count, 18)
+    }
+    private func canonical(_ data: Data) throws -> Data {
+        try JSONSerialization.data(withJSONObject: JSONSerialization.jsonObject(with: data), options: [.sortedKeys])
+    }
 }

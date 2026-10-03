@@ -28,6 +28,7 @@ enum AssistLongPressChrome {
         case .desqueeze: DesqueezeAssist.longPressMenu(assist: assist)
         case .level, .instantReview, .magnification, .evMeter:
             EmptyView()
+        default: EmptyView()
         }
     }
 

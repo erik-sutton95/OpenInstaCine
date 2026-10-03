@@ -97,6 +97,67 @@ final class AssistInspectorPreviewTests: XCTestCase {
         XCTAssertTrue(assist.zebra)
     }
 
+    func testRetiredSourceCannotPublishThroughNativeInspectorOwner() async throws {
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        let firstLease = bus.openSource(.live)
+        bus.publish(firstLease, source: try Self.buffer(width: 8, height: 8), transfer: .dlog2, bundle: nil)
+        let frame = try XCTUnwrap(bus.inspectorFrame)
+        let started = InspectorPreviewTestSignal("Native inspector accepted source A")
+        let release = DispatchSemaphore(value: 0)
+        let clock = InspectorPreviewTestClock()
+        let reference = try Self.referenceImage()
+        let renderer = AssistInspectorImageRenderer(now: { clock.now }, operation: { _, _ in
+            started.signal()
+            XCTAssertEqual(release.wait(timeout: .now() + 10), .success)
+            return reference
+        })
+        let owner = UUID()
+        renderer.activate(owner: owner)
+        let work = Task { await renderer.render(owner: owner, source: frame) { LiveImageEffects() } }
+        defer { work.cancel(); release.signal() }
+        try await started.wait()
+        let successor = bus.openSource(.live)
+        bus.publish(successor, source: try Self.buffer(width: 16, height: 8), transfer: .rec709, bundle: nil)
+        release.signal()
+        let retired = await work.value
+        XCTAssertNil(retired, "Retiring the actual source must discard native work without a view callback")
+        XCTAssertFalse(frame.isCurrent)
+        XCTAssertEqual(bus.inspectorFrame?.transfer, .rec709)
+        clock.now = 200_000_000
+        release.signal()
+        let resumed = await renderer.render(owner: owner, source: try XCTUnwrap(bus.inspectorFrame)) { LiveImageEffects() }
+        XCTAssertNotNil(resumed, "A successor source reuses the retained native worker")
+    }
+
+    func testCoveredLiveFrameCannotReachInspectorEvenWhileItsLeaseIsActive() async throws {
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        let live = bus.openSource(.live)
+        bus.publish(live, source: try Self.buffer(width: 8, height: 8), transfer: .rec709, bundle: nil)
+        let frame = try XCTUnwrap(bus.inspectorFrame)
+        let renderer = AssistInspectorImageRenderer()
+        let owner = UUID()
+        renderer.activate(owner: owner)
+        let playback = bus.openSource(.playback)
+        XCTAssertTrue(live.isActive)
+        XCTAssertNil(bus.inspectorFrame, "A cold playback source cannot borrow the hidden camera picture")
+        var preparations = 0
+        let hidden = await renderer.render(owner: owner, source: frame) {
+            preparations += 1
+            return LiveImageEffects()
+        }
+        XCTAssertNil(hidden)
+        XCTAssertEqual(preparations, 0, "Refused source work cannot prepare an inspector cube")
+        bus.closeSource(playback)
+        let stale = await renderer.render(owner: owner, source: frame) { LiveImageEffects() }
+        XCTAssertNil(stale, "Returning live cannot revive a previously captured source epoch")
+        let current = try XCTUnwrap(bus.inspectorFrame)
+        let resumed = await renderer.render(owner: owner, source: current) { LiveImageEffects() }
+        XCTAssertNotNil(resumed)
+        let result = try XCTUnwrap(resumed)
+        bus.closeSource(live)
+        XCTAssertFalse(renderer.isCurrent(result), "A completed native result loses authority with its actual source")
+    }
+
     func testPreviewImageIsBoundedBeforeRendering() async throws {
         let renderer = AssistInspectorImageRenderer()
         let owner = UUID()
@@ -208,7 +269,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
         let clock = InspectorPreviewTestClock()
         let invocations = InspectorRenderInvocationCounter()
         var preparations = 0
-        let prepare: @MainActor () -> LiveImageEffects = {
+        let prepare: @MainActor @Sendable () -> LiveImageEffects = {
             preparations += 1
             return LiveImageEffects()
         }

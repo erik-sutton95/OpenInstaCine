@@ -190,7 +190,7 @@ enum ZebraAssist {
     }
 
     /// Binds ``LiveAssistState`` dual-zebra options and persists on change.
-    static func longPressMenu(
+    @MainActor static func longPressMenu(
         assist: LiveAssistState,
         compact: Bool = false
     ) -> ZebraLongPressMenu {
@@ -206,7 +206,7 @@ enum ZebraAssist {
         )
     }
 
-    static func longPressMenu(_ assist: LiveAssistState) -> ZebraLongPressMenu {
+    @MainActor static func longPressMenu(_ assist: LiveAssistState) -> ZebraLongPressMenu {
         longPressMenu(assist: assist)
     }
 }

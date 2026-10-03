@@ -7,6 +7,7 @@ import XCTest
 /// Pins OpenZCine `AssistConfiguration.Zebra` + `AssistQuickSettingsContent.zebraRows`
 /// (OperatorPreferences.swift, MonitorPanels.swift, MonitorControls.swift,
 /// ImageEffectsCompositor.swift).
+@MainActor
 final class ZebraAssistTests: XCTestCase {
     /// This test's monitored source (XCTest makes a fresh one per test).
     private let ceiling = ScopeExposureCeiling()

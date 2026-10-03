@@ -5,6 +5,7 @@ import XCTest
 
 @testable import OpenInstaCine
 
+@MainActor
 final class LUTAssistTests: XCTestCase {
     private let keys = [
         "OpenInstaCine.Assist.v1",
