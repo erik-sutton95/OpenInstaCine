@@ -388,81 +388,17 @@ internal fun FalseColorReferenceRuler(state: LiveAssistState, colorMode: Int, mo
         } else {
             emptyList()
         }
-    val axis = FalseColorReference.axisLabels(state.falseColorScale)
-    val curve = FalseColorReference.curveKeyLabel(colorMode, rec709)
-    Box(
-        modifier
-            .size(ScopePanelSize.falseColorReference.width.dp, ScopePanelSize.falseColorReference.height.dp)
-            .clip(RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp))
-            .monitorMaterial(MonitorMaterial.Scope)
-            .padding(7.dp),
-    ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val barH = 8.dp.toPx()
-            val barY = 14.dp.toPx()
-            val barW = size.width
-            drawRect(Color.White.copy(alpha = 0.12f), Offset(0f, barY), Size(barW, barH))
-            for (segment in segments) {
-                val lo = segment.lowerFraction.toFloat()
-                val hi = segment.upperFraction.toFloat()
-                drawRect(
-                    Color(
-                        segment.band.red.toFloat(),
-                        segment.band.green.toFloat(),
-                        segment.band.blue.toFloat(),
-                    ),
-                    Offset(barW * lo, barY),
-                    Size(maxOf(1f, barW * (hi - lo)), barH),
-                )
-            }
-        }
-        Text(
-            "False Color",
-            color = LiveDesign.text,
-            fontSize = 8.5.sp,
-            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.TopStart),
-        )
-        Text(
-            "${state.falseColorScale.menuLabel} · $curve",
-            color = LiveDesign.muted,
-            fontSize = 7.5.sp,
-            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-            modifier = Modifier.align(Alignment.TopEnd),
-        )
-        if (markers.isNotEmpty()) {
-            Box(Modifier.align(Alignment.BottomStart).fillMaxSize().padding(top = 26.dp)) {
-                markers.forEach { marker ->
-                    Text(
-                        marker.label,
-                        color = LiveDesign.muted,
-                        fontSize = 5.5.sp,
-                        fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-                        modifier =
-                            Modifier.offset(
-                                x = (ScopePanelSize.falseColorReference.width * marker.fraction.toFloat() - 10f).dp,
-                                y = 0.dp,
-                            ),
-                    )
-                }
-            }
-        } else if (axis.isNotEmpty()) {
-            Row(
-                Modifier.align(Alignment.BottomStart).fillMaxSize().padding(top = 26.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                axis.forEach { label ->
-                    Text(
-                        label,
-                        color = LiveDesign.muted,
-                        fontSize = 5.5.sp,
-                        fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-                    )
-                }
-            }
-        }
-    }
+    com.opencapture.monitorui.MonitorFalseColorReference(
+        com.opencapture.monitorui.MonitorFalseColorReferenceValues(
+            subtitle = "${state.falseColorScale.menuLabel} · ${FalseColorReference.curveKeyLabel(colorMode, rec709)}",
+            segments = segments.mapIndexed { index, segment ->
+                com.opencapture.monitorui.MonitorFalseColorReferenceSegment(index,
+                    segment.lowerFraction, segment.upperFraction, segment.band.red, segment.band.green, segment.band.blue)
+            },
+            markers = markers.mapIndexed { index, marker ->
+                com.opencapture.monitorui.MonitorFalseColorReferenceMarker(index, marker.label, marker.fraction)
+            },
+            axisLabels = FalseColorReference.axisLabels(state.falseColorScale)), modifier)
 }
 
 private fun panelPx(

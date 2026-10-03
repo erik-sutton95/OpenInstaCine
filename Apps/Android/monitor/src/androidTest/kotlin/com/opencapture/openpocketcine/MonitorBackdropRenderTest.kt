@@ -43,6 +43,45 @@ import org.junit.runner.RunWith
 /** Pixel evidence from the real HWUI/RenderEffect modifier, not an emulated blur model. */
 @RunWith(AndroidJUnit4::class)
 class MonitorBackdropRenderTest {
+    @Test fun sharedFalseColorReferenceRetainsResolvedKeyRendersGapsAndClearsSuccessor() {
+        val source = mutableListOf(
+            com.opencapture.monitorui.MonitorFalseColorReferenceSegment(0, 0.0, 0.25, 1.0, 0.0, 0.0),
+            com.opencapture.monitorui.MonitorFalseColorReferenceSegment(1, 0.75, 1.0, 0.0, 0.0, 1.0))
+        val held = com.opencapture.monitorui.MonitorFalseColorReferenceValues("Source A", source,
+            axisLabels = listOf("crush", "18%", "clip"))
+        source.clear()
+        val successor = com.opencapture.monitorui.MonitorFalseColorReferenceValues("Source B", source)
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            val values = androidx.compose.runtime.mutableStateOf(held)
+            var density = 1f
+            var bounds = Rect.Zero
+            scenario.onActivity { activity ->
+                density = activity.resources.displayMetrics.density
+                activity.setContent {
+                    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+                        com.opencapture.monitorui.MonitorFalseColorReference(values.value,
+                            Modifier.onGloballyPositioned { bounds = it.boundsInWindow() })
+                    }
+                }
+            }
+            fun color(image: Bitmap, x: Int): Int = image.getPixel(
+                (bounds.left + x * density).roundToInt(), (bounds.top + 25 * density).roundToInt())
+            val image = capture(scenario, "shared-false-color-reference")
+            val red = color(image, 27)
+            assertTrue(Color.red(red) > 240 && Color.green(red) < 10 && Color.blue(red) < 10)
+            val blue = color(image, 237)
+            assertTrue(Color.blue(blue) > 240 && Color.red(blue) < 10 && Color.green(blue) < 10)
+            val gap = color(image, 132)
+            assertTrue(abs(Color.red(gap) - Color.green(gap)) < 4 && abs(Color.green(gap) - Color.blue(gap)) < 4)
+            scenario.onActivity { values.value = successor }
+            val cleared = capture(scenario, "shared-false-color-cleared")
+            for (x in listOf(27, 132, 237)) {
+                val c = color(cleared, x)
+                assertTrue(abs(Color.red(c) - Color.green(c)) < 4 && abs(Color.green(c) - Color.blue(c)) < 4)
+            }
+        }
+    }
+
     @Test fun sharedTrafficMeterPlacesOverUnderBarsAndClearsTheNextReading() {
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
             val reading = androidx.compose.runtime.mutableStateOf(ScopeTrafficLightsReading.NONE)

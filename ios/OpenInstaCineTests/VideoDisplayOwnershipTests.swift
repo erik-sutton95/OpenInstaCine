@@ -9,6 +9,48 @@ import SwiftUI
 
 @MainActor
 final class VideoDisplayOwnershipTests: XCTestCase {
+    func testSharedFalseColorReferenceRetainsResolvedKeyRendersGapsAndClearsSuccessor() throws {
+        var source = [MonitorFalseColorReferenceSegment(id: 0, lowerFraction: 0, upperFraction: 0.25,
+            red: 1, green: 0, blue: 0),
+            MonitorFalseColorReferenceSegment(id: 1, lowerFraction: 0.75, upperFraction: 1,
+                red: 0, green: 0, blue: 1)]
+        let held = MonitorFalseColorReferenceValues(subtitle: "Source A", segments: source,
+            axisLabels: ["crush", "18%", "clip"])
+        source.removeAll()
+        let successor = MonitorFalseColorReferenceValues(subtitle: "Source B", segments: source)
+        func render(_ values: MonitorFalseColorReferenceValues) throws -> [UInt8] {
+            let renderer = ImageRenderer(content: MonitorFalseColorReference(values: values, inspector: true)
+                .frame(width: 250, height: 26).background(Color.black))
+            renderer.scale = 1
+            let image = try XCTUnwrap(renderer.uiImage?.cgImage)
+            var rgba = [UInt8](repeating: 0, count: 250 * 26 * 4)
+            let context = try XCTUnwrap(CGContext(data: &rgba, width: 250, height: 26,
+                bitsPerComponent: 8, bytesPerRow: 250 * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: 250, height: 26))
+            let attachment = XCTAttachment(image: UIImage(cgImage: image))
+            attachment.name = "shared-false-color-reference"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            return rgba
+        }
+        func channel(_ rgba: [UInt8], _ x: Int, _ component: Int) -> Int { Int(rgba[(7 * 250 + x) * 4 + component]) }
+        let image = try render(held)
+        XCTAssertGreaterThan(channel(image, 20, 0), 240)
+        XCTAssertLessThan(channel(image, 20, 1), 10)
+        XCTAssertLessThan(channel(image, 20, 2), 10)
+        XCTAssertGreaterThan(channel(image, 230, 2), 240)
+        XCTAssertLessThan(channel(image, 230, 0), 10)
+        XCTAssertLessThan(channel(image, 230, 1), 10)
+        XCTAssertLessThan(abs(channel(image, 125, 0) - channel(image, 125, 1)), 4)
+        XCTAssertGreaterThan(channel(image, 125, 0), 100)
+        let cleared = try render(successor)
+        for x in [20, 125, 230] {
+            XCTAssertLessThan(abs(channel(cleared, x, 0) - channel(cleared, x, 1)), 4)
+            XCTAssertLessThan(abs(channel(cleared, x, 1) - channel(cleared, x, 2)), 4)
+        }
+    }
+
     func testSharedTrafficMeterPlacesOverAndUnderBarsAndClearsTheirSuccessor() async throws {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 74, height: 168))
         let host = UIHostingController(rootView: AnyView(EmptyView()))
