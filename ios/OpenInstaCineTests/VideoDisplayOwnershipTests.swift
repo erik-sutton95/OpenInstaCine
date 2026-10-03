@@ -9,6 +9,90 @@ import SwiftUI
 
 @MainActor
 final class VideoDisplayOwnershipTests: XCTestCase {
+    func testSharedAudioMeterRotatesItsTracksKeepsPeaksAndClearsSilentSuccessor() async throws {
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        let host = UIHostingController(rootView: AnyView(EmptyView()))
+        host.view.backgroundColor = .black
+        host.safeAreaRegions = []
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        func render(_ orientation: MonitorAudioOrientation, silent: Bool) async throws -> [UInt8] {
+            let size = MonitorAudioMetrics.panelSize(orientation: orientation)
+            let probe = PanelProbe()
+            probe.expectedSize = size
+            probe.laidOut = expectation(description: "native audio meter laid out")
+            let ready = try XCTUnwrap(probe.laidOut)
+            host.rootView = AnyView(ZStack(alignment: .topLeading) {
+                Color.black
+                ZStack {
+                MonitorAudioMeter(left: silent ? -60 : -3, leftPeak: silent ? -60 : 0,
+                    right: silent ? -60 : -30, rightPeak: silent ? -60 : -18,
+                    orientation: orientation)
+                PanelProbeView(view: probe).id(ObjectIdentifier(probe)).allowsHitTesting(false)
+                }.frame(width: size.width, height: size.height)
+            }.ignoresSafeArea())
+            host.view.frame = window.bounds
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            await fulfillment(of: [ready], timeout: 5)
+            let displayed = expectation(description: "native audio canvas submitted")
+            let frames = NativeFrameProbe(ready: displayed)
+            frames.start()
+            await fulfillment(of: [displayed], timeout: 5)
+            frames.stop()
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 2
+            let origin = probe.convert(CGPoint.zero, to: host.view)
+            let captured = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                XCTAssertTrue(host.view.drawHierarchy(in: CGRect(x: -origin.x, y: -origin.y,
+                    width: host.view.bounds.width, height: host.view.bounds.height), afterScreenUpdates: true))
+            }
+            let image = try XCTUnwrap(captured.cgImage)
+            let width = Int(size.width * 2), height = Int(size.height * 2)
+            var rgba = [UInt8](repeating: 0, count: width * height * 4)
+            let context = try XCTUnwrap(CGContext(data: &rgba, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            let attachment = XCTAttachment(image: UIImage(cgImage: image))
+            attachment.name = "shared-audio-\(orientation.rawValue)-\(silent ? "silent" : "active")"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            return rgba
+        }
+        for orientation in MonitorAudioOrientation.allCases {
+            let width = Int(MonitorAudioMetrics.panelSize(orientation: orientation).width * 2)
+            func channels(_ rgba: [UInt8], _ point: CGPoint) -> [Int] {
+                let at = (Int((point.y * 2).rounded()) * width + Int((point.x * 2).rounded())) * 4
+                return (0..<3).map { Int(rgba[at + $0]) }
+            }
+            let vertical = orientation == .vertical
+            let redPoint = vertical ? CGPoint(x: 8, y: 13) : CGPoint(x: 155, y: 8)
+            let greenPoint = vertical ? CGPoint(x: 20, y: 120) : CGPoint(x: 35, y: 20)
+            let emptyPoint = vertical ? CGPoint(x: 20, y: 30) : CGPoint(x: 100, y: 20)
+            let peakPoint = vertical ? CGPoint(x: 20, y: 49) : CGPoint(x: 120, y: 20)
+            let active = try await render(orientation, silent: false)
+            let red = channels(active, redPoint), green = channels(active, greenPoint)
+            XCTAssertGreaterThan(red[0], 200)
+            XCTAssertLessThan(red[1], 140)
+            XCTAssertGreaterThan(green[1], 150)
+            XCTAssertLessThan(green[0], 120)
+            let empty = channels(active, emptyPoint)
+            XCTAssertLessThan(abs(empty[0] - empty[1]), 4)
+            let peak = channels(active, peakPoint)
+            XCTAssertGreaterThan(peak[0], 150)
+            XCTAssertGreaterThan(peak[1], 120)
+            XCTAssertLessThan(peak[2], 110)
+            let silent = try await render(orientation, silent: true)
+            for point in [redPoint, greenPoint, peakPoint] {
+                let clear = channels(silent, point)
+                XCTAssertLessThan(abs(clear[0] - clear[1]), 4)
+                XCTAssertLessThan(abs(clear[1] - clear[2]), 4)
+            }
+        }
+    }
+
     func testSharedFalseColorReferenceRetainsResolvedKeyRendersGapsAndClearsSuccessor() throws {
         var source = [MonitorFalseColorReferenceSegment(id: 0, lowerFraction: 0, upperFraction: 0.25,
             red: 1, green: 0, blue: 0),
@@ -144,6 +228,22 @@ final class VideoDisplayOwnershipTests: XCTestCase {
         attachment.name = "shared-guide-union-mask"
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor private final class NativeFrameProbe: NSObject {
+        let ready: XCTestExpectation
+        private var remaining = 2
+        private var link: CADisplayLink?
+        init(ready: XCTestExpectation) { self.ready = ready }
+        func start() {
+            link = CADisplayLink(target: self, selector: #selector(frame))
+            link?.add(to: .main, forMode: .common)
+        }
+        func stop() { link?.invalidate(); link = nil }
+        @objc private func frame() {
+            remaining -= 1
+            if remaining == 0 { stop(); ready.fulfill() }
+        }
     }
 
     @MainActor private final class PanelProbe: UIView {

@@ -1,12 +1,10 @@
 import OpenPocketViewCore
+import MonitorUI
 import SwiftUI
 
 /// Presentation preferences only. Meter values and peak hold remain the camera's.
 extension AudioAssist {
-    enum Orientation: String, Codable, CaseIterable, Sendable {
-        case vertical = "Vertical"
-        case horizontal = "Horizontal"
-    }
+    typealias Orientation = MonitorAudioOrientation
 
     struct StoredCenter: Codable, Equatable {
         var x: Double
@@ -32,18 +30,15 @@ extension AudioAssist {
     }
 
     static func panelSize(orientation: Orientation) -> CGSize {
-        orientation == .vertical
-            ? panelSize : CGSize(width: panelSize.height, height: panelSize.width)
+        MonitorAudioMetrics.panelSize(orientation: orientation)
     }
 
     static func levelFraction(_ db: Double) -> Double {
-        guard db.isFinite else { return 0 }
-        return min(1, max(0, (db - AudioMeterBallistics.floorDB) / -AudioMeterBallistics.floorDB))
+        MonitorAudioReadout.fraction(db)
     }
 
     static func dbText(_ db: Double) -> String {
-        guard db.isFinite, db > AudioMeterBallistics.floorDB + 0.5 else { return "−∞" }
-        return String(format: "%.0f", min(0, db))
+        MonitorAudioReadout.label(db)
     }
 
     static func center(

@@ -89,6 +89,8 @@ LUNA_OWNED=(
   OpenInstaCine/MonitorVideoBackdrop.swift
   OpenInstaCine/Assists/AssistInspectorImageRenderer.swift
   OpenInstaCine/Assists/FalseColorAssist.swift
+  OpenInstaCine/Assists/AudioAssistStore.swift
+  OpenInstaCine/Assists/AudioAssist.swift
   OpenInstaCine/Assists/HistogramAssist.swift
   OpenInstaCine/Assists/NDAssist.swift
   OpenInstaCine/Assists/TrafficLightsAssist.swift
