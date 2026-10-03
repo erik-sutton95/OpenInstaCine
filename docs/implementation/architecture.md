@@ -23,7 +23,13 @@ Swift preference code moved from `LiveAssists.swift` to `OperatorPreferences.swi
 remaining assist values retain their original storage behavior. The sync script excludes
 these migrated files so a Pocket sync cannot restore the deleted implementations.
 
-Remaining display, assist, storage/delivery and system sections still live in this app and
+Cache presentation, app information, project/legal, support and diagnostics sections also
+use the shared settings views. Cache IO/confirmation, legal routes, reporting consent,
+diagnostic export/deletion and privacy policy remain app callbacks. Android app information
+now receives this app's actual protocol and theme copy. Native input/action/display controls
+are shared rather than copied implementations.
+
+Remaining display, assist, link/controller and delivery sections still live in this app and
 will migrate separately. The ownership table below records the earlier extraction baseline.
 The settings migration preserves Android's existing Sharing placeholder and iOS's existing
 sharing support. Simulator rendering and automated checks do not qualify physical devices.

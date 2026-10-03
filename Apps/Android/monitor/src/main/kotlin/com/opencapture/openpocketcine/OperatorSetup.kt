@@ -466,13 +466,6 @@ fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {
             model.session.hasVideoFormat,
             measuredFps,
         )
-    val fpsLabel =
-        OperatorLinkHealth.fpsChipLabel(
-            isLive = isLive,
-            recovering = recovery.isRecovering,
-            measuredFps = measuredFps,
-            phase = phase,
-        )
     val phaseLabel = connectionPhaseLabel(phase, failure)
     val view = LocalView.current
     var legalKind by remember { mutableStateOf<LegalKind?>(null) }
@@ -1303,28 +1296,13 @@ private fun StorageRows(model: AppModel, onClearCache: () -> Unit) {
             SettingsValueText("Not configured")
         }
     }
-    SettingsRowCard {
-        SettingsSwitchInlineRow(
-            title = "Full Resolution Caching",
-            isOn = model.cacheFullResolution,
-            help = SettingsHelpCopy.CACHE_FULL_RESOLUTION,
-            showTopDivider = false,
-        ) {
-            operatorHaptic(view, model.hapticsEnabled)
-            model.updateCacheFullResolution(!model.cacheFullResolution)
-        }
-        SettingsInlineRow("Local Media Cache", SettingsHelpCopy.LOCAL_CACHE) {
-            SettingsValueText(cacheLabel)
-        }
-        SettingsInlineRow("Clear Cache", SettingsHelpCopy.CLEAR_CACHE) {
-            Text(
-                "Clear",
-                style = LiveType.ui(13f, FontWeight.SemiBold),
-                color = LiveDesign.rec,
-                modifier = Modifier.settingsClickable(role = Role.Button, onClick = onClearCache),
-            )
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorCacheSettings(
+        cacheOriginals = model.cacheFullResolution, sizeLabel = cacheLabel,
+        cacheHelp = SettingsHelpCopy.CACHE_FULL_RESOLUTION,
+        scopeHelp = SettingsHelpCopy.LOCAL_CACHE, clearHelp = SettingsHelpCopy.CLEAR_CACHE,
+        onCacheOriginals = model::updateCacheFullResolution, clear = onClearCache,
+        feedback = { operatorHaptic(view, model.hapticsEnabled) },
+    )
 }
 
 @Composable
@@ -1335,72 +1313,30 @@ private fun SystemRows(model: AppModel, onLegal: (LegalKind) -> Unit) {
     var diagnosticOptions by remember { mutableStateOf(false) }
     var showReportForm by remember { mutableStateOf(false) }
     val report by ManualProblemReport.snapshot.collectAsState()
-    SettingsRowCard(title = "Help & Feedback") {
-        SettingsInlineRow("Report a problem",
-            SettingsHelpCopy.REPORT_PROBLEM,
-            showTopDivider = false) {
-            SettingsActionPill("Open") { showReportForm = true }
-        }
-        if (report.delivery != ManualProblemReportDelivery.IDLE) {
-            SettingsInlineRow(
-                "Report status",
-                report.detail ?: "This phone keeps one report until Sentry accepts it or you discard it.",
-            ) {
-                SettingsValueText(report.statusLabel)
+    com.opencapture.monitorui.settings.MonitorSupportSettings(
+        automaticReports = reliabilityOptIn, available = ReliabilityReporting.isAvailable,
+        automaticHelp = SettingsHelpCopy.RELIABILITY_REPORTS,
+        unavailableHelp = SettingsHelpCopy.RELIABILITY_UNAVAILABLE,
+        onAutomaticReports = { reliabilityOptIn = it; ReliabilityReporting.setConsent(it) },
+        report = { showReportForm = true }, privacy = { onLegal(LegalKind.PRIVACY) },
+        status = if (report.delivery == ManualProblemReportDelivery.IDLE) null else
+            com.opencapture.monitorui.settings.MonitorReportStatus(report.statusLabel,
+                report.detail ?: "This phone keeps one report until Sentry accepts it or you discard it.", report.eventId),
+        discard = if (report.allowsDiscard) ({ ManualProblemReport.discard() }) else null,
+        feedback = { operatorHaptic(view, model.hapticsEnabled) },
+    )
+    com.opencapture.monitorui.settings.MonitorDiagnosticSettings(
+        expanded = diagnosticOptions, onExpanded = { diagnosticOptions = it },
+        deleteHelp = "Remove saved feed reports from this phone. Connection logs remain. Turn off automatic reporting to clear pending uploads. Reports already sent cannot be removed here.",
+        save = { DiagnosticCenter.shareReport(context, model.session, copyForFeedback = false) },
+        delete = {
+            com.opencapture.openpocketcine.diagnostics.FeedIncidentRuntime.deleteStoredReports { deleted ->
+                android.widget.Toast.makeText(context,
+                    if (deleted) "Saved feed reports deleted" else "Couldn't delete saved feed reports. Please try again.",
+                    android.widget.Toast.LENGTH_LONG).show()
             }
-            report.eventId?.let { id ->
-                SettingsInlineRow("Report ID", "Use this ID if you follow up.") {
-                    SettingsValueText(id)
-                }
-            }
-            if (report.allowsDiscard) {
-                SettingsInlineRow("Queued report", "Remove the unsent report from this phone.") {
-                    SettingsActionPill("Discard") { ManualProblemReport.discard() }
-                }
-            }
-        }
-        if (ReliabilityReporting.isAvailable) {
-            SettingsSwitchInlineRow(
-                title = "Automatic error reports",
-                help = SettingsHelpCopy.RELIABILITY_REPORTS,
-                isOn = reliabilityOptIn,
-            ) {
-                operatorHaptic(view, model.hapticsEnabled)
-                reliabilityOptIn = !reliabilityOptIn
-                ReliabilityReporting.setConsent(reliabilityOptIn)
-            }
-        } else {
-            SettingsInlineRow(
-                title = "Automatic error reports",
-                help = SettingsHelpCopy.RELIABILITY_UNAVAILABLE,
-            ) {
-                SettingsValueText("Off")
-            }
-        }
-        SettingsInlineRow("Reporting Privacy", "What reports contain, retention, and how to request deletion.") {
-            SettingsActionPill("Read") { onLegal(LegalKind.PRIVACY) }
-        }
-    }
-    SettingsGroupCard(
-        title = "Diagnostic options",
-        caption = "Save or remove reports on this phone",
-        expanded = diagnosticOptions,
-        onExpandToggle = { diagnosticOptions = !diagnosticOptions },
-    ) {
-        SettingsInlineRow("Save diagnostic report", "Keep a copy or share it with support.", showTopDivider = false) {
-            SettingsActionPill("Save") { DiagnosticCenter.shareReport(context, model.session, copyForFeedback = false) }
-        }
-        SettingsInlineRow("Delete saved feed reports",
-            "Remove saved feed reports from this phone. Connection logs remain. Turn off automatic reporting to clear pending uploads. Reports already sent cannot be removed here.") {
-            SettingsActionPill("Delete") {
-                com.opencapture.openpocketcine.diagnostics.FeedIncidentRuntime.deleteStoredReports { deleted ->
-                    android.widget.Toast.makeText(context,
-                        if (deleted) "Saved feed reports deleted" else "Couldn't delete saved feed reports. Please try again.",
-                        android.widget.Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
+        },
+    )
     if (showReportForm) {
         ManualProblemReportDialog(
             model = model,
@@ -1412,34 +1348,20 @@ private fun SystemRows(model: AppModel, onLegal: (LegalKind) -> Unit) {
         )
     }
 
-    SettingsRowCard(title = "Project & Legal") {
-        SettingsInlineRow("Source Code", SettingsHelpCopy.SOURCE, showTopDivider = false) {
-            SettingsActionPill("Open") { openUrl(context, OpenPocketCineLinks.SOURCE) }
-        }
-        SettingsInlineRow("Privacy", "What this app stores on this phone.") {
-            SettingsActionPill("Open") { onLegal(LegalKind.PRIVACY) }
-        }
-        SettingsInlineRow("Terms", "How you can use OpenInstaCine.") {
-            SettingsActionPill("Open") { openUrl(context, OpenPocketCineLinks.TERMS) }
-        }
-        SettingsInlineRow("Licenses", "Apache 2.0 and third-party notices.") {
-            SettingsActionPill("Open") { onLegal(LegalKind.LICENSES) }
-        }
-        SettingsInlineRow("NOTICE", "Attribution shipped with the app.") {
-            SettingsActionPill("Open") { onLegal(LegalKind.NOTICE) }
-        }
-    }
-    SettingsRowCard(title = "App Information") {
-        SettingsInlineRow("Theme", SettingsHelpCopy.THEME, showTopDivider = false) {
-            SettingsValueText("DJI Black")
-        }
-        SettingsInlineRow("Protocol Implementation", SettingsHelpCopy.PROTOCOL) {
-            SettingsValueText("DUML / BLE + Wi-Fi")
-        }
-        SettingsInlineRow("App Version", SettingsHelpCopy.APP_VERSION) {
-            SettingsValueText(formatAppVersion(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toLong()))
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorProjectLegalSettings(
+        sourceHelp = SettingsHelpCopy.SOURCE, termsHelp = "How you can use OpenInstaCine.",
+        source = { openUrl(context, OpenPocketCineLinks.SOURCE) },
+        privacy = { onLegal(LegalKind.PRIVACY) },
+        terms = { openUrl(context, OpenPocketCineLinks.TERMS) },
+        licenses = { onLegal(LegalKind.LICENSES) }, notice = { onLegal(LegalKind.NOTICE) },
+    )
+    com.opencapture.monitorui.settings.MonitorAppInformationSettings(
+        theme = "Charcoal", protocolName = "Insta360 / BLE + Wi-Fi",
+        version = formatAppVersion(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toLong()),
+        themeHelp = "Charcoal field-monitor chrome with yellow accents, tuned for low reflection on set.",
+        protocolHelp = "Camera control speaks Insta360's protocol over Bluetooth and the camera's Wi-Fi. No Insta360 SDK is bundled or required.",
+        versionHelp = "Current OpenInstaCine build from the native project metadata.",
+    )
 }
 
 internal fun openUrl(context: Context, url: String) {
@@ -1454,70 +1376,4 @@ private fun operatorHaptic(view: View, enabled: Boolean) {
 @Composable
 fun OperatorCloseButton(onClose: () -> Unit, modifier: Modifier = Modifier) {
     PanelCloseButton(onClick = onClose, modifier = modifier)
-}
-
-@Composable
-private fun SettingsLiveTile(
-    isLive: Boolean,
-    phaseLabel: String,
-    bars: Int,
-    cameraName: String,
-    fpsLabel: String,
-    hasVideoFormat: Boolean,
-) {
-    val tint =
-        when {
-            !isLive -> LiveDesign.faint
-            bars >= 3 -> LiveDesign.good
-            bars == 2 -> LiveDesign.accent
-            bars == 1 -> LiveDesign.rec
-            hasVideoFormat -> LiveDesign.accent
-            else -> LiveDesign.faint
-        }
-    val lit =
-        when {
-            !isLive -> 0
-            bars > 0 -> bars.coerceIn(0, 4)
-            hasVideoFormat -> 2
-            else -> 1
-        }
-    val detail = OperatorLinkHealth.liveTileDetail(isLive, cameraName, fpsLabel, phaseLabel)
-    Row(
-        Modifier
-            .background(LiveDesign.surface, ChromeShape)
-            .border(1.dp, LiveDesign.hairline, ChromeShape)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(Modifier.size(8.dp).background(tint, CircleShape))
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                if (isLive) "Active Link" else "No Link",
-                style = LiveType.ui(12f, FontWeight.SemiBold),
-                color = LiveDesign.text,
-                maxLines = 1,
-            )
-            Text(
-                detail,
-                style = LiveType.mono(10.5f),
-                color = LiveDesign.muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
-            repeat(4) { index ->
-                Box(
-                    Modifier
-                        .width(3.dp)
-                        .height((6 + index * 3).dp)
-                        .background(
-                            if (index < lit) tint.copy(alpha = 0.52f + index * 0.12f) else LiveDesign.hairline,
-                            CircleShape,
-                        ),
-                )
-            }
-        }
-    }
 }

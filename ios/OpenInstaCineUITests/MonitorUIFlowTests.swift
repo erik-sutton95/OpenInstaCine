@@ -830,6 +830,43 @@ final class MonitorUIFlowTests: XCTestCase {
         }
     }
 
+    func testCommonCachePreferenceSurvivesRelaunchAndClearCanBeCancelled() throws {
+        app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "settings"
+        app.launch()
+        func openStorage() {
+            let tabs = app.scrollViews["monitor.settings.tabs"]
+            XCTAssertTrue(tabs.waitForExistence(timeout: 10))
+            let storage = app.buttons["monitor.settings.tab.Storage"]
+            reveal(storage, in: tabs, portrait: true)
+            storage.tap()
+        }
+        openStorage()
+        let cache = app.buttons["Full Resolution Caching"]
+        XCTAssertTrue(cache.waitForExistence(timeout: 5))
+        let initial = try XCTUnwrap(cache.value as? String)
+        XCTAssertTrue(["On", "Off"].contains(initial))
+        cache.tap()
+        let changed = initial == "On" ? "Off" : "On"
+        XCTAssertEqual(cache.value as? String, changed)
+        app.terminate()
+        app.launch()
+        openStorage()
+        XCTAssertEqual(cache.value as? String, changed)
+        app.buttons["Clear"].tap()
+        XCTAssertTrue(app.sheets["Clear cache?"].waitForExistence(timeout: 5))
+        if app.buttons["Cancel"].exists {
+            app.buttons["Cancel"].tap()
+        } else {
+            // The adaptive popover offers dismissal outside its bounds.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).tap()
+        }
+        XCTAssertFalse(app.sheets["Clear cache?"].exists)
+        XCTAssertEqual(cache.value as? String, changed)
+        cache.tap()
+        XCTAssertEqual(cache.value as? String, initial)
+        capture("SIMULATED-settings-cache-reload-and-cancel")
+    }
+
     func testPlaybackInfoLoopAndShareReturnToTheSamePlayer() {
         app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "playback"
         app.launch()

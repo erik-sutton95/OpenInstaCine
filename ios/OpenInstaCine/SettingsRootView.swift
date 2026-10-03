@@ -731,35 +731,14 @@ struct SettingsRootView: View {
                 frameioStatusControl
             }
         }
-        SettingsRowCard {
-            SettingsSwitchInlineRow(
-                title: "Full Resolution Caching",
-                help: SettingsHelpCopy.cacheFullResolution,
-                showTopDivider: false,
-                isOn: model.cacheFullResolution
-            ) {
-                model.cacheFullResolution.toggle()
-            }
-            SettingsInlineRow(
-                title: "Local Media Cache",
-                help: "Originals and playback proxies downloaded from the camera."
-            ) {
-                SettingsValueText(value: cacheSizeLabel)
-            }
-            SettingsInlineRow(
-                title: "Clear Cache",
-                help: SettingsHelpCopy.clearCache
-            ) {
-                Button {
-                    confirmClearCache = true
-                } label: {
-                    Text(clearingCache ? "Clearing…" : "Clear")
-                        .font(LiveType.ui(size: 13, weight: .semibold))
-                        .foregroundStyle(LiveDesign.rec)
-                }
-                .buttonStyle(.zcTapTarget)
-            }
-        }
+        MonitorCacheSettings(
+            cacheOriginals: Binding(get: { model.cacheFullResolution }, set: { model.cacheFullResolution = $0 }),
+            sizeLabel: cacheSizeLabel, clearing: clearingCache,
+            cacheHelp: SettingsHelpCopy.cacheFullResolution,
+            scopeHelp: "Originals and playback proxies downloaded from the camera.",
+            clearHelp: SettingsHelpCopy.clearCache,
+            feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) },
+            clear: { confirmClearCache = true })
         .confirmationDialog(
             "Clear cache?",
             isPresented: $confirmClearCache,
@@ -828,137 +807,32 @@ struct SettingsRootView: View {
     // MARK: - System
 
     @ViewBuilder private var systemRows: some View {
-        SettingsRowCard(title: "Help & Feedback") {
-            SettingsInlineRow(
-                title: "Report a problem",
-                help:
-                    "Tell us what happened in the app. Choose whether to include technical details and an email for a reply.",
-                showTopDivider: false
-            ) {
-                SettingsActionPill(title: "Open") { showProblemReport = true }
-                    .accessibilityIdentifier("support.report.open")
-            }
-            if ReliabilityReporting.isAvailable {
-                SettingsSwitchInlineRow(
-                    title: "Automatic error reports",
-                    help: SettingsHelpCopy.reliabilityReports,
-                    isOn: reliabilityOptIn
-                ) {
-                    reliabilityOptIn.toggle()
-                    ReliabilityReporting.setConsent(reliabilityOptIn)
-                }
-            } else {
-                SettingsInlineRow(
-                    title: "Automatic error reports",
-                    help: SettingsHelpCopy.reliabilityUnavailable
-                ) {
-                    SettingsValueText(value: "Off")
-                }
-            }
-            SettingsInlineRow(
-                title: "Reporting Privacy",
-                help: "What reports contain, retention, and how to request deletion."
-            ) {
-                SettingsActionPill(title: "Read") {
-                    legalKind = .privacy
-                }
-            }
-        }
-        SettingsRowCard {
-            Button {
-                showDiagnosticOptions.toggle()
-            } label: {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Diagnostic options").font(LiveType.ui(size: 13, weight: .semibold))
-                        Text("Save or remove reports on this phone").font(
-                            LiveType.ui(size: 11.5, weight: .regular)
-                        )
-                        .foregroundStyle(LiveDesign.muted)
-                    }
-                    Spacer()
-                    (showDiagnosticOptions ? OpcIcon.chevronUp : OpcIcon.chevronDown)
-                        .frame(width: 20, height: 20).foregroundStyle(LiveDesign.muted)
-                }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain).foregroundStyle(LiveDesign.text)
-            .accessibilityIdentifier("support.diagnostics.disclosure")
-            .accessibilityValue(showDiagnosticOptions ? "Expanded" : "Collapsed")
-            if showDiagnosticOptions {
-                SettingsInlineRow(
-                    title: "Save diagnostic report", help: "Keep a copy or share it with support."
-                ) {
-                    SettingsActionPill(title: "Save") {
-                        if let url = DiagnosticCenter.shared.writeReport(session: model.session) {
-                            diagnosticsShare = DiagnosticSharePayload(url: url)
-                        } else {
-                            supportError = true
-                        }
-                    }
-                }
-                SettingsInlineRow(
-                    title: "Delete saved feed reports",
-                    help: SettingsHelpCopy.deleteStoredIncidents
-                ) {
-                    SettingsActionPill(title: "Delete") {
-                        FeedIncidentRuntime.deleteStoredIncidents {}
-                    }
-                }
-            }
-        }
+        MonitorSupportSettings(
+            automaticReports: Binding(get: { reliabilityOptIn }, set: {
+                reliabilityOptIn = $0; ReliabilityReporting.setConsent($0)
+            }), available: ReliabilityReporting.isAvailable,
+            automaticHelp: SettingsHelpCopy.reliabilityReports,
+            unavailableHelp: SettingsHelpCopy.reliabilityUnavailable,
+            report: { showProblemReport = true }, privacy: { legalKind = .privacy })
+        MonitorDiagnosticSettings(expanded: $showDiagnosticOptions,
+            deleteHelp: SettingsHelpCopy.deleteStoredIncidents,
+            save: {
+                if let url = DiagnosticCenter.shared.writeReport(session: model.session) {
+                    diagnosticsShare = DiagnosticSharePayload(url: url)
+                } else { supportError = true }
+            }, delete: { FeedIncidentRuntime.deleteStoredIncidents {} })
 
-        SettingsRowCard(title: "Project & Legal") {
-            SettingsInlineRow(
-                title: "Source Code",
-                help: SettingsHelpCopy.sourceHelp,
-                showTopDivider: false
-            ) {
-                SettingsActionPill(title: "Open") {
-                    if let url = OpenInstaCineLinks.source { openURL(url) }
-                }
-            }
-            SettingsInlineRow(title: "Privacy", help: "What this app stores on this phone.") {
-                SettingsActionPill(title: "Open") {
-                    legalKind = .privacy
-                }
-            }
-            SettingsInlineRow(title: "Terms", help: "How you can use OpenInstaCine.") {
-                SettingsActionPill(title: "Open") {
-                    if let url = OpenInstaCineLinks.terms { openURL(url) }
-                }
-            }
-            SettingsInlineRow(title: "Licenses", help: "Apache 2.0 and third-party notices.") {
-                SettingsActionPill(title: "Open") { legalKind = .licenses }
-            }
-            SettingsInlineRow(title: "NOTICE", help: "Attribution shipped with the app.") {
-                SettingsActionPill(title: "Open") { legalKind = .notice }
-            }
-        }
-
-        SettingsRowCard(title: "App Information") {
-            SettingsInlineRow(
-                title: "Theme",
-                help: SettingsHelpCopy.themeHelp,
-                showTopDivider: false
-            ) {
-                SettingsValueText(value: "Charcoal")
-            }
-            SettingsInlineRow(
-                title: "Protocol Implementation",
-                help:
-                    "Camera control speaks Insta360's protocol over Bluetooth and the camera's Wi-Fi. No Insta360 SDK is bundled or required."
-            ) {
-                SettingsValueText(value: "Insta360 / BLE + Wi-Fi")
-            }
-            SettingsInlineRow(
-                title: "App Version",
-                help: "Current OpenInstaCine build from the native project metadata."
-            ) {
-                SettingsValueText(value: Self.appVersionText)
-            }
-        }
+        MonitorProjectLegalSettings(
+            sourceHelp: SettingsHelpCopy.sourceHelp, termsHelp: "How you can use OpenInstaCine.",
+            source: { if let url = OpenInstaCineLinks.source { openURL(url) } },
+            privacy: { legalKind = .privacy },
+            terms: { if let url = OpenInstaCineLinks.terms { openURL(url) } },
+            licenses: { legalKind = .licenses }, notice: { legalKind = .notice })
+        MonitorAppInformationSettings(
+            theme: "Charcoal", protocolName: "Insta360 / BLE + Wi-Fi", version: Self.appVersionText,
+            themeHelp: SettingsHelpCopy.themeHelp,
+            protocolHelp: "Camera control speaks Insta360's protocol over Bluetooth and the camera's Wi-Fi. No Insta360 SDK is bundled or required.",
+            versionHelp: "Current OpenInstaCine build from the native project metadata.")
     }
 
     static var appVersionText: String {

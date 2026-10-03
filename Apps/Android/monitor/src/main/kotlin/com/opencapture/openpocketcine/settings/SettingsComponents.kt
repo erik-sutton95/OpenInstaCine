@@ -138,36 +138,11 @@ fun SettingsResetButton(onClick: () -> Unit) {
  * `SettingsActionPill`). Title is uppercased to match the iOS monospaced pill.
  */
 @Composable
-fun SettingsActionPill(
-    title: String,
-    icon: OpcIcon? = null,
-    tint: Color = LiveDesign.accent,
-    background: Color = LiveDesign.accentDim,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier
-            .alpha(if (enabled) 1f else 0.45f)
-            .background(background, CircleShape)
-            .border(1.dp, tint.copy(alpha = 0.5f), CircleShape)
-            .settingsClickable(role = Role.Button, enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        icon?.let {
-            OpcIcon(icon = it, contentDescription = null, tint = tint, modifier = Modifier.size(13.dp))
-        }
-        Text(
-            title.uppercase(),
-            style = chromeStyle(10.5f, FontWeight.Bold, mono = true),
-            color = tint,
-            maxLines = 1,
-            letterSpacing = 0.6.sp,
-        )
-    }
+fun SettingsActionPill(title: String, icon: OpcIcon? = null, tint: Color = LiveDesign.accent,
+    background: Color = LiveDesign.accentDim, modifier: Modifier = Modifier,
+    enabled: Boolean = true, onClick: () -> Unit) {
+    com.opencapture.monitorui.settings.MonitorSettingsActionPill(
+        title, icon, tint, background, modifier, enabled, onClick)
 }
 
 /**
@@ -477,73 +452,9 @@ object SettingsPalette {
  * Done on the IME commits and hides the pad. Bring-into-view so Operator Setup
  * on a small phone still reveals Highlight / Midtone.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun SettingsNumberField(
-    value: Int,
-    maximum: Int,
-    onChange: (Int) -> Unit,
-) {
-    var editing by remember { mutableStateOf(false) }
-    var draft by remember(value) { mutableStateOf(value.toString()) }
-    val focusRequester = remember { FocusRequester() }
-    val bringIntoView = remember { BringIntoViewRequester() }
-    val keyboard = LocalSoftwareKeyboardController.current
-    fun commit() {
-        draft.toIntOrNull()?.let { onChange(it.coerceIn(0, maximum)) }
-        editing = false
-        keyboard?.hide()
-    }
-    Box(
-        Modifier
-            .height(30.dp)
-            .width(44.dp)
-            .background(LiveDesign.background.copy(alpha = 0.5f), ChromeShape)
-            .border(1.dp, LiveDesign.hairline, ChromeShape)
-            .bringIntoViewRequester(bringIntoView)
-            .then(
-                if (editing) {
-                    Modifier
-                } else {
-                    Modifier.settingsClickable(role = Role.Button) { editing = true }
-                },
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (editing) {
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-                bringIntoView.bringIntoView()
-            }
-            BasicTextField(
-                value = draft,
-                onValueChange = { next -> draft = next.filter(Char::isDigit).take(3) },
-                textStyle =
-                    chromeStyle(12f, FontWeight.SemiBold, mono = true)
-                        .copy(color = LiveDesign.text, textAlign = TextAlign.Center),
-                keyboardOptions =
-                    KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done,
-                    ),
-                keyboardActions = KeyboardActions(onDone = { commit() }),
-                singleLine = true,
-                cursorBrush = SolidColor(LiveDesign.accent),
-                modifier =
-                    Modifier
-                        .widthIn(min = 28.dp, max = 40.dp)
-                        .focusRequester(focusRequester)
-                        .onFocusChanged { if (!it.isFocused && editing) commit() },
-            )
-        } else {
-            Text(
-                value.toString(),
-                style = chromeStyle(12f, FontWeight.SemiBold, mono = true),
-                color = LiveDesign.text,
-                textAlign = TextAlign.Center,
-            )
-        }
-    }
+fun SettingsNumberField(value: Int, maximum: Int, onChange: (Int) -> Unit) {
+    com.opencapture.monitorui.settings.MonitorSettingsNumberField(value, maximum, onChange)
 }
 
 /** Compact native slider with the existing trailing numeric readout. */
@@ -755,97 +666,17 @@ fun SettingsQuietLink(title: String, onClick: () -> Unit): Unit {
  * so accessibility font scaling never hides that context.
  */
 @Composable
-fun SettingsGroupCard(
-    title: String,
-    caption: String,
-    onReset: (() -> Unit)? = null,
-    captionMaxLines: Int = 2,
-    /**
-     * When non-null the card collapses to its header and the whole header toggles it. Long tabs
-     * (Display carries three DISP sections) read as a short list of sections this way instead of
-     * one unbroken scroll of controls.
-     */
-    expanded: Boolean? = null,
-    onExpandToggle: (() -> Unit)? = null,
-    content: @Composable () -> Unit,
-) {
-    val isExpanded = expanded ?: true
-    Column(
-        Modifier.fillMaxWidth().settingsCardSurface().padding(horizontal = 13.dp, vertical = 11.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Column(
-            Modifier.then(
-                if (expanded != null && onExpandToggle != null) {
-                    Modifier.settingsClickable(role = Role.Button, onClick = onExpandToggle)
-                } else {
-                    Modifier
-                }
-            ),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    title,
-                    style = chromeStyle(13f, FontWeight.SemiBold),
-                    color = LiveDesign.text,
-                )
-                Spacer(Modifier.weight(1f))
-                if (onReset != null && isExpanded) {
-                    SettingsResetButton(onClick = onReset)
-                }
-                if (expanded != null) {
-                    OpcIcon(
-                        icon = if (isExpanded) OpcIcon.CHEVRON_UP else OpcIcon.CHEVRON_DOWN,
-                        contentDescription = null,
-                        tint = LiveDesign.muted,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-            Text(
-                caption,
-                style = chromeStyle(11.5f, FontWeight.Normal),
-                color = LiveDesign.muted,
-                maxLines = captionMaxLines,
-            )
-        }
-        if (isExpanded) {
-            content()
-        }
-    }
+fun SettingsGroupCard(title: String, caption: String, onReset: (() -> Unit)? = null,
+    captionMaxLines: Int = 2, expanded: Boolean? = null, onExpandToggle: (() -> Unit)? = null,
+    content: @Composable () -> Unit) {
+    com.opencapture.monitorui.settings.MonitorSettingsGroupCard(
+        title, caption, onReset, captionMaxLines, expanded, onExpandToggle, content)
 }
 
 /** Small label + switch tile for toggle grids (iOS `DisplayToggleItem`). */
 @Composable
-fun DisplayToggleItem(
-    title: String,
-    isOn: Boolean,
-    modifier: Modifier = Modifier,
-    onToggle: () -> Unit,
-) {
-    Row(
-        modifier
-            .height(46.dp)
-            .background(LiveDesign.background.copy(alpha = 0.38f), ChromeShape)
-            .border(1.dp, LiveDesign.hairline, ChromeShape)
-            .settingsClickable(role = Role.Switch, onClick = onToggle)
-            .padding(horizontal = 9.dp),
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            title,
-            style = chromeStyle(11.5f, FontWeight.SemiBold),
-            color = LiveDesign.text,
-            maxLines = 1,
-        )
-        Spacer(Modifier.weight(1f))
-        SettingsSwitchGraphic(isOn = isOn)
-    }
+fun DisplayToggleItem(title: String, isOn: Boolean, modifier: Modifier = Modifier, onToggle: () -> Unit) {
+    com.opencapture.monitorui.settings.MonitorSettingsDisplayToggle(title, isOn, modifier, onToggle)
 }
 
 /** Floating xmark close button on a glass circle (iOS `CloseButton`, 37pt). */
