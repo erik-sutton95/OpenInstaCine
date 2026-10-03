@@ -1,3 +1,4 @@
+import OpenCineAppKit
 import MonitorPresentation
 import MonitorUI
 import OpenCineMedia
@@ -78,65 +79,7 @@ enum HistogramAssist {
     /// OpenZCine `MovablePanelStoredCenter` — centre as a fraction of the overlay bounds.
     typealias StoredCenter = MonitorScopeStoredCenter
 
-    struct Options: Equatable, Codable, Sendable {
-        var trafficLights: Bool
-        var crushClipCompensation: CrushClipCompensation
-        var scale: Double
-        /// False only for a fresh automatic size; legacy saved scales stay explicit.
-        var hasCustomScale: Bool
-        var storedCenter: StoredCenter?
-        var storedCenterPortrait: StoredCenter?
-
-        static let `default` = Options(
-            trafficLights: true,
-            crushClipCompensation: .zero,
-            scale: defaultScale,
-            storedCenter: nil,
-            storedCenterPortrait: nil)
-
-        init(
-            trafficLights: Bool = true,
-            crushClipCompensation: CrushClipCompensation = .zero,
-            scale: Double = defaultScale,
-            hasCustomScale: Bool = false,
-            storedCenter: StoredCenter? = nil,
-            storedCenterPortrait: StoredCenter? = nil
-        ) {
-            self.trafficLights = trafficLights
-            self.crushClipCompensation = crushClipCompensation
-            self.scale = Self.clampedScale(scale)
-            self.hasCustomScale = hasCustomScale || scale != defaultScale
-            self.storedCenter = storedCenter
-            self.storedCenterPortrait = storedCenterPortrait
-        }
-
-        enum CodingKeys: String, CodingKey {
-            case trafficLights, crushClipCompensation, scale, hasCustomScale, storedCenter,
-                storedCenterPortrait
-        }
-
-        init(from decoder: any Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            trafficLights = try c.decodeIfPresent(Bool.self, forKey: .trafficLights) ?? true
-            crushClipCompensation =
-                try c.decodeIfPresent(CrushClipCompensation.self, forKey: .crushClipCompensation)
-                ?? .zero
-            scale = Self.clampedScale(
-                try c.decodeIfPresent(Double.self, forKey: .scale) ?? defaultScale)
-            // Old JSON cannot distinguish an untouched 1.0 from a manual 1.0.
-            // Preserve it rather than rewriting an operator's layout on upgrade.
-            hasCustomScale =
-                try c.decodeIfPresent(Bool.self, forKey: .hasCustomScale)
-                ?? true
-            storedCenter = try c.decodeIfPresent(StoredCenter.self, forKey: .storedCenter)
-            storedCenterPortrait = try c.decodeIfPresent(
-                StoredCenter.self, forKey: .storedCenterPortrait)
-        }
-
-        static func clampedScale(_ value: Double) -> Double {
-            min(max(value, scaleRange.lowerBound), scaleRange.upperBound)
-        }
-    }
+    typealias Options = MonitorHistogramOptions
 
     static func panelSize(scale: Double) -> CGSize {
         let clamped = Options.clampedScale(scale)
@@ -244,92 +187,7 @@ enum HistogramAssist {
     }
 }
 
-@MainActor
-@Observable
-final class HistogramAssistStore {
-    static let shared = HistogramAssistStore(options: load())
-    private static let defaultsKey = "OpenInstaCine.HistogramAssist.v1"
-
-    var options: HistogramAssist.Options {
-        didSet { persist() }
-    }
-    /// Session centre in canvas space (OpenZCine `movablePanelCenters["histo"]`).
-    var sessionCenter: CGPoint?
-    var sessionCenterPortrait: CGPoint?
-
-    var optionsBinding: Binding<HistogramAssist.Options> {
-        Binding(
-            get: { self.options },
-            set: { self.options = $0 }
-        )
-    }
-
-    init(options: HistogramAssist.Options = .default) {
-        self.options = options
-    }
-
-    static func load() -> HistogramAssist.Options {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
-            let decoded = try? JSONDecoder().decode(HistogramAssist.Options.self, from: data)
-        else { return .default }
-        return decoded
-    }
-
-    func persist() {
-        guard let data = try? JSONEncoder().encode(options) else { return }
-        UserDefaults.standard.set(data, forKey: Self.defaultsKey)
-    }
-
-    func setScale(_ scale: Double) {
-        var next = options
-        next.scale = HistogramAssist.Options.clampedScale(scale)
-        next.hasCustomScale = true
-        options = next
-    }
-
-    /// Plot, hit frame and resize origin all consume the same effective size.
-    func presentationScale(
-        in bounds: CGRect, tablet: Bool? = nil
-    ) -> Double {
-        guard bounds.width > 1, bounds.height > 1 else { return options.scale }
-        return MonitorScopeSizing.scale(
-            portrait: bounds.height > bounds.width,
-            tablet: tablet ?? (UIDevice.current.userInterfaceIdiom == .pad),
-            preferred: options.hasCustomScale ? options.scale : nil)
-    }
-
-    func sessionCenter(in bounds: CGRect) -> CGPoint? {
-        ScopeCanvasSlot.pick(sessionCenter, sessionCenterPortrait, in: bounds)
-    }
-
-    func storedCenter(in bounds: CGRect) -> HistogramAssist.StoredCenter? {
-        ScopeCanvasSlot.pick(options.storedCenter, options.storedCenterPortrait, in: bounds)
-    }
-
-    func beginDrag(center: CGPoint, in bounds: CGRect) {
-        ScopeCanvasSlot.assign(&sessionCenter, &sessionCenterPortrait, in: bounds, center)
-    }
-
-    func drag(to center: CGPoint, in bounds: CGRect) {
-        beginDrag(center: center, in: bounds)
-    }
-
-    func cancelDrag(bounds: CGRect) {
-        ScopeCanvasSlot.assign(&sessionCenter, &sessionCenterPortrait, in: bounds, nil)
-    }
-
-    func endDrag(bounds: CGRect) {
-        guard let center = sessionCenter(in: bounds) else { return }
-        var next = options
-        let stored = HistogramAssist.StoredCenter(center: center, in: bounds)
-        if ScopeCanvasSlot.forBounds(bounds) == .portrait {
-            next.storedCenterPortrait = stored
-        } else {
-            next.storedCenter = stored
-        }
-        options = next
-    }
-}
+typealias HistogramAssistStore = MonitorScopePanelStore<MonitorHistogramOptions>
 
 /// OpenZCine `AssistQuickSettingsContent.histogramRows`.
 struct HistogramLongPressMenu: View {

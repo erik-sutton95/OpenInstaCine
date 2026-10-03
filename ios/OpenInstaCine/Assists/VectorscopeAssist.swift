@@ -1,3 +1,4 @@
+import OpenCineAppKit
 import MonitorPresentation
 import MonitorUI
 import SwiftUI
@@ -37,67 +38,7 @@ enum VectorscopeAssist {
     /// OpenZCine `MovablePanelStoredCenter` — centre as a fraction of the overlay bounds.
     typealias StoredCenter = MonitorScopeStoredCenter
 
-    struct Options: Equatable, Codable, Sendable {
-        var zoom: Zoom
-        var brightness: Int
-        var scale: Double
-        /// False only for a fresh automatic size; legacy saved scales stay explicit.
-        var hasCustomScale: Bool
-        var storedCenter: StoredCenter?
-        var storedCenterPortrait: StoredCenter?
-
-        static let `default` = Options(
-            zoom: .x1,
-            brightness: defaultBrightness,
-            scale: defaultScale,
-            storedCenter: nil,
-            storedCenterPortrait: nil)
-
-        init(
-            zoom: Zoom = .x1,
-            brightness: Int = defaultBrightness,
-            scale: Double = defaultScale,
-            hasCustomScale: Bool = false,
-            storedCenter: StoredCenter? = nil,
-            storedCenterPortrait: StoredCenter? = nil
-        ) {
-            self.zoom = zoom
-            self.brightness = Self.clampedBrightness(brightness)
-            self.scale = Self.clampedScale(scale)
-            self.hasCustomScale = hasCustomScale || scale != defaultScale
-            self.storedCenter = storedCenter
-            self.storedCenterPortrait = storedCenterPortrait
-        }
-
-        enum CodingKeys: String, CodingKey {
-            case zoom, brightness, scale, hasCustomScale, storedCenter, storedCenterPortrait
-        }
-
-        init(from decoder: any Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            zoom = try c.decodeIfPresent(Zoom.self, forKey: .zoom) ?? .x1
-            brightness = Self.clampedBrightness(
-                try c.decodeIfPresent(Int.self, forKey: .brightness) ?? defaultBrightness)
-            scale = Self.clampedScale(
-                try c.decodeIfPresent(Double.self, forKey: .scale) ?? defaultScale)
-            // Old JSON cannot distinguish an untouched 1.0 from a manual 1.0.
-            // Preserve it rather than rewriting an operator's layout on upgrade.
-            hasCustomScale =
-                try c.decodeIfPresent(Bool.self, forKey: .hasCustomScale)
-                ?? true
-            storedCenter = try c.decodeIfPresent(StoredCenter.self, forKey: .storedCenter)
-            storedCenterPortrait = try c.decodeIfPresent(
-                StoredCenter.self, forKey: .storedCenterPortrait)
-        }
-
-        static func clampedScale(_ value: Double) -> Double {
-            min(max(value, scaleRange.lowerBound), scaleRange.upperBound)
-        }
-
-        static func clampedBrightness(_ value: Int) -> Int {
-            min(max(value, brightnessRange.lowerBound), brightnessRange.upperBound)
-        }
-    }
+    typealias Options = MonitorVectorscopeOptions
 
     /// OpenZCine `Scopes.brightnessMultiplier` — vectorscope keeps the unity baseline.
     static func intensity(_ brightness: Int) -> Double {
@@ -202,92 +143,7 @@ enum VectorscopeAssist {
     }
 }
 
-@MainActor
-@Observable
-final class VectorscopeAssistStore {
-    static let shared = VectorscopeAssistStore(options: load())
-    private static let defaultsKey = "OpenInstaCine.VectorscopeAssist.v1"
-
-    var options: VectorscopeAssist.Options {
-        didSet { persist() }
-    }
-    /// Session centre in canvas space (OpenZCine `movablePanelCenters["vector"]`).
-    var sessionCenter: CGPoint?
-    var sessionCenterPortrait: CGPoint?
-
-    var optionsBinding: Binding<VectorscopeAssist.Options> {
-        Binding(
-            get: { self.options },
-            set: { self.options = $0 }
-        )
-    }
-
-    init(options: VectorscopeAssist.Options = .default) {
-        self.options = options
-    }
-
-    static func load() -> VectorscopeAssist.Options {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
-            let decoded = try? JSONDecoder().decode(VectorscopeAssist.Options.self, from: data)
-        else { return .default }
-        return decoded
-    }
-
-    func persist() {
-        guard let data = try? JSONEncoder().encode(options) else { return }
-        UserDefaults.standard.set(data, forKey: Self.defaultsKey)
-    }
-
-    func setScale(_ scale: Double) {
-        var next = options
-        next.scale = VectorscopeAssist.Options.clampedScale(scale)
-        next.hasCustomScale = true
-        options = next
-    }
-
-    /// Plot, hit frame and resize origin all consume the same effective size.
-    func presentationScale(
-        in bounds: CGRect, tablet: Bool? = nil
-    ) -> Double {
-        guard bounds.width > 1, bounds.height > 1 else { return options.scale }
-        return MonitorScopeSizing.scale(
-            portrait: bounds.height > bounds.width,
-            tablet: tablet ?? (UIDevice.current.userInterfaceIdiom == .pad),
-            preferred: options.hasCustomScale ? options.scale : nil)
-    }
-
-    func sessionCenter(in bounds: CGRect) -> CGPoint? {
-        ScopeCanvasSlot.pick(sessionCenter, sessionCenterPortrait, in: bounds)
-    }
-
-    func storedCenter(in bounds: CGRect) -> VectorscopeAssist.StoredCenter? {
-        ScopeCanvasSlot.pick(options.storedCenter, options.storedCenterPortrait, in: bounds)
-    }
-
-    func beginDrag(center: CGPoint, in bounds: CGRect) {
-        ScopeCanvasSlot.assign(&sessionCenter, &sessionCenterPortrait, in: bounds, center)
-    }
-
-    func drag(to center: CGPoint, in bounds: CGRect) {
-        beginDrag(center: center, in: bounds)
-    }
-
-    func cancelDrag(bounds: CGRect) {
-        ScopeCanvasSlot.assign(&sessionCenter, &sessionCenterPortrait, in: bounds, nil)
-    }
-
-    func endDrag(bounds: CGRect) {
-        guard let center = sessionCenter(in: bounds) else { return }
-        var next = options
-        let stored = VectorscopeAssist.StoredCenter(center: center, in: bounds)
-        if ScopeCanvasSlot.forBounds(bounds) == .portrait {
-            next.storedCenterPortrait = stored
-        } else {
-            next.storedCenter = stored
-        }
-        options = next
-    }
-}
+typealias VectorscopeAssistStore = MonitorScopePanelStore<MonitorVectorscopeOptions>
 
 /// OpenZCine `AssistQuickSettingsContent.vectorscopeRows`.
 struct VectorscopeLongPressMenu: View {

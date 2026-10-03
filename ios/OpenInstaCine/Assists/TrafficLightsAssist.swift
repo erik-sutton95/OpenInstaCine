@@ -1,3 +1,5 @@
+import OpenCineAppKit
+import MonitorPresentation
 import MonitorUI
 import OpenCineMedia
 import OpenPocketViewCore
@@ -188,63 +190,10 @@ enum TrafficLightsAssist {
         longPressMenu(assist: assist)
     }
 
-    fileprivate struct Snapshot: Codable {
-        var compensation: CrushClipCompensation
-        var scale: Double
-        var position: StoredCenter?
-        var positionPortrait: StoredCenter?
-    }
+    typealias Snapshot = MonitorTrafficLightsOptions
 }
 
-@MainActor
-@Observable
-final class TrafficLightsAssistStore {
-    static let shared = TrafficLightsAssistStore()
-    fileprivate static let prefsKey = "OpenInstaCine.Assist.trafficLights.v1"
-
-    var compensation: TrafficLightsAssist.CrushClipCompensation
-    var scale: Double
-    var position: TrafficLightsAssist.StoredCenter?
-    var positionPortrait: TrafficLightsAssist.StoredCenter?
-    var sessionCenter: CGPoint?
-    var sessionCenterPortrait: CGPoint?
-
-    init() {
-        if let data = UserDefaults.standard.data(forKey: Self.prefsKey),
-            let snap = try? JSONDecoder().decode(TrafficLightsAssist.Snapshot.self, from: data)
-        {
-            compensation = snap.compensation
-            scale = TrafficLightsAssist.clampedScale(snap.scale)
-            position = snap.position
-            positionPortrait = snap.positionPortrait
-        } else if let shared = TrafficLightsAssist.CrushClipCompensation(
-            rawValue: HistogramAssist.store.options.crushClipCompensation.rawValue)
-        {
-            compensation = shared
-            scale = TrafficLightsAssist.defaultScale
-            position = nil
-            positionPortrait = nil
-        } else {
-            compensation = TrafficLightsAssist.defaultCompensation
-            scale = TrafficLightsAssist.defaultScale
-            position = nil
-            positionPortrait = nil
-        }
-        if let histo = HistogramAssist.CrushClipCompensation(rawValue: compensation.rawValue) {
-            HistogramAssist.store.options.crushClipCompensation = histo
-        }
-    }
-
-    func persist() {
-        let snap = TrafficLightsAssist.Snapshot(
-            compensation: compensation,
-            scale: TrafficLightsAssist.clampedScale(scale),
-            position: position,
-            positionPortrait: positionPortrait)
-        guard let data = try? JSONEncoder().encode(snap) else { return }
-        UserDefaults.standard.set(data, forKey: Self.prefsKey)
-    }
-}
+typealias TrafficLightsAssistStore = MonitorTrafficLightsPreferenceStore
 
 // MARK: - Long-press rows
 
