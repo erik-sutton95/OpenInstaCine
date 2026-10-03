@@ -3,16 +3,12 @@ package com.opencapture.openpocketcine
 import android.graphics.Bitmap
 import android.graphics.Paint
 import android.graphics.Rect
-import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.Looper
 import android.view.PixelCopy
 import android.view.Surface
-import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
-import android.view.View
-import android.view.ViewGroup
 import com.opencapture.opencine.appkit.statusPresentation
 import com.opencapture.opencine.appkit.ShellModel
 import androidx.compose.foundation.Canvas
@@ -43,7 +39,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import android.app.ActivityManager
 import android.content.Context
-import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -551,15 +546,8 @@ fun LiveViewScreen(model: AppModel) {
                 stretchToRect = desqueezeVisible,
             )
             session.setPlates(GpuOverlayBus.plateSnapshot())
-            session.syncAssists(
-                assist = assist,
+            session.updateEffects(
                 plan = effectsPlan,
-                canvasOriginX = canvasOrigin.x,
-                canvasOriginY = canvasOrigin.y,
-                wave = GpuOverlayBus.wave,
-                parade = GpuOverlayBus.parade,
-                histoRect = GpuOverlayBus.histo,
-                vector = GpuOverlayBus.vector,
                 uiScale = density.density,
                 pictureMirrored = liveViewFlip,
                 pictureFlippedVertically = flipV,
@@ -1186,69 +1174,13 @@ private fun VulkanLivePresenter(
     DisposableEffect(Unit) { onDispose { onSurfaceView(null) } }
     AndroidView(
         factory = { viewContext ->
-            SurfaceView(viewContext).apply {
-                isClickable = false
-                isFocusable = false
-                setZOrderMediaOverlay(false)
-                // API 34+ default destroys this surface when Settings / Media
-                // cover it. Pocket has no periodic GOP , keep the surface while
-                // the view stays attached (#248).
-                if (Build.VERSION.SDK_INT >= 34) {
-                    setSurfaceLifecycle(SurfaceView.SURFACE_LIFECYCLE_FOLLOWS_ATTACHMENT)
-                }
-                unsplitMotionEvents()
-                onSurfaceView(this)
-                holder.addCallback(
-                    object : SurfaceHolder.Callback {
-                        override fun surfaceCreated(holder: SurfaceHolder) {
-                            DiagnosticCenter.log(
-                                "info",
-                                "feed",
-                                "surface",
-                                "feed: surface created",
-                            )
-                        }
-
-                        override fun surfaceChanged(
-                            holder: SurfaceHolder,
-                            format: Int,
-                            width: Int,
-                            height: Int,
-                        ) {
-                            this@apply.unsplitMotionEvents()
-                            DiagnosticCenter.log(
-                                "info",
-                                "feed",
-                                "surface",
-                                "feed: surface changed ${width}x${height}",
-                            )
-                            session.attachWindow(holder.surface, width, height)
-                        }
-
-                        override fun surfaceDestroyed(holder: SurfaceHolder) {
-                            DiagnosticCenter.log(
-                                "info",
-                                "feed",
-                                "surface",
-                                "feed: surface destroyed",
-                            )
-                            session.detachWindow()
-                        }
-                    },
-                )
-            }
+            com.opencapture.opencine.runtime.MonitorSurfacePictureHost(
+                viewContext, attach = session::attachWindow, detach = session::detachWindow,
+                journal = { DiagnosticCenter.log("info", "feed", "surface", it) },
+            ).also(onSurfaceView)
         },
         modifier = modifier,
     )
-}
-
-/** Keep both pinch fingers on one view \u2014 Android otherwise splits pointer 2 onto SurfaceView. */
-private fun View.unsplitMotionEvents() {
-    var walk: View? = this
-    while (walk != null) {
-        (walk as? ViewGroup)?.isMotionEventSplittingEnabled = false
-        walk = walk.parent as? View
-    }
 }
 
 /** GLES fallback; the same bounded raw tap supplies chrome after the native present. */
@@ -1308,108 +1240,23 @@ private fun LiveFeedPresenter(
         key(gpuFailed) {
             AndroidView(
                 factory = { viewContext ->
-                    TextureView(viewContext).apply {
-                        isOpaque = true
-                        textureViewOut.value(this)
-                        val onUpdated: (TextureView) -> Unit = { tv ->
+                    val program =
+                        if (gpuFailed) com.opencapture.opencine.runtime.MonitorDecoderTextureProgram {
+                            attach.value(it)
+                        } else session.pictureProgram
+                    com.opencapture.opencine.runtime.MonitorTexturePictureHost(
+                        viewContext, program = program,
+                        updated = { tv ->
                             if (gpuFailed) tv.surfaceTexture?.let { sourcePresented.value(it.timestamp) }
                             presented.value()
-                        }
-                        surfaceTextureListener =
-                            if (gpuFailed) {
-                                TextureFeedListener(
-                                    host = this,
-                                    onSurface = { attach.value(it) },
-                                    onUpdated = onUpdated,
-                                )
-                            } else {
-                                EffectsFeedListener(
-                                    host = this,
-                                    session = session,
-                                    onUpdated = onUpdated,
-                                )
-                            }
-                    }
+                        },
+                        journal = { DiagnosticCenter.log("info", "feed", "surface", it) },
+                    ).also { textureViewOut.value(it) }
                 },
                 modifier = Modifier.fillMaxSize(),
             )
         }
 
-    }
-}
-
-/** GPU path: TextureView is the EGL window; MediaCodec writes an OES SurfaceTexture. */
-private class EffectsFeedListener(
-    private val host: TextureView,
-    private val session: LiveFeedEffectsSession,
-    private val onUpdated: ((TextureView) -> Unit)?,
-) : TextureView.SurfaceTextureListener {
-    override fun onSurfaceTextureAvailable(
-        surfaceTexture: SurfaceTexture,
-        width: Int,
-        height: Int,
-    ) {
-        DiagnosticCenter.log(
-            "info",
-            "feed",
-            "surface",
-            "feed: gles surface available ${width}x${height}",
-        )
-        session.attachDisplay(surfaceTexture, width, height)
-    }
-
-    override fun onSurfaceTextureSizeChanged(
-        surfaceTexture: SurfaceTexture,
-        width: Int,
-        height: Int,
-    ) {
-        session.resize(width, height)
-    }
-
-    override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-        DiagnosticCenter.log("info", "feed", "surface", "feed: gles surface destroyed")
-        session.detachDisplay()
-        return true
-    }
-
-    override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {
-        onUpdated?.invoke(host)
-    }
-}
-
-/** Hands MediaCodec a TextureView surface without resetting the GOP on teardown. */
-private class TextureFeedListener(
-    private val host: TextureView,
-    private val onSurface: (Surface) -> Unit,
-    private val onUpdated: ((TextureView) -> Unit)?,
-) : TextureView.SurfaceTextureListener {
-    private var surface: Surface? = null
-
-    override fun onSurfaceTextureAvailable(
-        surfaceTexture: SurfaceTexture,
-        width: Int,
-        height: Int,
-    ) {
-        val next = Surface(surfaceTexture)
-        surface?.release()
-        surface = next
-        onSurface(next)
-    }
-
-    override fun onSurfaceTextureSizeChanged(
-        surfaceTexture: SurfaceTexture,
-        width: Int,
-        height: Int,
-    ) = Unit
-
-    override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-        surface?.release()
-        surface = null
-        return true
-    }
-
-    override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {
-        onUpdated?.invoke(host)
     }
 }
 

@@ -76,7 +76,15 @@ LUNA_OWNED=(
   # source adapters and generation checks; donor publishers cannot be restored.
   OpenInstaCine/LiveFrameSample.swift
   OpenInstaCine/LiveScopes.swift
+  OpenInstaCine/ScopePanelPlacement.swift
+  OpenInstaCine/ScopeTraceMetalView.swift
+  OpenInstaCine/Assists/WaveformAssist.swift
+  OpenInstaCine/Assists/ParadeAssist.swift
+  OpenInstaCine/Assists/VectorscopeAssist.swift
   OpenInstaCine/HevcDecoder.swift
+  OpenInstaCine/LiveDecodeMetrics.swift
+  OpenInstaCine/VideoView.swift
+  OpenInstaCine/PlaybackAudio.swift
   OpenInstaCine/PlaybackFeed.swift
   OpenInstaCine/LiveMonitorFx.swift
   OpenInstaCine/LiveMonitorLooks.swift
@@ -87,11 +95,23 @@ LUNA_OWNED=(
   OpenInstaCine/MonitorVideoBackdrop.swift
   OpenInstaCine/Assists/AssistInspectorImageRenderer.swift
   OpenInstaCine/Assists/FalseColorAssist.swift
+  OpenInstaCine/Assists/AudioAssistStore.swift
+  OpenInstaCine/Assists/AudioAssist.swift
+  OpenInstaCine/Assists/HistogramAssist.swift
+  OpenInstaCine/Assists/PeakingAssist.swift
+  OpenInstaCine/Assists/ZebraAssist.swift
+  OpenInstaCine/Assists/DesqueezeAssist.swift
+  OpenInstaCine/Assists/NDAssist.swift
+  OpenInstaCine/Assists/TrafficLightsAssist.swift
+  OpenInstaCine/Assists/GridAssist.swift
+  OpenInstaCine/Assists/GuidesAssist.swift
+  OpenInstaCine/Assists/CrosshairAssist.swift
   OpenInstaCine/MediaPlayer.swift
   OpenInstaCine/WatcherRelayClient.swift
   OpenInstaCine/Assists/AssistInspectorPreview.swift
   OpenInstaCineTests/AssistInspectorLifecycleTests.swift
   OpenInstaCineTests/AssistInspectorPreviewTests.swift
+  OpenInstaCineTests/HistogramAssistTests.swift
   OpenInstaCineTests/DecoderGenerationTests.swift
   OpenInstaCineTests/FirstConnectTests.swift
   OpenInstaCineTests/LiveFrameSampleTests.swift

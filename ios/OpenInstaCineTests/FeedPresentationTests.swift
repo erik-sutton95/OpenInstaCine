@@ -120,6 +120,40 @@ final class FeedPresentationTests: XCTestCase {
         replacement.withLock { $0 }?(false)
     }
 
+    func testRuntimeReplacementRejectsPreviousOwnerGPUCompletion() async throws {
+        let feed = try makeFeed()
+        let drawable = try TestFeedDrawable(layer: feed.layer as! CAMetalLayer)
+        let retired = MonitorLiveVideoRuntime()
+        retired.processedFeed = feed
+        let submitted = expectation(description: "Previous owner submitted GPU work")
+        let oldCompletion = OSAllocatedUnfairLock<(@Sendable (Bool) -> Void)?>(initialState: nil)
+        feed.presentOperations.acquire = { _ in drawable }
+        feed.presentOperations.submit = { _, _, completed in
+            oldCompletion.withLock { $0 = completed }
+            submitted.fulfill()
+        }
+        XCTAssertTrue(feed.display(picture, timeNs: 10))
+        await fulfillment(of: [submitted], timeout: 3)
+        let successor = MonitorLiveVideoRuntime()
+        successor.processedFeed = feed
+        retired.close()
+        try XCTUnwrap(oldCompletion.withLock { $0 })(true)
+        await MainActor.run {}
+        await Task.yield()
+        XCTAssertFalse(feed.hasPresentedFrame, "Old GPU work cannot claim the replacement's picture")
+        XCTAssertNil(feed.lastPresentedTimeNs)
+        XCTAssertNil(successor.health.lastPresentedAt)
+
+        let current = expectation(description: "Replacement owner presents")
+        feed.onSuccessfulPresent = { current.fulfill() }
+        feed.presentOperations.submit = { _, _, completed in completed(true) }
+        XCTAssertTrue(feed.display(picture, timeNs: 20))
+        await fulfillment(of: [current], timeout: 3)
+        XCTAssertEqual(feed.lastPresentedTimeNs, 20)
+        XCTAssertEqual(feed.presentedFrames, 1, "Old completion releases its flight without counting a new present")
+        successor.close()
+    }
+
     func testPresentationJournalReportsSilenceAfterAWindowOfPicture() throws {
         var metrics = FeedPresentationMetrics(startedAt: 0)
         for tick in 1...25 { metrics.notePresented(at: Double(tick) / 25) }

@@ -58,8 +58,7 @@ final class TrafficLightsAssistTests: XCTestCase {
             "red over (clip), green balanced, blue under (crush)")
     }
 
-    /// HISTO and TL each carry a copy of OpenZCine `CrushClipCompensation`; one table
-    /// holds both to the same stops, labels, lenient decode, and core-meter threshold.
+    /// HISTO and TL use one common table of stops, labels, lenient decode and meter threshold.
     func testCrushClipCompensationMatchesAcrossHistoAndLights() throws {
         let histo = try Self.compensationRow(HistogramAssist.CrushClipCompensation.self)
         let lights = try Self.compensationRow(TrafficLightsAssist.CrushClipCompensation.self)
@@ -150,4 +149,4 @@ where RawValue == Int {
 }
 
 extension HistogramAssist.CrushClipCompensation: CrushClipCompensationRow {}
-extension TrafficLightsAssist.CrushClipCompensation: CrushClipCompensationRow {}
+// HISTO and LIGHTS now alias the same common compensation type.

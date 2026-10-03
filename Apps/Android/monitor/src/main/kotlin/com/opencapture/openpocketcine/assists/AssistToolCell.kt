@@ -97,30 +97,5 @@ internal fun AssistScrollChevron(leading: Boolean, visible: Boolean, modifier: M
 /** The supplied design owns assist glyphs; EV uses its readable abbreviation. */
 @Composable
 internal fun AssistToolGlyph(tool: LiveAssistTool, tint: Color, modifier: Modifier = Modifier,
-    evFontSize: Float = 13.3f) {
-    val icon = when (tool) {
-        LiveAssistTool.LUT -> com.opencapture.monitorui.MonitorAssistIcon.LUT
-        LiveAssistTool.PEAK -> com.opencapture.monitorui.MonitorAssistIcon.PEAKING
-        LiveAssistTool.FALSE -> com.opencapture.monitorui.MonitorAssistIcon.FALSE_COLOR
-        LiveAssistTool.ZEBRA -> com.opencapture.monitorui.MonitorAssistIcon.ZEBRA
-        LiveAssistTool.WAVE -> com.opencapture.monitorui.MonitorAssistIcon.WAVEFORM
-        LiveAssistTool.PARADE -> com.opencapture.monitorui.MonitorAssistIcon.RGB_PARADE
-        LiveAssistTool.HISTO -> com.opencapture.monitorui.MonitorAssistIcon.HISTOGRAM
-        LiveAssistTool.VECTOR -> com.opencapture.monitorui.MonitorAssistIcon.VECTORSCOPE
-        LiveAssistTool.LIGHTS -> com.opencapture.monitorui.MonitorAssistIcon.TRAFFIC_LIGHTS
-        LiveAssistTool.GUIDES -> com.opencapture.monitorui.MonitorAssistIcon.FRAME_GUIDE
-        LiveAssistTool.GRID -> com.opencapture.monitorui.MonitorAssistIcon.GRID
-        LiveAssistTool.CROSS -> com.opencapture.monitorui.MonitorAssistIcon.CROSSHAIR
-        LiveAssistTool.LEVEL -> com.opencapture.monitorui.MonitorAssistIcon.LEVEL
-        LiveAssistTool.MIRROR -> com.opencapture.monitorui.MonitorAssistIcon.MIRROR
-        LiveAssistTool.AUDIO -> com.opencapture.monitorui.MonitorAssistIcon.AUDIO_METERS
-        LiveAssistTool.ND, LiveAssistTool.EV, LiveAssistTool.DESQ -> null
-    }
-    if (tool == LiveAssistTool.EV) {
-        Box(modifier, contentAlignment = Alignment.Center) {
-            Text("EV", style = LiveType.ui(evFontSize, FontWeight.SemiBold), color = tint, maxLines = 1)
-        }
-    } else if (tool == LiveAssistTool.DESQ) OpcIcon(OpcIcon.CHEVRONS_UP_DOWN, null, modifier.rotate(90f), tint)
-    else if (icon == null) OpcIcon(OpcIcon.APERTURE, null, modifier, tint)
-    else com.opencapture.monitorui.MonitorAssistIcon(icon, tint, modifier)
-}
+    evFontSize: Float = 13.3f) =
+    com.opencapture.monitorui.MonitorAssistToolGlyph(tool, tint, modifier, evFontSize)

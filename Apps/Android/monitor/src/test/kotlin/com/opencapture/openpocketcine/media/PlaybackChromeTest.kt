@@ -185,6 +185,18 @@ class PlaybackChromeTest {
     }
 
     @Test
+    fun signed32FullScaleKeepsBothChannelMagnitudes() {
+        val buffer = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putInt(Int.MIN_VALUE)
+            putInt(Int.MAX_VALUE)
+            rewind()
+        }
+        val peaks = PlaybackPcmPeaks.ingest(buffer, androidx.media3.common.C.ENCODING_PCM_32BIT, 2)
+        assertEquals(1f, peaks.first, 0.000001f)
+        assertEquals(1f, peaks.second, 0.000001f)
+    }
+
+    @Test
     fun metersMuteWhileConformingAndKeepPeaksOtherwise() {
         val box = AudioLevelTapBox()
         box.ingest(0.9f, 0.4f)

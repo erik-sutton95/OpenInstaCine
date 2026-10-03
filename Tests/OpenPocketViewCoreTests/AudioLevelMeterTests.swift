@@ -2,47 +2,6 @@ import Testing
 
 @testable import OpenPocketViewCore
 
-@Suite("Audio meter dBFS conversion")
-struct AudioMeterDecibelTests {
-    /// Full scale reads 0 dB, half amplitude −6 dB; silence and overdrive clamp.
-    @Test(
-        arguments: [
-            (1, 0), (0.5, -6.0206), (2, 0),
-            (0, AudioMeterBallistics.floorDB), (-1, AudioMeterBallistics.floorDB),
-            (0.000_01, AudioMeterBallistics.floorDB),
-        ] as [(Double, Double)])
-    func linearMapsToDecibels(linear: Double, decibels: Double) {
-        #expect(abs(AudioMeterBallistics.decibels(fromLinear: linear) - decibels) < 0.01)
-    }
-}
-
-@Suite("Audio meter ballistics")
-struct AudioMeterBallisticsTests {
-    @Test func attackIsInstant() {
-        let next = AudioMeterBallistics.step(.silent, peakLinear: 1, dt: 0.04)
-        #expect(next.levelDB == 0)
-        #expect(next.peakDB == 0)
-        #expect(next.peakAge == 0)
-    }
-
-    @Test func levelDecaysAtTheDocumentedRate() {
-        let loud = AudioMeterBallistics.step(.silent, peakLinear: 1, dt: 0.04)
-        let dt = 0.5
-        let next = AudioMeterBallistics.step(loud, peakLinear: 0, dt: dt)
-        #expect(abs(next.levelDB - (-AudioMeterBallistics.levelDecayPerSecond * dt)) < 1e-9)
-    }
-
-    @Test func peakHoldsThroughTheHoldWindowThenDecays() {
-        var channel = AudioMeterBallistics.step(.silent, peakLinear: 1, dt: 0.04)
-        channel = AudioMeterBallistics.step(channel, peakLinear: 0, dt: 1.0)
-        #expect(channel.peakDB == 0)
-        #expect(channel.levelDB < 0)
-        channel = AudioMeterBallistics.step(channel, peakLinear: 0, dt: 1.0)
-        #expect(channel.peakAge > AudioMeterBallistics.peakHoldSeconds)
-        #expect(channel.peakDB < 0)
-    }
-}
-
 @Suite("cam_audio_status_v2")
 struct CamAudioStatusTests {
     /// live1.pcap — room tone, left=2 right=2 (114 B).

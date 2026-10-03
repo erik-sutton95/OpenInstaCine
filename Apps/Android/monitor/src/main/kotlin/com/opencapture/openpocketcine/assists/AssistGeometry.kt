@@ -5,7 +5,7 @@ import com.opencapture.openpocketcine.feed.fromColorMode
 import com.opencapture.openpocketcine.feed.LiveColorScience
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeDisplayScale
-import com.opencapture.opencine.media.ScopeExposureCeiling
+import com.opencapture.openpocketcine.feed.ScopeExposureCeiling
 import com.opencapture.opencine.media.ScopeClipSource
 import com.opencapture.openpocketcine.feed.WaveformIre
 import com.opencapture.openpocketcine.session.CameraStatus
@@ -15,141 +15,20 @@ import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-data class AssistPoint(val x: Float, val y: Float)
+typealias AssistPoint = com.opencapture.monitorui.MonitorScopePoint
+typealias AssistSize = com.opencapture.monitorui.MonitorScopeSize
+typealias AssistRect = com.opencapture.monitorui.MonitorScopeRect
+typealias StoredCenter = com.opencapture.monitorui.MonitorScopeStoredCenter
+typealias ScopeGuides = com.opencapture.monitorui.MonitorScopeGuides
+typealias ScopePanelSize = com.opencapture.monitorui.MonitorScopePanelSize
 
-data class AssistSize(val width: Float, val height: Float)
+typealias GridSegment = com.opencapture.monitorui.MonitorGridSegment
 
-data class AssistRect(val x: Float, val y: Float, val width: Float, val height: Float) {
-    val minX: Float
-        get() = x
-    val minY: Float
-        get() = y
-    val maxX: Float
-        get() = x + width
-    val maxY: Float
-        get() = y + height
-    val midX: Float
-        get() = x + width / 2f
-    val midY: Float
-        get() = y + height / 2f
+typealias GridAssist = com.opencapture.monitorui.MonitorGridGeometry
 
-    fun contains(px: Float, py: Float): Boolean = px in minX..maxX && py in minY..maxY
+typealias GuidesAssist = com.opencapture.monitorui.MonitorGuideGeometry
 
-    /** Aspect-fit a picture of `aspect` (width/height) inside this rect. */
-    fun fittedContent(aspect: Float): AssistRect {
-        val ratio = if (aspect.isFinite() && aspect > 0f) aspect else 16f / 9f
-        if (height <= 0f) return this
-        return if (width / height > ratio) {
-            val w = height * ratio
-            AssistRect(x + (width - w) / 2f, y, w, height)
-        } else {
-            val h = width / ratio
-            AssistRect(x, y + (height - h) / 2f, width, h)
-        }
-    }
-}
-
-data class GridSegment(val from: AssistPoint, val to: AssistPoint)
-
-data class StoredCenter(val xFraction: Double, val yFraction: Double) {
-    constructor(center: AssistPoint, bounds: AssistRect) : this(
-        ((center.x - bounds.minX) / maxOf(bounds.width, 1f)).toDouble(),
-        ((center.y - bounds.minY) / maxOf(bounds.height, 1f)).toDouble(),
-    )
-
-    fun center(bounds: AssistRect): AssistPoint =
-        AssistPoint(
-            bounds.minX + xFraction.toFloat() * bounds.width,
-            bounds.minY + yFraction.toFloat() * bounds.height,
-        )
-}
-
-data class ScopeGuides(
-    val clip: Boolean = true,
-    val crush: Boolean = true,
-    val middle: Boolean = true,
-)
-
-object ScopePanelSize {
-    val waveform = AssistSize(250f, 153f)
-    val parade = AssistSize(250f, 153f)
-    val histogram = AssistSize(250f, 77f)
-    val vectorscope = AssistSize(190f, 190f)
-    val trafficLights = AssistSize(74f, 168f)
-    val ndMeter = AssistSize(84f, 30f)
-    val audio = AssistSize(28f, 168f)
-    val falseColorReference = AssistSize(264f, 52f)
-}
-
-object GridAssist {
-    val thirdsFractions = floatArrayOf(1f / 3f, 2f / 3f)
-    val phiFractions = floatArrayOf(0.382f, 0.618f)
-    const val STROKE_OPACITY = 0.22f
-    const val STROKE_WIDTH_DP = 1f
-    val optionLabels = listOf("Thirds", "Phi Grid", "Diagonal")
-
-    fun segments(
-        feed: AssistRect,
-        thirds: Boolean,
-        phi: Boolean,
-        diagonal: Boolean,
-    ): List<GridSegment> {
-        val lines = ArrayList<GridSegment>(12)
-        if (thirds) appendFractions(feed, thirdsFractions, lines)
-        if (phi) appendFractions(feed, phiFractions, lines)
-        if (diagonal) {
-            lines +=
-                GridSegment(
-                    AssistPoint(feed.minX, feed.minY),
-                    AssistPoint(feed.maxX, feed.maxY),
-                )
-            lines +=
-                GridSegment(
-                    AssistPoint(feed.maxX, feed.minY),
-                    AssistPoint(feed.minX, feed.maxY),
-                )
-        }
-        return lines
-    }
-
-    private fun appendFractions(feed: AssistRect, fractions: FloatArray, lines: MutableList<GridSegment>) {
-        for (fraction in fractions) {
-            val x = feed.minX + feed.width * fraction
-            val y = feed.minY + feed.height * fraction
-            lines += GridSegment(AssistPoint(x, feed.minY), AssistPoint(x, feed.maxY))
-            lines += GridSegment(AssistPoint(feed.minX, y), AssistPoint(feed.maxX, y))
-        }
-    }
-}
-
-object GuidesAssist {
-    /** Letterbox when the guide is wider than the feed, pillarbox when narrower. */
-    fun rectForRatio(feed: AssistRect, ratio: Float): AssistRect {
-        val width: Float
-        val height: Float
-        if (feed.height <= 0f || ratio <= 0f) return feed
-        if (feed.width / feed.height > ratio) {
-            height = feed.height
-            width = feed.height * ratio
-        } else {
-            width = feed.width
-            height = feed.width / ratio
-        }
-        return AssistRect(
-            feed.minX + (feed.width - width) / 2f,
-            feed.minY + (feed.height - height) / 2f,
-            width,
-            height,
-        )
-    }
-}
-
-object CrosshairAssist {
-    const val ARM_LENGTH_DP = 40f
-    const val STROKE_WIDTH_DP = 1.4f
-    const val OPACITY = 0.65f
-    const val HELP = "Tap the toolbar button to show or hide the centre crosshair."
-}
+typealias CrosshairAssist = com.opencapture.monitorui.MonitorCrosshairGeometry
 
 object MirrorAssist {
     const val EXPLANATION =
@@ -243,13 +122,13 @@ object WaveformAxis {
 }
 
 object HistogramAssist {
-    const val PANEL_TITLE = "Histo"
-    const val CHIP = "RGBL"
-    const val CLIP_ZONE_IRE = 95.0
-    const val TRAFFIC_LAMP_WIDTH = 7.5f
-    const val TRAFFIC_LAMP_HEIGHT = 15f
-    const val TRAFFIC_OUTER_PAD = 6f
-    const val TRAFFIC_LINE_GAP = 4f
+    const val PANEL_TITLE = com.opencapture.monitorui.MonitorHistogramGeometry.PANEL_TITLE
+    const val CHIP = com.opencapture.monitorui.MonitorHistogramGeometry.CHIP
+    const val CLIP_ZONE_IRE = com.opencapture.monitorui.MonitorHistogramGeometry.CLIP_ZONE_IRE
+    const val TRAFFIC_LAMP_WIDTH = com.opencapture.monitorui.MonitorHistogramGeometry.TRAFFIC_LAMP_WIDTH
+    const val TRAFFIC_LAMP_HEIGHT = com.opencapture.monitorui.MonitorHistogramGeometry.TRAFFIC_LAMP_HEIGHT
+    const val TRAFFIC_OUTER_PAD = com.opencapture.monitorui.MonitorHistogramGeometry.TRAFFIC_OUTER_PAD
+    const val TRAFFIC_LINE_GAP = com.opencapture.monitorui.MonitorHistogramGeometry.TRAFFIC_LINE_GAP
     const val TRAFFIC_LIGHTS_TITLE = "Traffic Lights"
     const val TRAFFIC_LIGHTS_HELP = "Show small RGB edge blocks for crushed and clipped channels. Clip lights from about a third of a stop under the camera's clip, the same point zebra 100% and CineStop use."
     const val COMPENSATION_TITLE = "Crush/Clip Compensation"
@@ -260,15 +139,8 @@ object HistogramAssist {
         get() = TRAFFIC_OUTER_PAD + TRAFFIC_LAMP_WIDTH + TRAFFIC_LINE_GAP
 
     fun plotRect(width: Float, height: Float, density: Float = 1f): AssistRect {
-        val gutter = trafficGutter * density
-        val title = WaveformAxis.TITLE_HEIGHT * density
-        val bottom = WaveformAxis.BOTTOM_PAD * density
-        return AssistRect(
-            gutter,
-            title,
-            maxOf(1f, width - gutter * 2f),
-            maxOf(1f, height - title - bottom),
-        )
+        val rect = com.opencapture.monitorui.MonitorHistogramGeometry.plotRect(width, height, density)
+        return AssistRect(rect.left, rect.top, rect.width, rect.height)
     }
 
     fun plotX(ire: Double, rect: AssistRect, density: Float = 1f): Float =
@@ -304,205 +176,30 @@ object VectorscopeAssist {
 }
 
 object VectorscopeGraticule {
-    const val SKIN_ANGLE_DEGREES = 123.0
-    const val SKIN_LENGTH = 0.92
-    const val BOX_SIDE = 7f
-    const val LABEL_PUSH = 10f
-    const val CROSS_ARM = 8f
-    data class Target(val label: String, val red: Int, val green: Int, val blue: Int)
-
-    val targets =
-        listOf(
-            Target("R", 191, 0, 0),
-            Target("Mg", 191, 0, 191),
-            Target("B", 0, 0, 191),
-            Target("Cy", 0, 191, 191),
-            Target("G", 0, 191, 0),
-            Target("Yl", 191, 191, 0),
-        )
-
-    fun plotSquare(width: Float, height: Float, density: Float = 1f): AssistRect {
-        val sidePad = 6f * density
-        val title = 26f * density
-        val bottom = 8f * density
-        val plot =
-            AssistRect(
-                sidePad,
-                title,
-                width - sidePad * 2f,
-                maxOf(1f, height - title - bottom),
-            )
-        val side = minOf(plot.width, plot.height)
-        return AssistRect(plot.midX - side / 2f, plot.midY - side / 2f, side, side)
-    }
-
-    fun skinEnd(rect: AssistRect): AssistPoint {
-        val radius = rect.width / 2f
-        val angle = Math.toRadians(SKIN_ANGLE_DEGREES)
-        return AssistPoint(
-            rect.midX + (cos(angle) * radius * SKIN_LENGTH).toFloat(),
-            rect.midY - (sin(angle) * radius * SKIN_LENGTH).toFloat(),
-        )
-    }
-
-    fun rec709Chroma(red: Double, green: Double, blue: Double): Pair<Double, Double> {
-        val y = 0.2126 * red + 0.7152 * green + 0.0722 * blue
-        return (blue - y) / 1.8556 to (red - y) / 1.5748
-    }
-
-    fun targetCenter(red: Int, green: Int, blue: Int, rect: AssistRect): AssistPoint {
-        val chroma = rec709Chroma(red / 255.0, green / 255.0, blue / 255.0)
-        return AssistPoint(
-            rect.midX + chroma.first.toFloat() * rect.width,
-            rect.midY - chroma.second.toFloat() * rect.height,
-        )
-    }
-}
-
-object TrafficLightsAssist {
-    const val METER_TITLE = "TL"
-    const val TITLE_SIZE = 8.5f
-    const val TITLE_SPACING = 6f
-    const val COLUMN_SPACING = 6f
-    const val POST_SPACING = 4f
-    const val PANEL_PAD = 8f
-    const val TRACK_WIDTH = 11f
-    const val COLUMN_HEIGHT = 108f
-    const val INDICATOR_SIZE = 8f
-    const val TRACK_CORNER = 2f
-    const val MIN_BAR_HEIGHT = 1.5f
-    const val CENTER_LINE_FACTOR = 0.85f
-    const val BALANCE_CENTER = 0.5
-    const val BALANCE_DEAD_ZONE = 0.03
-    val meterRedRGB = Triple(255.0, 92.0, 82.0)
-    val meterGreenRGB = Triple(86.0, 235.0, 132.0)
-    val meterBlueRGB = Triple(96.0, 158.0, 255.0)
-
-    enum class BarSide {
-        NEUTRAL,
-        OVER,
-        UNDER,
-    }
-
-    data class ChannelDisplay(val side: BarSide, val barFill: Double) {
-        companion object {
-            val neutral = ChannelDisplay(BarSide.NEUTRAL, 0.0)
+    const val SKIN_ANGLE_DEGREES = com.opencapture.monitorui.MonitorVectorscopeGraticule.SKIN_ANGLE_DEGREES
+    const val SKIN_LENGTH = com.opencapture.monitorui.MonitorVectorscopeGraticule.SKIN_LENGTH
+    const val BOX_SIDE = com.opencapture.monitorui.MonitorVectorscopeGraticule.BOX_SIDE
+    const val LABEL_PUSH = com.opencapture.monitorui.MonitorVectorscopeGraticule.LABEL_PUSH
+    const val CROSS_ARM = com.opencapture.monitorui.MonitorVectorscopeGraticule.CROSS_ARM
+    val targets = com.opencapture.monitorui.MonitorVectorscopeGraticule.targets
+    fun plotSquare(width: Float, height: Float, density: Float = 1f): AssistRect =
+        com.opencapture.monitorui.MonitorVectorscopeGraticule.plotSquare(width, height, density).let {
+            AssistRect(it.x, it.y, it.width, it.height)
         }
-    }
-
-    fun channelDisplay(
-        level: Double,
-        center: Double = BALANCE_CENTER,
-        deadZone: Double = BALANCE_DEAD_ZONE,
-    ): ChannelDisplay {
-        val deviation = level - center
-        if (abs(deviation) <= deadZone) return ChannelDisplay.neutral
-        return if (deviation > 0) {
-            val span = maxOf(1 - center, Double.MIN_VALUE)
-            ChannelDisplay(BarSide.OVER, minOf(1.0, deviation / span))
-        } else {
-            val span = maxOf(center, Double.MIN_VALUE)
-            ChannelDisplay(BarSide.UNDER, minOf(1.0, abs(deviation) / span))
+    fun skinEnd(rect: AssistRect): AssistPoint =
+        com.opencapture.monitorui.MonitorVectorscopeGraticule.skinEnd(rect.scopeRect()).let { AssistPoint(it.x, it.y) }
+    fun rec709Chroma(red: Double, green: Double, blue: Double): Pair<Double, Double> =
+        com.opencapture.opencine.media.ScopeChroma.rec709(red, green, blue)
+    fun targetCenter(red: Int, green: Int, blue: Int, rect: AssistRect): AssistPoint =
+        com.opencapture.monitorui.MonitorVectorscopeGraticule.targetCenter(red, green, blue, rect.scopeRect()).let {
+            AssistPoint(it.x, it.y)
         }
-    }
+    private fun AssistRect.scopeRect() = com.opencapture.monitorui.MonitorScopeRect(x, y, width, height)
 }
 
-object MovablePanelMath {
-    const val HOLD_SECONDS = 0.3
-    const val POSITION_GRID = 4f
-    const val SCALE_MIN = 0.6
-    const val SCALE_MAX = 1.6
-    /** Thumb well for the L-corner. Larger than iOS 56 so the grip is easy to hit. */
-    const val GRIP_HIT_DP = 90f
-    /** iOS `WaveformAssist.gripVisualSize` — L-bracket stroke size. */
-    const val GRIP_VISUAL_DP = 14f
-    /** How far the L drawing sits past the clip (iOS `gripExteriorGap`). */
-    const val GRIP_EXTERIOR_GAP_DP = 2f
-    /** How much of [GRIP_HIT_DP] hangs off the panel (outside the clip). */
-    const val GRIP_EXTERIOR_DP = 40f
-    const val GRIP_BOTTOM_EXTERIOR_DP = 12f
-    const val MIN_GRIP_HIT_DP = 44f
-    const val DRAG_HIT_PADDING_DP = 10f
 
-    val gripPadDp: Float
-        get() = GRIP_EXTERIOR_DP
 
-    /** Top-leading of the hit well: [GRIP_EXTERIOR_DP] past the clip, rest on the plate. */
-    fun gripHitSize(panelWidth: Float, panelHeight: Float): Float =
-        maxOf(MIN_GRIP_HIT_DP, minOf(GRIP_HIT_DP, panelWidth + GRIP_EXTERIOR_DP,
-            panelHeight + GRIP_BOTTOM_EXTERIOR_DP))
-
-    fun gripHitOrigin(panelWidth: Float, panelHeight: Float): AssistPoint {
-        val hit = gripHitSize(panelWidth, panelHeight)
-        return AssistPoint(panelWidth - hit + GRIP_EXTERIOR_DP,
-            panelHeight - hit + GRIP_BOTTOM_EXTERIOR_DP)
-    }
-
-    /** Extra wrapper space above/left of a small body, so Compose does not shrink the target. */
-    fun gripOverhang(panelWidth: Float, panelHeight: Float): AssistPoint {
-        val origin = gripHitOrigin(panelWidth, panelHeight)
-        return AssistPoint(maxOf(0f, -origin.x), maxOf(0f, -origin.y))
-    }
-
-    /** Top-leading of the 14 dp L inside the hit well, 2 dp outside the clip. */
-    fun gripVisualOrigin(hitSize: Float = GRIP_HIT_DP): AssistPoint {
-        val x = hitSize - GRIP_EXTERIOR_DP + GRIP_EXTERIOR_GAP_DP - GRIP_VISUAL_DP
-        val y = hitSize - GRIP_BOTTOM_EXTERIOR_DP + GRIP_EXTERIOR_GAP_DP - GRIP_VISUAL_DP
-        return AssistPoint(x, y)
-    }
-
-    fun clampedScale(value: Double): Double = value.coerceIn(SCALE_MIN, SCALE_MAX)
-
-    fun panelSize(base: AssistSize, scale: Double): AssistSize {
-        val clamped = clampedScale(scale)
-        return AssistSize(round(base.width * clamped.toFloat()), round(base.height * clamped.toFloat()))
-    }
-
-    fun clamp(point: AssistPoint, size: AssistSize, bounds: AssistRect): AssistPoint {
-        val halfW = size.width / 2f
-        val halfH = size.height / 2f
-        return AssistPoint(
-            point.x.coerceIn(bounds.minX + halfW, maxOf(bounds.minX + halfW, bounds.maxX - halfW)),
-            point.y.coerceIn(bounds.minY + halfH, maxOf(bounds.minY + halfH, bounds.maxY - halfH)),
-        )
-    }
-
-    /** Pixel bounds fit the body horizontally and reserve the resize well vertically. */
-    fun fittedSize(preferred: AssistSize, bounds: AssistRect, grip: Float): AssistSize {
-        val bottomGrip = grip * GRIP_BOTTOM_EXTERIOR_DP / GRIP_EXTERIOR_DP
-        val factor = minOf(1f, maxOf(1f, bounds.width) / maxOf(1f, preferred.width),
-            maxOf(1f, bounds.height - bottomGrip) / maxOf(1f, preferred.height))
-        return AssistSize(maxOf(1f, kotlin.math.floor(preferred.width * factor)),
-            maxOf(1f, kotlin.math.floor(preferred.height * factor)))
-    }
-
-    fun clampWithGrip(point: AssistPoint, size: AssistSize, bounds: AssistRect, grip: Float): AssistPoint {
-        val density = grip / GRIP_EXTERIOR_DP
-        val bottomGrip = GRIP_BOTTOM_EXTERIOR_DP * density
-        val hit = gripHitSize(size.width / density, size.height / density) * density
-        // Equal body margins; the visible corner fits the padding, while its expanded
-        // touch well may extend beyond the side boundary or beneath fixed controls.
-        val minX = bounds.minX + size.width / 2
-        val minY = bounds.minY + maxOf(size.height / 2, hit - bottomGrip - size.height / 2)
-        return AssistPoint(point.x.coerceIn(minX, maxOf(minX, bounds.maxX - size.width / 2)),
-            point.y.coerceIn(minY, maxOf(minY, bounds.maxY - size.height / 2 - bottomGrip)))
-    }
-
-    fun snap(point: AssistPoint, grid: Float = POSITION_GRID): AssistPoint =
-        AssistPoint(round(point.x / grid) * grid, round(point.y / grid) * grid)
-
-    fun resolvedCenter(
-        session: AssistPoint?,
-        stored: StoredCenter?,
-        defaultCenter: AssistPoint,
-        size: AssistSize,
-        bounds: AssistRect,
-    ): AssistPoint {
-        if (session != null) return clamp(session, size, bounds)
-        if (stored != null) return clamp(stored.center(bounds), size, bounds)
-        return clamp(defaultCenter, size, bounds)
-    }
-}
+typealias MovablePanelMath = com.opencapture.monitorui.MonitorScopePanelMath
 
 object FalseColorBands {
     data class Band(

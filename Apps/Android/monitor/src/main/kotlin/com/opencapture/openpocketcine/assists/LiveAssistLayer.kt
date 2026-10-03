@@ -348,72 +348,18 @@ private fun scopePanelShape() = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.d
 
 @Composable
 private fun GuidesOverlay(state: LiveAssistState, feed: AssistRect) {
-    val selected = state.selectedGuides.ifEmpty { setOf(state.guideAspect) }
-    val frames =
-        selected.sortedBy { it.ratio }.map { it to GuidesAssist.rectForRatio(feed, it.ratio) }
-    Canvas(Modifier.fillMaxSize()) {
-        if (state.guideMask && frames.isNotEmpty()) {
-            val mask = Color.Black.copy(alpha = 0.6f)
-            val holes = frames.map { it.second }
-            val minL = holes.minOf { it.minX }
-            val maxR = holes.maxOf { it.maxX }
-            val minT = holes.minOf { it.minY }
-            val maxB = holes.maxOf { it.maxY }
-            drawRect(mask, Offset(feed.minX, feed.minY), Size(feed.width, (minT - feed.minY).coerceAtLeast(0f)))
-            drawRect(mask, Offset(feed.minX, maxB), Size(feed.width, (feed.maxY - maxB).coerceAtLeast(0f)))
-            drawRect(mask, Offset(feed.minX, minT), Size((minL - feed.minX).coerceAtLeast(0f), (maxB - minT).coerceAtLeast(0f)))
-            drawRect(mask, Offset(maxR, minT), Size((feed.maxX - maxR).coerceAtLeast(0f), (maxB - minT).coerceAtLeast(0f)))
-        }
-        for ((aspect, frame) in frames) {
-            drawRect(
-                LiveDesign.accent.copy(alpha = 0.85f),
-                Offset(frame.minX, frame.minY),
-                Size(frame.width, frame.height),
-                style = Stroke(1.dp.toPx()),
-            )
-        }
-    }
-    frames.forEach { (aspect, frame) ->
-        Text(
-            aspect.label,
-            color = LiveDesign.accent,
-            fontSize = 10.sp,
-            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.2.sp,
-            modifier =
-                Modifier
-                    .offset { IntOffset((frame.minX + 34f).roundToInt(), (frame.minY + 13f).roundToInt()) }
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(Color.Black.copy(alpha = 0.42f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-        )
-    }
+    com.opencapture.monitorui.MonitorAspectGuideFrames(
+        state.selectedGuides.ifEmpty { setOf(state.guideAspect) }, feed, state.guideMask)
 }
 
 @Composable
 private fun GridOverlay(state: LiveAssistState, feed: AssistRect) {
-    val lines = GridAssist.segments(feed, state.gridThirds, state.gridPhi, state.gridDiagonal)
-    Canvas(Modifier.fillMaxSize()) {
-        val stroke = GridAssist.STROKE_WIDTH_DP.dp.toPx()
-        val color = Color.White.copy(alpha = GridAssist.STROKE_OPACITY)
-        for (segment in lines) {
-            drawLine(color, Offset(segment.from.x, segment.from.y), Offset(segment.to.x, segment.to.y), stroke)
-        }
-    }
+    com.opencapture.monitorui.MonitorFeedGrid(feed, state.gridThirds, state.gridPhi, state.gridDiagonal)
 }
 
 @Composable
 private fun CrosshairOverlay(feed: AssistRect) {
-    Canvas(Modifier.fillMaxSize()) {
-        val color = Color.White.copy(alpha = CrosshairAssist.OPACITY)
-        val arm = CrosshairAssist.ARM_LENGTH_DP.dp.toPx()
-        val stroke = CrosshairAssist.STROKE_WIDTH_DP.dp.toPx()
-        val cx = feed.midX
-        val cy = feed.midY
-        drawRect(color, Offset(cx - stroke / 2f, cy - arm / 2f), Size(stroke, arm))
-        drawRect(color, Offset(cx - arm / 2f, cy - stroke / 2f), Size(arm, stroke))
-    }
+    com.opencapture.monitorui.MonitorFeedCrosshair(feed)
 }
 
 @Composable
@@ -442,81 +388,17 @@ internal fun FalseColorReferenceRuler(state: LiveAssistState, colorMode: Int, mo
         } else {
             emptyList()
         }
-    val axis = FalseColorReference.axisLabels(state.falseColorScale)
-    val curve = FalseColorReference.curveKeyLabel(colorMode, rec709)
-    Box(
-        modifier
-            .size(ScopePanelSize.falseColorReference.width.dp, ScopePanelSize.falseColorReference.height.dp)
-            .clip(RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp))
-            .monitorMaterial(MonitorMaterial.Scope)
-            .padding(7.dp),
-    ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val barH = 8.dp.toPx()
-            val barY = 14.dp.toPx()
-            val barW = size.width
-            drawRect(Color.White.copy(alpha = 0.12f), Offset(0f, barY), Size(barW, barH))
-            for (segment in segments) {
-                val lo = segment.lowerFraction.toFloat()
-                val hi = segment.upperFraction.toFloat()
-                drawRect(
-                    Color(
-                        segment.band.red.toFloat(),
-                        segment.band.green.toFloat(),
-                        segment.band.blue.toFloat(),
-                    ),
-                    Offset(barW * lo, barY),
-                    Size(maxOf(1f, barW * (hi - lo)), barH),
-                )
-            }
-        }
-        Text(
-            "False Color",
-            color = LiveDesign.text,
-            fontSize = 8.5.sp,
-            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.TopStart),
-        )
-        Text(
-            "${state.falseColorScale.menuLabel} · $curve",
-            color = LiveDesign.muted,
-            fontSize = 7.5.sp,
-            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-            modifier = Modifier.align(Alignment.TopEnd),
-        )
-        if (markers.isNotEmpty()) {
-            Box(Modifier.align(Alignment.BottomStart).fillMaxSize().padding(top = 26.dp)) {
-                markers.forEach { marker ->
-                    Text(
-                        marker.label,
-                        color = LiveDesign.muted,
-                        fontSize = 5.5.sp,
-                        fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-                        modifier =
-                            Modifier.offset(
-                                x = (ScopePanelSize.falseColorReference.width * marker.fraction.toFloat() - 10f).dp,
-                                y = 0.dp,
-                            ),
-                    )
-                }
-            }
-        } else if (axis.isNotEmpty()) {
-            Row(
-                Modifier.align(Alignment.BottomStart).fillMaxSize().padding(top = 26.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                axis.forEach { label ->
-                    Text(
-                        label,
-                        color = LiveDesign.muted,
-                        fontSize = 5.5.sp,
-                        fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-                    )
-                }
-            }
-        }
-    }
+    com.opencapture.monitorui.MonitorFalseColorReference(
+        com.opencapture.monitorui.MonitorFalseColorReferenceValues(
+            subtitle = "${state.falseColorScale.menuLabel} · ${FalseColorReference.curveKeyLabel(colorMode, rec709)}",
+            segments = segments.mapIndexed { index, segment ->
+                com.opencapture.monitorui.MonitorFalseColorReferenceSegment(index,
+                    segment.lowerFraction, segment.upperFraction, segment.band.red, segment.band.green, segment.band.blue)
+            },
+            markers = markers.mapIndexed { index, marker ->
+                com.opencapture.monitorui.MonitorFalseColorReferenceMarker(index, marker.label, marker.fraction)
+            },
+            axisLabels = FalseColorReference.axisLabels(state.falseColorScale)), modifier)
 }
 
 private fun panelPx(

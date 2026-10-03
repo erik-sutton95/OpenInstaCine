@@ -21,6 +21,13 @@ internal class LiveFeedEffectsSession(context: Context, scopeBus: LiveScopeSampl
         onFirstFrame = onFirstFrame, letterboxSource = letterboxSource,
         notifySurfaceOnMain = notifySurfaceOnMain, onFramePresented = { onFramePresented(it ?: 0) },
         playback = playback, backdrop = backdrop?.native)
+    val pictureProgram: com.opencapture.opencine.runtime.MonitorTexturePictureProgram =
+        object : com.opencapture.opencine.runtime.MonitorTexturePictureProgram {
+            override fun attach(texture: SurfaceTexture, width: Int, height: Int) =
+                runtime.attachDisplay(texture, width, height)
+            override fun resize(width: Int, height: Int) = runtime.resize(width, height)
+            override fun detach() = runtime.detachDisplay()
+        }
     fun setStretchToRect(enabled: Boolean) = runtime.setStretchToRect(enabled)
     fun attachDisplay(surface: SurfaceTexture, width: Int, height: Int) = runtime.attachDisplay(surface, width, height)
     fun resize(width: Int, height: Int) = runtime.resize(width, height)

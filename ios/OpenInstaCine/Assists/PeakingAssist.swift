@@ -1,4 +1,5 @@
 import MonitorUI
+import OpenCineMedia
 import SwiftUI
 import UIKit
 
@@ -17,86 +18,18 @@ enum PeakingAssist {
     static let colorHelp =
         "Choose the edge color that stays readable over your typical scene."
 
-    /// OpenZCine `Peaking.Color` — GPU paint + long-press dots (`SettingsPalette.peaking`).
-    enum Color: String, CaseIterable, Codable, Sendable, Identifiable {
-        case white = "White"
-        case blue = "Blue"
-        case red = "Red"
-        case green = "Green"
-
-        var id: String { rawValue }
-
-        /// Overlay RGB OpenZCine `Peaking.Color.rgb` paints on focused edges.
-        var rgb: (Double, Double, Double) {
-            switch self {
-            case .white: (246.0 / 255, 241.0 / 255, 226.0 / 255)
-            case .blue: (64.0 / 255, 142.0 / 255, 255.0 / 255)
-            case .red: (255.0 / 255, 72.0 / 255, 64.0 / 255)
-            case .green: (74.0 / 255, 220.0 / 255, 132.0 / 255)
-            }
-        }
-
-        /// OpenZCine `SettingsPalette.peaking` tokens — not the overlay RGB.
-        var swatch: SwiftUI.Color {
-            switch self {
-            case .white: LiveDesign.text
-            case .blue: LiveHDRDisplay.chromeColor(red: 64.0 / 255, green: 142.0 / 255, blue: 1)
-            case .red: LiveDesign.rec
-            case .green: LiveDesign.good
-            }
-        }
-    }
-
-    /// OpenZCine `Peaking.Sensitivity` — Low / Med / High detector steps.
-    enum Sensitivity: String, CaseIterable, Codable, Sendable, Identifiable {
-        case low = "Low"
-        case medium = "Med"
-        case high = "High"
-
-        var id: String { rawValue }
-
-        /// Two-scale ratio bar. Higher = stricter (OpenZCine `Peaking.Sensitivity.ratioThreshold`).
-        var ratioThreshold: Double {
-            switch self {
-            case .low: 2.30
-            case .medium: 2.10
-            case .high: 1.90
-            }
-        }
-
-        /// Coarse-operator floor in `robertsSquared` units (OpenZCine `noiseGate`).
-        var noiseGate: Double {
-            switch self {
-            case .low: 0.00522
-            case .medium: 0.00174
-            case .high: 0.00058
-            }
-        }
-    }
+    typealias Color = MonitorPeakingColor
+    typealias Sensitivity = MonitorPeakingSense
 
     /// OpenZCine `SettingsPalette.peaking` order — White / Blue / Red / Green.
     static let palette: [Color] = Color.allCases
     /// Segmented-control copy in `peakingRows`.
     static let sensitivityOptions = Sensitivity.allCases.map(\.rawValue)
 
-    struct Options: Equatable, Codable, Sendable {
-        var color: Color
-        var sensitivity: Sensitivity
-
-        static let `default` = Options(color: .red, sensitivity: .medium)
-
-        var overlay: OverlaySpec { OverlaySpec(color: color, sensitivity: sensitivity) }
-    }
+    typealias Options = MonitorPeakingOptions
 
     /// Detector + paint values the GPU peaking pass reads (OpenZCine `PeakingSettings`).
-    struct OverlaySpec: Equatable, Sendable {
-        var color: Color
-        var sensitivity: Sensitivity
-
-        var rgb: (Double, Double, Double) { color.rgb }
-        var ratioThreshold: Double { sensitivity.ratioThreshold }
-        var noiseGate: Double { sensitivity.noiseGate }
-    }
+    typealias OverlaySpec = MonitorPeakingOverlaySpec
 
     static func overlay(from options: Options) -> OverlaySpec { options.overlay }
 
@@ -267,5 +200,17 @@ private enum PeakingAssistHaptics {
     @MainActor
     static func selection() {
         OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+    }
+}
+
+// Display swatches follow this app's HDR theme; detector RGB stays portable.
+extension MonitorPeakingColor {
+    var swatch: SwiftUI.Color {
+        switch self {
+        case .white: LiveDesign.text
+        case .blue: LiveHDRDisplay.chromeColor(red: 64.0 / 255, green: 142.0 / 255, blue: 1)
+        case .red: LiveDesign.rec
+        case .green: LiveDesign.good
+        }
     }
 }

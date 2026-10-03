@@ -28,6 +28,7 @@ enum LiveAssistTool: String, CaseIterable, Identifiable {
     case magnification = "MAG"
 
     var id: String { rawValue }
+    var sharedTool: MonitorAssistTool? { MonitorAssistTool(rawValue: rawValue) }
 
     var isRetired: Bool { self == .magnification }
     var isPhotographyOnly: Bool { self == .instantReview }
@@ -64,136 +65,23 @@ enum LiveAssistTool: String, CaseIterable, Identifiable {
     static var cleanPinCases: [LiveAssistTool] { settingsCases.filter { $0 != .evMeter } }
 
     /// Compact label for the Display ▸ DISP 2 pin grid.
-    var displaySettingsTitle: String {
-        switch self {
-        case .parade: "Parade"
-        case .ndMeter: "ND"
-        case .audioMeters: "Audio Levels"
-        default: title
-        }
-    }
+    var displaySettingsTitle: String { sharedTool?.displaySettingsTitle ?? title }
 
-    var hasConfiguration: Bool {
-        switch self {
-        // Audio options affect presentation only.
-        case .instantReview, .magnification, .level, .evMeter:
-            false
-        default: true
-        }
-    }
+    var hasConfiguration: Bool { sharedTool?.hasConfiguration ?? false }
 
     /// The approved prototype owns these tool glyphs; app-only tools retain
     /// Lucide fallbacks without inventing a new visual language.
-    var monitorIcon: MonitorAssistIcon? {
-        switch self {
-        case .lut: .lut
-        case .peaking: .peaking
-        case .falseColor: .falseColor
-        case .zebra: .zebra
-        case .waveform: .waveform
-        case .parade: .rgbParade
-        case .histogram: .histogram
-        case .vectorscope: .vectorscope
-        case .trafficLights: .trafficLights
-        case .guides: .frameGuide
-        case .grid: .grid
-        case .crosshair: .crosshair
-        case .mirror: .mirror
-        case .audioMeters: .audioMeters
-        case .level: .level
-        default: nil
-        }
-    }
+    var monitorIcon: MonitorAssistIcon? { sharedTool?.monitorIcon }
 
     /// Existing app-only assist glyphs use the shared Lucide catalog.
-    var opcIcon: OpcIcon? {
-        switch self {
-        case .lut: .blend
-        case .peaking: .mountain
-        case .falseColor: .contrast
-        case .zebra: nil
-        case .waveform: .audioWaveform
-        case .parade: .chartColumn
-        case .histogram: .audioLines
-        case .vectorscope: .crosshair
-        case .trafficLights: .sun
-        case .ndMeter: .aperture
-        case .evMeter: nil
-        case .audioMeters: .slidersVertical
-        case .guides: .squareDashed
-        case .grid: .grid3x3
-        case .crosshair: .plus
-        case .level: .circle
-        case .desqueeze: .chevronsUpDown
-        case .mirror: .flipHorizontal2
-        case .magnification: .zoomIn
-        case .instantReview: .image
-        }
-    }
+    var opcIcon: OpcIcon? { sharedTool?.fallbackIcon ?? (self == .instantReview ? .image : self == .magnification ? .zoomIn : nil) }
 
-    var title: String {
-        switch self {
-        case .lut: "LUT"
-        case .peaking: "Peaking"
-        case .falseColor: "False Color"
-        case .zebra: "Zebra"
-        case .waveform: "Waveform"
-        case .parade: "RGB Parade"
-        case .histogram: "Histogram"
-        case .vectorscope: "Vectorscope"
-        case .trafficLights: "Traffic Lights"
-        case .ndMeter: "ND Suggestion"
-        case .evMeter: "EV Meter"
-        case .audioMeters: "Audio Levels"
-        case .guides: "Guides"
-        case .grid: "Grid"
-        case .crosshair: "Crosshair"
-        case .level: "Level"
-        case .desqueeze: "Anamorphic Desqueeze"
-        case .mirror: "Mirror"
-        case .magnification: "Magnify"
-        case .instantReview: "Instant Playback"
-        }
-    }
+    var title: String { sharedTool?.title ?? (self == .instantReview ? "Instant Playback" : "Magnify") }
 }
 
-enum GuideFamily: String, CaseIterable, Codable, Identifiable {
-    case film = "Film"
-    case social = "Social"
-    var id: String { rawValue }
-}
+typealias GuideFamily = MonitorGuideFamily
 
-enum GuideAspect: String, CaseIterable, Identifiable, Codable {
-    case cinema276 = "2.76:1"
-    case cinema = "2.39:1"
-    case cinema235 = "2.35:1"
-    case twoK = "2.00:1"
-    case wide = "1.85:1"
-    case hd = "16:9"
-    case euro = "1.66:1"
-    case imax = "1.43:1"
-    case academy = "4:3"
-    case vertical = "9:16"
-    case social = "4:5"
-    case square = "1:1"
-    case portrait = "2:3"
-    case feed = "1.91:1"
-
-    var id: String { rawValue }
-
-    var ratio: CGFloat {
-        let parts = rawValue.split(separator: ":").compactMap { Double($0) }
-        guard parts.count == 2, parts[1] > 0 else { return 1 }
-        return CGFloat(parts[0] / parts[1])
-    }
-
-    static func ratios(for family: GuideFamily) -> [GuideAspect] {
-        switch family {
-        case .film: [.cinema276, .cinema, .cinema235, .twoK, .wide, .hd, .euro, .imax, .academy]
-        case .social: [.vertical, .social, .square, .portrait, .hd, .feed]
-        }
-    }
-}
+typealias GuideAspect = MonitorGuideAspect
 
 @Observable
 final class LiveAssistState {
@@ -1045,115 +933,32 @@ private struct FocusBoxView: View {
     }
 }
 
-struct FeedGridView: View {
-    let feed: CGRect
-    var thirds = true
-    var phi = false
-    var diagonal = false
+typealias FeedGridView = MonitorFeedGrid
 
-    var body: some View {
-        Path { path in
-            if thirds { fractions(&path, [1.0 / 3, 2.0 / 3]) }
-            if phi { fractions(&path, [0.382, 0.618]) }
-            if diagonal {
-                path.move(to: CGPoint(x: feed.minX, y: feed.minY))
-                path.addLine(to: CGPoint(x: feed.maxX, y: feed.maxY))
-                path.move(to: CGPoint(x: feed.maxX, y: feed.minY))
-                path.addLine(to: CGPoint(x: feed.minX, y: feed.maxY))
-            }
-        }
-        .stroke(Color.white.opacity(0.22), lineWidth: 1)
-    }
+typealias FeedCrosshairView = MonitorFeedCrosshair
 
-    private func fractions(_ path: inout Path, _ fractions: [CGFloat]) {
-        for fraction in fractions {
-            let x = feed.minX + feed.width * fraction
-            let y = feed.minY + feed.height * fraction
-            path.move(to: CGPoint(x: x, y: feed.minY))
-            path.addLine(to: CGPoint(x: x, y: feed.maxY))
-            path.move(to: CGPoint(x: feed.minX, y: y))
-            path.addLine(to: CGPoint(x: feed.maxX, y: y))
-        }
-    }
-}
+typealias FeedSplitComparisonMarks = MonitorFeedComparisonMarks
 
-struct FeedCrosshairView: View {
-    let feed: CGRect
-
-    var body: some View {
-        ZStack {
-            Rectangle().fill(Color.white.opacity(0.65)).frame(width: 1.4, height: 40)
-            Rectangle().fill(Color.white.opacity(0.65)).frame(width: 40, height: 1.4)
-        }
-        .position(x: feed.midX, y: feed.midY)
-    }
-}
-
-struct FeedSplitComparisonMarks: View {
-    let vertical: Bool
-    let feed: CGRect
-
-    var body: some View {
-        ZStack {
-            Rectangle()
-                .fill(Color.white.opacity(0.5))
-                .frame(width: vertical ? 1 : feed.width, height: vertical ? feed.height : 1)
-                .position(x: feed.midX, y: feed.midY)
-            label("LOG")
-                .position(
-                    x: vertical ? feed.midX - 16 : feed.minX + feed.width * 0.16,
-                    y: vertical ? feed.minY + feed.height * 0.16 : feed.midY - 10)
-            label("LUT")
-                .position(
-                    x: vertical ? feed.midX + 16 : feed.minX + feed.width * 0.16,
-                    y: vertical ? feed.minY + feed.height * 0.16 : feed.midY + 10)
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func label(_ text: String) -> some View {
-        Text(text)
-            .font(MonitorTheme.font(8, weight: .semibold)).monospacedDigit()
-            .kerning(0.5)
-            .foregroundStyle(Color.white.opacity(0.85))
-            .shadow(color: .black.opacity(0.8), radius: 1.5, y: 0.5)
-    }
-}
-
-/// LEVEL: camera world attitude (`LevelReading`), not this phone. Gauges show
-/// picture roll and look-up tilt from the horizon (OpenZCine `LevelGaugeView`);
-/// near plumb a bubble shows the lens offset from straight down / up. Stale or
-/// missing attitude shows `No level data` and never reads green.
+/// Camera attitude sampling stays in the source adapter; shared UI receives resolved values.
 enum LevelAssist {
     static let refresh: TimeInterval = 0.1
-    /// Roll strip centre above the visible picture's bottom edge; tilt mirrors the offset.
-    static let rollLiftLandscape: CGFloat = 84
-    static let rollLiftPortrait: CGFloat = 22
+    static let rollLiftLandscape = MonitorLevelGeometry.rollLiftLandscape
+    static let rollLiftPortrait = MonitorLevelGeometry.rollLiftPortrait
 
-    /// Strips on the on-screen part of the feed (OpenZCine #47). Roll runs along
-    /// the bottom, lifted clear of the landscape / portrait chrome; tilt centres
-    /// vertically, right of centre by the same distance roll sits below centre,
-    /// kept 6 pt inside the picture (portrait fill).
-    static func frames(feed: CGRect, viewport: CGRect, portrait: Bool) -> (roll: CGRect, tilt: CGRect) {
-        var visible = feed.intersection(viewport)
-        if visible.isNull || visible.isEmpty { visible = feed }
-        let t = MonitorLevelGauge.thickness
-        let rollWidth = max(0, min(MonitorLevelGauge.maxLength, visible.width - 24))
-        let rollMidY = visible.maxY - (portrait ? rollLiftPortrait : rollLiftLandscape)
-        let tiltHeight = max(0, min(MonitorLevelGauge.maxLength, visible.height - 12))
-        let tiltMidX = min(visible.midX + (rollMidY - visible.midY), visible.maxX - 6 - t / 2)
-        return (
-            CGRect(x: visible.midX - rollWidth / 2, y: rollMidY - t / 2, width: rollWidth, height: t),
-            CGRect(x: tiltMidX - t / 2, y: visible.midY - tiltHeight / 2, width: t, height: tiltHeight)
-        )
+    @MainActor static func frames(feed: CGRect, viewport: CGRect, portrait: Bool) -> (roll: CGRect, tilt: CGRect) {
+        MonitorLevelGeometry.frames(feed: feed, viewport: viewport, portrait: portrait)
+    }
+
+    static func display(_ mode: LevelReading.Mode) -> MonitorLevelDisplay {
+        switch mode {
+        case .unavailable: .unavailable
+        case .gauges(let roll, let tilt): .gauges(rollDeg: roll, tiltDeg: tilt)
+        case .bubble(let x, let y): .bubble(xDeg: x, yDeg: y)
+        }
     }
 
     static func accessibilityValue(_ mode: LevelReading.Mode) -> String {
-        switch mode {
-        case .unavailable: WorldLevelSnap.noLevelData
-        case .gauges(let roll, let tilt): String(format: "Roll %+.1f°, tilt %+.1f°", roll, tilt)
-        case .bubble(let x, let y): String(format: "Off plumb %+.1f° / %+.1f°", x, y)
-        }
+        MonitorLevelGeometry.accessibilityValue(display(mode), noDataLabel: WorldLevelSnap.noLevelData)
     }
 }
 
@@ -1174,61 +979,10 @@ struct FeedLevelView: View {
                     poseInvert: model.session.gimbalPoseInvertPan,
                     assistMirror: model.assist.mirrorsHorizontally)
                     != model.assist.flipsVertically)
-            content(mode)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Level")
-                .accessibilityValue(LevelAssist.accessibilityValue(mode))
-                .accessibilityIdentifier("monitor.level")
+            MonitorLevelOverlay(display: LevelAssist.display(mode), feed: feed, viewport: viewport,
+                portrait: portrait, noDataLabel: WorldLevelSnap.noLevelData)
         }
         .allowsHitTesting(false)
-    }
-
-    @ViewBuilder
-    private func content(_ mode: LevelReading.Mode) -> some View {
-        let frames = LevelAssist.frames(
-            feed: feed, viewport: viewport, portrait: portrait)
-        switch mode {
-        case .bubble(let x, let y):
-            let visible = feed.intersection(viewport).isNull ? feed : feed.intersection(viewport)
-            MonitorLevelBubble(xDeg: x, yDeg: y)
-                .position(x: visible.midX, y: visible.midY)
-        case .gauges(let roll, let tilt):
-            strips(roll: roll, tilt: tilt, frames: frames, caption: nil)
-        case .unavailable:
-            strips(roll: nil, tilt: nil, frames: frames, caption: WorldLevelSnap.noLevelData)
-        }
-    }
-
-    private func strips(roll: Double?, tilt: Double?, frames: (roll: CGRect, tilt: CGRect), caption: String?)
-        -> some View
-    {
-        ZStack {
-            MonitorLevelGauge(axis: .horizontal, value: roll)
-                .frame(width: frames.roll.width, height: frames.roll.height)
-                .position(x: frames.roll.midX, y: frames.roll.midY)
-            if let caption {
-                LevelCaption(text: caption)
-                    .position(x: frames.roll.midX, y: frames.roll.maxY + 6)
-            }
-            if !frames.tilt.isEmpty {
-                MonitorLevelGauge(axis: .vertical, value: tilt)
-                    .frame(width: frames.tilt.width, height: frames.tilt.height)
-                    .position(x: frames.tilt.midX, y: frames.tilt.midY)
-            }
-        }
-    }
-}
-
-private struct LevelCaption: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(MonitorTheme.font(8, weight: .medium))
-            .kerning(0.5)
-            .foregroundStyle(LiveDesign.muted)
-            .shadow(color: .black.opacity(0.6), radius: 1.5)
-            .fixedSize()
     }
 }
 
@@ -1316,15 +1070,10 @@ struct AssistToolIcon: View {
     var size: CGFloat? = 19
 
     var body: some View {
-        if tool == .evMeter {
-            Text("EV")
-                .font(MonitorTheme.font(size.map { $0 * 0.7 } ?? 17, weight: .semibold))
-                .frame(width: size, height: size)
-        } else if let icon = tool.monitorIcon {
-            icon.frame(width: size, height: size)
+        if let shared = tool.sharedTool {
+            MonitorAssistToolGlyph(tool: shared, size: size)
         } else if let icon = tool.opcIcon {
             icon.frame(width: size, height: size)
-                .rotationEffect(.degrees(tool == .desqueeze ? 90 : 0))
         }
     }
 }

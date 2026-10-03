@@ -211,9 +211,7 @@ enum ZebraAssist {
     }
 }
 
-extension ZebraPaint: Identifiable {
-    var id: String { rawValue }
-
+extension ZebraPaint {
     /// OpenZCine `SettingsPalette` token (not overlay RGB).
     var swatch: Color {
         switch self {
