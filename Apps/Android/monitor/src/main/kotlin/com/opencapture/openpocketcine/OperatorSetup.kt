@@ -73,6 +73,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
+import com.opencapture.monitorui.settings.MonitorGimbalSettings
+import com.opencapture.monitorui.settings.MonitorJoystickSettings
+import com.opencapture.monitorui.settings.MonitorControllerSettings
+import com.opencapture.monitorui.settings.MonitorMotionIntegerSetting
+import com.opencapture.monitorui.settings.MonitorMotionChoiceSetting
+import com.opencapture.monitorui.settings.MonitorMotionToggleSetting
 import com.opencapture.monitorui.MonitorJoystickSize
 import com.opencapture.monitorui.MonitorLinkHealth
 import com.opencapture.openpocketcine.assists.CrushClipCompensation
@@ -1018,123 +1024,65 @@ private fun ControlsRows(model: AppModel) {
         feedback = { operatorHaptic(view, model.hapticsEnabled) },
     )
     if (layout.gimbal) {
-        SettingsRowCard(title = "Gimbal") {
-            SettingsInlineRow(
-                title = "Joystick sensitivity",
-                help = SettingsHelpCopy.JOYSTICK_SENSITIVITY,
-                showTopDivider = false,
-                stacked = true,
-            ) {
-                SettingsValueSlider(
-                    value = model.gimbalStickSensitivity,
-                    range = 1..5,
-                    label = "${model.gimbalStickSensitivity}",
-                    labelWidth = 24,
-                    onChange = { next ->
-                        if (next != model.gimbalStickSensitivity) {
-                            operatorHaptic(view, model.hapticsEnabled)
-                            model.updateGimbalStickSensitivity(next)
-                        }
-                    },
-                )
-            }
-        }
-        SettingsRowCard(title = "On-screen joystick") {
-            SettingsInlineRow(
-                title = "Size",
-                help = SettingsHelpCopy.VIRTUAL_JOYSTICK_SIZE,
-                showTopDivider = false,
-                stacked = true,
-            ) {
-                SettingsSegmented(
-                    options = MonitorJoystickSize.entries.map { it.label },
-                    selected = model.virtualJoystickSize.label,
-                    compact = true,
-                    testTag = "gimbal.virtual.size",
-                ) { label ->
-                    val next = MonitorJoystickSize.fromLabel(label)
-                    if (next != model.virtualJoystickSize) {
-                        operatorHaptic(view, model.hapticsEnabled)
-                        model.updateVirtualJoystickSize(next)
-                    }
-                }
-            }
-            SettingsSwitchInlineRow(
-                title = "Invert pan",
-                help = SettingsHelpCopy.VIRTUAL_JOYSTICK_INVERT_PAN,
-                isOn = model.virtualJoystickInvertPan,
-                testTag = "gimbal.virtual.invertPan",
-            ) {
+        MonitorGimbalSettings(sensitivity = MonitorMotionIntegerSetting(
+            value = model.gimbalStickSensitivity, range = 1..5, help = SettingsHelpCopy.JOYSTICK_SENSITIVITY,
+        ) { next ->
+            if (next != model.gimbalStickSensitivity) {
                 operatorHaptic(view, model.hapticsEnabled)
-                model.updateVirtualJoystickInvertPan(!model.virtualJoystickInvertPan)
+                model.updateGimbalStickSensitivity(next)
             }
-            SettingsSwitchInlineRow(
-                title = "Invert tilt",
-                help = SettingsHelpCopy.VIRTUAL_JOYSTICK_INVERT_TILT,
-                isOn = model.virtualJoystickInvertTilt,
-                testTag = "gimbal.virtual.invertTilt",
-            ) {
-                operatorHaptic(view, model.hapticsEnabled)
-                model.updateVirtualJoystickInvertTilt(!model.virtualJoystickInvertTilt)
-            }
-            SettingsInlineRow(
-                title = "Dead zone",
-                help = SettingsHelpCopy.VIRTUAL_JOYSTICK_DEADZONE,
-                stacked = true,
-            ) {
-                Box(Modifier.testTag("gimbal.virtual.deadzone")) {
-                    SettingsPercentSlider(
-                        value = model.virtualJoystickDeadzonePercent,
-                        range = 0..25,
-                        onChange = { next ->
-                            if (next != model.virtualJoystickDeadzonePercent) {
-                                operatorHaptic(view, model.hapticsEnabled)
-                                model.updateVirtualJoystickDeadzonePercent(next)
-                            }
-                        },
-                    )
-                }
-            }
-            SettingsInlineRow(
-                title = "Response curve",
-                help = SettingsHelpCopy.VIRTUAL_JOYSTICK_RESPONSE,
-                stacked = true,
-            ) {
-                SettingsSegmented(
-                    options = CameraCommands.VirtualJoystickCurve.entries.map { it.label },
-                    selected = model.virtualJoystickResponseCurve.label,
-                    compact = true,
-                    testTag = "gimbal.virtual.response",
-                ) { label ->
-                    val next = CameraCommands.VirtualJoystickCurve.fromLabel(label)
-                    if (next != model.virtualJoystickResponseCurve) {
-                        operatorHaptic(view, model.hapticsEnabled)
-                        model.updateVirtualJoystickResponseCurve(next)
-                    }
-                }
-            }
-        }
-    }
-    SettingsRowCard(title = "Controller") {
-        SettingsInlineRow("Gimbal joystick", SettingsHelpCopy.GIMBAL_JOYSTICK, showTopDivider = false, stacked = true) {
-            SettingsSegmented(
-                options = GamepadGimbalStick.entries.map { it.label },
-                selected = gimbalGamepadStick.label,
-                compact = true,
-            ) { label ->
-                val next = GamepadGimbalStick.fromLabel(label)
-                if (next != gimbalGamepadStick) {
+        })
+        MonitorJoystickSettings(
+            size = MonitorMotionChoiceSetting(MonitorJoystickSize.entries.map { it.label },
+                model.virtualJoystickSize.label, SettingsHelpCopy.VIRTUAL_JOYSTICK_SIZE) { label ->
+                val next = MonitorJoystickSize.fromLabel(label)
+                if (next != model.virtualJoystickSize) {
                     operatorHaptic(view, model.hapticsEnabled)
-                    OperatorPrefs.setGimbalGamepadStick(context, next)
-                    gimbalGamepadStick = next
-                    model.gimbalGamepad.noteStickSelectionChanged(model)
+                    model.updateVirtualJoystickSize(next)
                 }
-            }
-        }
-        SettingsInlineRow("Gamepad", SettingsHelpCopy.GAMEPAD) {
-            SettingsValueText(if (model.gamepadConnected) "Connected" else "Not connected")
-        }
+            },
+            invertPan = MonitorMotionToggleSetting(model.virtualJoystickInvertPan,
+                SettingsHelpCopy.VIRTUAL_JOYSTICK_INVERT_PAN) { next ->
+                operatorHaptic(view, model.hapticsEnabled)
+                model.updateVirtualJoystickInvertPan(next)
+            },
+            invertTilt = MonitorMotionToggleSetting(model.virtualJoystickInvertTilt,
+                SettingsHelpCopy.VIRTUAL_JOYSTICK_INVERT_TILT) { next ->
+                operatorHaptic(view, model.hapticsEnabled)
+                model.updateVirtualJoystickInvertTilt(next)
+            },
+            deadZone = MonitorMotionIntegerSetting(model.virtualJoystickDeadzonePercent,
+                0..25, SettingsHelpCopy.VIRTUAL_JOYSTICK_DEADZONE, suffix = "%") { next ->
+                if (next != model.virtualJoystickDeadzonePercent) {
+                    operatorHaptic(view, model.hapticsEnabled)
+                    model.updateVirtualJoystickDeadzonePercent(next)
+                }
+            },
+            response = MonitorMotionChoiceSetting(CameraCommands.VirtualJoystickCurve.entries.map { it.label },
+                model.virtualJoystickResponseCurve.label, SettingsHelpCopy.VIRTUAL_JOYSTICK_RESPONSE) { label ->
+                val next = CameraCommands.VirtualJoystickCurve.fromLabel(label)
+                if (next != model.virtualJoystickResponseCurve) {
+                    operatorHaptic(view, model.hapticsEnabled)
+                    model.updateVirtualJoystickResponseCurve(next)
+                }
+            },
+            identifierPrefix = "gimbal.virtual",
+        )
     }
+    MonitorControllerSettings(
+        stick = MonitorMotionChoiceSetting(GamepadGimbalStick.entries.map { it.label },
+            gimbalGamepadStick.label, SettingsHelpCopy.GIMBAL_JOYSTICK) { label ->
+            val next = GamepadGimbalStick.fromLabel(label)
+            if (next != gimbalGamepadStick) {
+                operatorHaptic(view, model.hapticsEnabled)
+                OperatorPrefs.setGimbalGamepadStick(context, next)
+                gimbalGamepadStick = next
+                model.gimbalGamepad.noteStickSelectionChanged(model)
+            }
+        },
+        status = if (model.gamepadConnected) "Connected" else "Not connected",
+        statusHelp = SettingsHelpCopy.GAMEPAD,
+    )
 }
 
 @Composable

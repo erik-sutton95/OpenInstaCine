@@ -469,78 +469,38 @@ struct SettingsRootView: View {
             feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }
         )
         let capabilities = OsmoMonitorPresentation.capabilities(model.session)
-        if capabilities.gimbal {
-            SettingsRowCard(title: "Gimbal") {
-                SettingsInlineRow(
-                    title: "Joystick sensitivity", help: SettingsHelpCopy.joystickSensitivity,
-                    showTopDivider: false, stacked: true
-                ) {
-                    GimbalStickSensitivitySlider(value: Bindable(model).gimbalStickSensitivity)
-                }
-                if capabilities.headTracking {
-                    SettingsSwitchInlineRow(
-                        title: "Head Tracking (Experimental)", help: SettingsHelpCopy.headTracking,
-                        isOn: model.headTrackingEnabled
-                    ) { model.headTrackingEnabled.toggle() }
-                }
-            }
-            SettingsRowCard(title: "On-screen joystick") {
-                SettingsInlineRow(
-                    title: "Size", help: SettingsHelpCopy.virtualJoystickSize,
-                    showTopDivider: false, stacked: true
-                ) {
-                    SettingsSegmented(
-                        options: MonitorJoystickSize.allCases.map(\.label),
-                        selected: model.virtualJoystickSize.label,
-                        compact: true
-                    ) { value in
-                        model.virtualJoystickSize = MonitorJoystickSize.fromLabel(value)
-                    }
-                    .accessibilityIdentifier("gimbal.virtual.size")
-                }
-                SettingsSwitchInlineRow(
-                    title: "Invert pan", help: SettingsHelpCopy.virtualJoystickInvertPan,
-                    isOn: model.virtualJoystickInvertPan,
-                    identifier: "gimbal.virtual.invertPan"
-                ) { model.virtualJoystickInvertPan.toggle() }
-                SettingsSwitchInlineRow(
-                    title: "Invert tilt", help: SettingsHelpCopy.virtualJoystickInvertTilt,
-                    isOn: model.virtualJoystickInvertTilt,
-                    identifier: "gimbal.virtual.invertTilt"
-                ) { model.virtualJoystickInvertTilt.toggle() }
-                SettingsInlineRow(
-                    title: "Dead zone", help: SettingsHelpCopy.virtualJoystickDeadzone,
-                    stacked: true
-                ) {
-                    VirtualJoystickDeadzoneSlider(
-                        value: Bindable(model).virtualJoystickDeadzonePercent)
-                }
-                SettingsInlineRow(
-                    title: "Response curve", help: SettingsHelpCopy.virtualJoystickResponse,
-                    stacked: true
-                ) {
-                    SettingsSegmented(
-                        options: GimbalStick.ResponseCurve.allCases.map(\.label),
-                        selected: model.virtualJoystickResponseCurve.label,
-                        compact: true
-                    ) { value in
-                        model.virtualJoystickResponseCurve =
-                            GimbalStick.ResponseCurve.fromLabel(value)
-                    }
-                    .accessibilityIdentifier("gimbal.virtual.response")
-                }
-            }
+        let preferenceFeedback = {
+            OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
         }
-        SettingsRowCard(title: "Controller") {
-            SettingsInlineRow(
-                title: "Gimbal joystick", help: SettingsHelpCopy.gimbalJoystick,
-                showTopDivider: false, stacked: true
-            ) {
-                SettingsSegmented(
-                    options: GamepadGimbalStick.allCases.map(\.label),
-                    selected: gimbalGamepadStick.label,
-                    compact: true
-                ) { value in
+        if capabilities.gimbal {
+            MonitorGimbalSettings(
+                sensitivity: .init(value: Bindable(model).gimbalStickSensitivity, range: 1...5,
+                    help: SettingsHelpCopy.joystickSensitivity,
+                    feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }),
+                headTracking: capabilities.headTracking
+                    ? .init(value: Bindable(model).headTrackingEnabled,
+                        help: SettingsHelpCopy.headTracking, feedback: preferenceFeedback) : nil)
+            MonitorJoystickSettings(
+                size: .init(options: MonitorJoystickSize.allCases.map(\.label),
+                    selection: Binding(get: { model.virtualJoystickSize.label },
+                        set: { model.virtualJoystickSize = MonitorJoystickSize.fromLabel($0) }),
+                    help: SettingsHelpCopy.virtualJoystickSize, feedback: preferenceFeedback),
+                invertPan: .init(value: Bindable(model).virtualJoystickInvertPan,
+                    help: SettingsHelpCopy.virtualJoystickInvertPan, feedback: preferenceFeedback),
+                invertTilt: .init(value: Bindable(model).virtualJoystickInvertTilt,
+                    help: SettingsHelpCopy.virtualJoystickInvertTilt, feedback: preferenceFeedback),
+                deadZone: .init(value: Bindable(model).virtualJoystickDeadzonePercent,
+                    range: GimbalStick.deadzonePercentRange, help: SettingsHelpCopy.virtualJoystickDeadzone,
+                    suffix: "%", feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }),
+                response: .init(options: GimbalStick.ResponseCurve.allCases.map(\.label),
+                    selection: Binding(get: { model.virtualJoystickResponseCurve.label },
+                        set: { model.virtualJoystickResponseCurve = GimbalStick.ResponseCurve.fromLabel($0) }),
+                    help: SettingsHelpCopy.virtualJoystickResponse, feedback: preferenceFeedback),
+                identifierPrefix: "gimbal.virtual")
+        }
+        MonitorControllerSettings(
+            stick: .init(options: GamepadGimbalStick.allCases.map(\.label),
+                selection: Binding(get: { gimbalGamepadStick.label }, set: { value in
                     let next = GamepadGimbalStick.fromLabel(value)
                     if next != OperatorPrefs.gimbalGamepadStick {
                         OperatorPrefs.gimbalGamepadStick = next
@@ -548,14 +508,8 @@ struct SettingsRootView: View {
                         model.gimbalPadHeld = false
                         model.session.endGimbalStick()
                     }
-                }
-            }
-            SettingsInlineRow(
-                title: "Gamepad", help: SettingsHelpCopy.gamepad
-            ) {
-                SettingsValueText(value: model.gamepadConnected ? "Connected" : "Not connected")
-            }
-        }
+                }), help: SettingsHelpCopy.gimbalJoystick, feedback: preferenceFeedback),
+            status: model.gamepadConnected ? "Connected" : "Not connected", statusHelp: SettingsHelpCopy.gamepad)
     }
 
     // MARK: - Display (honest: rail-owned)

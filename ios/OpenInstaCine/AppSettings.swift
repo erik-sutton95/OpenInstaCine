@@ -281,69 +281,6 @@ struct SettingsResetButton: View {
     }
 }
 
-struct GimbalStickSensitivitySlider: View {
-    @Binding var value: Int
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Slider(
-                value: Binding(
-                    get: { Double(value) },
-                    set: {
-                        let next = GimbalStick.clampedSensitivity(Int($0.rounded()))
-                        guard next != value else { return }
-                        OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled)
-                        value = next
-                    }),
-                in: 1...5,
-                step: 1
-            )
-            .tint(LiveDesign.accent)
-            .accessibilityLabel("Joystick sensitivity")
-            .accessibilityValue("\(value)")
-            Text("\(value)")
-                .font(MonitorTheme.font(12, weight: .medium)).monospacedDigit()
-                .foregroundStyle(LiveDesign.text)
-                .frame(width: 24, alignment: .trailing)
-                .monospacedDigit()
-        }
-    }
-}
-
-struct VirtualJoystickDeadzoneSlider: View {
-    @Binding var value: Int
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Slider(
-                value: Binding(
-                    get: { Double(value) },
-                    set: {
-                        let next = GimbalStick.clampedDeadzonePercent(Int($0.rounded()))
-                        guard next != value else { return }
-                        OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled)
-                        value = next
-                    }),
-                in: Double(
-                    GimbalStick.deadzonePercentRange.lowerBound)...Double(
-                        GimbalStick.deadzonePercentRange.upperBound),
-                step: 1
-            )
-            .tint(LiveDesign.accent)
-            .accessibilityIdentifier("gimbal.virtual.deadzone")
-            .accessibilityLabel("Dead zone")
-            .accessibilityValue("\(value)%")
-            Text("\(value)%")
-                .font(MonitorTheme.font(12, weight: .medium)).monospacedDigit()
-                .foregroundStyle(LiveDesign.text)
-                .frame(width: 40, alignment: .trailing)
-                .monospacedDigit()
-        }
-    }
-}
-
 enum OperatorSettingsHaptics {
     @MainActor
     static func selection(enabled: Bool) {
