@@ -25,6 +25,7 @@ import com.opencapture.opencine.insta360.luna.LunaFailures
 import com.opencapture.opencine.insta360.luna.LunaIntegration
 import com.opencapture.openpocketcine.pairing.LocalPairingCallouts
 import com.opencapture.openpocketcine.assists.LiveAssistState
+import com.opencapture.openpocketcine.assists.createLiveAssistState
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.GimbalDoubleTap
@@ -55,7 +56,7 @@ class AppModel(
     val scopeBus = com.opencapture.opencine.runtime.ScopeSampleBus()
     val inspectorPreview = com.opencapture.opencine.runtime.InspectorPreviewPipeline(scopeBus,
         { com.opencapture.openpocketcine.feed.Media3GlBackend(it) }, logTag = "OpcInspector")
-    val assist = LiveAssistState.from(appContext)
+    val assist = createLiveAssistState(appContext)
 
     /**
      * Cameras and pairing through the shared OpenCine flow (SHELL-02): the Luna integration over

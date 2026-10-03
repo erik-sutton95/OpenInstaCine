@@ -454,41 +454,7 @@ internal fun monitorBottomInsetDp(rawInsetDp: Float, isPortrait: Boolean): Float
         rawInsetDp
     }
 
-data class ChromeRect(val x: Float, val y: Float, val width: Float, val height: Float) {
-    val minX: Float get() = x
-    val minY: Float get() = y
-    val maxX: Float get() = x + width
-    val maxY: Float get() = y + height
-    val midX: Float get() = x + width / 2f
-    val midY: Float get() = y + height / 2f
-    val isEmpty: Boolean get() = width <= 1f || height <= 1f
-
-    fun inset(dx: Float, dy: Float): ChromeRect =
-        ChromeRect(
-            x + dx,
-            y + dy,
-            (width - 2f * dx).coerceAtLeast(0f),
-            (height - 2f * dy).coerceAtLeast(0f),
-        )
-
-    fun intersects(other: ChromeRect): Boolean =
-        minX < other.maxX && other.minX < maxX && minY < other.maxY && other.minY < maxY
-
-    fun contains(px: Float, py: Float): Boolean = px >= minX && px <= maxX && py >= minY && py <= maxY
-
-    /** Aspect-fit a picture of `aspect` (width/height) inside this well. */
-    fun fittedContent(aspect: Float): ChromeRect {
-        val ratio = if (aspect.isFinite() && aspect > 0f) aspect else 16f / 9f
-        if (height <= 0f) return this
-        return if (width / height > ratio) {
-            val w = height * ratio
-            ChromeRect(x + (width - w) / 2f, y, w, height)
-        } else {
-            val h = width / ratio
-            ChromeRect(x, y + (height - h) / 2f, width, h)
-        }
-    }
-}
+typealias ChromeRect = com.opencapture.monitorui.MonitorRect
 
 /** Canvas origin in window pixels \u2014 capture / top-picker anchors are relative to this. */
 val LocalLiveCanvasOrigin = compositionLocalOf { Offset.Zero }

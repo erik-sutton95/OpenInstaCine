@@ -1,3 +1,5 @@
+import OpenCineAppKit
+import MonitorPresentation
 import MonitorUI
 import OpenPocketViewCore
 import SwiftUI
@@ -50,12 +52,7 @@ enum NDAssist {
 
     typealias StoredCenter = MonitorScopeStoredCenter
 
-    struct Snapshot: Codable, Equatable, Sendable {
-        var scale: Double
-        var position: StoredCenter?
-        var positionPortrait: StoredCenter?
-        var notation: NDFilterNotation?
-    }
+    typealias Snapshot = MonitorNDOptions
 
     static func clampedScale(_ value: Double) -> Double {
         min(max(value, scaleRange.lowerBound), scaleRange.upperBound)
@@ -103,45 +100,7 @@ enum NDAssist {
     static var store: NDAssistStore { NDAssistStore.shared }
 }
 
-@MainActor
-@Observable
-final class NDAssistStore {
-    static let shared = NDAssistStore()
-    fileprivate static let prefsKey = "OpenInstaCine.Assist.ndMeter.v1"
-
-    var scale: Double
-    var notation: NDFilterNotation
-    var position: NDAssist.StoredCenter?
-    var positionPortrait: NDAssist.StoredCenter?
-    var sessionCenter: CGPoint?
-    var sessionCenterPortrait: CGPoint?
-
-    init() {
-        if let data = UserDefaults.standard.data(forKey: Self.prefsKey),
-            let snap = try? JSONDecoder().decode(NDAssist.Snapshot.self, from: data)
-        {
-            scale = NDAssist.clampedScale(snap.scale)
-            notation = snap.notation ?? NDAssist.defaultNotation
-            position = snap.position
-            positionPortrait = snap.positionPortrait
-        } else {
-            scale = NDAssist.defaultScale
-            notation = NDAssist.defaultNotation
-            position = nil
-            positionPortrait = nil
-        }
-    }
-
-    func persist() {
-        let snap = NDAssist.Snapshot(
-            scale: NDAssist.clampedScale(scale),
-            position: position,
-            positionPortrait: positionPortrait,
-            notation: notation)
-        guard let data = try? JSONEncoder().encode(snap) else { return }
-        UserDefaults.standard.set(data, forKey: Self.prefsKey)
-    }
-}
+typealias NDAssistStore = MonitorNDPreferenceStore
 
 struct NDLongPressMenu: View {
     @Bindable var store = NDAssist.store
