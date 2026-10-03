@@ -46,6 +46,8 @@ targets:
       - package: OpenCine
         product: OpenCineRelay
       - package: OpenCine
+        product: OpenCineFrameIO
+      - package: OpenCine
         product: MonitorUI
       - package: OpenCine
         product: MonitorPresentation
@@ -85,7 +87,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: OpenInstaCine/OpenInstaCine.entitlements
         GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) CI_SILENCE_GL_DEPRECATION=1"
         OTHER_SWIFT_FLAGS: "$(inherited) -Xcc -DCI_SILENCE_GL_DEPRECATION"
-        # Same team as OpenZCine — it already has the Hotspot Configuration capability.
+        # Same team as OpenZCine, which already has the Hotspot Configuration capability.
         DEVELOPMENT_TEAM: "4V4EGQ6LZA"
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: YES
@@ -102,10 +104,10 @@ targets:
         INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
         INFOPLIST_KEY_UIStatusBarHidden: YES
         # YES so SwiftUI `.statusBarHidden` can hide the iPad system bar after launch.
-        # `UIStatusBarHidden~ipad` lives in Info-Frameio.plist — INFOPLIST_KEY cannot
+        # `UIStatusBarHidden~ipad` lives in Info-Frameio.plist; INFOPLIST_KEY cannot
         # spell a `~ipad` variant.
         INFOPLIST_KEY_UIViewControllerBasedStatusBarAppearance: YES
-        # Space-separated — a colon list becomes one invalid string and iOS stays portrait-only.
+        # Use spaces: a colon list becomes one invalid string and iOS stays portrait-only.
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone: YES

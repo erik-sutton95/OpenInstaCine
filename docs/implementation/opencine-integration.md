@@ -63,6 +63,24 @@ Automated Android native probes cover strings, null/empty arrays, LUT bytes and
 float arrays; exported Java symbol sets are compared with the prior app binary.
 Camera transport and live-picture checks remain in the device checklist.
 
+### Shared Frame.io client (SHELL-03 I5c, first increment)
+
+The iOS app directly consumes OpenCineFrameIO for PKCE and token exchange/refresh, response
+models, account/workspace/project requests, upload parts and completion polling. The copied
+FrameioService is removed. The app supplies its Info.plist identity, browser presentation,
+Keychain adapter, destination preferences, native export and internet-hop lifetime.
+The Keychain service `OpenInstaCine.frameio`, account `oauth-token`, accessibility and existing
+saved-token JSON remain unchanged. Progress still reaches callers on MainActor. API/upload
+requests retain the 12-second timeout without waiting for connectivity; browser token exchange
+retains URLSession.shared. The common client also preserves an existing refresh token when IMS
+omits its replacement and rejects invalid resource identifiers/file inputs before HTTPS.
+
+Both-architecture simulator build-for-testing, the actual saved-token JSON compatibility test
+and the two existing delivery-hop lifetime tests pass. This is a local candidate; real Adobe
+sign-in, upload, camera network return and physical-device behavior remain untested. Frame.io
+remains an iOS-only feature in this app. Shared delivery batch composition is still a subsequent
+increment; adopting this client does not complete the full delivery migration.
+
 ## What changes for users
 
 Nothing is meant to look different. Underneath:
@@ -259,8 +277,8 @@ edits are safe. Details, the first-sync base to use after publishing and the Atl
 ## Risks before merging
 
 - First sync after publishing: set `openpocketcine-sync-commit.txt` to OpenPocketCine's
-  post-integration `main` commit, and decide Frame.io (OpenPocketCine moved its client into
-  OpenCineFrameIO; this app keeps its own until it adopts the product).
+  post-integration `main` commit. Frame.io's iOS client now comes from OpenCineFrameIO;
+  app-specific credential storage and browser presentation remain here.
 - The Kotlin `ScopeExposureCeiling` risk listed here before is closed: each feed owns its
   ceiling since 7bdb55c.
 
