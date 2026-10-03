@@ -42,6 +42,42 @@ import org.junit.runner.RunWith
 /** Pixel evidence from the real HWUI/RenderEffect modifier, not an emulated blur model. */
 @RunWith(AndroidJUnit4::class)
 class MonitorBackdropRenderTest {
+    @Test fun nativeTextureHostRetiresOldWindowWithoutReleasingCurrentSurface() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            val surfaces = mutableListOf<android.view.Surface>()
+            val program = com.opencapture.opencine.runtime.MonitorDecoderTextureProgram { surfaces += it }
+            var updates = 0
+            val host = com.opencapture.opencine.runtime.MonitorTexturePictureHost(
+                instrumentation.targetContext, program, updated = { updates += 1 })
+            val listener = requireNotNull(host.surfaceTextureListener)
+            val old = android.graphics.SurfaceTexture(false)
+            val current = android.graphics.SurfaceTexture(false)
+            try {
+                old.setDefaultBufferSize(16, 16)
+                current.setDefaultBufferSize(32, 16)
+                listener.onSurfaceTextureAvailable(old, 16, 16)
+                assertTrue(surfaces.single().isValid, "The actual direct decoder surface is valid")
+                listener.onSurfaceTextureAvailable(current, 32, 16)
+                assertTrue(!surfaces.first().isValid, "Replacement releases the old native output surface")
+                assertTrue(surfaces.last().isValid)
+                listener.onSurfaceTextureDestroyed(old)
+                listener.onSurfaceTextureUpdated(old)
+                assertTrue(surfaces.last().isValid, "Late teardown cannot release the replacement")
+                assertEquals(0, updates, "Old window updates cannot refresh source presentation")
+                listener.onSurfaceTextureUpdated(current)
+                assertEquals(1, updates)
+                listener.onSurfaceTextureDestroyed(current)
+                assertTrue(!surfaces.last().isValid, "Native ownership ends with the current window")
+                listener.onSurfaceTextureUpdated(current)
+                assertEquals(1, updates, "Retired current-window updates are also refused")
+            } finally {
+                old.release()
+                current.release()
+            }
+        }
+    }
+
     @Test fun sharedHistogramKeepsTheSignalWhenEdgeLightsAreHidden() {
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
             val display = ScopeHistogramDisplay.EMPTY.copy(red = FloatArray(256) {

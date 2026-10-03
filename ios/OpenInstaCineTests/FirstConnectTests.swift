@@ -29,6 +29,7 @@ final class FirstConnectTests: XCTestCase {
         let source = try XCTUnwrap(decoder.lastSourceFrameAt)
         let presented = try XCTUnwrap(decoder.lastPresentedAt)
         let decoded = bus.decodedFrames
+        let health = decoder.health
         let firstHeartbeats = heartbeats
         let firstCompletions = completions
         decoder.handleDecodedFrame(buffer, isNewSourceFrame: false)
@@ -39,6 +40,14 @@ final class FirstConnectTests: XCTestCase {
         XCTAssertGreaterThan(completions, firstCompletions, "Exercise the cached repaint")
         XCTAssertEqual(decoder.lastPresentedAt, presented)
         XCTAssertEqual(decoder.lastSourceFrameAt, source)
+        XCTAssertEqual(decoder.health.source, health.source)
+        XCTAssertEqual(decoder.health.lastSourceFrameAt, health.lastSourceFrameAt)
+        XCTAssertEqual(decoder.health.lastPresentedAt, health.lastPresentedAt,
+            "The aggregate's source-present time cannot advance on a cached repaint")
+        XCTAssertEqual(decoder.health.pipeline.submitted, health.pipeline.submitted)
+        XCTAssertEqual(decoder.health.pipeline.accepted, health.pipeline.accepted)
+        XCTAssertEqual(decoder.health.pipeline.output, health.pipeline.output)
+        XCTAssertEqual(decoder.health.pipeline.assistOutput, health.pipeline.assistOutput)
         XCTAssertEqual(bus.decodedFrames, decoded)
         XCTAssertEqual(heartbeats, firstHeartbeats)
         await fulfillment(of: [identity], timeout: 1)

@@ -81,16 +81,17 @@ extension LiveFrameSampleBus {
 final class LiveAssistEngine: @unchecked Sendable {
     typealias Result = OpenCineApple.MonitorAssistEngine.Result
     private let native: OpenCineApple.MonitorAssistEngine
-    init() {
+    static var configuration: OpenCineApple.MonitorAssistConfiguration {
         let curves = Dictionary(uniqueKeysWithValues: [MonitorTransfer.rec709, .hdr, .dlog, .dlogm, .dlog2, .ilog].compactMap { transfer in
             LiveColorScience.rec709LookCurve(transfer).map { (transfer, $0) }
         })
-        native = OpenCineApple.MonitorAssistEngine(configuration: .init(
+        return .init(
             clipProfile: ScopeExposureCeiling.sourceProfile, lookCurves: curves,
             defaultScopeLook: { $0 == .ilog ? BundledLunaLUT.iLogToRec709 : nil },
             inferTransfer: { MonitorTransfer.inferred(minByte: $0, maxByte: $1, fallback: $2) },
-            logSubsystem: "com.opencapture.openinstacine", journal: { ControlLiveLog.line($0) }))
+            logSubsystem: "com.opencapture.openinstacine", journal: { ControlLiveLog.line($0) })
     }
+    init() { native = OpenCineApple.MonitorAssistEngine(configuration: Self.configuration) }
     func adopt(exposureCeiling: OpenCineMedia.ScopeExposureCeiling) {
         native.adopt(exposureCeiling: exposureCeiling)
     }
