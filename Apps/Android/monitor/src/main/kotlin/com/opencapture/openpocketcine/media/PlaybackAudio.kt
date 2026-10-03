@@ -15,68 +15,14 @@ import com.opencapture.openpocketcine.assists.AudioMeterReading
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.abs
-import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
 
-/** One channel of a broadcast-style dBFS bar — iOS `AudioMeterChannel`. */
-data class AudioMeterChannel(
-    val levelDB: Double = AudioMeterBallistics.FLOOR_DB,
-    val peakDB: Double = AudioMeterBallistics.FLOOR_DB,
-    val peakAge: Double = 0.0,
-) {
-    fun asReading(): AudioMeterReading = AudioMeterReading(levelDB = levelDB, peakDB = peakDB)
+typealias AudioMeterBallistics = com.opencapture.opencine.media.MonitorAudioMeterBallistics
+typealias AudioMeterChannel = com.opencapture.opencine.media.MonitorAudioMeterChannel
+typealias AudioMeterLevels = com.opencapture.opencine.media.MonitorAudioMeterLevels
 
-    companion object {
-        val Silent = AudioMeterChannel()
-    }
-}
-
-data class AudioMeterLevels(
-    val left: AudioMeterChannel,
-    val right: AudioMeterChannel,
-) {
-    companion object {
-        val Silent = AudioMeterLevels(AudioMeterChannel.Silent, AudioMeterChannel.Silent)
-    }
-}
-
-/**
- * Instant attack, timed decay, peak hold. Same constants as
- * `OpenPocketViewCore.AudioMeterBallistics`.
- */
-object AudioMeterBallistics {
-    const val FLOOR_DB = -60.0
-    const val LEVEL_DECAY_PER_SECOND = 26.0
-    const val PEAK_HOLD_SECONDS = 1.8
-    const val PEAK_DECAY_PER_SECOND = 12.0
-
-    fun decibels(fromLinear: Double): Double {
-        if (fromLinear <= 0.0) return FLOOR_DB
-        return max(FLOOR_DB, min(0.0, 20.0 * log10(fromLinear)))
-    }
-
-    fun step(channel: AudioMeterChannel, peakLinear: Double, dt: Double): AudioMeterChannel {
-        val stepDt = max(0.0, dt)
-        val incoming = decibels(fromLinear = peakLinear)
-        val decayed = max(FLOOR_DB, channel.levelDB - LEVEL_DECAY_PER_SECOND * stepDt)
-        val level = max(incoming, decayed)
-        val (peak, age) =
-            if (incoming >= channel.peakDB) {
-                incoming to 0.0
-            } else {
-                val nextAge = channel.peakAge + stepDt
-                val nextPeak =
-                    if (nextAge > PEAK_HOLD_SECONDS) {
-                        max(FLOOR_DB, channel.peakDB - PEAK_DECAY_PER_SECOND * stepDt)
-                    } else {
-                        channel.peakDB
-                    }
-                nextPeak to nextAge
-            }
-        return AudioMeterChannel(levelDB = level, peakDB = max(peak, level), peakAge = age)
-    }
-}
+fun AudioMeterChannel.asReading(): AudioMeterReading = AudioMeterReading(levelDB = levelDB, peakDB = peakDB)
 
 /** Lock-guarded per-channel linear peak accumulator. iOS `AudioLevelTapBox`. */
 class AudioLevelTapBox {
