@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine.media
 
+import com.opencapture.opencine.media.MonitorConformPreview as ConformPreview
+
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

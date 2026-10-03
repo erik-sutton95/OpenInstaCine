@@ -94,6 +94,9 @@ LUNA_OWNED=(
   OpenInstaCine/VideoView.swift
   OpenInstaCine/PlaybackAudio.swift
   OpenInstaCine/PlaybackFeed.swift
+  # I5b-1: real player/item/load/scrub owners are shared; preserve native/source adapters.
+  OpenInstaCine/LunaPlaybackComposition.swift
+  OpenInstaCine/MediaPlayerLayerView.swift
   OpenInstaCine/LiveMonitorFx.swift
   OpenInstaCine/LiveMonitorLooks.swift
   OpenInstaCine/FeedWorkingRaster.swift

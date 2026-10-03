@@ -190,7 +190,7 @@ extension CameraSession {
     var isBrowsingMedia: Bool { mediaLibrary.browsing }
     var mediaCacheRevision: UInt64 { mediaLibrary.cacheRevision }
     var mediaDownloadProgress: [String: Double] {
-        var values = playbackProgress
+        var values: [String: Double] = [:]
         for record in mediaLibrary.records {
             if let value = mediaLibrary.progress[record.asset.id] { values[record.payload.file.path] = value }
         }
@@ -282,48 +282,7 @@ extension CameraSession {
     var canReachCameraMedia: Bool {
         guard case .live = phase else { return false }; return backend.isControlReady
     }
-    func resolvePlaybackSource(for file: MediaFile) async -> MediaPlaybackSource? { localPlaybackSource(for: file) }
-    func remainingPlaybackSources(for file: MediaFile, after source: MediaPlaybackSource) -> [MediaPlaybackSource] {
-        MediaHTTP.previewPaths(file).filter { $0 != source.path }.compactMap { path in
-            MediaHTTP.pathURL(storage: 0, path: path, route: profile.media).map {
-                .init(url: $0, mimeType: MediaHTTP.playbackMIMEType(for: path), isRemote: true, path: path)
-            }
-        }
-    }
-    // Playback source choice stays app-owned until I5b, but every write already shares the
-    // gallery root lease. Clear/replacement retires the native task before a late completion.
-    func cachePlaybackFile(file: MediaFile, path: String) async throws -> URL {
-        let library = mediaLibrary!
-        let directory = library.cache.directory
-        let address = cameraMedia.playbackAddress(file: file, path: path)
-        if let existing = directory.existing(address) { return existing }
-        if let record = mediaRecord(for: file), let representation = record.asset.representations.first(where: {
-            ($0.role == .original && path == file.path) || ($0.role == .proxy && path == file.proxyPath)
-        }), library.canTransfer {
-            return try await library.cacheRepresentation(representation.id, asset: record.asset.id)
-        }
-        guard canReachCameraMedia, let url = MediaHTTP.pathURL(storage: 0, path: path, route: profile.media) else { throw MediaTransferError.timeout }
-        let operation = UUID(), generation = directory.generation
-        let writer = try directory.beginWrite(at: address)
-        let io = cameraMedia.nativeIO
-        playbackTransfers[file.path]?.task.cancel()
-        let task = Task { @MainActor [weak self] in
-            defer { writer.abort() }
-            let receipt = try await io.transfer(from: url, expectedByteCount: path == file.path && file.sizeBytes > 0 ? file.sizeBytes : nil, into: writer)
-            guard let self, self.mediaLibrary === library, directory.generation == generation,
-                self.playbackTransfers[file.path]?.id == operation, !Task.isCancelled else { throw MediaServiceError.retired }
-            let result = try writer.commit(receipt); library.refreshLocalCache(); return result
-        }
-        playbackTransfers[file.path] = (operation, task); playbackProgress[file.path] = 0
-        defer {
-            if playbackTransfers[file.path]?.id == operation { playbackTransfers[file.path] = nil; playbackProgress[file.path] = nil }
-        }
-        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
-    }
-    func retirePlaybackTransfers() {
-        for operation in playbackTransfers.values { operation.task.cancel() }
-        playbackTransfers.removeAll(); playbackProgress.removeAll(); playbackMediaNote = nil
-    }
+    func retirePlaybackTransfers() { playbackMediaNote = nil }
     func deleteMediaFiles(_ files: [MediaFile]) async {
         let ids = files.compactMap { mediaRecord(for: $0)?.asset.id }
         do { _ = try await mediaLibrary.delete(ids) } catch { playbackMediaNote = MediaOperatorCopy.deleteFailed }

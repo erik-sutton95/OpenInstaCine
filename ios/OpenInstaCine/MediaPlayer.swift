@@ -1,5 +1,8 @@
 import AVFoundation
 import ImageIO
+import OpenCineAppKit
+import OpenCineApple
+import OpenCineMedia
 import MonitorPresentation
 import MonitorUI
 import OpenPocketViewCore
@@ -383,63 +386,56 @@ struct MediaPlayerView: View {
     @Environment(\.monitorWindowGeometry) private var windowGeometry
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var player = AVPlayer()
-    @State private var isPlaying = true
-    @State private var isMuted = false
-    @State private var currentTime: Double = 0
-    @State private var duration: Double = 0
-    @State private var isScrubbing = false
-    @State private var scrubTime: Double = 0
-    @State private var wasPlayingBeforeScrub = false
-    @State private var scrubOrigin: ScrubOrigin?
-    @State private var scrubResumeTask: Task<Void, Never>?
+    @State private var nativePlayback: MonitorApplePlaybackOwner
+    @State private var playback: LunaPlaybackModel?
+    @State private var scrubToken: MonitorPlaybackScrubToken?
     @State private var playerVisible = false
-    @State private var lastScrubSeekTime: CFAbsoluteTime = 0
-    @State private var isClipReady = false
-    @State private var loadError: String?
-    @State private var reachedEnd = false
-    @State private var isRemoteStream = false
-    @State private var timeObserver: Any?
-    @State private var endObserver: NSObjectProtocol?
     @State private var playbackFlashIcon: OpcIcon?
     @State private var playbackFlashVisible = false
     @State private var playbackFlashTask: Task<Void, Never>?
     @State private var isDeleteConfirmPresented = false
-    @State private var loadTask: Task<Void, Never>?
     @State private var chromeVisible = true
     @State private var assistMode = false
     @State private var isInfoPresented = false
     @State private var isConformPresented = false
-    @State private var isLooping = false
     @State private var zoom = AnchoredPinchZoom()
     @State private var zoomContainerSize: CGSize = .zero
-    @State private var videoDisplaySize = CGSize(width: 16, height: 9)
     @State private var suppressNextPlaybackTap = false
     @State private var isFrameScrubbing = false
-    @State private var frameScrubOriginTime: Double = 0
     @State private var frameScrubVideoWidth: CGFloat = 0
     @State private var frameScrubPending = false
     @State private var toastMessage: String?
-    @State private var conformSource = ConformPreview.Source()
-    @State private var conformTarget: Double?
-    @State private var playerLoadGeneration = 0
-    @State private var playbackFeed = PlaybackFeedSession()
     @State private var deliveryPresentation: MediaDeliveryPresentation?
     @State private var playbackAssistToolbarFrame: CGRect = .zero
     @State private var playbackBarFrame: CGRect = .zero
     @State private var playbackAudioLevels = AudioMeterLevels.silent
     @State private var audioMeterController = PlaybackAudioMeterController()
 
-    private let scrubSeekThrottle: CFAbsoluteTime = 0.075
-    private let scrubSeekTolerance = CMTime(seconds: 0.1, preferredTimescale: 600)
-
-    private struct ScrubOrigin: Hashable {
-        let clip: AnyHashable
-        let generation: Int
+    private var player: AVPlayer { nativePlayback.player }
+    private var playbackFeed: MonitorPlaybackFeedSession { nativePlayback.feed }
+    private var isPlaying: Bool { (playback?.reportedPlaying ?? playback?.playRequested ?? true) && !isScrubbing }
+    private var isMuted: Bool { playback?.muted ?? false }
+    private var currentTime: Double { playback?.position ?? 0 }
+    private var duration: Double { playback?.duration ?? Double(active.durationSeconds) }
+    private var isScrubbing: Bool { playback?.scrubbing ?? false }
+    private var scrubTime: Double { playback?.scrubPosition ?? currentTime }
+    private var isClipReady: Bool { playback?.ready ?? false }
+    private var loadError: String? { playback?.error }
+    private var reachedEnd: Bool { playback?.reachedEnd ?? false }
+    private var isLooping: Bool {
+        get { playback?.looping ?? false }
+        nonmutating set { playback?.setLooping(newValue) }
     }
-
-    private var currentScrubOrigin: ScrubOrigin {
-        ScrubOrigin(clip: AnyHashable(active.id), generation: playerLoadGeneration)
+    private var conformSource: ConformPreview.Source { playback?.metadata.conform ?? .init() }
+    private var conformTarget: Double? {
+        get { playback?.conformTarget }
+        nonmutating set { playback?.setConformTarget(newValue) }
+    }
+    private var currentScrubOrigin: AnyHashable { AnyHashable(playback?.token) }
+    private var playerLoadGeneration: Int { Int(truncatingIfNeeded: playback?.token.revision ?? 0) }
+    private var videoDisplaySize: CGSize {
+        if let width = playback?.metadata.width, let height = playback?.metadata.height { return CGSize(width: width, height: height) }
+        return PlaybackVideoLayout.size(fromResolution: active.resolution) ?? CGSize(width: 16, height: 9)
     }
 
     private enum FrameScrub {
@@ -455,6 +451,7 @@ struct MediaPlayerView: View {
     init(files: [MediaFile], startingAt file: MediaFile) {
         self.files = files
         _active = State(initialValue: file)
+        _nativePlayback = State(initialValue: MonitorApplePlaybackOwner(feed: PlaybackFeedSession()))
     }
 
     private var session: CameraSession { model.session }
@@ -463,21 +460,10 @@ struct MediaPlayerView: View {
         files.contains(where: { $0.id == active.id }) ? files : [active]
     }
 
-    private var currentIndex: Int? {
-        playlist.firstIndex { $0.id == active.id }
-    }
+    private var canGoPrevious: Bool { playback?.canGoPrevious ?? false }
+    private var canGoNext: Bool { playback?.canGoNext ?? false }
 
-    private var canGoPrevious: Bool {
-        guard let index = currentIndex else { return false }
-        return index > 0
-    }
-
-    private var canGoNext: Bool {
-        guard let index = currentIndex else { return false }
-        return index < playlist.count - 1
-    }
-
-    var body: some View {
+    private var playerContent: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
@@ -677,6 +663,10 @@ struct MediaPlayerView: View {
                     clip: rect)
             ]
         }
+    }
+
+    private var playerLifecycle: some View {
+        playerContent
         .statusBarHidden()
         .preferredColorScheme(.dark)
         .onAppear {
@@ -686,31 +676,46 @@ struct MediaPlayerView: View {
         }
         .onDisappear {
             playerVisible = false
-            scrubResumeTask?.cancel()
-            scrubResumeTask = nil
-            scrubOrigin = nil
-            isScrubbing = false
+            scrubToken = nil
+            playback?.setPresentationActive(false)
             model.assist.gradesClip = false
             disappear()
         }
         .task(id: active.id) {
             assistMode = false
-            await loadActiveClip()
+            loadActiveClip()
         }
         .onChange(of: isConformPresented) { _, shown in if shown { assistMode = false } }
         .onChange(of: isInfoPresented) { _, shown in if shown { assistMode = false } }
         .onChange(of: deliveryPresentation?.id) { _, shown in if shown != nil { assistMode = false }
         }
         .onChange(of: chromeVisible) { _, shown in if !shown { assistMode = false } }
-        .onChange(of: session.mediaDownloadProgress[active.path] ?? -1) { _, _ in
-            if session.isDownloaded(active), isRemoteStream, isClipReady {
-                Task { await loadActiveClip() }
+        .onChange(of: session.isDownloaded(active)) { _, downloaded in
+            if downloaded, isClipReady { playback?.refreshTransfer() }
+        }
+        .onChange(of: scenePhase) { _, phase in playback?.setSceneActive(phase == .active) }
+        .onChange(of: playback?.ready) { _, ready in
+            if ready == true, playback?.isActive == true, playback?.ready == true,
+                playback?.active?.payload.file == active,
+                OperatorPrefs.cacheFullResolution, !session.isDownloaded(active) {
+                let file = active
+                Task { await session.download(file: file) }
             }
         }
-        .onChange(of: session.isDownloaded(active)) { _, downloaded in
-            guard downloaded, isClipReady else { return }
-            Task { await adoptPlaybackLUTColor() }
+        .onChange(of: playback?.look?.source) { _, look in
+            guard let look, playback?.isActive == true, playback?.look?.source == look else { return }
+            if let shot = look.shotColor {
+                session.cameraMedia.rememberShotColor(shot, path: look.file.path, cameraID: look.cameraID)
+            }
+            guard playback?.isActive == true, playback?.look?.source == look else { return }
+            model.assist.adoptPlaybackColor(look.color,
+                family: look.family != .other ? look.family : model.assist.monitorFamily,
+                cameraName: look.cameraName)
         }
+    }
+
+    var body: some View {
+        playerLifecycle
         .overlay {
             if deliveryPresentation != nil {
                 MediaDeliveryPopupOverlay(files: [active]) {
@@ -738,11 +743,7 @@ struct MediaPlayerView: View {
             }
         }
         .onChange(of: model.delivery.isActive) { _, active in
-            if active {
-                player.pause()
-            } else if isPlaying {
-                startPlayback()
-            }
+            playback?.setPresentationActive(!active && playerVisible)
         }
         .onChange(of: model.assist.playbackVisibleTools) { _, _ in
             updatePlaybackEffects()
@@ -927,69 +928,23 @@ struct MediaPlayerView: View {
                 bufferedProgress: bufferedDuration,
                 interactionIdentity: { AnyHashable(currentScrubOrigin) },
                 onScrubbingChanged: { scrubbing in
-                    if scrubbing {
-                        if !isScrubbing {
-                            scrubResumeTask?.cancel()
-                            scrubResumeTask = nil
-                            scrubOrigin = currentScrubOrigin
-                            wasPlayingBeforeScrub = isPlaying
-                            scrubTime = currentTime
-                            player.pause()
-                        }
-                        isScrubbing = true
-                    } else {
-                        isScrubbing = false
-                    }
+                    if scrubbing { scrubToken = playback?.beginScrub() }
                 },
                 onProgressChange: { time in
-                    guard scrubOrigin == currentScrubOrigin, playerVisible else { return }
-                    scrubTime = time
-                    clearEndStateIfSeeking(to: time)
-                    let now = CFAbsoluteTimeGetCurrent()
-                    if now - lastScrubSeekTime >= scrubSeekThrottle {
-                        lastScrubSeekTime = now
-                        player.seek(
-                            to: CMTime(seconds: time, preferredTimescale: 600),
-                            toleranceBefore: scrubSeekTolerance,
-                            toleranceAfter: scrubSeekTolerance)
-                    }
+                    if let scrubToken { playback?.updateScrub(seconds: time, admitted: scrubToken) }
                 },
                 onSeek: { time in
-                    guard scrubOrigin == currentScrubOrigin, playerVisible else { return }
-                    player.seek(
-                        to: CMTime(seconds: time, preferredTimescale: 600),
-                        toleranceBefore: .zero, toleranceAfter: .zero)
-                    currentTime = time
-                    scrubTime = time
-                    isScrubbing = false
-                    clearEndStateIfSeeking(to: time)
-                    if wasPlayingBeforeScrub {
-                        startPlayback()
+                    if let token = scrubToken {
+                        playback?.updateScrub(seconds: time, admitted: token)
+                        playback?.commitScrub(admitted: token)
                     }
-                    scrubOrigin = nil
+                    scrubToken = nil
                 },
                 onCancelled: { reason in
-                    // Restore an interrupted interaction on the current clip.
-                    // Dismissal/source replacement must not restart old playback.
-                    let origin = scrubOrigin
-                    scrubOrigin = nil
-                    guard case .interrupted = reason, let origin,
-                        origin == currentScrubOrigin, playerVisible, scenePhase == .active
-                    else { return }
-                    let resume = wasPlayingBeforeScrub
-                    scrubResumeTask?.cancel()
-                    scrubResumeTask = Task { @MainActor in
-                        // Let source/disappearance handlers invalidate this edit
-                        // before applying the host's playback-resume policy.
-                        await Task.yield()
-                        guard !Task.isCancelled, playerVisible, scenePhase == .active,
-                            currentScrubOrigin == origin, !isScrubbing
-                        else { return }
-                        let elapsed = CMTimeGetSeconds(player.currentTime())
-                        if elapsed.isFinite { currentTime = max(0, elapsed) }
-                        if resume { startPlayback() }
-                        scrubResumeTask = nil
-                    }
+                    let admitted = scrubToken; scrubToken = nil
+                    guard let admitted else { return }
+                    if case .interrupted = reason { playback?.cancelScrub(interrupted: true, admitted: admitted) }
+                    else { playback?.cancelScrub(interrupted: false, admitted: admitted) }
                 }
             )
             let arrangement =
@@ -1337,10 +1292,7 @@ struct MediaPlayerView: View {
 
     private func shareTransportButton(compact: Bool) -> some View {
         Button {
-            if isPlaying {
-                player.pause()
-                isPlaying = false
-            }
+            if isPlaying { playback?.setPlaying(false) }
             deliveryPresentation = MediaDeliveryPresentation(files: [active])
         } label: {
             MonitorPlaybackChip(title: compact ? nil : "SHARE", active: true) { OpcIcon.share }
@@ -1529,247 +1481,31 @@ struct MediaPlayerView: View {
         syncPlaybackAudioMetering()
     }
 
-    /// Auto LUT needs ColorMode. `colr`/`nclx` is Rec.709 even for D-Log2;
-    /// QuickTime Keys `com.dji.camera.ColorGammaSxS` on the **original** is the
-    /// shot profile. LRF/XRF sidecars are Rec.709 even for log — do not read them.
-    /// Live `@2` is the body's current SET — used only when the original has no Keys.
-    private func adoptPlaybackLUTColor(playedPath: String? = nil, playedURL: URL? = nil) async {
-        let clip: ColorMode?
-        if let original = session.localURL(for: active),
-            let mode = ClipColorProfileIO.shotColor(at: original, path: active.path)
-        {
-            session.rememberShotColor(mode, for: active)
-            clip = mode
-        } else if let playedPath, let playedURL,
-            let mode = ClipColorProfileIO.shotColor(at: playedURL, path: playedPath)
-        {
-            session.rememberShotColor(mode, for: active)
-            clip = mode
-        } else if let cached = session.shotColor(for: active) {
-            clip = cached
-        } else {
-            clip = await session.fetchOriginalShotColor(for: active)
-        }
-        let color = PlaybackLUTColor.resolve(
-            clip: clip,
-            live: session.status.colorMode,
-            last: OperatorPrefs.lastMonitorColorMode ?? model.assist.monitorColorMode)
-        guard let color else { return }
-        model.assist.adoptPlaybackColor(
-            color,
-            family: session.bodyFamily != .other
-                ? session.bodyFamily : model.assist.monitorFamily,
-            cameraName: session.connectedCamera?.model.name)
-        if let clip {
-            ControlLiveLog.line("media: clip color \(clip.label(in: session.profile))")
-        } else {
-            ControlLiveLog.line(
-                "media: clip color fallback \(color.label(in: session.profile)) (proxy Keys ignored)")
-        }
-    }
-
     private func disappear() {
-        loadTask?.cancel()
         playbackFlashTask?.cancel()
         audioMeterController.stopPolling()
         audioMeterController.detach(from: player.currentItem)
-        playbackFeed.shutdown()
+        nativePlayback.onItemChanged = nil
+        playback?.close()
         model.assist.configureTool = nil
-        teardownPlayer()
         MediaPlaybackAudioSession.deactivateAfterPlayback()
     }
 
-    private func loadActiveClip() async {
-        playbackFeed.beginSourceChange()
-        isClipReady = false
-        loadError = nil
-        reachedEnd = false
-        currentTime = 0
-        duration = Double(active.durationSeconds)
-        applyListedClipGeometry()
-        teardownPlayerObservers()
-        player.pause()
-
-        #if targetEnvironment(simulator)
-            if let url = MonitorMediaReview.clipURL(for: active) {
-                let source = MediaPlaybackSource(
-                    url: url, mimeType: "video/mp4", isRemote: false, path: active.path)
-                _ = await playSource(source, timeout: .seconds(8))
-                return
-            }
-        #endif
-
-        // Never hand AVPlayer a `/v2?path=` URL. That path has no extension, the
-        // camera often parks `moov` at the end, and SoftAP has no internet —
-        // the item stays `.unknown` and this overlay never clears. Pull the
-        // sidecar (same GET as thumbs) and play the local file.
-        // Prefer the 720p sidecar even when the 4K original is already cached
-        // for export (`FeedPresentPolicy.preferProxyForMonitorGrade`). LUT /
-        // false colour grade that proxy, not the raw clip.
-        if let proxy = session.localProxySource(for: active) {
-            isRemoteStream = false
-            if await playSource(proxy, timeout: .seconds(8)) { return }
-        }
-
-        if session.canReachCameraMedia {
-            for path in MediaHTTP.proxyPaths(active) {
-                if Task.isCancelled { return }
-                isRemoteStream = true
-                do {
-                    let local = try await session.cachePlaybackFile(file: active, path: path)
-                    let source = MediaPlaybackSource(
-                        url: local,
-                        mimeType: MediaHTTP.playbackMIMEType(for: path),
-                        isRemote: false,
-                        path: path)
-                    isRemoteStream = false
-                    if await playSource(source, timeout: .seconds(8)) { return }
-                } catch {
-                    ControlLiveLog.line(
-                        "media: play download failed \(path) \(error.localizedDescription)")
-                }
+    private func loadActiveClip() {
+        guard let record = session.mediaPlaybackRecord(for: active) else { return }
+        if playback == nil {
+            playback = session.makeMediaPlayback(native: nativePlayback, previousColor: { model.assist.monitorColorMode })
+            nativePlayback.onItemChanged = { item in
+                audioMeterController.detach(from: nil)
+                if let item { attachPlaybackAssists(to: item) }
             }
         }
-
-        if let cached = session.localPlaybackSource(for: active) {
-            isRemoteStream = false
-            if await playSource(cached, timeout: .seconds(8)) { return }
+        scrubToken = nil; isFrameScrubbing = false; zoom.reset()
+        if playback?.active?.asset.id != record.asset.id {
+            playback?.load(record, playlist: playlist.compactMap { session.mediaPlaybackRecord(for: $0) })
         }
-
-        guard session.canReachCameraMedia else {
-            loadError = MediaOperatorCopy.clipNotCached
-            return
-        }
-
-        let original = MediaHTTP.deliveryPath(active)
-        isRemoteStream = true
-        do {
-            let local = try await session.cachePlaybackFile(file: active, path: original)
-            let source = MediaPlaybackSource(
-                url: local,
-                mimeType: MediaHTTP.playbackMIMEType(for: original),
-                isRemote: false,
-                path: original)
-            isRemoteStream = false
-            if await playSource(source, timeout: .seconds(8)) { return }
-        } catch {
-            ControlLiveLog.line(
-                "media: play download failed \(original) \(error.localizedDescription)")
-        }
-
-        isRemoteStream = false
-        if !Task.isCancelled {
-            loadError = MediaOperatorCopy.clipOpenFailed
-        }
-    }
-
-    private func playSource(_ source: MediaPlaybackSource, timeout: Duration) async -> Bool {
-        teardownPlayerObservers()
-        let item = attachItem(url: source.url, mimeType: source.mimeType, isRemote: source.isRemote)
-        let ready = await waitUntilReady(item, timeout: timeout)
-        if ready {
-            let seconds = item.duration.seconds
-            if seconds.isFinite, seconds > 0 { duration = seconds }
-            isClipReady = true
-            loadError = nil
-            if isPlaying { startPlayback() }
-            playbackFeed.noteItemReady()
-            await adoptPlaybackLUTColor(playedPath: source.path, playedURL: source.url)
-            if OperatorPrefs.cacheFullResolution, !session.isDownloaded(active) {
-                Task { await session.download(file: active) }
-            }
-            Task { await probeConformAndSize(from: item.asset) }
-            ControlLiveLog.line("media: play ready \(source.path) remote=\(source.isRemote)")
-            return true
-        }
-        let err = item.error?.localizedDescription ?? "status=\(item.status.rawValue)"
-        ControlLiveLog.line("media: play skip \(source.path) \(err)")
-        teardownPlayerObservers()
-        player.replaceCurrentItem(with: nil)
-        return false
-    }
-
-    private func attachItem(url: URL, mimeType: String, isRemote: Bool) -> AVPlayerItem {
-        let asset = AVURLAsset(
-            url: url,
-            options: [
-                "AVURLAssetOutOfBandMIMETypeKey": mimeType,
-                AVURLAssetAllowsCellularAccessKey: false,
-                "AVURLAssetHTTPHeaderFieldsKey": ["Accept": "*/*"],
-            ])
-        let item = AVPlayerItem(asset: asset)
-        playbackFeed.prepare(item)
-        player.replaceCurrentItem(with: item)
-        applyMute()
-        player.automaticallyWaitsToMinimizeStalling = isRemote
-        attachPlaybackAssists(to: item)
-        observePlaybackEnd(for: item)
-        attachTimeObserver()
-        return item
-    }
-
-    private func waitUntilReady(_ item: AVPlayerItem, timeout: Duration) async -> Bool {
-        let clock = ContinuousClock()
-        let deadline = clock.now + timeout
-        while !Task.isCancelled, clock.now < deadline {
-            if item.status == .readyToPlay { return true }
-            if item.status == .failed { return false }
-            try? await Task.sleep(for: .milliseconds(80))
-        }
-        return item.status == .readyToPlay
-    }
-
-    private func uniquePaths(_ paths: [String]) -> [String] {
-        var seen = Set<String>()
-        return paths.filter { seen.insert($0).inserted }
-    }
-
-    private func attachTimeObserver() {
-        let interval = CMTime(seconds: 0.2, preferredTimescale: 600)
-        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
-            Task { @MainActor in
-                guard !isScrubbing else { return }
-                currentTime = time.seconds
-                if let dur = player.currentItem?.duration.seconds, dur.isFinite, dur > 0 {
-                    duration = dur
-                }
-            }
-        }
-    }
-
-    private func observePlaybackEnd(for item: AVPlayerItem) {
-        endObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: item,
-            queue: .main
-        ) { _ in
-            Task { @MainActor in
-                if isLooping {
-                    restartPlayback()
-                } else {
-                    reachedEnd = true
-                    isPlaying = false
-                    currentTime = duration
-                }
-            }
-        }
-    }
-
-    private func teardownPlayerObservers() {
-        if let timeObserver {
-            player.removeTimeObserver(timeObserver)
-            self.timeObserver = nil
-        }
-        if let endObserver {
-            NotificationCenter.default.removeObserver(endObserver)
-            self.endObserver = nil
-        }
-    }
-
-    private func teardownPlayer() {
-        teardownPlayerObservers()
-        player.pause()
-        player.replaceCurrentItem(with: nil)
+        playback?.setSceneActive(scenePhase == .active)
+        playback?.setPresentationActive(playerVisible)
     }
 
     private func handleFrameTap() {
@@ -1807,171 +1543,44 @@ struct MediaPlayerView: View {
         }
     }
 
-    private func togglePlay() {
-        if isPlaying {
-            player.pause()
-            isPlaying = false
-        } else {
-            startPlayback()
-        }
-    }
-
-    private func startPlayback() {
-        reachedEnd = false
-        player.rate = Float(conformSpeed)
-        isPlaying = true
-        playbackFeed.noteItemReady()
-    }
-
-    private func applyMute() {
-        player.isMuted = isMuted || conformTarget != nil
-    }
-
-    private func restartPlayback() {
-        player.seek(to: .zero)
-        currentTime = 0
-        startPlayback()
-    }
-
-    private func seek(by delta: Double) {
-        let target = min(max(0, currentTime + delta), duration)
-        player.seek(to: CMTime(seconds: target, preferredTimescale: 600))
-        currentTime = target
-        clearEndStateIfSeeking(to: target)
-    }
-
-    private func clearEndStateIfSeeking(to time: Double) {
-        if reachedEnd, time + 0.05 < duration {
-            reachedEnd = false
-        }
-    }
-
-    private func toggleMute() {
-        isMuted.toggle()
-        applyMute()
-    }
+    private func togglePlay() { playback?.togglePlaying() }
+    private func startPlayback() { playback?.setPlaying(true); playbackFeed.noteItemReady() }
+    private func applyMute() { playback?.setMuted(isMuted) }
+    private func restartPlayback() { playback?.restart() }
+    private func seek(by delta: Double) { playback?.seek(by: delta) }
+    private func toggleMute() { playback?.setMuted(!isMuted) }
 
     private func goToAdjacent(offset: Int) {
-        guard let index = currentIndex else { return }
-        let next = index + offset
-        guard playlist.indices.contains(next) else {
+        guard let playback else { return }
+        guard offset < 0 ? playback.canGoPrevious : playback.canGoNext else {
             UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
             return
         }
-        player.pause()
-        isPlaying = true
-        reachedEnd = false
-        isClipReady = false
+        playback.setPresentationActive(false)
+        playback.goToAdjacent(offset)
+        guard let next = playback.active?.payload.file else { return }
         zoom.reset()
         withAnimation(.easeInOut(duration: 0.28)) {
-            active = playlist[next]
+            active = next
         }
     }
 
     private func beginFrameScrub() {
-        wasPlayingBeforeScrub = isPlaying
-        frameScrubOriginTime = currentTime
-        scrubTime = currentTime
-        isScrubbing = true
-        isFrameScrubbing = true
-        player.pause()
-        isPlaying = false
+        guard let token = playback?.beginScrub() else { return }
+        scrubToken = token; isFrameScrubbing = true
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
-
     private func updateFrameScrub(horizontalDelta: CGFloat) {
-        guard duration > 0, frameScrubVideoWidth > 0 else { return }
-        let deltaTime = Double(horizontalDelta / frameScrubVideoWidth) * duration
-        let time = max(0, min(duration, frameScrubOriginTime + deltaTime))
-        scrubTime = time
-        clearEndStateIfSeeking(to: time)
-        let now = CFAbsoluteTimeGetCurrent()
-        if now - lastScrubSeekTime >= scrubSeekThrottle {
-            lastScrubSeekTime = now
-            player.seek(
-                to: CMTime(seconds: time, preferredTimescale: 600),
-                toleranceBefore: scrubSeekTolerance,
-                toleranceAfter: scrubSeekTolerance)
-        }
+        if let scrubToken { playback?.updateFrameScrub(delta: Double(horizontalDelta),
+            width: Double(frameScrubVideoWidth), admitted: scrubToken) }
     }
-
     private func endFrameScrub() {
-        guard isFrameScrubbing else { return }
-        player.seek(
-            to: CMTime(seconds: scrubTime, preferredTimescale: 600),
-            toleranceBefore: .zero,
-            toleranceAfter: .zero)
-        currentTime = scrubTime
-        isScrubbing = false
-        isFrameScrubbing = false
-        clearEndStateIfSeeking(to: scrubTime)
-        if wasPlayingBeforeScrub { startPlayback() }
-        suppressNextPlaybackTap = true
+        if let scrubToken { playback?.commitScrub(admitted: scrubToken) }
+        scrubToken = nil; isFrameScrubbing = false; suppressNextPlaybackTap = true
     }
-
-    private func applyListedClipGeometry() {
-        videoDisplaySize =
-            PlaybackVideoLayout.size(fromResolution: active.resolution)
-            ?? CGSize(width: 16, height: 9)
-        conformTarget = nil
-        if let fps = active.fps, fps > 0 {
-            conformSource = ConformPreview.probe(listedRate: Double(fps))
-        } else {
-            conformSource = ConformPreview.Source()
-        }
-    }
-
-    private func probeConformAndSize(from asset: AVAsset) async {
-        playerLoadGeneration += 1
-        let generation = playerLoadGeneration
-        if let urlAsset = asset as? AVURLAsset {
-            if let size = await loadVideoDisplaySize(from: urlAsset) {
-                guard generation == playerLoadGeneration else { return }
-                videoDisplaySize = size
-            }
-            let probed = await loadConformSource(from: urlAsset)
-            guard generation == playerLoadGeneration else { return }
-            conformSource = probed
-            if let target = conformTarget, let rate = probed.captureRate,
-                target >= rate * ConformPreview.conformFloor
-            {
-                conformTarget = nil
-            }
-        }
-    }
-
-    private func loadVideoDisplaySize(from asset: AVURLAsset) async -> CGSize? {
-        guard let track = try? await asset.loadTracks(withMediaType: .video).first else {
-            return nil
-        }
-        guard let size = try? await track.load(.naturalSize) else { return nil }
-        let transform = (try? await track.load(.preferredTransform)) ?? .identity
-        let rect = CGRect(origin: .zero, size: size).applying(transform)
-        let fitted = CGSize(width: abs(rect.width), height: abs(rect.height))
-        guard fitted.width > 1, fitted.height > 1 else { return nil }
-        return fitted
-    }
-
-    private func loadConformSource(from asset: AVURLAsset) async -> ConformPreview.Source {
-        let listed = active.fps.map { Double($0) }
-        guard let track = try? await asset.loadTracks(withMediaType: .video).first else {
-            return ConformPreview.probe(listedRate: listed)
-        }
-        let nominal = try? await track.load(.nominalFrameRate)
-        let minimum = try? await track.load(.minFrameDuration)
-        return ConformPreview.probe(
-            nominalFrameRate: nominal.map { Double($0) },
-            minFrameDurationSeconds: (minimum?.isValid == true) ? minimum?.seconds : nil,
-            listedRate: listed)
-    }
-
     private func dismissPlayback() {
-        playerVisible = false
-        scrubResumeTask?.cancel()
-        scrubResumeTask = nil
-        scrubOrigin = nil
-        isScrubbing = false
-        player.pause()
+        playerVisible = false; scrubToken = nil
+        playback?.setPresentationActive(false)
         dismiss()
     }
 
