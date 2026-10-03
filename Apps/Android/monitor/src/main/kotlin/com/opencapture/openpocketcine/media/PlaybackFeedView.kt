@@ -3,8 +3,6 @@
 package com.opencapture.openpocketcine.media
 
 import android.graphics.SurfaceTexture
-import android.os.Handler
-import android.os.Looper
 import android.view.TextureView
 import androidx.compose.foundation.layout.BoxWithConstraints
 import com.opencapture.monitorui.monitorBackdropSource
@@ -19,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.exoplayer.ExoPlayer
+import com.opencapture.opencine.media.MonitorPlaybackItemToken
 import com.opencapture.openpocketcine.feed.FeedEffectsRenderPlan
 import com.opencapture.openpocketcine.feed.LiveFeedEffectsSession
 
@@ -30,7 +28,7 @@ import com.opencapture.openpocketcine.feed.LiveFeedEffectsSession
  */
 @Composable
 internal fun PlaybackFeedView(
-    player: ExoPlayer,
+    native: Media3PlaybackPort,
     scopeBus: com.opencapture.opencine.runtime.ScopeSampleBus,
     preview: com.opencapture.opencine.runtime.InspectorPreviewPipeline,
     backdrop: MonitorBackdropFeed,
@@ -40,21 +38,23 @@ internal fun PlaybackFeedView(
     zoom: AnchoredPinchZoom,
     sourceWidth: Int,
     sourceHeight: Int,
-    sourceIdentity: String,
+    sourceIdentity: MonitorPlaybackItemToken,
     sourceReady: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val main = remember { Handler(Looper.getMainLooper()) }
+    val pictureOwner = remember(native) { native.claimPicture() }
     val session =
-        remember {
+        remember(native) {
             LiveFeedEffectsSession(
                 context = context,
                 scopeBus = scopeBus,
                 preview = preview,
                 backdrop = backdrop,
                 onDecoderSurface = { surface ->
-                    main.post { player.setVideoSurface(surface) }
+                    // The shared runtime already delivers on Main and refuses its retired
+                    // generation. Keep native ownership here instead of posting it a second time.
+                    native.attachPicture(surface, pictureOwner)
                 },
                 onGpuFailed = { },
                 letterboxSource = false,
@@ -62,10 +62,10 @@ internal fun PlaybackFeedView(
                 playback = true,
             )
         }
-    DisposableEffect(session, player) {
+    DisposableEffect(session, native) {
         onDispose {
             session.close()
-            main.post { player.clearVideoSurface() }
+            native.releasePicture(pictureOwner)
         }
     }
     LaunchedEffect(sourceIdentity, sourceReady) {

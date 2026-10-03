@@ -2,6 +2,11 @@
 
 package com.opencapture.openpocketcine.media
 
+import com.opencapture.opencine.media.MonitorConformPreview as ConformPreview
+import com.opencapture.opencine.media.MonitorPlaybackScrubToken
+import com.opencapture.opencine.media.MonitorPlaybackLookTiming
+import com.opencapture.opencine.appkit.MonitorMediaPlaybackModel
+
 import com.opencapture.openpocketcine.feed.colorMode
 
 import com.opencapture.monitorui.LocalMonitorBackdrops
@@ -82,10 +87,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackParameters
-import androidx.media3.common.Player
-import androidx.media3.common.VideoSize
 import com.opencapture.monitorui.MonitorLayoutPolicy
 import com.opencapture.monitorui.MonitorPlaybackLayout
 import com.opencapture.openpocketcine.AppModel
@@ -336,33 +337,13 @@ fun MediaPlayerScreen(
     val haptics = LocalOperatorHaptics.current
     var active by remember { mutableStateOf(startingAt) }
     val playlist = if (files.any { it.id == active.id }) files else listOf(active)
-    val index = playlist.indexOfFirst { it.id == active.id }
-    val canPrev = index > 0
-    val canNext = index >= 0 && index < playlist.lastIndex
-    var isPlaying by remember { mutableStateOf(true) }
-    var isMuted by remember { mutableStateOf(false) }
-    var currentTime by remember { mutableFloatStateOf(0f) }
-    var duration by remember { mutableFloatStateOf(active.durationSeconds.toFloat()) }
-    var scrubbing by remember { mutableStateOf(false) }
-    var wasPlayingBeforeScrub by remember { mutableStateOf(false) }
-    var lastScrubSeekAt by remember { mutableLongStateOf(0L) }
-    var reachedEnd by remember { mutableStateOf(false) }
-    var ready by remember(active.id) { mutableStateOf(false) }
-    var loadError by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     var chromeVisible by remember { mutableStateOf(true) }
     var assistMode by remember { mutableStateOf(false) }
     var conformMenu by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
-    var looping by remember { mutableStateOf(false) }
-    var playbackSource by remember { mutableStateOf("") }
-    var conformSource by remember { mutableStateOf(ConformPreview.Source()) }
-    var conformTarget by remember { mutableStateOf<Double?>(null) }
-    var videoWidth by remember { mutableFloatStateOf(16f) }
-    var videoHeight by remember { mutableFloatStateOf(9f) }
     var zoom by remember { mutableStateOf(AnchoredPinchZoom()) }
     var frameScrubbing by remember { mutableStateOf(false) }
-    var frameScrubOrigin by remember { mutableFloatStateOf(0f) }
     var flashSymbol by remember { mutableStateOf<OpcIcon?>(null) }
     var flashVisible by remember { mutableStateOf(false) }
     var flashJob by remember { mutableStateOf<Job?>(null) }
@@ -372,23 +353,54 @@ fun MediaPlayerScreen(
     val activeRecord = controller.record(active)
     val favorite = activeRecord?.favorite ?: active.isStarred
     val progress = activeRecord?.let { libraryState.progress[it.asset.id] }
-    val context = LocalContext.current
     val playbackWindow = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
     val portraitPlayback = playbackWindow.height > playbackWindow.width
     val density = LocalDensity.current
     val anyPlaybackAssistOn = assist.playbackVisibleTools.isNotEmpty()
     val audioMetersOn = assist.isPlaybackVisible(LiveAssistTool.AUDIO)
-    val conformSpeed =
-        run {
-            val target = conformTarget
-            val rate = conformSource.captureRate
-            if (target == null || rate == null) 1.0 else ConformPreview.speed(rate, target)
-        }
-    val conformAvailability = ConformPreview.availability(conformSource)
     val meterBox = remember { AudioLevelTapBox() }
     val meterSink = remember { PlaybackPcmBufferSink(meterBox) }
     val meterSampler = remember { com.opencapture.opencine.runtime.MonitorAudioMeterSampler(meterBox) }
     val glass = remember { MonitorGlass(GlassTier.FLAT) }
+
+    val context = LocalContext.current
+    val native = remember(controller) { Media3PlaybackPort(createPlaybackExoPlayer(context, meterSink), scope) }
+    val playback = remember(controller) {
+        MonitorMediaPlaybackModel<LunaMediaLibraryPayload, LunaPlaybackLook>(controller.library, native, scope,
+            readyTimeout = null, retryNativeFailures = false, candidates = controller::playbackCandidates,
+            lookTiming = MonitorPlaybackLookTiming.BEFORE_NATIVE_PREPARATION,
+            startTiming = com.opencapture.opencine.media.MonitorPlaybackStartTiming.AFTER_NATIVE_ITEM_INSTALLATION,
+            resolveLook = { record, _ -> controller.resolvePlaybackLook(record) })
+    }
+    val playbackState by playback.state.collectAsState()
+    val canPrev = playback.canGoPrevious
+    val canNext = playback.canGoNext
+    var scrubToken by remember { mutableStateOf<MonitorPlaybackScrubToken?>(null) }
+    val player = native.player
+    val isPlaying = (playbackState.reportedPlaying ?: playbackState.playRequested) && !playbackState.scrubbing
+    val isMuted = playbackState.muted
+    val scrubbing = playbackState.scrubbing
+    val currentTime = (if (scrubbing) playbackState.scrubPosition else playbackState.position).toFloat()
+    val duration = (playbackState.duration ?: active.durationSeconds.toDouble()).toFloat()
+    val reachedEnd = playbackState.reachedEnd
+    val ready = playbackState.ready
+    val loadError = playbackState.error
+    val looping = playbackState.looping
+    val conformSource = playbackState.metadata.conform
+    val conformTarget = playbackState.conformTarget
+    val conformSpeed = playback.rate
+    val conformAvailability = ConformPreview.availability(conformSource)
+    val listed = PlaybackVideoLayout.sizeFromResolution(active.resolution)
+    val videoWidth = playbackState.metadata.width?.toFloat() ?: listed?.width ?: 16f
+    val videoHeight = playbackState.metadata.height?.toFloat() ?: listed?.height ?: 9f
+    val decodeWidth = player.videoSize.width.takeIf { it > 1 } ?: 1280
+    val decodeHeight = player.videoSize.height.takeIf { it > 1 } ?: 720
+    val clipColorMode = playbackState.look?.source?.colorMode ?: -1
+    val playbackSource = when (playbackState.item?.role) {
+        com.opencapture.opencine.media.MediaRepresentationRole.PROXY -> "PROXY"
+        com.opencapture.opencine.media.MediaRepresentationRole.ORIGINAL -> "ORIGINAL"
+        null -> ""
+    }
 
     fun handlePlaybackBack() {
         when {
@@ -401,9 +413,6 @@ fun MediaPlayerScreen(
     BackHandler { handlePlaybackBack() }
     val backdrop = rememberMonitorBackdropFeed(active.id, enabled = ready)
     val status by model.session.chromeStatus.collectAsState()
-    var decodeWidth by remember { mutableIntStateOf(1280) }
-    var decodeHeight by remember { mutableIntStateOf(720) }
-    var clipColorMode by remember { mutableIntStateOf(-1) }
     val effectsPlan =
         rememberLiveFeedEffectsPlan(
             assist = assist,
@@ -415,148 +424,34 @@ fun MediaPlayerScreen(
             clipColorMode = clipColorMode,
         )
 
-    fun applyListedGeometry() {
-        val listed = PlaybackVideoLayout.sizeFromResolution(active.resolution)
-        videoWidth = listed?.width ?: 16f
-        videoHeight = listed?.height ?: 9f
-        conformTarget = null
-        conformSource = ConformPreview.probe(listedRate = active.fps?.toDouble())
-    }
-
     fun conformedLabel(seconds: Float): String =
         MediaClipFormatting.durationLabel(ConformPreview.conformedDuration(seconds.toDouble(), conformSpeed))
 
-    val player =
-        remember {
-            createPlaybackExoPlayer(context, meterSink).apply { playWhenReady = true }
-        }
-
-    fun applyPlaybackRate() {
-        player.playbackParameters = PlaybackParameters(conformSpeed.toFloat(), 1f)
-        player.volume = if (isMuted || conformTarget != null) 0f else 1f
-    }
-
-    DisposableEffect(player) {
-        val listener =
-            object : Player.Listener {
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_READY) {
-                        ready = true
-                        val dur = player.duration
-                        if (dur > 0) duration = dur / 1000f
-                    }
-                    if (playbackState == Player.STATE_ENDED) {
-                        reachedEnd = true
-                        isPlaying = false
-                    }
-                }
-
-                override fun onIsPlayingChanged(playing: Boolean) {
-                    isPlaying = playing
-                }
-
-                override fun onVideoSizeChanged(videoSize: VideoSize) {
-                    if (videoSize.width > 1 && videoSize.height > 1) {
-                        val ratio = videoSize.pixelWidthHeightRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
-                        videoWidth = videoSize.width * ratio
-                        videoHeight = videoSize.height.toFloat()
-                        decodeWidth = videoSize.width
-                        decodeHeight = videoSize.height
-                    }
-                }
-            }
-        player.addListener(listener)
+    DisposableEffect(playback) {
         onDispose {
-            assist.configureTool = null
-            flashJob?.cancel()
-            player.removeListener(listener)
-            meterSink.close()
-            meterBox.close()
-            player.release()
+            assist.configureTool = null; flashJob?.cancel()
+            playback.close(); meterSink.close(); meterBox.close()
         }
     }
-
     LaunchedEffect(active.id) {
-        assist.configureTool = null
-        ready = false
-        loadError = null
-        reachedEnd = false
-        currentTime = 0f
-        duration = active.durationSeconds.toFloat()
-        clipColorMode = -1
-        zoom = AnchoredPinchZoom()
-        frameScrubbing = false
-        decodeWidth = 1280
-        decodeHeight = 720
-        applyListedGeometry()
+        assist.configureTool = null; zoom = AnchoredPinchZoom(); frameScrubbing = false; scrubToken = null
         meterBox.readAndReset()
-        player.stop()
-        player.clearMediaItems()
-        val local = controller.cacheForPlayback(active)
-        if (local == null) {
-            clipColorMode = -1
-            loadError =
-                if (controller.isLive) MediaOperatorCopy.CLIP_OPEN_FAILED
-                else MediaOperatorCopy.CLIP_NOT_CACHED
-            return@LaunchedEffect
-        }
-        clipColorMode =
-            withContext(Dispatchers.IO) { controller.fetchShotColor(active) }
-        playbackSource = if (local.extension.lowercase() in listOf("lrf", "xrf")) "PROXY" else "ORIGINAL"
-        player.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(local)))
-        player.prepare()
-        applyPlaybackRate()
-        player.playWhenReady = true
-        isPlaying = true
-        if (model.cacheFullResolution && controller.isLive && !controller.isDownloaded(active)) {
-            controller.download(active)
+        controller.record(active)?.let { record ->
+            if (playback.state.value.active?.asset?.id != record.asset.id) playback.load(record, playlist.mapNotNull(controller::record))
         }
     }
-
-    LaunchedEffect(looping) { player.repeatMode = if (looping) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF }
-
+    LaunchedEffect(playbackState.token, playbackState.nativeItemInstalled) {
+        if (playback.isActive && playbackState.nativeItemInstalled && playback.state.value.token == playbackState.token &&
+            playbackState.active?.asset?.id == activeRecord?.asset?.id &&
+            model.cacheFullResolution && controller.isLive && !controller.isDownloaded(active)) controller.download(active)
+    }
     LaunchedEffect(progress, active.id) {
-        if (progress != null && progress >= 1f && controller.isDownloaded(active)) {
-            clipColorMode =
-                withContext(Dispatchers.IO) { controller.fetchShotColor(active) }
-        }
+        if (progress != null && progress >= 1f && controller.isDownloaded(active)) playback.refreshTransfer()
     }
 
-    LaunchedEffect(ready, active.id) {
-        if (!ready) return@LaunchedEffect
-        val formatRate = player.videoFormat?.frameRate
-        val nominal =
-            if (formatRate != null && formatRate.isFinite() && formatRate > 1f) {
-                formatRate.toDouble()
-            } else {
-                null
-            }
-        val probed =
-            ConformPreview.probe(
-                nominalFrameRate = nominal,
-                listedRate = active.fps?.toDouble(),
-            )
-        conformSource = probed
-        val target = conformTarget
-        val rate = probed.captureRate
-        if (target != null && rate != null && target >= rate * ConformPreview.conformFloor) {
-            conformTarget = null
-        }
-    }
-
-    LaunchedEffect(conformTarget, isMuted, conformSpeed) {
-        applyPlaybackRate()
-    }
-
-    LaunchedEffect(player, isPlaying, scrubbing) {
-        while (true) {
-            if (!scrubbing) {
-                currentTime = (player.currentPosition / 1000f).coerceAtLeast(0f)
-                val dur = player.duration
-                if (dur > 0) duration = dur / 1000f
-            }
-            delay(200)
-        }
+    LaunchedEffect(playbackState.token, playbackState.look) {
+        val look = playbackState.look ?: return@LaunchedEffect
+        if (playback.isActive && playback.state.value.token == playbackState.token && playback.state.value.look == look) controller.rememberPlaybackLook(look.source)
     }
 
     LaunchedEffect(audioMetersOn, conformTarget != null) {
@@ -585,12 +480,7 @@ fun MediaPlayerScreen(
         }
     }
 
-    fun seekBy(delta: Float) {
-        val target = (currentTime + delta).coerceIn(0f, max(duration, 0f))
-        player.seekTo((target * 1000).toLong())
-        currentTime = target
-        if (reachedEnd && target + 0.05f < duration) reachedEnd = false
-    }
+    fun seekBy(delta: Float) { playback.seekBy(delta.toDouble()) }
 
     fun flashTransport(willPlay: Boolean) {
         flashJob?.cancel()
@@ -608,37 +498,16 @@ fun MediaPlayerScreen(
     fun handleFrameTap() {
         if (!ready || frameScrubbing) return
         when (PlaybackFrameTap.action(chromeVisible, reachedEnd)) {
-            PlaybackFrameTap.RESTART_PLAYBACK -> {
-                player.seekTo(0)
-                applyPlaybackRate()
-                player.play()
-                reachedEnd = false
-                isPlaying = true
-                flashTransport(true)
-            }
-            PlaybackFrameTap.TOGGLE_TRANSPORT -> {
-                val willPlay = !isPlaying
-                if (isPlaying) {
-                    player.pause()
-                } else {
-                    applyPlaybackRate()
-                    player.play()
-                }
-                flashTransport(willPlay)
-            }
+            PlaybackFrameTap.RESTART_PLAYBACK -> { playback.restart(); flashTransport(true) }
+            PlaybackFrameTap.TOGGLE_TRANSPORT -> { val willPlay = !isPlaying; playback.setPlaying(willPlay); flashTransport(willPlay) }
             PlaybackFrameTap.IGNORE -> Unit
         }
     }
-
     fun goToAdjacent(offset: Int) {
-        val next = index + offset
-        if (next !in playlist.indices) return
-        player.pause()
-        isPlaying = true
-        reachedEnd = false
-        ready = false
-        zoom = AnchoredPinchZoom()
-        active = playlist[next]
+        if (if (offset < 0) !playback.canGoPrevious else !playback.canGoNext) return
+        playback.setPresentationActive(false); playback.goToAdjacent(offset)
+        zoom = AnchoredPinchZoom(); active = playback.state.value.active?.payload?.file ?: return
+        playback.setPresentationActive(true)
     }
 
     CompositionLocalProvider(LocalMonitorGlass provides glass, LocalMonitorBackdrops provides listOf(backdrop.source),
@@ -712,7 +581,7 @@ fun MediaPlayerScreen(
                     .clipToBounds(),
             ) {
                 PlaybackFeedView(
-                    player = player,
+                    native = native,
                     scopeBus = model.scopeBus,
                     preview = model.inspectorPreview,
                     backdrop = backdrop,
@@ -722,7 +591,7 @@ fun MediaPlayerScreen(
                     zoom = zoom,
                     sourceWidth = decodeWidth,
                     sourceHeight = decodeHeight,
-                    sourceIdentity = active.id,
+                    sourceIdentity = playbackState.token,
                     sourceReady = ready,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -759,41 +628,14 @@ fun MediaPlayerScreen(
                     chromeVisible = swipe == PlaybackChromeSwipe.SHOW
                 })
                 val latestOnScrubStart by rememberUpdatedState({
-                    wasPlayingBeforeScrub = isPlaying
-                    frameScrubOrigin = currentTime
-                    scrubbing = true
-                    frameScrubbing = true
-                    player.pause()
-                    isPlaying = false
-                    haptics.longPress()
+                    scrubToken = playback.beginScrub(); frameScrubbing = scrubToken != null
+                    if (frameScrubbing) haptics.longPress()
                 })
                 val latestOnScrubDelta by rememberUpdatedState<(Float) -> Unit>({ dx ->
-                    val time =
-                        PlaybackFrameScrub.timeAfterDelta(
-                            originSeconds = frameScrubOrigin,
-                            deltaPx = dx,
-                            videoWidthPx = fitted.width,
-                            durationSeconds = duration,
-                        )
-                    currentTime = time
-                    if (reachedEnd && time + 0.05f < duration) reachedEnd = false
-                    val now = SystemClock.elapsedRealtime()
-                    if (now - lastScrubSeekAt >=
-                        (PlaybackFrameScrub.SEEK_THROTTLE_SECONDS * 1000).toLong()
-                    ) {
-                        lastScrubSeekAt = now
-                        player.seekTo((time * 1000).toLong())
-                    }
+                    scrubToken?.let { playback.updateFrameScrub(dx.toDouble(), fitted.width.toDouble(), it) }
                 })
                 val latestOnScrubEnd by rememberUpdatedState({
-                    player.seekTo((currentTime * 1000).toLong())
-                    scrubbing = false
-                    frameScrubbing = false
-                    if (reachedEnd && currentTime + 0.05f < duration) reachedEnd = false
-                    if (wasPlayingBeforeScrub) {
-                        applyPlaybackRate()
-                        player.play()
-                    }
+                    scrubToken?.let(playback::commitScrub); scrubToken = null; frameScrubbing = false
                 })
                 val latestOnPinch by rememberUpdatedState<(Float, Offset) -> Unit>({ magnification, centroid ->
                     val anchor = unitPoint(centroid, fitted.width, fitted.height)
@@ -939,7 +781,7 @@ fun MediaPlayerScreen(
                         )
                         PlaybackActionChip(OpcIcon.INFO, "Clip info", { infoOpen = !infoOpen }, active = infoOpen)
                         PlaybackActionChip(
-                            OpcIcon.SHARE, "Share clip", { player.pause(); onDeliver(active) },
+                            OpcIcon.SHARE, "Share clip", { playback.setPlaying(false); onDeliver(active) },
                             title = if (portraitPlayback) null else "SHARE", active = true,
                         )
                         if (controller.canDelete(active)) {
@@ -978,36 +820,12 @@ fun MediaPlayerScreen(
                             progressSeconds = if (duration > 0f) currentTime.coerceIn(0f, duration) else 0f,
                             durationSeconds = duration,
                             onScrubbingChanged = { dragging ->
-                                if (dragging) {
-                                    if (!scrubbing) {
-                                        wasPlayingBeforeScrub = isPlaying
-                                        player.pause()
-                                    }
-                                    scrubbing = true
-                                } else {
-                                    scrubbing = false
-                                }
+                                if (dragging) scrubToken = playback.beginScrub()
                             },
-                            onProgressChange = { time ->
-                                currentTime = time
-                                if (reachedEnd && time + 0.05f < duration) reachedEnd = false
-                                val now = SystemClock.elapsedRealtime()
-                                if (now - lastScrubSeekAt >=
-                                    (PlaybackFrameScrub.SEEK_THROTTLE_SECONDS * 1000).toLong()
-                                ) {
-                                    lastScrubSeekAt = now
-                                    player.seekTo((time * 1000).toLong())
-                                }
-                            },
-                            onSeek = {
-                                currentTime = it
-                                player.seekTo((it * 1000).toLong())
-                                if (reachedEnd && it + 0.05f < duration) reachedEnd = false
-                                scrubbing = false
-                                if (wasPlayingBeforeScrub) {
-                                    applyPlaybackRate()
-                                    player.play()
-                                }
+                            onProgressChange = { time -> scrubToken?.let { playback.updateScrub(time.toDouble(), it) } },
+                            onSeek = { time ->
+                                scrubToken?.let { token -> playback.updateScrub(time.toDouble(), token); playback.commitScrub(token) }
+                                scrubToken = null
                             },
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -1023,17 +841,7 @@ fun MediaPlayerScreen(
                                 if (reachedEnd) "Restart clip" else if (isPlaying) "Pause" else "Play",
                                 iconSize = MonitorPlaybackLayout.PLAY_ICON_SIZE.dp,
                             ) {
-                                if (reachedEnd) {
-                                    player.seekTo(0)
-                                    reachedEnd = false
-                                    applyPlaybackRate()
-                                    player.play()
-                                } else if (isPlaying) {
-                                    player.pause()
-                                } else {
-                                    applyPlaybackRate()
-                                    player.play()
-                                }
+                                if (reachedEnd) playback.restart() else playback.setPlaying(!isPlaying)
                             }
                             PlaybackTransportButton(OpcIcon.SKIP_FORWARD, "Forward 15 seconds") { seekBy(15f) }
                         }
@@ -1044,12 +852,12 @@ fun MediaPlayerScreen(
                             horizontalArrangement = Arrangement.spacedBy(MonitorPlaybackLayout.ACTION_SPACING.dp),
                         ) {
                             PlaybackConformButton(conformAvailability, conformSource.captureRate ?: 0.0, conformTarget,
-                                conformMenu, { conformMenu = it }, { conformTarget = it })
+                                conformMenu, { conformMenu = it }, { playback.setConformTarget(it) })
                             PlaybackActionChip(
                                 if (isMuted) OpcIcon.VOLUME_X else OpcIcon.VOLUME_2,
-                                if (isMuted) "Unmute" else "Mute", { isMuted = !isMuted }, active = isMuted,
+                                if (isMuted) "Unmute" else "Mute", { playback.setMuted(!isMuted) }, active = isMuted,
                             )
-                            PlaybackActionChip(OpcIcon.REPEAT, "Loop clip", { looping = !looping }, active = looping)
+                            PlaybackActionChip(OpcIcon.REPEAT, "Loop clip", { playback.setLooping(!looping) }, active = looping)
                             PlaybackActionChip(PlaybackChromeMetrics.hideChromeIcon, "Hide playback controls", { chromeVisible = false })
                         }
                     },
@@ -1128,8 +936,8 @@ fun MediaPlayerScreen(
                             val dying = active
                             controller.delete(dying)
                             when {
-                                canNext -> active = playlist[index + 1]
-                                canPrev -> active = playlist[index - 1]
+                                canNext -> goToAdjacent(1)
+                                canPrev -> goToAdjacent(-1)
                                 else -> onClose()
                             }
                         }

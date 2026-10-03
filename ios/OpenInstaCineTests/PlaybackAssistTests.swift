@@ -5,6 +5,8 @@ import Metal
 import OpenPocketViewCore
 import XCTest
 import OpenCineAppKit
+import OpenCineApple
+import OpenCineMedia
 import MonitorPresentation
 
 @testable import OpenInstaCine
@@ -14,6 +16,61 @@ import MonitorPresentation
 /// lands. `AVVideoComposition` after `replaceCurrentItem` never showed the look.
 @MainActor
 final class PlaybackAssistTests: XCTestCase {
+    func testActualNativeOwnerRejectsOutgoingRetireAndCloseAfterSuccessorClaim() {
+        let player = AVPlayer(), feed = PlaybackFeedSession()
+        let native = MonitorApplePlaybackOwner(player: player, feed: feed)
+        let a = MonitorPlaybackItemToken(owner: UUID(), revision: 0)
+        let b = MonitorPlaybackItemToken(owner: UUID(), revision: 0)
+        native.retireItem(for: a); native.retireItem(for: b)
+        let item = ReadyPlaybackItem(url: URL(fileURLWithPath: "/tmp/owned-player-B.mp4"))
+        player.replaceCurrentItem(with: item)
+        var retiredItems = 0
+        native.onItemChanged = { if $0 == nil { retiredItems += 1 } }
+        native.retireItem(for: .init(owner: a.owner, revision: 1))
+        native.close(token: .init(owner: a.owner, revision: 2))
+        XCTAssertTrue(player.currentItem === item)
+        XCTAssertEqual(retiredItems, 0, "an outgoing owner cannot clear the successor's native graph")
+        native.close(token: .init(owner: b.owner, revision: 1))
+        XCTAssertNil(player.currentItem)
+        XCTAssertEqual(retiredItems, 1)
+    }
+
+    func testLateParkedSeekCannotKickTheNextSource() async {
+        let player = ControlledPlaybackPlayer(), session = PlaybackFeedSession()
+        let host = PlaybackFeedHostView(frame: CGRect(x: 0, y: 0, width: 64, height: 64))
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        var effects = LiveImageEffects(); effects.histogram = true
+        let a = ReadyPlaybackItem(url: URL(fileURLWithPath: "/tmp/parked-A.mp4"))
+        session.prepare(a); player.replaceCurrentItem(with: a); session.attach(host: host, player: player)
+        session.setEffects(effects, transfer: .rec709, sampleBus: bus)
+        await player.whenCaptured(1)
+        XCTAssertEqual(player.seekCount, 1)
+        let b = ReadyPlaybackItem(url: URL(fileURLWithPath: "/tmp/parked-B.mp4"))
+        session.prepare(b); player.replaceCurrentItem(with: b); session.noteItemReady()
+        await player.whenCaptured(2)
+        XCTAssertEqual(player.seekCount, 2)
+        player.finishSeek(0)
+        await withCheckedContinuation { continuation in session.debugOnPullQueue { continuation.resume() } }
+        XCTAssertEqual(player.seekCount, 2, "A's native completion must not reset B's pending kick or seek B again")
+        XCTAssertTrue(player.currentItem === b && bus.usesPlaybackSource)
+        session.shutdown(); XCTAssertFalse(bus.usesPlaybackSource)
+    }
+
+    func testRetiredFeedCannotClearSuccessorPictureOrSampleLease() {
+        let a = PlaybackFeedSession(), b = PlaybackFeedSession()
+        let host = PlaybackFeedHostView(frame: CGRect(x: 0, y: 0, width: 64, height: 64))
+        let player = AVPlayer(), bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        var effects = LiveImageEffects(); effects.histogram = true
+        a.attach(host: host, player: AVPlayer()); a.setEffects(effects, transfer: .rec709, sampleBus: bus)
+        b.attach(host: host, player: player); b.setEffects(effects, transfer: .rec709, sampleBus: bus)
+        XCTAssertTrue(bus.usesPlaybackSource)
+        a.shutdown()
+        XCTAssertTrue(b.debugBoundHost === host && host.playerLayer.player === player)
+        XCTAssertNotNil(host.ciFeed.onPresented)
+        XCTAssertTrue(bus.usesPlaybackSource, "A's cleanup cannot close B's current sample lease")
+        b.shutdown(); XCTAssertFalse(bus.usesPlaybackSource)
+    }
+
     /// Sentry OPENPOCKETCINE-IOS-2Q: Main waited on a busy pull during a clip
     /// change until the watchdog killed the app.
     @MainActor
@@ -613,6 +670,34 @@ private final class UnreadyPlaybackPlayer: AVPlayer {
     ) {
         seeks.withLock { count += 1 }
     }
+}
+
+private final class ControlledPlaybackPlayer: AVPlayer, @unchecked Sendable {
+    private let lock = NSLock()
+    private var completions: [(Bool) -> Void] = []
+    private var waiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    override func currentTime() -> CMTime { .zero }
+    var seekCount: Int { lock.withLock { completions.count } }
+    override func seek(to time: CMTime, toleranceBefore: CMTime, toleranceAfter: CMTime,
+        completionHandler: @escaping (Bool) -> Void) {
+        let ready = lock.withLock {
+            completions.append(completionHandler)
+            let ready = waiters.filter { $0.0 <= completions.count }.map { $0.1 }
+            waiters.removeAll { $0.0 <= completions.count }
+            return ready
+        }
+        for waiter in ready { waiter.resume() }
+    }
+    func whenCaptured(_ count: Int) async {
+        await withCheckedContinuation { continuation in
+            let ready = lock.withLock {
+                if completions.count >= count { return true }
+                waiters.append((count, continuation)); return false
+            }
+            if ready { continuation.resume() }
+        }
+    }
+    func finishSeek(_ index: Int) { lock.withLock { completions[index] }(true) }
 }
 
 private final class ReadyPlaybackItem: AVPlayerItem {

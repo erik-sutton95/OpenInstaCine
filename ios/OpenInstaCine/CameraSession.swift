@@ -250,9 +250,7 @@ final class CameraSession {
     @ObservationIgnored var mediaLibraryServiceID: CameraSessionID?
     private(set) var cameraGalleryOpen = false
     @ObservationIgnored let cameraMedia: CameraMedia
-    var playbackProgress: [String: Double] = [:]
     var playbackMediaNote: String?
-    @ObservationIgnored var playbackTransfers: [String: (id: UUID, task: Task<URL, Error>)] = [:]
 
     // Focus / tracking / face AF
     var focusPoint: CGPoint = CGPoint(x: 0.5, y: 0.5)

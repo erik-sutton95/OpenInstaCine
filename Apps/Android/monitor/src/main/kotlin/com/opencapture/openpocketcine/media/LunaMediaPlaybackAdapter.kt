@@ -4,6 +4,7 @@ import android.content.Context
 import com.opencapture.opencine.appkit.*
 import com.opencapture.opencine.media.*
 import com.opencapture.openpocketcine.lut.ClipColorProfile
+import com.opencapture.openpocketcine.feed.fromColorMode
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import kotlinx.coroutines.Dispatchers
@@ -12,6 +13,8 @@ import java.io.File
 import java.util.Locale
 
 /** Source look/OS playback adapters only; the gallery consumes the common library directly. */
+data class LunaPlaybackLook(val colorMode: Int?, val file: MediaFile)
+
 class LunaMediaPlaybackAdapter(
     context: Context,
     private val session: PocketCameraSession,
@@ -77,7 +80,46 @@ class LunaMediaPlaybackAdapter(
         catch (error: kotlinx.coroutines.CancellationException) { throw error }
         catch (_: Exception) { /* The common operation publishes its fenced failure note. */ }
     }
-    /** Source choice stays here until I5b. Every original/proxy write uses the common root lease. */
+    fun playbackCandidates(record: MonitorMediaRecord<LunaMediaLibraryPayload>): List<MonitorPlaybackCandidate> {
+        val file = record.payload.file
+        val choices = mutableListOf<MonitorPlaybackCandidate>()
+        cache.localProxyFile(file, cameraId)?.let { proxy ->
+            choices += MonitorPlaybackCandidate.Cached(MonitorPlaybackItem(proxy.toURI(), MediaHTTP.playbackMIMEType(proxy.name),
+                file.proxyPath ?: proxy.name, MediaRepresentationRole.PROXY))
+        }
+        if (isLive) record.asset.representations.filter { it.role == MediaRepresentationRole.PROXY }.forEach {
+            choices += MonitorPlaybackCandidate.Representation(it.id, MediaHTTP.playbackMIMEType(file.proxyPath ?: "proxy.mp4"), file.proxyPath ?: file.path)
+        }
+        localFile(file)?.let { original ->
+            choices += MonitorPlaybackCandidate.Cached(MonitorPlaybackItem(original.toURI(), MediaHTTP.playbackMIMEType(file.path), file.path))
+        }
+        if (isLive) record.asset.representations.firstOrNull { it.role == MediaRepresentationRole.ORIGINAL }?.let {
+            choices += MonitorPlaybackCandidate.Representation(it.id, MediaHTTP.playbackMIMEType(file.path), file.path)
+        }
+        return choices
+    }
+    suspend fun resolvePlaybackLook(record: MonitorMediaRecord<LunaMediaLibraryPayload>): MonitorPlaybackLook<LunaPlaybackLook> {
+        val file = record.payload.file
+        val gamma = record.payload.source?.gamma?.lowercase(Locale.US)
+        val original = localFile(file)
+        val cached = cachedShotColor(file).takeIf { it >= 0 }
+        val color = withContext(Dispatchers.IO) {
+            original?.let { ClipColorProfile.shotColorFromFile(it, file.path).takeIf { mode -> mode >= 0 } }
+                ?: cached ?: when {
+                    gamma == null -> null
+                    "log" in gamma -> CameraCommands.COLOR_ILOG
+                    "dolby" in gamma || "hdr" in gamma -> CameraCommands.COLOR_DOLBY_VISION
+                    "standard" in gamma || "vivid" in gamma -> CameraCommands.COLOR_NORMAL
+                    else -> null
+                }
+        }
+        val transfer = color?.let { com.opencapture.openpocketcine.feed.MonitorTransfer.fromColorMode(it) }
+        return MonitorPlaybackLook(transfer, LunaPlaybackLook(color, file))
+    }
+    fun rememberPlaybackLook(look: LunaPlaybackLook) {
+        look.colorMode?.let { cache.rememberShotColor(look.file.path, it, cameraId) }
+    }
+    /** Photo viewer compatibility while delivery/photo composition remains outside I5b-1. */
     suspend fun cacheForPlayback(file: MediaFile): File? {
         cache.localProxyFile(file, cameraId)?.let { return it }
         val record = record(file)
