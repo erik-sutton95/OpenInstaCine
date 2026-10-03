@@ -607,14 +607,11 @@ internal fun AssistRows(model: AppModel, statusColorMode: Int, onOpenLut: () -> 
     val assist = model.assist
     com.opencapture.monitorui.settings.MonitorViewAssistSettings(assistSettingsSections(assist, statusColorMode))
 
-    SettingsRowCard(title = "EV Meter") {
-        SettingsSwitchInlineRow(
-            "Enabled",
-            isOn = assist.evMeter,
-            help = "Show the camera's exposure meter at the picture's left edge in DISP 1. Auto and Manual use the camera reading without changing exposure settings.",
-            showTopDivider = false,
-        ) { assist.toggle(LiveAssistTool.EV) }
-    }
+    com.opencapture.monitorui.settings.MonitorExposureMeterSettings(
+        isOn = assist.evMeter,
+        help = "Show the camera's exposure meter at the picture's left edge in DISP 1. Auto and Manual use the camera reading without changing exposure settings.",
+        onToggle = { assist.toggle(LiveAssistTool.EV) },
+    )
 
     SettingsRowCard(title = "Anamorphic Desqueeze", onReset = {
         assist.updateDesqueezeFactor(1.33)
@@ -627,22 +624,16 @@ internal fun AssistRows(model: AppModel, statusColorMode: Int, onOpenLut: () -> 
         com.opencapture.openpocketcine.assists.DesqueezeOptions(assist)
     }
 
-    SettingsRowCard(title = "LUT") {
-        SettingsInlineRow("Look", SettingsHelpCopy.LUT_LOOK, showTopDivider = false) {
-            SettingsValueText(
-                lutLookLabel(
-                    selection = model.lutSelection,
-                    enabled = assist.lutOn,
-                    colorMode = statusColorMode,
-                    family = model.session.connectedCamera?.model?.family ?: "pocket",
-                    cameraName = model.session.connectedCamera?.name,
-                ),
-            )
-        }
-        SettingsInlineRow("Choose look") {
-            SettingsActionPill(title = "Open", onClick = onOpenLut)
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorLookSettings(
+        look = lutLookLabel(
+            selection = model.lutSelection,
+            enabled = assist.lutOn,
+            colorMode = statusColorMode,
+            family = model.session.connectedCamera?.model?.family ?: "pocket",
+            cameraName = model.session.connectedCamera?.name,
+        ),
+        help = SettingsHelpCopy.LUT_LOOK, onOpen = onOpenLut,
+    )
 }
 
 /** Facts use the actual app state, saved actions and sampled source calibration. */
