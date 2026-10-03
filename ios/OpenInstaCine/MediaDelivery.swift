@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OpenCineApple
 import OpenPocketViewCore
 import Photos
 import SwiftUI
@@ -46,13 +47,7 @@ private struct FrameioMarkShape: Shape {
     }
 }
 
-enum MediaExportFormat: String, Sendable, CaseIterable, Identifiable {
-    case mov
-    case mp4
-    var id: String { rawValue }
-    var avFileType: AVFileType { self == .mov ? .mov : .mp4 }
-    var label: String { rawValue.uppercased() }
-}
+typealias MediaExportFormat = MonitorMediaExporter.Format
 
 enum MediaDeliveryDestination: String, CaseIterable, Identifiable, Sendable {
     case nativeShare

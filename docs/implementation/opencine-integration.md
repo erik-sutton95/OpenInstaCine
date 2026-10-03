@@ -68,7 +68,7 @@ Camera transport and live-picture checks remain in the device checklist.
 The iOS app directly consumes OpenCineFrameIO for PKCE and token exchange/refresh, response
 models, account/workspace/project requests, upload parts and completion polling. The copied
 FrameioService is removed. The app supplies its Info.plist identity, browser presentation,
-Keychain adapter, destination preferences, native export and internet-hop lifetime.
+Keychain adapter, destination preferences and internet-hop lifetime.
 The Keychain service `OpenInstaCine.frameio`, account `oauth-token`, accessibility and existing
 saved-token JSON remain unchanged. Progress still reaches callers on MainActor. API/upload
 requests retain the 12-second timeout without waiting for connectivity; browser token exchange
@@ -80,6 +80,22 @@ and the two existing delivery-hop lifetime tests pass. This is a local candidate
 sign-in, upload, camera network return and physical-device behavior remain untested. Frame.io
 remains an iOS-only feature in this app. Shared delivery batch composition is still a subsequent
 increment; adopting this client does not complete the full delivery migration.
+
+### Shared native exporter (SHELL-03 I5c, second increment)
+
+The iOS app now consumes `OpenCineApple.MonitorMediaExporter` for native encoding, full-raster
+LUT baking, preset/fallback selection, progress, output readiness and optional JSON sidecars.
+The identical Pocket/Insta exporter donor is replaced here by the existing Documents/exports
+filename adapter and source-curve/metadata mapping. Initial preparation remains at 2%; native
+progress and sidecar naming/JSON policy remain unchanged. The shared module receives a sampled
+cube and explicit metadata key/value instead of importing a camera integration.
+
+The same five native export regression tests pass against both the original and migrated
+both-architecture products, including actual encoded pixels and embedded curve metadata.
+Shared copy/sidecar fixtures, the full shared Swift suite and strict concurrency checks pass.
+This is a local candidate, with the published/canonical app pin unchanged. Physical-device
+export and cloud delivery remain untested; batch, route and delivery UI ownership remain
+subsequent increments.
 
 ## What changes for users
 
