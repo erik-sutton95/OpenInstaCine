@@ -171,30 +171,13 @@ struct SettingsRootView: View {
     @ViewBuilder private var linkRows: some View {
         SettingsLinkHealthCard().monitorFullWidthCard()
 
-        SettingsRowCard(title: "Connection") {
-            SettingsInlineRow(
-                title: "Current Transport",
-                help: SettingsHelpCopy.currentTransport,
-                showTopDivider: false
-            ) {
-                SettingsValueText(value: model.isLive ? "BLE + Wi-Fi active" : "Not connected")
-            }
-            SettingsInlineRow(
-                title: "Phase",
-                help: "Where the BLE → Wi-Fi → datalink handshake is right now."
-            ) {
-                SettingsValueText(value: model.session.phase.label)
-            }
-            if let ssid = model.session.joinedSSID, !ssid.isEmpty {
-                SettingsInlineRow(
-                    title: "Camera Wi-Fi",
-                    help:
-                        "SSID joined for this session. The password stays in the iOS Keychain on this phone."
-                ) {
-                    SettingsValueText(value: ssid)
-                }
-            }
-        }
+        MonitorConnectionSettings(
+            transport: model.isLive ? "BLE + Wi-Fi active" : "Not connected",
+            transportHelp: SettingsHelpCopy.currentTransport,
+            phase: model.session.phase.label,
+            phaseHelp: "Where the BLE → Wi-Fi → datalink handshake is right now.",
+            network: model.session.joinedSSID.flatMap { $0.isEmpty ? nil : $0 },
+            networkHelp: "SSID joined for this session. The password stays in the iOS Keychain on this phone.")
 
         if FeedUpscaler.supportedOnThisDevice.count > 1 {
             SettingsRowCard(title: "Processing") {
@@ -215,29 +198,11 @@ struct SettingsRootView: View {
             }
         }
 
-        SettingsRowCard(title: "Your cameras") {
-            if model.savedCameras.isEmpty {
-                SettingsInlineRow(
-                    title: "Saved",
-                    help:
-                        "Pair from the home list. Settings does not start a new pair — that stays on Your cameras.",
-                    showTopDivider: false
-                ) {
-                    SettingsValueText(value: "None")
-                }
-            } else {
-                ForEach(Array(model.savedCameras.enumerated()), id: \.element.id) { index, camera in
-                    let network = camera.routes.first { $0.kind == .cameraAccessPoint }?.network
-                    SettingsInlineRow(
-                        title: camera.displayName,
-                        help: camera.model + (network.map { " · \($0)" } ?? ""),
-                        showTopDivider: index > 0
-                    ) {
-                        SettingsValueText(value: network ?? "Saved")
-                    }
-                }
-            }
-        }
+        MonitorSavedCameraSettings(cameras: model.savedCameras.map { camera in
+            let network = camera.routes.first { $0.kind == .cameraAccessPoint }?.network
+            return .init(id: camera.id, name: camera.displayName,
+                detail: camera.model + (network.map { " · \($0)" } ?? ""), network: network)
+        }, emptyHelp: "Pair from the home list. Settings does not start a new pair; that stays on Your cameras.")
     }
 
     // MARK: - Sharing

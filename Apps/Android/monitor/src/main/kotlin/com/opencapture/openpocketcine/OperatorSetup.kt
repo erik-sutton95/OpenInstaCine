@@ -574,20 +574,13 @@ private fun LinkRows(model: AppModel, isLive: Boolean, phaseLabel: String, bars:
         caption = OperatorLinkHealth.caption(isLive, bars),
         score = OperatorLinkHealth.score(bars),
     )
-    SettingsRowCard(title = "Connection") {
-        SettingsInlineRow("Current Transport", SettingsHelpCopy.CURRENT_TRANSPORT, showTopDivider = false) {
-            SettingsValueText(if (isLive) "BLE + Wi-Fi active" else "Not connected")
-        }
-        SettingsInlineRow("Phase", SettingsHelpCopy.PHASE) {
-            SettingsValueText(phaseLabel)
-        }
-        val ssid = model.session.joinedSSID
-        if (!ssid.isNullOrEmpty()) {
-            SettingsInlineRow("Camera Wi-Fi", SettingsHelpCopy.CAMERA_WIFI) {
-                SettingsValueText(ssid)
-            }
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorConnectionSettings(
+        transport = if (isLive) "BLE + Wi-Fi active" else "Not connected",
+        transportHelp = SettingsHelpCopy.CURRENT_TRANSPORT,
+        phase = phaseLabel, phaseHelp = SettingsHelpCopy.PHASE,
+        network = model.session.joinedSSID?.takeIf { it.isNotEmpty() },
+        networkHelp = SettingsHelpCopy.CAMERA_WIFI,
+    )
     if (FeedUpscaler.supported.size > 1) {
         val context = LocalContext.current
         var upscaler by remember { mutableStateOf(OperatorPrefs.feedUpscaler(context)) }
@@ -607,21 +600,11 @@ private fun LinkRows(model: AppModel, isLive: Boolean, phaseLabel: String, bars:
         }
     }
     val saved = model.cameras.state.collectAsState().value.saved
-    SettingsRowCard(title = "Your cameras") {
-        if (saved.isEmpty()) {
-            SettingsInlineRow("Saved", SettingsHelpCopy.SAVED_CAMERAS, showTopDivider = false) {
-                SettingsValueText("None")
-            }
-        } else {
-            saved.forEachIndexed { index, camera ->
-                val network = camera.routes.firstOrNull { it.kind == com.opencapture.opencine.core.RouteKind.CAMERA_ACCESS_POINT }?.network
-                val help = camera.model + (network?.let { " · $it" } ?: "")
-                SettingsInlineRow(camera.displayName, help, showTopDivider = index > 0) {
-                    SettingsValueText(network ?: "Saved")
-                }
-            }
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorSavedCameraSettings(cameras = saved.map { camera ->
+        val network = camera.routes.firstOrNull { it.kind == com.opencapture.opencine.core.RouteKind.CAMERA_ACCESS_POINT }?.network
+        com.opencapture.monitorui.settings.MonitorSavedCameraSummary(
+            camera.id, camera.displayName, camera.model + (network?.let { " · $it" } ?: ""), network)
+    }, emptyHelp = SettingsHelpCopy.SAVED_CAMERAS)
 }
 
 @Composable
