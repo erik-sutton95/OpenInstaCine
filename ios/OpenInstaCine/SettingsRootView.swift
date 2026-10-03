@@ -273,27 +273,14 @@ struct SettingsRootView: View {
                 reset: { feedback(); resetTrafficLights() }),
         ]).buttonStyle(.zcTapTarget).monitorFullWidthCard()
 
-        SettingsRowCard(title: "EV Meter") {
-            SettingsSwitchInlineRow(
-                title: "Enabled",
-                help:
-                    "Show the exposure meter at the picture's left edge in DISP 1. It reads the camera's metered EV, or meters the picture when the camera reports none. It never changes exposure settings.",
-                showTopDivider: false, isOn: model.assist.evMeter
-            ) { model.assist.toggle(.evMeter) }
-        }
+        MonitorExposureMeterSettings(isOn: model.assist.evMeter,
+            help: "Show the exposure meter at the picture's left edge in DISP 1. It reads the camera's metered EV, or meters the picture when the camera reports none. It never changes exposure settings.",
+            feedback: { OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled) },
+            onToggle: { model.assist.toggle(.evMeter) })
 
-        SettingsRowCard(title: "LUT") {
-            SettingsInlineRow(
-                title: "Look",
-                help: "Looks apply on this phone. The file on the camera is unchanged.",
-                showTopDivider: false
-            ) {
-                SettingsValueText(value: lutLabel)
-            }
-            SettingsInlineRow(title: "Choose look") {
-                SettingsActionPill(title: "Open") { showLUTPicker = true }
-            }
-        }
+        MonitorLookSettings(look: lutLabel,
+            help: "Looks apply on this phone. The file on the camera is unchanged.",
+            onOpen: { showLUTPicker = true })
     }
 
     private func resetFalseColor() {
