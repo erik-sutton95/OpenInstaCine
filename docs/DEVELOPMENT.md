@@ -20,12 +20,18 @@ same change when protocol, app behavior or setup changes.
 
 Luna-specific app code lives in `ios/OpenInstaCine/CameraSession.swift`,
 `CameraSessionControls.swift`, `CameraMedia.swift` (Luna extension),
-`LunaShellMapping.swift`, `LunaThumbnailImage.swift`, `DebugRemote.swift`,
+`LunaShellMapping.swift`, `LunaMediaCatalogCodec.swift`, `LunaNativeMediaIO.swift`, `DebugRemote.swift`,
 `OpenInstaCineBrand.swift`, `OsmoCameraPageAdapter.swift` and
 `OsmoMonitorPresentation.swift` (the `Osmo*` names are kept so shared call sites
 bind unchanged). Everything else in `ios/OpenInstaCine` is the shared shell.
-`just sync-openpocketcine` re-copies the shell from the sibling checkout and
-leaves the Luna files alone.
+The actual media gallery consumes `MonitorMediaLibraryModel` and its root-owned cache directly.
+The app codec preserves the existing index bytes, paths, favorite keys and typed Luna source
+records; native HTTP/JPEG adapters supply the source services. Apple keeps the existing90%
+original eligibility and Android keeps exact-size eligibility, separate from stream completion.
+Nested player covers and rotation retain the gallery owner; its outer exit retires the browse.
+Playback source/look selection and OS delivery remain application composition.
+`just sync-openpocketcine` re-copies the remaining donor shell from the sibling checkout and
+protects these actual shared-owner adopters and their native tests.
 
 ## Build and run
 

@@ -41,7 +41,15 @@ LUNA_OWNED=(
   OpenInstaCine/CameraSessionControls.swift
   OpenInstaCine/CameraMedia.swift
   OpenInstaCine/LunaShellMapping.swift
+  # SHELL-03 I-5a: the actual gallery consumes shared library/cache/thumbnail owners.
+  # Retain source/OS adapters; upstream workflow copies cannot overwrite this adoption.
   OpenInstaCine/LunaThumbnailImage.swift
+  OpenInstaCine/MediaLibraryStub.swift
+  OpenInstaCine/MonitorMediaReview.swift
+  OpenInstaCine/LunaMediaCatalogCodec.swift
+  OpenInstaCine/LunaNativeMediaIO.swift
+  OpenInstaCineTests/LunaMediaCatalogCodecTests.swift
+  OpenInstaCineTests/LunaMediaLibraryOwnerTests.swift
   OpenInstaCine/DebugRemote.swift
   # SHELL-03 I-1: the root, covers and monitor lifetime are OpenCineAppKit's AppShell and
   # ShellModel, the common controls its MonitorControlModel. What is left here is this app's

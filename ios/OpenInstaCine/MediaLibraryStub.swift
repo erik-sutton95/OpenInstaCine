@@ -3,6 +3,7 @@ import ImageIO
 import MonitorPresentation
 import MonitorUI
 import OpenCineAppKit
+import OpenCineMedia
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -129,93 +130,6 @@ enum MediaCategoryTab: String, CaseIterable, Identifiable {
     }
 }
 
-enum MediaBrowserLayout: String, CaseIterable {
-    case grid
-    case list
-
-    var toggleIcon: OpcIcon {
-        switch self {
-        case .grid: .layoutList
-        case .list: .layoutGrid
-        }
-    }
-
-    var accessibilityLabel: String {
-        switch self {
-        case .grid: "List view"
-        case .list: "Grid view"
-        }
-    }
-}
-
-enum MediaThumbnailSize: String, CaseIterable, Identifiable {
-    case small, medium, large
-    var id: String { rawValue }
-
-    var gridMinimum: CGFloat {
-        switch self {
-        case .small: 148
-        case .medium: 210
-        case .large: 280
-        }
-    }
-
-    var gridMaximum: CGFloat {
-        switch self {
-        case .small: 200
-        case .medium: 300
-        case .large: 380
-        }
-    }
-
-    var gridIconSize: CGFloat {
-        switch self {
-        case .small: 9
-        case .medium: 12
-        case .large: 15
-        }
-    }
-
-    var accessibilityLabel: String {
-        switch self {
-        case .small: "Small thumbnails"
-        case .medium: "Medium thumbnails"
-        case .large: "Large thumbnails"
-        }
-    }
-}
-
-enum MediaSortOrder: String, CaseIterable {
-    case newest, oldest, name, rating
-
-    var menuLabel: String {
-        switch self {
-        case .newest: "Newest"
-        case .oldest: "Oldest"
-        case .name: "Name"
-        case .rating: "Rating"
-        }
-    }
-
-    var next: MediaSortOrder {
-        switch self {
-        case .newest: .oldest
-        case .oldest: .name
-        case .name: .rating
-        case .rating: .newest
-        }
-    }
-
-    var librarySort: MediaLibrarySort {
-        switch self {
-        case .newest: .newest
-        case .oldest: .oldest
-        case .name: .name
-        case .rating: .rating
-        }
-    }
-}
-
 enum MediaClipPresentation {
     static func resolutionLabel(_ resolution: String?) -> String? {
         guard let resolution, !resolution.isEmpty else { return nil }
@@ -281,108 +195,31 @@ struct MediaLibraryView: View {
 
     @Environment(AppModel.self) private var model
     @Environment(\.monitorWindowGeometry) private var windowGeometry
-    @State private var category: MediaCategoryTab = .all
-    @State private var layout: MediaBrowserLayout = .grid
-    @State private var thumbnailSize: MediaThumbnailSize = .medium
-    @State private var sortOrder: MediaSortOrder = .newest
     @State private var isFilterPopupPresented = false
-    @State private var formatFilters: Set<String> = []
-    @State private var resolutionFilters: Set<String> = []
-    @State private var dateStartKey: String?
-    @State private var dateEndKey: String?
-    @State private var colorFilters: Set<UInt8> = []
     @State private var pickingDate: FilterDateBound?
-    @State private var isSelecting = false
-    @State private var selectedIDs: Set<String> = []
     @State private var isBatchDeleteConfirmPresented = false
     @State private var playingFile: MediaFile?
     @State private var viewingPhoto: MediaFile?
     @State private var deliveryFiles: [MediaFile]?
     @State private var resolvedDurations: [String: String] = [:]
-    @State private var cacheEntries: [String: MediaCacheEntry] = [:]
-    @State private var cacheCameraID: String?
-
-    private struct CacheRequest: Equatable {
-        var cameraID: String
-        var files: [MediaFile]
-        var revision: UInt64
-    }
-
-    private var cacheRequest: CacheRequest {
-        CacheRequest(
-            cameraID: session.mediaCameraID, files: session.mediaFiles,
-            revision: session.mediaCacheRevision)
-    }
-
-    private func cachedEntry(_ file: MediaFile) -> MediaCacheEntry? {
-        cacheCameraID == session.mediaCameraID ? cacheEntries[file.path] : nil
-    }
-
-    private func cachedGrade(_ file: MediaFile) -> MediaCacheGrade {
-        cachedEntry(file)?.grade ?? .none
-    }
-
     private var session: CameraSession { model.session }
-
-    private var isLive: Bool {
-        if case .live = session.phase { return true }
-        return false
+    private var library: MonitorMediaLibraryModel<LunaMediaLibraryPayload> { session.mediaLibrary }
+    private var isLive: Bool { library.canRefresh }
+    private var displayedFiles: [MediaFile] { library.displayedRecords.map { record in
+        var file = record.payload.file; file.isStarred = record.favorite; return file
+    } }
+    private func cachedEntry(_ file: MediaFile) -> MonitorMediaCacheEntry? {
+        session.mediaRecord(for: file).flatMap { library.entries[$0.asset.id] }
     }
-
-    private var localFavorites: Set<String> {
-        Set(session.mediaFiles.filter { session.isFavorite($0) }.map(\.path))
+    private func cachedGrade(_ file: MediaFile) -> MediaCacheGrade {
+        let entry = cachedEntry(file)
+        return .resolve(hasOriginal: entry?.originalURL != nil, hasProxy: entry?.proxyURL != nil)
     }
-
-    private var libraryFiles: [MediaFile] {
-        if isLive { return session.mediaFiles }
-        return MediaLibraryQuery.cachedOnly(
-            session.mediaFiles,
-            cachedPaths: Set(
-                session.mediaFiles.filter { cachedGrade($0).isPlayableOffline }.map(\.path)))
-    }
-
-    private var displayedFiles: [MediaFile] {
-        var files = MediaLibraryQuery.filtered(
-            libraryFiles,
-            tab: category.libraryTab,
-            formats: formatFilters,
-            resolutions: resolutionFilters,
-            dateStart: dateStartKey,
-            dateEnd: dateEndKey,
-            colors: colorFilters,
-            shotColors: shotColorCodes,
-            localFavorites: localFavorites
-        )
-        if category == .favorites {
-            files = files.filter { session.isFavorite($0) }
-        }
-        if sortOrder == .rating {
-            return files.sorted { lhs, rhs in
-                let left = session.isFavorite(lhs)
-                let right = session.isFavorite(rhs)
-                if left != right { return left && !right }
-                return (lhs.filenameTimestamp ?? "") > (rhs.filenameTimestamp ?? "")
-            }
-        }
-        return MediaLibraryQuery.sorted(files, by: sortOrder.librarySort)
-    }
-
     private var displayedVideos: [MediaFile] {
         displayedFiles.filter { $0.kind == .video }
     }
 
-    private var filterSourceFiles: [MediaFile] {
-        var files = MediaLibraryQuery.filtered(
-            libraryFiles,
-            tab: category.libraryTab,
-            localFavorites: localFavorites
-        )
-        if category == .favorites {
-            files = files.filter { session.isFavorite($0) }
-        }
-        return files
-    }
-
+    private var filterSourceFiles: [MediaFile] { library.records(in: library.category).map(\.payload.file) }
     private var formatOptions: [String] {
         Array(Set(filterSourceFiles.map(\.fileExtension)).filter { !$0.isEmpty }).sorted()
     }
@@ -391,43 +228,26 @@ struct MediaLibraryView: View {
         Array(Set(filterSourceFiles.compactMap(\.resolution)).filter { !$0.isEmpty }).sorted()
     }
 
-    private var shotColorCodes: [String: UInt8] {
-        var map: [String: UInt8] = [:]
-        for file in filterSourceFiles {
-            if let mode = session.shotColor(for: file) {
-                map[file.path] = mode.rawValue
-            }
-        }
-        return map
-    }
-
     private var colorOptions: [ColorMode] {
-        let present = Set(shotColorCodes.values)
+        let present = Set(library.records(in: library.category).compactMap { $0.facts.color.flatMap(UInt8.init) })
         return ColorMode.allCases.filter { present.contains($0.rawValue) }
     }
-
     private var dateBounds: ClosedRange<Date>? {
         let dates = filterSourceFiles.compactMap { MediaLibraryQuery.date(fromKey: $0.dateKey) }
         guard let first = dates.min(), let last = dates.max() else { return nil }
         return first...last
     }
 
-    private var activeFilterCount: Int {
-        formatFilters.count + resolutionFilters.count + colorFilters.count
-            + (dateStartKey == nil && dateEndKey == nil ? 0 : 1)
-    }
-
+    private var activeFilterCount: Int { library.activeFilterCount }
     private var hasActiveFilters: Bool { activeFilterCount > 0 }
-
-    private var selectedFiles: [MediaFile] {
-        displayedFiles.filter { selectedIDs.contains($0.id) }
-    }
-
+    private var selectedFiles: [MediaFile] { library.selectedRecords.map(\.payload.file) }
     private func mediaPermissions(_ file: MediaFile) -> MonitorMediaPermissions {
         var permissions: MonitorMediaPermissions = [.favorite]
-        if isLive || cachedGrade(file) == .original { permissions.insert(.share) }
-        if isLive && cachedGrade(file) != .original { permissions.insert(.cache) }
-        if isLive && file.isDeletable { permissions.insert(.delete) }
+        let asset = session.mediaRecord(for: file)?.asset
+        let canTransfer = library.canTransfer && asset?.representations.contains { $0.role == .original } == true
+        if canTransfer || cachedGrade(file) == .original { permissions.insert(.share) }
+        if canTransfer && cachedGrade(file) != .original { permissions.insert(.cache) }
+        if library.canDelete && asset?.deletable == true { permissions.insert(.delete) }
         return permissions
     }
 
@@ -438,7 +258,7 @@ struct MediaLibraryView: View {
             let metadata = MediaClipPresentation.metadataLine(
                 file: file, durationOverride: resolvedDurations[file.id])
             return MonitorMediaItem(
-                id: file.id, filename: file.filename,
+                id: session.mediaRecord(for: file)!.asset.id.rawValue, filename: file.filename,
                 metadata: color.isEmpty ? metadata : "\(color) · \(metadata)",
                 format: file.resolution ?? "", color: color,
                 duration: file.kind == .photo
@@ -458,30 +278,29 @@ struct MediaLibraryView: View {
 
     private var catalogCategories: [MonitorMediaCategory] {
         MediaCategoryTab.allCases.map { tab in
-            MonitorMediaCategory(
-                id: tab.rawValue, title: tab.rawValue,
-                count: MediaLibraryQuery.filtered(
-                    libraryFiles, tab: tab.libraryTab,
-                    localFavorites: localFavorites
-                ).count)
+            MonitorMediaCategory(id: tab.rawValue, title: tab.rawValue,
+                count: library.records(in: MonitorMediaCategoryFilter(rawValue: tab.rawValue.lowercased())!).count)
         }
     }
+    private var categoryTitle: String { library.category.rawValue.capitalized }
+    private var sortTitle: String { library.sort.rawValue.capitalized }
 
     var body: some View {
-        let filesByID = Dictionary(
-            displayedFiles.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
+        @Bindable var library = library
+        let filesByID = Dictionary(library.displayedRecords.map { ($0.asset.id.rawValue, $0.payload.file) },
+            uniquingKeysWith: { _, latest in latest })
         ZStack(alignment: .topLeading) {
             LiveDesign.background
 
             MonitorMediaCatalog(
                 brand: session.connectedCamera?.name ?? "OpenInstaCine", safeArea: safeArea,
-                items: catalogItems, categories: catalogCategories, category: category.rawValue,
-                layout: layout == .grid ? .grid : .list,
-                thumbnailSize: MonitorThumbnailSize(rawValue: thumbnailSize.rawValue) ?? .medium,
-                sortTitle: sortOrder.menuLabel,
+                items: catalogItems, categories: catalogCategories, category: categoryTitle,
+                layout: library.layout,
+                thumbnailSize: library.thumbnailSize,
+                sortTitle: sortTitle,
                 status: isLive ? "Camera + local cache" : "Available on this phone",
-                selectedIDs: selectedIDs, selecting: isSelecting,
-                refreshing: session.mediaFetchInProgress, canRefresh: isLive,
+                selectedIDs: Set(library.selectedIDs.map(\.rawValue)), selecting: library.selecting,
+                refreshing: library.fetching, canRefresh: library.canRefresh,
                 tablet: UIDevice.current.userInterfaceIdiom == .pad,
                 action: handleCatalogAction
             ) { item in
@@ -518,10 +337,10 @@ struct MediaLibraryView: View {
         }
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
-        .animation(.easeInOut(duration: 0.2), value: thumbnailSize)
-        .animation(.easeInOut(duration: 0.2), value: layout)
+        .animation(.easeInOut(duration: 0.2), value: library.thumbnailSize)
+        .animation(.easeInOut(duration: 0.2), value: library.layout)
         .confirmationDialog(
-            "Delete \(selectedIDs.count) items from the camera?",
+            "Delete \(library.selectedIDs.count) items from the camera?",
             isPresented: $isBatchDeleteConfirmPresented, titleVisibility: .visible
         ) {
             Button("Delete", role: .destructive) {
@@ -532,16 +351,7 @@ struct MediaLibraryView: View {
                 }
             }
         }
-        .task(id: cacheRequest) {
-            let request = cacheRequest
-            let entries = await session.cameraMedia.cacheEntries(
-                cameraID: request.cameraID, files: request.files)
-            guard !Task.isCancelled, cacheRequest == request else { return }
-            cacheCameraID = request.cameraID
-            cacheEntries = entries
-        }
-        .onAppear { session.beginMediaBrowse() }
-        .onDisappear { session.endMediaBrowse() }
+        .onAppear { library.begin() }
         .fullScreenCover(item: $playingFile) { file in
             MediaPlayerView(files: displayedVideos, startingAt: file)
                 .environment(model)
@@ -566,14 +376,14 @@ struct MediaLibraryView: View {
             FilterCalendarSheet(
                 title: bound.title,
                 range: dateBounds ?? Date.distantPast...Date.distantFuture,
-                key: bound == .start ? $dateStartKey : $dateEndKey
+                key: bound == .start ? $library.dateStart : $library.dateEnd
             )
         }
-        .onChange(of: dateStartKey) { _, start in
-            if let start, let end = dateEndKey, start > end { dateEndKey = start }
+        .onChange(of: library.dateStart) { _, start in
+            if let start, let end = library.dateEnd, start > end { library.dateEnd = start }
         }
-        .onChange(of: dateEndKey) { _, end in
-            if let end, let start = dateStartKey, end < start { dateStartKey = end }
+        .onChange(of: library.dateEnd) { _, end in
+            if let end, let start = library.dateStart, end < start { library.dateStart = end }
         }
     }
 
@@ -591,45 +401,36 @@ struct MediaLibraryView: View {
     private func handleCatalogAction(_ action: MonitorMediaAction) {
         switch action {
         case .back: dismiss()
-        case .refresh: session.refreshMedia()
-        case .cycleSort: sortOrder = sortOrder.next
+        case .refresh: library.refresh()
+        case .cycleSort:
+            let values = MonitorMediaSort.allCases
+            library.sort = values[(values.firstIndex(of: library.sort)! + 1) % values.count]
         case .category(let id):
-            if let tab = MediaCategoryTab(rawValue: id) { category = tab }
-        case .layout(let value): layout = value == .grid ? .grid : .list
-        case .thumbnailSize(let size):
-            if let value = MediaThumbnailSize(rawValue: size.rawValue) { thumbnailSize = value }
+            if let category = MonitorMediaCategoryFilter(rawValue: id.lowercased()) { library.category = category }
+        case .layout(let value): library.layout = value
+        case .thumbnailSize(let value): library.thumbnailSize = value
         case .open(let id):
-            if let file = displayedFiles.first(where: { $0.id == id }) { open(file) }
+            if let record = library.record(.init(id)) { open(record.payload.file) }
         case .select(let id):
-            if let file = displayedFiles.first(where: { $0.id == id }) {
-                if isSelecting { toggleSelection(file) } else { beginSelection(with: file) }
+            if let record = library.record(.init(id)) {
+                if library.selecting { toggleSelection(record.asset.id) } else { beginSelection(with: record.asset.id) }
             }
         case .selection(let ids):
-            if !isSelecting { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
-            isSelecting = true
-            selectedIDs = ids
-        case .favorite(let id):
-            if let file = displayedFiles.first(where: { $0.id == id }) {
-                session.toggleFavorite(file)
-            }
-        case .selectAll: selectedIDs = Set(displayedFiles.map(\.id))
-        case .clearSelection: exitSelectionMode()
+            if !library.selecting { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+            library.selecting = true; library.selectedIDs = Set(ids.map { MediaAssetID($0) })
+        case .favorite(let id): library.toggleFavorite(.init(id))
+        case .selectAll: library.selectAll()
+        case .clearSelection: library.clearSelection()
         case .shareSelection:
             let files = selectedFiles
-            if !files.isEmpty, files.allSatisfy({ mediaPermissions($0).contains(.share) }) {
-                Task { await share(files) }
-            }
+            if !files.isEmpty, files.allSatisfy({ mediaPermissions($0).contains(.share) }) { deliveryFiles = files }
         case .cacheSelection:
-            let files = selectedFiles.filter { mediaPermissions($0).contains(.cache) }
-            Task { for file in files { await session.download(file: file) } }
+            let ids = library.selectedRecords.filter { mediaPermissions($0.payload.file).contains(.cache) }.map(\.asset.id)
+            Task { for id in ids { _ = try? await library.cacheOriginal(id) } }
         case .favoriteSelection:
-            for file in selectedFiles where !session.isFavorite(file) {
-                session.toggleFavorite(file)
-            }
+            for record in library.selectedRecords where !record.favorite { library.toggleFavorite(record.asset.id) }
         case .deleteSelection:
-            if !selectedFiles.isEmpty,
-                selectedFiles.allSatisfy({ mediaPermissions($0).contains(.delete) })
-            {
+            if !selectedFiles.isEmpty, selectedFiles.allSatisfy({ mediaPermissions($0).contains(.delete) }) {
                 isBatchDeleteConfirmPresented = true
             }
         }
@@ -695,23 +496,18 @@ struct MediaLibraryView: View {
                                 MonitorMediaFilterForm.ColorOption(
                                     id: $0.rawValue, label: $0.label(in: session.profile))
                             },
-                            formatSelection: formatFilters, resolutionSelection: resolutionFilters,
-                            colorSelection: colorFilters,
-                            dateStartLabel: dateStartKey.map(MediaClipPresentation.dateLabel),
-                            dateEndLabel: dateEndKey.map(MediaClipPresentation.dateLabel),
+                            formatSelection: library.formats, resolutionSelection: library.resolutions,
+                            colorSelection: Set(library.colors.compactMap(UInt8.init)),
+                            dateStartLabel: library.dateStart.map(MediaClipPresentation.dateLabel),
+                            dateEndLabel: library.dateEnd.map(MediaClipPresentation.dateLabel),
                             hasDates: dateBounds != nil,
-                            onToggleFormat: { toggle($0, in: &formatFilters) },
-                            onToggleResolution: { toggle($0, in: &resolutionFilters) },
-                            onToggleColor: { toggle($0, in: &colorFilters) },
+                            onToggleFormat: { toggle($0, in: &library.formats) },
+                            onToggleResolution: { toggle($0, in: &library.resolutions) },
+                            onToggleColor: { toggle(String($0), in: &library.colors) },
                             onPickStart: { pickingDate = .start },
                             onPickEnd: { pickingDate = .end },
-                            onClear: {
-                                formatFilters.removeAll()
-                                resolutionFilters.removeAll()
-                                colorFilters.removeAll()
-                                dateStartKey = nil
-                                dateEndKey = nil
-                            })
+                            onClear: { library.resetFilters() }
+                            )
                     }
                     .monitorScrollFade()
                 }
@@ -787,7 +583,7 @@ struct MediaLibraryView: View {
         if hasActiveFilters {
             return MediaLibraryCopy.filterEmpty
         }
-        switch category {
+        switch library.category {
         case .favorites: return MediaLibraryCopy.emptyFavorites
         case .videos: return MediaLibraryCopy.emptyVideos
         case .photos: return MediaLibraryCopy.emptyPhotos
@@ -796,8 +592,8 @@ struct MediaLibraryView: View {
     }
 
     private func open(_ file: MediaFile) {
-        if isSelecting {
-            toggleSelection(file)
+        if library.selecting, let id = session.mediaRecord(for: file)?.asset.id {
+            toggleSelection(id)
             return
         }
         if !isLive, !session.isAvailableOffline(file) { return }
@@ -808,25 +604,15 @@ struct MediaLibraryView: View {
         }
     }
 
-    private func beginSelection(with file: MediaFile) {
-        guard !isSelecting else { return }
-        isSelecting = true
-        selectedIDs = [file.id]
+    private func beginSelection(with id: MediaAssetID) {
+        guard !library.selecting else { return }
+        library.selecting = true; library.selectedIDs = [id]
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
-
-    private func toggleSelection(_ file: MediaFile) {
-        if selectedIDs.contains(file.id) {
-            selectedIDs.remove(file.id)
-        } else {
-            selectedIDs.insert(file.id)
-        }
+    private func toggleSelection(_ id: MediaAssetID) {
+        if library.selectedIDs.contains(id) { library.selectedIDs.remove(id) } else { library.selectedIDs.insert(id) }
     }
-
-    private func exitSelectionMode() {
-        isSelecting = false
-        selectedIDs.removeAll()
-    }
+    private func exitSelectionMode() { library.clearSelection() }
 
     private func share(_ files: [MediaFile]) async {
         guard !files.isEmpty else { return }
@@ -890,7 +676,7 @@ private struct FilterCalendarSheet: View {
     }
 }
 
-/// The Osmo adapter owns thumbnail acquisition and metadata fallbacks. All card,
+/// The shared library owns thumbnail acquisition; native image/metadata decoding stays here. All card,
 /// grid/list and selection rendering lives in MonitorMediaCatalog.
 private struct MediaCatalogThumbnail: View {
     let cameraID: String
@@ -955,14 +741,6 @@ private struct MediaCatalogThumbnail: View {
         if let cachedURL = model.session.thumbnailURL(for: file),
             let image = await MediaCellImageLoader.shared.downsampled(
                 at: cachedURL, maxPixelSize: 640)
-        {
-            present(image)
-            return
-        }
-        if let remote = MediaHTTP.pathURL(
-                storage: file.storage, path: file.thumbPath, route: model.session.profile.media),
-            let (data, _) = try? await URLSession.shared.data(from: remote),
-            let image = await MediaCellImageLoader.shared.downsampled(data: data, maxPixelSize: 640)
         {
             present(image)
             return

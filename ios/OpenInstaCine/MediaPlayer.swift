@@ -156,6 +156,7 @@ struct MediaPhotoViewer: View {
                         MediaCircleIconButton(icon: .x, size: 34)
                     }
                     .buttonStyle(.zcTapTarget)
+                    .accessibilityLabel("Back to media")
                     Text(file.filename)
                         .font(LiveType.ui(size: 14, weight: .semibold))
                         .foregroundStyle(LiveDesign.text)

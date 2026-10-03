@@ -89,7 +89,6 @@ import com.opencapture.opencine.insta360.shell.CameraNotice
 import com.opencapture.opencine.insta360.shell.CameraControls
 import com.opencapture.opencine.insta360.shell.CameraGimbalAngle
 import com.opencapture.opencine.insta360.shell.CameraIdentity
-import com.opencapture.opencine.insta360.shell.CameraMediaStore
 import com.opencapture.opencine.insta360.shell.CameraReadout
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.update
@@ -146,7 +145,8 @@ class PocketCameraSession(
     /** A photo in flight; a record operation in flight is the shared model's `recordPending`. */
     private val _controlBusy = MutableStateFlow(false)
     /** Camera media over the control link, when the backend offers it (Luna: UCD2 list + HTTP). */
-    val media: CameraMediaStore? get() = (backend as? CameraMediaStore)?.takeIf { CameraCapability.CAMERA_MEDIA in capabilities }
+    val mediaCatalogRecords: com.opencapture.opencine.insta360.luna.LunaMediaCatalogRecordSource?
+        get() = backend as? com.opencapture.opencine.insta360.luna.LunaMediaCatalogRecordSource
     private val pins = LunaControlPins()
     /**
      * The monitor's common controls (SHELL-03): ISO, shutter, white balance and record go only
@@ -1086,25 +1086,9 @@ class PocketCameraSession(
         refreshTrackingHud()
     }
 
-    // Camera media: MediaLibraryController drives [media]; these hold the browse state.
-    private var mediaOwner = 0L
-    fun markBrowsingMedia(browsing: Boolean, resumePending: Boolean = false): Long {
-        isBrowsingMedia = browsing
-        return ++mediaOwner
-    }
-    fun ownsMediaLiveResume(owner: Long): Boolean = owner == mediaOwner
-    /** DJI suspends its live-only Selfie Flip GET here; the Luna pauses live view through [media] instead. */
-    fun setMediaTransportBrowsing(browsing: Boolean) = Unit
-    suspend fun withMediaLiveResumeOwner(owner: Long, work: suspend () -> Unit) { if (ownsMediaLiveResume(owner)) work() }
-    fun mediaLiveResumeExhausted(owner: Long) = Unit
-    fun setOperatorOverlayHeld(held: Boolean) = Unit
-    fun restartLiveViewAfterMedia(): Boolean = false
+    // Native render/control demand reads the common gallery's actual app binding until I6.
     fun beginMediaBrowse() { isBrowsingMedia = true }
     fun endMediaBrowse() { isBrowsingMedia = false }
-    fun listMedia() = Unit
-    // Luna deletes by URI through MediaLibraryController; favorites stay local like the official app.
-    fun deleteMedia(handle: Int) = Unit
-    fun setMediaFavorite(handle: Int, favorite: Boolean) = Unit
 
     // White balance: kelvin 2000...10000 or auto; the Luna has no tint.
     fun setWhiteBalanceAuto(tint: Int? = null) {

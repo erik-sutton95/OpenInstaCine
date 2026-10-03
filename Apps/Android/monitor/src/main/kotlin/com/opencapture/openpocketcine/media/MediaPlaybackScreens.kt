@@ -127,7 +127,7 @@ import kotlin.math.roundToInt
 fun MediaPhotoViewer(
     model: AppModel,
     file: MediaFile,
-    controller: MediaLibraryController,
+    controller: LunaMediaPlaybackAdapter,
     onClose: () -> Unit,
     onDeliver: (MediaFile) -> Unit = {},
 ) {
@@ -326,7 +326,7 @@ fun MediaPhotoViewer(
 fun MediaPlayerScreen(
     files: List<MediaFile>,
     startingAt: MediaFile,
-    controller: MediaLibraryController,
+    controller: LunaMediaPlaybackAdapter,
     model: AppModel,
     onClose: () -> Unit,
     onDeliver: (MediaFile) -> Unit = {},
@@ -368,8 +368,10 @@ fun MediaPlayerScreen(
     var flashJob by remember { mutableStateOf<Job?>(null) }
     var meterLeft by remember { mutableStateOf(AudioMeterChannel.Silent) }
     var meterRight by remember { mutableStateOf(AudioMeterChannel.Silent) }
-    val favorite = controller.isFavorite(active)
-    val progress = controller.downloadProgress[active.path]
+    val libraryState by controller.library.state.collectAsState()
+    val activeRecord = controller.record(active)
+    val favorite = activeRecord?.favorite ?: active.isStarred
+    val progress = activeRecord?.let { libraryState.progress[it.asset.id] }
     val context = LocalContext.current
     val playbackWindow = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
     val portraitPlayback = playbackWindow.height > playbackWindow.width

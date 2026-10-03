@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,31 +51,34 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
-fun MediaClipCell(file: MediaFile, controller: MediaLibraryController, onOpen: () -> Unit,
+fun MediaClipCell(file: MediaFile, controller: LunaMediaPlaybackAdapter, onOpen: () -> Unit,
     isSelecting: Boolean = false, isSelected: Boolean = false,
     onBeginSelection: (() -> Unit)? = null, onToggleSelection: (() -> Unit)? = null) =
     MediaCatalogClip(file, controller, onOpen, false, isSelecting, isSelected, onBeginSelection, onToggleSelection)
 
 @Composable
-fun MediaClipListRow(file: MediaFile, controller: MediaLibraryController, onOpen: () -> Unit,
+fun MediaClipListRow(file: MediaFile, controller: LunaMediaPlaybackAdapter, onOpen: () -> Unit,
     isSelecting: Boolean = false, isSelected: Boolean = false,
     onBeginSelection: (() -> Unit)? = null, onToggleSelection: (() -> Unit)? = null) =
     MediaCatalogClip(file, controller, onOpen, true, isSelecting, isSelected, onBeginSelection, onToggleSelection)
 
 /** The adapter owns cache lookup and bounded thumbnail IO; shared UI owns both renderers. */
 @Composable
-private fun MediaCatalogClip(file: MediaFile, controller: MediaLibraryController, onOpen: () -> Unit,
+private fun MediaCatalogClip(file: MediaFile, controller: LunaMediaPlaybackAdapter, onOpen: () -> Unit,
     list: Boolean, isSelecting: Boolean, isSelected: Boolean,
     onBeginSelection: (() -> Unit)?, onToggleSelection: (() -> Unit)?) {
-    var thumbnail by remember(file.id) { mutableStateOf<Bitmap?>(null) }
-    var duration by remember(file.id) { mutableStateOf<String?>(null) }
-    LaunchedEffect(file.id, controller.thumbnailFile(file)?.path, list) {
+    val libraryState by controller.library.state.collectAsState()
+    val identity = controller.record(file)?.asset?.id?.rawValue ?: file.id
+    val entry = controller.record(file)?.let { libraryState.entries[it.asset.id] }
+    var thumbnail by remember(identity) { mutableStateOf<Bitmap?>(null) }
+    var duration by remember(identity) { mutableStateOf<String?>(null) }
+    LaunchedEffect(identity, entry?.thumbnail?.path, entry?.original?.path, list) {
         thumbnail = MediaThumbs.load(file, controller, maxPx = if (list) 480 else 640)
         duration = MediaThumbs.durationLabel(file, controller)
     }
-    val grade = controller.cacheGrade(file)
+    val grade = MediaCacheGrade.resolve(entry?.original != null, entry?.proxy != null)
     val source = if (grade == MediaCacheGrade.ORIGINAL) "CACHED" else if (grade.isProxyOnly) "PROXY" else "ON CAMERA"
-    val clip = com.opencapture.monitorui.MonitorClipValue(file.id, file.filename,
+    val clip = com.opencapture.monitorui.MonitorClipValue(identity, file.filename,
         listOfNotNull(file.resolution, file.fileExtension.uppercase()).joinToString(" · "),
         duration, source, controller.isFavorite(file), controller.downloadProgress[file.path]?.toFloat())
     com.opencapture.monitorui.MonitorClipCard(clip, list, isSelecting, isSelected,
@@ -129,7 +133,7 @@ fun SelectionMarker(selected: Boolean, modifier: Modifier = Modifier) {
 }
 
 object MediaThumbs {
-    suspend fun load(file: MediaFile, controller: MediaLibraryController, maxPx: Int): Bitmap? =
+    suspend fun load(file: MediaFile, controller: LunaMediaPlaybackAdapter, maxPx: Int): Bitmap? =
         withContext(Dispatchers.IO) {
             decode(controller.thumbnailFile(file), maxPx)?.let { return@withContext it }
             if (file.kind == MediaKind.PHOTO && controller.isDownloaded(file)) {
@@ -137,18 +141,6 @@ object MediaThumbs {
             }
             controller.ensureThumbnail(file)
             decode(controller.thumbnailFile(file), maxPx)?.let { return@withContext it }
-            if (controller.isLive) {
-                runCatching {
-                    val storage = file.storage
-                    val data = MediaTransfer.fetchBytes(controller.mediaRoute, storage, file.thumbPath).first
-                    if (data.isNotEmpty()) {
-                        controller.thumbnailFile(file)
-                        decodeBytes(data, maxPx)
-                    } else {
-                        null
-                    }
-                }.getOrNull()?.let { return@withContext it }
-            }
             if (file.kind == MediaKind.VIDEO && controller.isDownloaded(file)) {
                 frameGrab(controller.localFile(file), maxPx)
             } else {
@@ -156,7 +148,7 @@ object MediaThumbs {
             }
         }
 
-    suspend fun durationLabel(file: MediaFile, controller: MediaLibraryController): String? {
+    suspend fun durationLabel(file: MediaFile, controller: LunaMediaPlaybackAdapter): String? {
         if (file.kind != MediaKind.VIDEO) return null
         if (file.durationSeconds > 0) return MediaClipFormatting.durationLabel(file.durationSeconds)
         val local = controller.localFile(file) ?: return null

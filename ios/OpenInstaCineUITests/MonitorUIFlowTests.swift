@@ -584,6 +584,36 @@ final class MonitorUIFlowTests: XCTestCase {
         capture("false-color-reference-placed")
     }
 
+    func testActualMediaLibraryFavoritesSelectionAndPhotoCoverSurviveRotation() {
+        app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "media-owned"
+        app.launch()
+        let first = "IMG_20261003_140001_00_001.JPG"
+        let second = "IMG_20261003_140002_00_002.JPG"
+        XCTAssertTrue(app.staticTexts[first].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts[second].exists)
+        app.buttons["Add favorite"].firstMatch.tap()
+        app.buttons["Show Favorites media"].tap()
+        XCTAssertTrue(app.buttons["Remove favorite"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["Show All media"].tap()
+        app.buttons["List view"].tap()
+        let row = app.staticTexts[first]
+        row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.5)
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForExistence(timeout: 5))
+        rotate(.landscapeLeft)
+        XCTAssertTrue(app.staticTexts["1 selected"].exists)
+        XCTAssertTrue(app.buttons["Remove favorite"].firstMatch.exists)
+        capture("SIMULATED-actual-owned-gallery-landscape-selection")
+        app.buttons["Clear selection"].tap()
+        app.staticTexts[first].tap()
+        let close = app.buttons["Back to media"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        rotate(.portrait)
+        close.tap()
+        XCTAssertTrue(app.staticTexts[first].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Remove favorite"].firstMatch.exists)
+        capture("SIMULATED-actual-owned-gallery-returned-photo")
+    }
+
     func testMediaPageAdaptsToOrientation() {
         app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "media-fixture"
         app.launch()
