@@ -6,6 +6,9 @@ import OpenPocketViewCore
 import SwiftUI
 
 enum OperatorPrefs {
+    private static let display = MonitorDisplayPreferences(
+        storage: .standard,
+        keys: .init(live: "OpenInstaCine.DispChrome.Live", clean: "OpenInstaCine.DispChrome.Clean"))
     private static let common = MonitorOperatorPreferences(
         storage: .standard,
         keys: .init(
@@ -33,8 +36,6 @@ enum OperatorPrefs {
     private static let virtualJoystickSizeKey = "OpenInstaCine.VirtualJoystickSize"
     private static let gimbalRampKey = "OpenInstaCine.GimbalRamp"
     private static let gimbalDoubleTapKey = "OpenInstaCine.GimbalDoubleTap"
-    private static let dispLiveKey = "OpenInstaCine.DispChrome.Live"
-    private static let dispCleanKey = "OpenInstaCine.DispChrome.Clean"
     private static let cleanPinsKey = "OpenInstaCine.CleanViewPins.v1"
     private static let playbackAssistsKey = "OpenInstaCine.PlaybackAssists.v1"
     private static let lastMonitorColorModeKey = "OpenInstaCine.LastMonitorColorMode"
@@ -200,13 +201,13 @@ enum OperatorPrefs {
     }
 
     static var dispLive: PocketDispChrome {
-        get { loadChrome(key: dispLiveKey) ?? .liveDefaults }
-        set { saveChrome(newValue, key: dispLiveKey) }
+        get { display.live }
+        set { display.live = newValue }
     }
 
     static var dispClean: PocketDispChrome {
-        get { loadChrome(key: dispCleanKey) ?? .cleanDefaults }
-        set { saveChrome(newValue, key: dispCleanKey) }
+        get { display.clean }
+        set { display.clean = newValue }
     }
 
     static var shutterUsesAngle: Bool {
@@ -293,17 +294,6 @@ enum OperatorPrefs {
             let ordered = LiveAssistTool.cleanPinCases.filter { newValue.contains($0) }.map(
                 \.rawValue)
             UserDefaults.standard.set(ordered, forKey: cleanPinsKey)
-        }
-    }
-
-    private static func loadChrome(key: String) -> PocketDispChrome? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode(PocketDispChrome.self, from: data)
-    }
-
-    private static func saveChrome(_ value: PocketDispChrome, key: String) {
-        if let data = try? JSONEncoder().encode(value) {
-            UserDefaults.standard.set(data, forKey: key)
         }
     }
 
