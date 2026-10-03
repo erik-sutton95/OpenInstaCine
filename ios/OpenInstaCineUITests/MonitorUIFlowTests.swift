@@ -193,6 +193,13 @@ final class MonitorUIFlowTests: XCTestCase {
                 format: "identifier == %@ AND label == %@",
                 "monitor.settings.card.title", "Zebra")
         ).firstMatch
+        let falseColor = app.staticTexts.matching(
+            NSPredicate(format: "identifier == %@ AND label == %@",
+                "monitor.settings.card.title", "False Color")).firstMatch
+        if app.frame.width > 700 {
+            XCTAssertGreaterThan(zebra.frame.minX, falseColor.frame.maxX + 16,
+                "The assist group must span the page so its own landscape columns can fit")
+        }
         for _ in 0..<6 where !zebra.isHittable {
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.8))
                 .press(

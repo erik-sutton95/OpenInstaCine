@@ -310,7 +310,7 @@ struct SettingsRootView: View {
                 reset: { feedback(); resetPeaking() }),
             .trafficLights(TrafficLightsAssist.longPressMenu(assist: model.assist, compact: true).commonMenu,
                 reset: { feedback(); resetTrafficLights() }),
-        ]).buttonStyle(.zcTapTarget)
+        ]).buttonStyle(.zcTapTarget).monitorFullWidthCard()
 
         SettingsRowCard(title: "EV Meter") {
             SettingsSwitchInlineRow(
