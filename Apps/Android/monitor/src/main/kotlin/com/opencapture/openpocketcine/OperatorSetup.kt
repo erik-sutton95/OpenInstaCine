@@ -553,7 +553,7 @@ private fun LutPickerHost(model: AppModel, onClose: () -> Unit) {
 
 @Composable
 private fun LinkRows(model: AppModel, isLive: Boolean, phaseLabel: String, bars: Int) {
-    SettingsDashScale(
+    com.opencapture.monitorui.settings.MonitorLinkHealthScale(
         title = "Link Health",
         caption = OperatorLinkHealth.caption(isLive, bars),
         score = OperatorLinkHealth.score(bars),

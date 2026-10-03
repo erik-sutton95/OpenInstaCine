@@ -87,7 +87,6 @@ import androidx.compose.ui.window.Popup
 import com.opencapture.openpocketcine.ChromeShape
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.LiveType
-import com.opencapture.monitorui.MonitorLinkHealth
 import com.opencapture.openpocketcine.OpcIcon
 import com.opencapture.openpocketcine.panelGlass
 import kotlin.math.roundToInt
@@ -152,109 +151,6 @@ fun SettingsActionPill(title: String, icon: OpcIcon? = null, tint: Color = LiveD
  * Link Health dash-scale meter (iOS `SettingsDashScale`): POOR / WATCH / STABLE
  * marker over a 12-dash track with a three-band legend.
  */
-@Composable
-fun SettingsDashScale(title: String, caption: String, score: Int) {
-    val band = MonitorLinkHealth.band(score)
-    val bandColor = MonitorLinkHealth.color(score)
-    val litCount =
-        when (band) {
-            MonitorLinkHealth.Band.POOR -> 4
-            MonitorLinkHealth.Band.WATCH -> 8
-            MonitorLinkHealth.Band.STABLE -> 12
-        }
-    val bandSlot =
-        when (band) {
-            MonitorLinkHealth.Band.POOR -> 0
-            MonitorLinkHealth.Band.WATCH -> 1
-            MonitorLinkHealth.Band.STABLE -> 2
-        }
-    val bandLabel =
-        when (band) {
-            MonitorLinkHealth.Band.POOR -> "POOR"
-            MonitorLinkHealth.Band.WATCH -> "WATCH"
-            MonitorLinkHealth.Band.STABLE -> "STABLE"
-        }
-    Column(
-        Modifier.fillMaxWidth()
-            .settingsCardSurface()
-            .padding(13.dp),
-        verticalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        Text(title, style = chromeStyle(13f, FontWeight.SemiBold), color = LiveDesign.text)
-        Text(
-            caption,
-            style = chromeStyle(11.5f, FontWeight.Medium, mono = true),
-            color = LiveDesign.muted,
-        )
-        Row(Modifier.fillMaxWidth().height(19.dp)) {
-            repeat(3) { slot ->
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    if (slot == bandSlot) {
-                        Text(
-                            bandLabel,
-                            style = chromeStyle(9.5f, FontWeight.Bold, mono = true),
-                            color = bandColor,
-                            letterSpacing = 0.5.sp,
-                            modifier =
-                                Modifier
-                                    .background(bandColor.copy(alpha = 0.12f), CircleShape)
-                                    .border(1.dp, bandColor, CircleShape)
-                                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-            }
-        }
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            repeat(12) { index ->
-                val fill =
-                    when {
-                        index >= litCount -> LiveDesign.hairlineStrong
-                        index < 4 -> MonitorLinkHealth.poor.copy(alpha = 0.8f)
-                        index < 8 -> MonitorLinkHealth.watch.copy(alpha = 0.85f)
-                        else -> MonitorLinkHealth.stable.copy(alpha = 0.9f)
-                    }
-                Box(
-                    Modifier.weight(1f)
-                        .height(6.dp)
-                        .background(fill, CircleShape),
-                )
-            }
-        }
-        Row(Modifier.fillMaxWidth()) {
-            DashLegend("Poor", "<50", Modifier.weight(1f), Alignment.Start)
-            DashLegend("Watch", "50-79", Modifier.weight(1f), Alignment.CenterHorizontally)
-            DashLegend("Stable", "80+", Modifier.weight(1f), Alignment.End)
-        }
-    }
-}
-
-@Composable
-private fun DashLegend(
-    name: String,
-    sub: String,
-    modifier: Modifier,
-    alignment: Alignment.Horizontal,
-) {
-    Row(
-        modifier,
-        horizontalArrangement =
-            when (alignment) {
-                Alignment.Start -> Arrangement.Start
-                Alignment.End -> Arrangement.End
-                else -> Arrangement.Center
-            },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(name, style = chromeStyle(10f, FontWeight.SemiBold), color = LiveDesign.muted)
-        Spacer(Modifier.size(4.dp))
-        Text(sub, style = chromeStyle(9f, FontWeight.Normal, mono = true), color = LiveDesign.faint)
-    }
-}
-
 /**
  * One label-plus-trailing-control row for a divider-separated card
  * (iOS `SettingsInlineRow`). When [stacked] is true (two-column View Assist
