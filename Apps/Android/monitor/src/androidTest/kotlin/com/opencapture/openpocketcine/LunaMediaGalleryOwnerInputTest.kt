@@ -136,25 +136,39 @@ class LunaMediaGalleryOwnerInputTest {
         val folder = File(instrumentation.targetContext.getExternalFilesDir(null), "i5a-gallery-native-proof")
         assertTrue(folder.mkdirs() || folder.isDirectory)
         var rendered: Bitmap? = null
+        var lastObservation = "No native window observed"
         // Configuration and model state can precede the native rotation's presented frame. This
         // independent fixture color proves the actual seeded JPEG is visible before accepting it.
-        await {
+        try { await {
             if (rendered != null) return@await true
             val root = instrumentation.uiAutomation.rootInActiveWindow ?: return@await false
             val cell = node(cellLabel) ?: return@await false
             val windowBounds = Rect().also { root.getBoundsInScreen(it) }
             val cellBounds = Rect().also { cell.getBoundsInScreen(it) }
+            lastObservation = "expectedLandscape=$landscape window=$windowBounds cell=$cellBounds"
             if ((windowBounds.width() > windowBounds.height()) != landscape ||
                 cellBounds.isEmpty || !Rect.intersects(windowBounds, cellBounds)) return@await false
             val bitmap = instrumentation.uiAutomation.takeScreenshot() ?: return@await false
             val oriented = (bitmap.width > bitmap.height) == landscape
+            lastObservation += " screenshot=${bitmap.width}x${bitmap.height} oriented=$oriented"
             val fixtureVisible = oriented && (0 until bitmap.height step 8).any { y ->
                 (0 until bitmap.width step 8).any { x ->
                     val pixel = bitmap.getPixel(x, y)
                     Color.red(pixel) < 30 && Color.green(pixel) > 200 && Color.blue(pixel) < 30
                 }
             }
+            lastObservation += " seededJpegVisible=$fixtureVisible"
             if (fixtureVisible) { rendered = bitmap; true } else { bitmap.recycle(); false }
+        } } catch (failure: Throwable) {
+            File(folder, "$name-failure-observation.txt").writeText(lastObservation)
+            instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
+                try {
+                    File(folder, "$name-unaccepted.png").outputStream().use {
+                        assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+                    }
+                } finally { bitmap.recycle() }
+            }
+            throw failure
         }
         val bitmap = checkNotNull(rendered)
         try {
