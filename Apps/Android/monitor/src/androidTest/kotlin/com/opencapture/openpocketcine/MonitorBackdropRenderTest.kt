@@ -43,6 +43,45 @@ import org.junit.runner.RunWith
 /** Pixel evidence from the real HWUI/RenderEffect modifier, not an emulated blur model. */
 @RunWith(AndroidJUnit4::class)
 class MonitorBackdropRenderTest {
+    @Test fun sharedLevelOverlayClearsKnownGreenAndReplacesBubbleWithUnavailable() {
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            val display = androidx.compose.runtime.mutableStateOf<com.opencapture.monitorui.MonitorLevelDisplay>(
+                com.opencapture.monitorui.MonitorLevelDisplay.Gauges(0.0, 0.0))
+            var bounds = Rect.Zero
+            var density = 1f
+            scenario.onActivity { activity ->
+                density = activity.resources.displayMetrics.density
+                activity.setContent {
+                    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+                        com.opencapture.monitorui.MonitorLevelOverlay(display.value,
+                            com.opencapture.monitorui.MonitorScopeRect(0f, 0f, 300f, 300f),
+                            com.opencapture.monitorui.MonitorScopeRect(0f, 0f, 300f, 300f), true,
+                            Modifier.size(300.dp).onGloballyPositioned { bounds = it.boundsInWindow() })
+                    }
+                }
+            }
+            fun greenPixels(image: Bitmap): Int {
+                var count = 0
+                for (y in bounds.top.roundToInt() until bounds.bottom.roundToInt()) {
+                    for (x in bounds.left.roundToInt() until bounds.right.roundToInt()) {
+                        val c = image.getPixel(x, y)
+                        if (Color.green(c) > 100 && Color.green(c) > Color.red(c) * 2
+                                && Color.green(c) > Color.blue(c) * 3 / 2) count++
+                    }
+                }
+                return count
+            }
+            val gauges = capture(scenario, "shared-level-known-zero")
+            assertTrue(greenPixels(gauges) > 100 * density * density)
+            scenario.onActivity { display.value = com.opencapture.monitorui.MonitorLevelDisplay.Unavailable }
+            assertEquals(0, greenPixels(capture(scenario, "shared-level-unavailable")))
+            scenario.onActivity { display.value = com.opencapture.monitorui.MonitorLevelDisplay.Bubble(0.0, 0.0) }
+            assertTrue(greenPixels(capture(scenario, "shared-level-known-bubble")) > 40 * density * density)
+            scenario.onActivity { display.value = com.opencapture.monitorui.MonitorLevelDisplay.Unavailable }
+            assertEquals(0, greenPixels(capture(scenario, "shared-level-retired-bubble")))
+        }
+    }
+
     @Test fun sharedFalseColorReferenceRetainsResolvedKeyRendersGapsAndClearsSuccessor() {
         val source = mutableListOf(
             com.opencapture.monitorui.MonitorFalseColorReferenceSegment(0, 0.0, 0.25, 1.0, 0.0, 0.0),

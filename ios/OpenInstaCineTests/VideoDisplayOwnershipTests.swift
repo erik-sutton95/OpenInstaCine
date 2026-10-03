@@ -3,12 +3,83 @@ import XCTest
 import MetalKit
 import MonitorUI
 import OpenCineMedia
+import OpenPocketViewCore
 import SwiftUI
 
 @testable import OpenInstaCine
 
 @MainActor
 final class VideoDisplayOwnershipTests: XCTestCase {
+    func testSharedLevelOverlayClearsKnownGreenAndReplacesBubbleWithUnavailable() async throws {
+        let size = CGSize(width: 300, height: 300)
+        let feed = CGRect(origin: .zero, size: size)
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        let host = UIHostingController(rootView: AnyView(EmptyView()))
+        host.view.backgroundColor = .black
+        host.safeAreaRegions = []
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        func render(_ display: MonitorLevelDisplay, name: String) async throws -> [UInt8] {
+            let probe = PanelProbe()
+            probe.expectedSize = size
+            probe.laidOut = expectation(description: "native level overlay laid out")
+            let ready = try XCTUnwrap(probe.laidOut)
+            host.rootView = AnyView(ZStack(alignment: .topLeading) {
+                Color.black
+                ZStack {
+                    MonitorLevelOverlay(display: display, feed: feed, viewport: feed, portrait: true)
+                    PanelProbeView(view: probe).id(ObjectIdentifier(probe)).allowsHitTesting(false)
+                }.frame(width: size.width, height: size.height)
+            }.ignoresSafeArea().transaction { $0.disablesAnimations = true })
+            host.view.frame = window.bounds
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            await fulfillment(of: [ready], timeout: 5)
+            let displayed = expectation(description: "native level canvas submitted")
+            let frames = NativeFrameProbe(ready: displayed)
+            frames.start()
+            await fulfillment(of: [displayed], timeout: 5)
+            frames.stop()
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let origin = probe.convert(CGPoint.zero, to: host.view)
+            let image = try XCTUnwrap(UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                XCTAssertTrue(host.view.drawHierarchy(in: CGRect(x: -origin.x, y: -origin.y,
+                    width: host.view.bounds.width, height: host.view.bounds.height), afterScreenUpdates: true))
+            }.cgImage)
+            var rgba = [UInt8](repeating: 0, count: 300 * 300 * 4)
+            let context = try XCTUnwrap(CGContext(data: &rgba, width: 300, height: 300,
+                bitsPerComponent: 8, bytesPerRow: 1200, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: feed)
+            let attachment = XCTAttachment(image: UIImage(cgImage: image))
+            attachment.name = "shared-level-\(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            return rgba
+        }
+        func greenPixels(_ rgba: [UInt8]) -> Int {
+            var count = 0
+            for index in stride(from: 0, to: rgba.count, by: 4) {
+                let red = Int(rgba[index]), green = Int(rgba[index + 1]), blue = Int(rgba[index + 2])
+                if green > 100 && green > red * 2 && green > blue * 3 / 2 { count += 1 }
+            }
+            return count
+        }
+        let gauges = try await render(.gauges(rollDeg: 0, tiltDeg: 0), name: "known-zero")
+        XCTAssertGreaterThan(greenPixels(gauges), 100)
+        let unavailable = try await render(.unavailable, name: "unavailable")
+        XCTAssertEqual(greenPixels(unavailable), 0)
+        let bubble = try await render(.bubble(xDeg: 0, yDeg: 0), name: "known-bubble")
+        XCTAssertGreaterThan(greenPixels(bubble), 40)
+        let retired = try await render(.unavailable, name: "retired-bubble")
+        XCTAssertEqual(greenPixels(retired), 0)
+        XCTAssertEqual(LevelAssist.accessibilityValue(.unavailable), WorldLevelSnap.noLevelData)
+        XCTAssertEqual(LevelAssist.accessibilityValue(.gauges(rollDeg: 1.5, tiltDeg: -0.3)),
+            "Roll +1.5°, tilt -0.3°")
+    }
+
     func testSharedAudioMeterRotatesItsTracksKeepsPeaksAndClearsSilentSuccessor() async throws {
         let window = UIWindow(frame: UIScreen.main.bounds)
         let host = UIHostingController(rootView: AnyView(EmptyView()))
