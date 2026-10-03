@@ -385,6 +385,7 @@ fun MediaPlayerScreen(
     val conformAvailability = ConformPreview.availability(conformSource)
     val meterBox = remember { AudioLevelTapBox() }
     val meterSink = remember { PlaybackPcmBufferSink(meterBox) }
+    val meterSampler = remember { com.opencapture.opencine.runtime.MonitorAudioMeterSampler(meterBox) }
     val glass = remember { MonitorGlass(GlassTier.FLAT) }
 
     fun handlePlaybackBack() {
@@ -467,6 +468,8 @@ fun MediaPlayerScreen(
             assist.configureTool = null
             flashJob?.cancel()
             player.removeListener(listener)
+            meterSink.close()
+            meterBox.close()
             player.release()
         }
     }
@@ -555,14 +558,13 @@ fun MediaPlayerScreen(
     }
 
     LaunchedEffect(audioMetersOn, conformTarget != null) {
+        meterSampler.reset()
         if (!audioMetersOn) {
             meterLeft = AudioMeterChannel.Silent
             meterRight = AudioMeterChannel.Silent
             meterBox.readAndReset()
             return@LaunchedEffect
         }
-        var left = AudioMeterChannel.Silent
-        var right = AudioMeterChannel.Silent
         var last = System.nanoTime()
         val conforming = conformTarget != null
         if (conforming) {
@@ -575,11 +577,9 @@ fun MediaPlayerScreen(
             val now = System.nanoTime()
             val dt = (now - last) / 1_000_000_000.0
             last = now
-            val peaks = meterBox.peaksForMeters(conforming = conformTarget != null)
-            left = AudioMeterBallistics.step(left, peaks.first.toDouble(), dt)
-            right = AudioMeterBallistics.step(right, peaks.second.toDouble(), dt)
-            meterLeft = left
-            meterRight = right
+            val levels = meterSampler.step(dt, outputMuted = conformTarget != null) ?: AudioMeterLevels.Silent
+            meterLeft = levels.left
+            meterRight = levels.right
         }
     }
 

@@ -78,6 +78,7 @@ LUNA_OWNED=(
   OpenInstaCine/HevcDecoder.swift
   OpenInstaCine/LiveDecodeMetrics.swift
   OpenInstaCine/VideoView.swift
+  OpenInstaCine/PlaybackAudio.swift
   OpenInstaCine/PlaybackFeed.swift
   OpenInstaCine/LiveMonitorFx.swift
   OpenInstaCine/LiveMonitorLooks.swift

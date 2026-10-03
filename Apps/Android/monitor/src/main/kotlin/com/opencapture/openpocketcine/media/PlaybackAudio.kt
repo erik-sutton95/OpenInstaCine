@@ -14,9 +14,6 @@ import androidx.media3.exoplayer.audio.TeeAudioProcessor
 import com.opencapture.openpocketcine.assists.AudioMeterReading
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
 
 typealias AudioMeterBallistics = com.opencapture.opencine.media.MonitorAudioMeterBallistics
 typealias AudioMeterChannel = com.opencapture.opencine.media.MonitorAudioMeterChannel
@@ -24,201 +21,49 @@ typealias AudioMeterLevels = com.opencapture.opencine.media.MonitorAudioMeterLev
 
 fun AudioMeterChannel.asReading(): AudioMeterReading = AudioMeterReading(levelDB = levelDB, peakDB = peakDB)
 
-/** Lock-guarded per-channel linear peak accumulator. iOS `AudioLevelTapBox`. */
-class AudioLevelTapBox {
-    private val lock = Any()
-    private var leftPeak = 0f
-    private var rightPeak = 0f
-
-    fun ingest(left: Float, right: Float) {
-        synchronized(lock) {
-            leftPeak = max(leftPeak, left)
-            rightPeak = max(rightPeak, right)
-        }
-    }
-
-    fun readAndReset(): Pair<Float, Float> {
-        synchronized(lock) {
-            val peaks = leftPeak to rightPeak
-            leftPeak = 0f
-            rightPeak = 0f
-            return peaks
-        }
-    }
-
-    /** Conform preview mutes output; meters follow so they don't dance on silent audio. */
+/** Legacy display adapter around the native source owner. */
+class AudioLevelTapBox : com.opencapture.opencine.runtime.MonitorAudioPeakAccumulator() {
+    private val legacySource = beginSource()
+    fun ingest(left: Float, right: Float) { legacySource?.ingest(left, right) }
+    fun readAndReset(): Pair<Float, Float> = sampleAndReset()?.let { it.left to it.right } ?: (0f to 0f)
+    /** Conform preview mutes output; this app keeps meters empty while conforming. */
     fun peaksForMeters(conforming: Boolean): Pair<Float, Float> {
         val raw = readAndReset()
         return if (conforming) 0f to 0f else raw
     }
 }
 
-/**
- * Interleaved PCM peak (max magnitude) per channel. Matches the iOS tap's
- * `vDSP_maxmgv` read of float32, plus ExoPlayer's usual 16-bit output.
- */
+/** Media3 wire encodings are resolved in the source adapter, never the native runtime. */
 object PlaybackPcmPeaks {
-    fun ingest(buffer: ByteBuffer, encoding: Int, channelCount: Int): Pair<Float, Float> {
-        if (!buffer.hasRemaining() || channelCount <= 0) return 0f to 0f
-        val view = buffer.slice()
-        view.order(orderFor(encoding, buffer.order()))
-        return when (encoding) {
-            C.ENCODING_PCM_FLOAT -> ingestFloat(view, channelCount)
-            C.ENCODING_PCM_32BIT, C.ENCODING_PCM_32BIT_BIG_ENDIAN ->
-                ingestInt(view, channelCount, bits = 32)
-            C.ENCODING_PCM_24BIT, C.ENCODING_PCM_24BIT_BIG_ENDIAN ->
-                ingestPacked24(view, channelCount)
-            C.ENCODING_PCM_8BIT -> ingestPcm8(view, channelCount)
-            else -> ingestInt16(view, channelCount)
+    fun format(encoding: Int, channelCount: Int): com.opencapture.opencine.runtime.MonitorPcmFormat {
+        val type = when (encoding) {
+            C.ENCODING_PCM_FLOAT -> com.opencapture.opencine.runtime.MonitorPcmSampleType.FLOAT32
+            C.ENCODING_PCM_32BIT, C.ENCODING_PCM_32BIT_BIG_ENDIAN -> com.opencapture.opencine.runtime.MonitorPcmSampleType.SIGNED32
+            C.ENCODING_PCM_24BIT, C.ENCODING_PCM_24BIT_BIG_ENDIAN -> com.opencapture.opencine.runtime.MonitorPcmSampleType.SIGNED24
+            C.ENCODING_PCM_8BIT -> com.opencapture.opencine.runtime.MonitorPcmSampleType.UNSIGNED8
+            else -> com.opencapture.opencine.runtime.MonitorPcmSampleType.SIGNED16
         }
-    }
-
-    private fun orderFor(encoding: Int, fallback: ByteOrder): ByteOrder =
-        when (encoding) {
-            C.ENCODING_PCM_16BIT_BIG_ENDIAN,
-            C.ENCODING_PCM_24BIT_BIG_ENDIAN,
-            C.ENCODING_PCM_32BIT_BIG_ENDIAN,
-            -> ByteOrder.BIG_ENDIAN
-            C.ENCODING_PCM_FLOAT,
-            C.ENCODING_PCM_16BIT,
-            C.ENCODING_PCM_24BIT,
-            C.ENCODING_PCM_32BIT,
-            C.ENCODING_PCM_8BIT,
-            -> ByteOrder.LITTLE_ENDIAN
-            else -> fallback
+        val order = when (encoding) {
+            C.ENCODING_PCM_16BIT_BIG_ENDIAN, C.ENCODING_PCM_24BIT_BIG_ENDIAN, C.ENCODING_PCM_32BIT_BIG_ENDIAN -> ByteOrder.BIG_ENDIAN
+            C.ENCODING_PCM_FLOAT, C.ENCODING_PCM_16BIT, C.ENCODING_PCM_24BIT, C.ENCODING_PCM_32BIT, C.ENCODING_PCM_8BIT -> ByteOrder.LITTLE_ENDIAN
+            else -> null
         }
-
-    private fun ingestFloat(buffer: ByteBuffer, channelCount: Int): Pair<Float, Float> {
-        val samples = buffer.asFloatBuffer()
-        var left = 0f
-        var right = 0f
-        while (samples.remaining() >= channelCount) {
-            val l = abs(samples.get())
-            if (l > left) left = l
-            if (channelCount == 1) {
-                right = left
-            } else {
-                val r = abs(samples.get())
-                if (r > right) right = r
-                repeat(channelCount - 2) {
-                    if (samples.hasRemaining()) samples.get()
-                }
-            }
-        }
-        if (channelCount == 1) right = left
-        return left to right
+        return com.opencapture.opencine.runtime.MonitorPcmFormat(type, channelCount, order)
     }
-
-    private fun ingestInt16(buffer: ByteBuffer, channelCount: Int): Pair<Float, Float> {
-        val samples = buffer.asShortBuffer()
-        var left = 0f
-        var right = 0f
-        while (samples.remaining() >= channelCount) {
-            val l = abs(samples.get().toInt()) / 32768f
-            if (l > left) left = l
-            if (channelCount == 1) {
-                right = left
-            } else {
-                val r = abs(samples.get().toInt()) / 32768f
-                if (r > right) right = r
-                repeat(channelCount - 2) {
-                    if (samples.hasRemaining()) samples.get()
-                }
-            }
-        }
-        if (channelCount == 1) right = left
-        return left to right
-    }
-
-    private fun ingestInt(buffer: ByteBuffer, channelCount: Int, bits: Int): Pair<Float, Float> {
-        val samples = buffer.asIntBuffer()
-        val denom = if (bits == 32) 2147483648.0f else 8388608.0f
-        var left = 0f
-        var right = 0f
-        while (samples.remaining() >= channelCount) {
-            val l = abs(samples.get()) / denom
-            if (l > left) left = l
-            if (channelCount == 1) {
-                right = left
-            } else {
-                val r = abs(samples.get()) / denom
-                if (r > right) right = r
-                repeat(channelCount - 2) {
-                    if (samples.hasRemaining()) samples.get()
-                }
-            }
-        }
-        if (channelCount == 1) right = left
-        return left to right
-    }
-
-    private fun ingestPacked24(buffer: ByteBuffer, channelCount: Int): Pair<Float, Float> {
-        val big = buffer.order() == ByteOrder.BIG_ENDIAN
-        var left = 0f
-        var right = 0f
-        val frameBytes = 3 * channelCount
-        while (buffer.remaining() >= frameBytes) {
-            val l = abs(readPcm24(buffer, big)) / 8388608f
-            if (l > left) left = l
-            if (channelCount == 1) {
-                right = left
-            } else {
-                val r = abs(readPcm24(buffer, big)) / 8388608f
-                if (r > right) right = r
-                repeat(channelCount - 2) {
-                    if (buffer.remaining() >= 3) readPcm24(buffer, big)
-                }
-            }
-        }
-        if (channelCount == 1) right = left
-        return left to right
-    }
-
-    private fun ingestPcm8(buffer: ByteBuffer, channelCount: Int): Pair<Float, Float> {
-        var left = 0f
-        var right = 0f
-        while (buffer.remaining() >= channelCount) {
-            val l = abs((buffer.get().toInt() and 0xFF) - 128) / 128f
-            if (l > left) left = l
-            if (channelCount == 1) {
-                right = left
-            } else {
-                val r = abs((buffer.get().toInt() and 0xFF) - 128) / 128f
-                if (r > right) right = r
-                repeat(channelCount - 2) {
-                    if (buffer.hasRemaining()) buffer.get()
-                }
-            }
-        }
-        if (channelCount == 1) right = left
-        return left to right
-    }
-
-    private fun readPcm24(buffer: ByteBuffer, bigEndian: Boolean): Int {
-        val b0 = buffer.get().toInt() and 0xFF
-        val b1 = buffer.get().toInt() and 0xFF
-        val b2 = buffer.get().toInt() and 0xFF
-        val packed = if (bigEndian) (b0 shl 16) or (b1 shl 8) or b2 else b0 or (b1 shl 8) or (b2 shl 16)
-        return if (packed and 0x800000 != 0) packed or -0x1000000 else packed
-    }
+    fun ingest(buffer: ByteBuffer, encoding: Int, channelCount: Int): Pair<Float, Float> =
+        com.opencapture.opencine.runtime.MonitorPcmPeaks.ingest(buffer, format(encoding, channelCount)) ?: (0f to 0f)
 }
 
 /** ExoPlayer `TeeAudioProcessor` sink → [AudioLevelTapBox]. */
 class PlaybackPcmBufferSink(
     private val box: AudioLevelTapBox,
 ) : TeeAudioProcessor.AudioBufferSink {
-    @Volatile private var encoding: Int = C.ENCODING_PCM_16BIT
-    @Volatile private var channelCount: Int = 2
-
+    private val input = com.opencapture.opencine.runtime.MonitorPcmAudioInput(box)
     override fun flush(sampleRateHz: Int, channelCount: Int, encoding: Int) {
-        this.channelCount = channelCount
-        this.encoding = encoding
+        input.prepare(PlaybackPcmPeaks.format(encoding, channelCount))
     }
-
-    override fun handleBuffer(buffer: ByteBuffer) {
-        val peaks = PlaybackPcmPeaks.ingest(buffer, encoding, channelCount)
-        box.ingest(peaks.first, peaks.second)
-    }
+    override fun handleBuffer(buffer: ByteBuffer) { input.ingest(buffer) }
+    fun close() { input.close() }
 }
 
 fun createPlaybackExoPlayer(context: Context, meterSink: PlaybackPcmBufferSink): ExoPlayer {
