@@ -418,8 +418,8 @@ private fun ZebraZoneRow(
 @Composable
 private fun WaveformOptions(state: LiveAssistState) {
     val haptics = LocalOperatorHaptics.current
-    ScopeTraceOptions(listOf("Luma", "RGB"), state.waveMode.label,
-        { haptics.selection(); state.setWaveform(mode = WaveformMode.fromPersisted(it)) },
+    com.opencapture.monitorui.MonitorScopeTraceMenu(WaveformMode.entries, state.waveMode,
+        { haptics.selection(); state.setWaveform(mode = it) }, { it.label },
         state.waveBrightness, { state.setWaveform(brightness = it) }, state.waveGuides,
         { haptics.selection(); state.setWaveform(guides = it) })
 }
@@ -427,88 +427,37 @@ private fun WaveformOptions(state: LiveAssistState) {
 @Composable
 private fun ParadeOptions(state: LiveAssistState) {
     val haptics = LocalOperatorHaptics.current
-    ScopeTraceOptions(listOf("RGB", "YRGB"), state.paradeMode.label,
-        { haptics.selection(); state.setParade(mode = ParadeMode.fromPersisted(it)) },
+    com.opencapture.monitorui.MonitorScopeTraceMenu(ParadeMode.entries, state.paradeMode,
+        { haptics.selection(); state.setParade(mode = it) }, { it.label },
         state.paradeBrightness, { state.setParade(brightness = it) }, state.paradeGuides,
         { haptics.selection(); state.setParade(guides = it) })
 }
 
-@Composable
-private fun ScopeTraceOptions(modes: List<String>, mode: String, onMode: (String) -> Unit,
-    brightness: Int, onBrightness: (Int) -> Unit, guides: ScopeGuides, onGuides: (ScopeGuides) -> Unit) {
-    com.opencapture.monitorui.MonitorOptionGroup {
-        SettingsInlineRow("Mode", showTopDivider = false) {
-            SettingsSegmented(modes, mode, compact = false, onSelect = onMode)
-        }
-        SettingsInlineRow("Brightness", help = "Raise trace intensity in bright light.", stacked = true) {
-            SettingsPercentSlider(brightness, 0..200, onBrightness)
-        }
-    }
-    Spacer(Modifier.height(11.dp))
-    Text("GUIDE LINES", modifier = Modifier.padding(start = 12.dp, bottom = 5.dp),
-        style = LiveType.ui(7.5f, FontWeight.Medium).copy(letterSpacing = 1.sp), color = LiveDesign.faint)
-    com.opencapture.monitorui.MonitorOptionGroup { GuideToggles(guides, onGuides) }
-}
 
 @Composable
 private fun HistogramOptions(state: LiveAssistState) {
     val haptics = LocalOperatorHaptics.current
-    SettingsSwitchInlineRow(
-        title = HistogramAssist.TRAFFIC_LIGHTS_TITLE,
-        isOn = state.histoTrafficLights,
-        help = HistogramAssist.TRAFFIC_LIGHTS_HELP,
-        showTopDivider = false,
-        stacked = false,
-    ) {
-        haptics.selection()
-        state.setHistogram(traffic = !state.histoTrafficLights)
-    }
-    SettingsInlineRow(HistogramAssist.COMPENSATION_TITLE, HistogramAssist.COMPENSATION_HELP, stacked = true) {
-        CompensationPicker(state.crushClipCompensation) {
-            haptics.selection()
-            state.setHistogram(compensation = it)
-        }
-    }
+    com.opencapture.monitorui.MonitorHistogramMenu(state.histoTrafficLights,
+        { haptics.selection(); state.setHistogram(traffic = !state.histoTrafficLights) },
+        state.crushClipCompensation, { haptics.selection(); state.setHistogram(compensation = it) },
+        HistogramAssist.TRAFFIC_LIGHTS_HELP, HistogramAssist.COMPENSATION_HELP)
 }
 
 @Composable
 private fun VectorscopeOptions(state: LiveAssistState) {
     val haptics = LocalOperatorHaptics.current
-    SettingsInlineRow(
-        "Trace Zoom",
-        help = "Magnifies only the chroma trace; the graticule stays at unity.",
-        showTopDivider = false,
-        stacked = true,
-    ) {
-        SettingsSegmented(
-            options = VectorscopeZoom.entries.map { it.label },
-            selected = state.vectorZoom.label,
-        ) {
-            haptics.selection()
-            state.setVectorscope(zoom = VectorscopeZoom.fromPersisted(it))
-        }
-    }
-    SettingsInlineRow("Brightness", help = "Raise trace intensity when the chroma plot is hard to read.", stacked = true) {
-        SettingsPercentSlider(value = state.vectorBrightness, range = 0..200) {
-            state.setVectorscope(brightness = it)
-        }
-    }
+    com.opencapture.monitorui.MonitorVectorscopeMenu(state.vectorZoom,
+        { haptics.selection(); state.setVectorscope(zoom = it) }, state.vectorBrightness,
+        { state.setVectorscope(brightness = it) })
 }
 
 @Composable
 private fun LightsOptions(state: LiveAssistState) {
     val haptics = LocalOperatorHaptics.current
-    SettingsInlineRow(
-        HistogramAssist.COMPENSATION_TITLE,
-        help = "Stops of crush/clip tolerance before a channel indicator glows. Shared with the histogram traffic lights.",
-        showTopDivider = false,
-        stacked = true,
-    ) {
-        CompensationPicker(state.crushClipCompensation) {
-            haptics.selection()
-            state.setCompensation(it)
-        }
-    }
+    com.opencapture.monitorui.MonitorCrushClipMenu(state.crushClipCompensation,
+        { haptics.selection(); state.setCompensation(it) },
+        "Stops of crush/clip tolerance before a channel indicator glows. Shared with the histogram traffic lights.",
+        showTopDivider = false)
 }
 
 @Composable
@@ -618,29 +567,7 @@ private fun MirrorOptions(state: LiveAssistState) {
     }
 }
 
-@Composable
-private fun GuideToggles(guides: ScopeGuides, onChange: (ScopeGuides) -> Unit) {
-    SettingsSwitchInlineRow("Safe clip", isOn = guides.clip, showTopDivider = false, stacked = false) {
-        onChange(guides.copy(clip = !guides.clip))
-    }
-    SettingsSwitchInlineRow("Safe crush", isOn = guides.crush, stacked = false) {
-        onChange(guides.copy(crush = !guides.crush))
-    }
-    SettingsSwitchInlineRow("Middle gray", isOn = guides.middle, stacked = false) {
-        onChange(guides.copy(middle = !guides.middle))
-    }
-}
 
-@Composable
-private fun CompensationPicker(selected: CrushClipCompensation, onSelect: (CrushClipCompensation) -> Unit) {
-    SettingsCrushClipSegmented(
-        options = CrushClipCompensation.entries.map { it.label to it.compactLabel },
-        selectedLabel = selected.label,
-        accentSelection = true,
-    ) { label ->
-        CrushClipCompensation.entries.firstOrNull { it.label == label }?.let(onSelect)
-    }
-}
 
 @Composable
 private fun OptionCopy(text: String) {

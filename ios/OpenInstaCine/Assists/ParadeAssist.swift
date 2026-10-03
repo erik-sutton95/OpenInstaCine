@@ -327,94 +327,18 @@ final class ParadeAssistStore {
 struct ParadeLongPressMenu: View {
     @Binding var options: ParadeAssist.Options
     var compact: Bool = false
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            MonitorInspectorCard {
-                SettingsInlineRow(title: "Mode", showTopDivider: false, stacked: compact) {
-                    SettingsSegmented(
-                        options: ParadeAssist.Mode.allCases.map(\.rawValue),
-                        selected: options.mode.rawValue,
-                        compact: compact,
-                        stacked: compact
-                    ) {
-                        guard let mode = ParadeAssist.Mode(rawValue: $0), mode != options.mode
-                        else {
-                            return
-                        }
-                        options.mode = mode
-                    }
-                }
-                SettingsInlineRow(
-                    title: "Brightness",
-                    help: ParadeAssist.brightnessHelp,
-                    stacked: compact
-                ) {
-                    ParadePercentSlider(
-                        value: Binding(
-                            get: { options.brightness },
-                            set: {
-                                let next = ParadeAssist.Options.clampedBrightness($0)
-                                guard next != options.brightness else { return }
-                                ParadeAssistHaptics.selection()
-                                options.brightness = next
-                            }),
-                        range: ParadeAssist.brightnessRange)
-                }
-            }
-            MonitorInspectorCard("Guide lines") {
-                SettingsSwitchInlineRow(
-                    title: "Safe clip",
-                    showTopDivider: false,
-                    stacked: compact,
-                    isOn: options.guides.clip
-                ) {
-                    ParadeAssistHaptics.selection()
-                    options.guides.clip.toggle()
-                }
-                SettingsSwitchInlineRow(
-                    title: "Safe crush",
-                    stacked: compact,
-                    isOn: options.guides.crush
-                ) {
-                    ParadeAssistHaptics.selection()
-                    options.guides.crush.toggle()
-                }
-                SettingsSwitchInlineRow(
-                    title: "Middle gray",
-                    stacked: compact,
-                    isOn: options.guides.middle
-                ) {
-                    ParadeAssistHaptics.selection()
-                    options.guides.middle.toggle()
-                }
-            }
-        }
-    }
-}
-
-/// OpenZCine `SettingsPercentSlider`.
-private struct ParadePercentSlider: View {
-    @Binding var value: Int
-    let range: ClosedRange<Int>
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Slider(
-                value: Binding(
-                    get: { Double(value) },
-                    set: { value = Int($0.rounded()) }),
-                in: Double(range.lowerBound)...Double(range.upperBound),
-                step: 1
-            )
-            .tint(LiveDesign.accent)
-            .frame(minWidth: 120, idealWidth: 190)
-            Text("\(value)%")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(LiveDesign.text)
-                .frame(width: 40, alignment: .trailing)
-                .monospacedDigit()
-        }
+        MonitorScopeTraceMenu(modes: ParadeAssist.Mode.allCases, mode: $options.mode,
+            brightness: Binding(get: { options.brightness }, set: {
+                let next = ParadeAssist.Options.clampedBrightness($0)
+                guard next != options.brightness else { return }
+                ParadeAssistHaptics.selection(); options.brightness = next
+            }), guides: $options.guides, title: { $0.rawValue },
+            brightnessHelp: ParadeAssist.brightnessHelp, brightnessRange: ParadeAssist.brightnessRange,
+            compact: compact, modeFeedback: {
+                OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+            }, guideFeedback: { ParadeAssistHaptics.selection() })
+            .buttonStyle(.zcTapTarget)
     }
 }
 

@@ -166,35 +166,13 @@ private struct PeakingColorDots: View {
     var compact: Bool = false
     let onSelect: (PeakingAssist.Color) -> Void
 
-    private var dotDiameter: CGFloat { compact ? 15 : 13 }
-    private var hitTarget: CGFloat { 44 }
-
     var body: some View {
-        HStack(spacing: compact ? 4 : 6) {
-            MonitorSnapshotRows(PeakingAssist.palette) { color in
-                Button {
-                    onSelect(color)
-                } label: {
-                    Circle()
-                        .fill(color.swatch)
-                        .frame(width: dotDiameter, height: dotDiameter)
-                        .frame(width: 36, height: 36)
-                        .background(LiveDesign.background.opacity(0.5), in: Circle())
-                        .overlay(
-                            Circle().stroke(
-                                color == selected ? color.swatch : LiveDesign.hairline,
-                                lineWidth: color == selected ? 2 : 1)
-                        )
-                        .frame(width: hitTarget, height: hitTarget)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.zcTapTarget)
-                .accessibilityLabel(color.rawValue)
-            }
-        }
+        MonitorSettingsColorDots(colors: PeakingAssist.palette.map {
+            .init(value: $0, title: $0.rawValue, color: $0.swatch)
+        }, selected: selected, compact: compact, background: LiveDesign.background,
+            border: LiveDesign.hairline, onSelect: onSelect).buttonStyle(.zcTapTarget)
     }
 }
-
 /// OpenZCine `OperatorSettingsHaptics.selection` (light tap; Pocket has no haptics preference yet).
 private enum PeakingAssistHaptics {
     @MainActor

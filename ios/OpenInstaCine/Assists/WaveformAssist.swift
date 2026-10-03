@@ -313,94 +313,18 @@ final class WaveformAssistStore {
 struct WaveformLongPressMenu: View {
     @Binding var options: WaveformAssist.Options
     var compact: Bool = false
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            MonitorInspectorCard {
-                SettingsInlineRow(title: "Mode", showTopDivider: false, stacked: compact) {
-                    SettingsSegmented(
-                        options: WaveformAssist.Mode.allCases.map(\.rawValue),
-                        selected: options.mode.rawValue,
-                        compact: compact,
-                        stacked: compact
-                    ) {
-                        guard let mode = WaveformAssist.Mode(rawValue: $0), mode != options.mode
-                        else {
-                            return
-                        }
-                        options.mode = mode
-                    }
-                }
-                SettingsInlineRow(
-                    title: "Brightness",
-                    help: WaveformAssist.brightnessHelp,
-                    stacked: compact
-                ) {
-                    WaveformPercentSlider(
-                        value: Binding(
-                            get: { options.brightness },
-                            set: {
-                                let next = WaveformAssist.Options.clampedBrightness($0)
-                                guard next != options.brightness else { return }
-                                WaveformAssistHaptics.selection()
-                                options.brightness = next
-                            }),
-                        range: WaveformAssist.brightnessRange)
-                }
-            }
-            MonitorInspectorCard("Guide lines") {
-                SettingsSwitchInlineRow(
-                    title: "Safe clip",
-                    showTopDivider: false,
-                    stacked: compact,
-                    isOn: options.guides.clip
-                ) {
-                    WaveformAssistHaptics.selection()
-                    options.guides.clip.toggle()
-                }
-                SettingsSwitchInlineRow(
-                    title: "Safe crush",
-                    stacked: compact,
-                    isOn: options.guides.crush
-                ) {
-                    WaveformAssistHaptics.selection()
-                    options.guides.crush.toggle()
-                }
-                SettingsSwitchInlineRow(
-                    title: "Middle gray",
-                    stacked: compact,
-                    isOn: options.guides.middle
-                ) {
-                    WaveformAssistHaptics.selection()
-                    options.guides.middle.toggle()
-                }
-            }
-        }
-    }
-}
-
-/// OpenZCine `SettingsPercentSlider`.
-private struct WaveformPercentSlider: View {
-    @Binding var value: Int
-    let range: ClosedRange<Int>
-
-    var body: some View {
-        HStack(spacing: 9) {
-            Slider(
-                value: Binding(
-                    get: { Double(value) },
-                    set: { value = Int($0.rounded()) }),
-                in: Double(range.lowerBound)...Double(range.upperBound),
-                step: 1
-            )
-            .tint(LiveDesign.accent)
-            .frame(minWidth: 120, idealWidth: 190)
-            Text("\(value)%")
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundStyle(LiveDesign.text)
-                .frame(width: 40, alignment: .trailing)
-                .monospacedDigit()
-        }
+        MonitorScopeTraceMenu(modes: WaveformAssist.Mode.allCases, mode: $options.mode,
+            brightness: Binding(get: { options.brightness }, set: {
+                let next = WaveformAssist.Options.clampedBrightness($0)
+                guard next != options.brightness else { return }
+                WaveformAssistHaptics.selection(); options.brightness = next
+            }), guides: $options.guides, title: { $0.rawValue },
+            brightnessHelp: WaveformAssist.brightnessHelp, brightnessRange: WaveformAssist.brightnessRange,
+            compact: compact, modeFeedback: {
+                OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+            }, guideFeedback: { WaveformAssistHaptics.selection() })
+            .buttonStyle(.zcTapTarget)
     }
 }
 

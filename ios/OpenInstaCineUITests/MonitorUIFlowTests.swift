@@ -371,6 +371,46 @@ final class MonitorUIFlowTests: XCTestCase {
         capture("assist-inspector-landscape")
     }
 
+    func testScopeTuningDeliversSelectionSliderAndGuideInputAcrossRotation() {
+        app.launch()
+        let expand = app.buttons["monitor.assists.expand"]
+        XCTAssertTrue(expand.waitForExistence(timeout: 10))
+        expand.tap()
+        let wave = app.buttons["monitor.assist.WAVE"]
+        XCTAssertTrue(wave.waitForExistence(timeout: 5))
+        wave.press(forDuration: 0.55)
+        XCTAssertTrue(app.buttons["Close Waveform"].waitForExistence(timeout: 5))
+        let luma = app.buttons["Luma"]
+        XCTAssertTrue(luma.isHittable)
+        luma.tap()
+        XCTAssertTrue(luma.isSelected)
+        let brightness = app.sliders.firstMatch
+        XCTAssertTrue(brightness.isHittable)
+        let prior = Int(brightness.value as? String ?? "") ?? 100
+        brightness.adjust(toNormalizedSliderPosition: prior > 100 ? 0.25 : 0.75)
+        guard let observed = Int(brightness.value as? String ?? "") else {
+            XCTFail("Native slider must report the current stepped brightness")
+            return
+        }
+        XCTAssertNotEqual(observed, prior)
+        XCTAssertTrue((0...200).contains(observed))
+        XCTAssertTrue(app.staticTexts["\(observed)%"].waitForExistence(timeout: 3))
+        let clip = app.buttons["Safe clip"]
+        let initial = clip.value as? String
+        XCTAssertTrue(initial == "On" || initial == "Off")
+        clip.tap()
+        let changed = initial == "On" ? "Off" : "On"
+        XCTAssertEqual(clip.value as? String, changed)
+        rotate(.landscapeRight)
+        XCTAssertTrue(app.buttons["Close Waveform"].exists)
+        XCTAssertTrue(app.buttons["Luma"].isSelected)
+        XCTAssertEqual(app.buttons["Safe clip"].value as? String, changed)
+        XCTAssertTrue(app.staticTexts["\(observed)%"].exists)
+        capture("SIMULATED-scope-tuning-landscape")
+        app.buttons["Close Waveform"].tap()
+        XCTAssertTrue(app.buttons["monitor.system.record"].isHittable)
+    }
+
     func testAssistInspectorRepeatedTabSwitchesKeepOneStablePanel() {
         app.launch()
         rotate(.landscapeLeft)

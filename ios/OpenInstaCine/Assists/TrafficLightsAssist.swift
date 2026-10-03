@@ -251,73 +251,14 @@ final class TrafficLightsAssistStore {
 struct TrafficLightsLongPressMenu: View {
     var assist: LiveAssistState
     var compact: Bool = false
-
     var body: some View {
-        SettingsInlineRow(
-            title: TrafficLightsAssist.compensationTitle,
-            help: TrafficLightsAssist.compensationHelp,
-            showTopDivider: false,
-            stacked: compact
-        ) {
-            TrafficLightsCrushClipSegmented(
-                selected: TrafficLightsAssist.sharedCompensation(),
-                compact: compact
-            ) { match in
-                guard match != TrafficLightsAssist.sharedCompensation() else { return }
-                TrafficLightsAssistHaptics.selection()
-                TrafficLightsAssist.setSharedCompensation(match)
-                assist.crushClipCompensation = match
-                assist.persist()
-                TrafficLightsAssist.store.persist()
-            }
-        }
-    }
-}
-
-/// OpenZCine `SettingsCrushClipSegmented` — fraction glyphs, 46×34 floor, full stop in VoiceOver.
-private struct TrafficLightsCrushClipSegmented: View {
-    let selected: TrafficLightsAssist.CrushClipCompensation
-    var compact: Bool = false
-    let onSelect: (TrafficLightsAssist.CrushClipCompensation) -> Void
-
-    var body: some View {
-        HStack(spacing: 4) {
-            MonitorSnapshotRows(TrafficLightsAssist.CrushClipCompensation.allCases) { option in
-                let active = option == selected
-                Button {
-                    onSelect(option)
-                } label: {
-                    Text(option.compactLabel)
-                        .font(
-                            LiveType.ui(
-                                size: compact ? 12 : 11, weight: active ? .semibold : .medium)
-                        )
-                        .foregroundStyle(active ? LiveDesign.text : LiveDesign.muted)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity)
-                        .frame(
-                            minWidth: TrafficLightsAssist.segmentMinWidth,
-                            minHeight: TrafficLightsAssist.segmentMinHeight
-                        )
-                        .background(
-                            active ? LiveDesign.surface : Color.clear,
-                            in: RoundedRectangle(
-                                cornerRadius: DesignTokens.cornerRadius, style: .continuous))
-                }
-                .buttonStyle(.zcTapTarget)
-                .accessibilityLabel(option.label)
-            }
-        }
-        .padding(4)
-        .background(
-            LiveDesign.background.opacity(0.5),
-            in: RoundedRectangle(cornerRadius: DesignTokens.cornerRadius, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DesignTokens.cornerRadius, style: .continuous)
-                .stroke(LiveDesign.hairline, lineWidth: 1)
-        )
-        .frame(maxWidth: .infinity)
+        MonitorCrushClipMenu(compensation: Binding(get: { TrafficLightsAssist.sharedCompensation() }, set: { match in
+            guard match != TrafficLightsAssist.sharedCompensation() else { return }
+            TrafficLightsAssistHaptics.selection()
+            TrafficLightsAssist.setSharedCompensation(match)
+            assist.crushClipCompensation = match
+            assist.persist(); TrafficLightsAssist.store.persist()
+        }), help: TrafficLightsAssist.compensationHelp, compact: compact, showTopDivider: false)
     }
 }
 
