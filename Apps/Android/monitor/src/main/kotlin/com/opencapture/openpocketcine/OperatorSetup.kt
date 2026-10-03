@@ -114,7 +114,6 @@ import com.opencapture.openpocketcine.settings.SettingsActionPill
 import com.opencapture.openpocketcine.settings.SettingsColorDot
 import com.opencapture.openpocketcine.settings.SettingsColorDots
 import com.opencapture.openpocketcine.settings.SettingsCrushClipSegmented
-import com.opencapture.openpocketcine.settings.SettingsDashScale
 import com.opencapture.openpocketcine.settings.SettingsGroupCard
 import com.opencapture.openpocketcine.settings.SettingsInlineRow
 import com.opencapture.openpocketcine.settings.SettingsPalette
