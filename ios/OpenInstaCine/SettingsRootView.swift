@@ -34,7 +34,7 @@ enum SettingsHelpCopy {
     static let headTracking =
         "Experimental. The compass above the joystick on the right is Calibrate Head Lock: that AirPods pose and that gimbal pose are shared forward. Head turns set matching pan and tilt angles within the gimbal’s range. Roll is shown only. Needs AirPods with motion (Pro, 3, Max, or later) in your ears. Off by default. The same control becomes STOP and clears the lock. On-screen stick, a game controller, and Motion Control takes priority."
     static let joystickSensitivity =
-        "How far a stick throw moves the gimbal — on-screen and a connected game controller. Small throws crawl; full throw is fastest. 4 is the captured feel. 5 reaches full speed sooner; 1 is the slowest."
+        "How far a stick throw moves the gimbal \u{2014} on-screen and a connected game controller. Small throws crawl; full throw is fastest. 4 is the captured feel. 5 reaches full speed sooner; 1 is the slowest."
     static let virtualJoystickSize =
         "How large the on-screen stick is. Medium is the default. Large is easier to grab; Small keeps more of the picture clear."
     static let virtualJoystickInvertPan =
@@ -58,11 +58,11 @@ enum SettingsHelpCopy {
     static let sourceHelp =
         "View the OpenInstaCine project on GitHub. Opening this may leave the camera Wi-Fi if that is the only network."
     static let linkHealth =
-        "How healthy the camera link is right now — delivery, not radio RSSI."
+        "How healthy the camera link is right now \u{2014} delivery, not radio RSSI."
     static let clearCache =
         "Removes downloaded clip files from this phone. The clip list stays so you can cache them again from the camera."
     static let cacheFullResolution =
-        "Download the original camera file when you open a clip. Off keeps only the 720p proxy to save space. Share needs the original — connect the camera if it is not cached."
+        "Download the original camera file when you open a clip. Off keeps only the 720p proxy to save space. Share needs the original \u{2014} connect the camera if it is not cached."
     static let shareDiagnostics =
         "Saves a report with connection events, warnings, and crashes. No name, location, or Wi-Fi password. Take a screenshot for TestFlight and paste the copied text into the feedback."
     static let reliabilityReports =
@@ -79,7 +79,7 @@ typealias OperatorSettingsTab = MonitorSettingsTab
 ///
 /// `safeArea` is the host-processed inset (OpenZCine `fullScreenPanelSafeArea` / standalone
 /// cover): landscape zeros the clean short edge. Do not read `GeometryReader.safeAreaInsets`
-/// here — this surface `ignoresSafeArea()`, so SwiftUI reports 0 and the island/trailing
+/// here: this surface `ignoresSafeArea()`, so SwiftUI reports 0 and the island/trailing
 /// card get only the 16pt floor.
 struct SettingsRootView: View {
     /// Real device insets after the host zeros the clean landscape edge.
@@ -220,60 +220,21 @@ struct SettingsRootView: View {
                 }
             }
         } else if model.isLive {
-            SettingsRowCard {
-                SettingsSwitchInlineRow(
-                    title: "Share this feed",
-                    help: SettingsHelpCopy.shareThisFeed,
-                    showTopDivider: false,
-                    isOn: model.shareThisFeed
-                ) {
-                    model.setShareThisFeed(!model.shareThisFeed)
-                }
-                SettingsInlineRow(
-                    title: "Join camera Wi-Fi",
-                    help:
-                        "On the watching device, scan this code with Camera, join the Wi-Fi, then open Watch a feed."
-                ) {
-                    Button("Show Wi-Fi code") { showWatcherWiFiCode = true }
-                        .font(LiveType.ui(size: 13, weight: .medium))
-                }
-                SettingsInlineRow(
-                    title: "Watcher passcode",
-                    help: SettingsHelpCopy.watcherPasscode
-                ) {
-                    SecureField("Optional", text: Bindable(model).sharePasscode)
-                        .font(LiveType.ui(size: 13, weight: .medium))
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 120)
-                        .onChange(of: model.sharePasscode) { _, value in
-                            WatcherRelayKeychain.hostPasscode = value
-                        }
-                }
-                SettingsSwitchInlineRow(
-                    title: "Control requests",
-                    help: SettingsHelpCopy.controlRequests,
-                    isOn: model.controlRequestsAllowed
-                ) {
-                    model.controlRequestsAllowed.toggle()
-                }
-                SettingsInlineRow(
-                    title: "Broadcast priority",
-                    help: SettingsHelpCopy.broadcastPriority,
-                    stacked: true
-                ) {
-                    SettingsSegmented(
-                        options: ["Quality", "High", "Medium", "Steady"],
-                        selected: ["Quality", "High", "Medium", "Steady"][
-                            min(model.broadcastPriority, 3)],
-                        compact: true
-                    ) { option in
-                        let order = ["Quality", "High", "Medium", "Steady"]
-                        if let i = order.firstIndex(of: option) {
-                            model.broadcastPriority = i
-                        }
-                    }
-                }
-            }
+            let priorities = ["Quality", "High", "Medium", "Steady"]
+            MonitorFeedSharingSettings(
+                sharing: Binding(get: { model.shareThisFeed }, set: model.setShareThisFeed),
+                passcode: Bindable(model).sharePasscode,
+                controlRequests: Bindable(model).controlRequestsAllowed,
+                priority: Binding(get: { priorities[min(model.broadcastPriority, 3)] }, set: {
+                    if let index = priorities.firstIndex(of: $0) { model.broadcastPriority = index }
+                }), priorities: priorities,
+                help: .init(sharing: SettingsHelpCopy.shareThisFeed,
+                    passcode: SettingsHelpCopy.watcherPasscode,
+                    controlRequests: SettingsHelpCopy.controlRequests,
+                    priority: SettingsHelpCopy.broadcastPriority),
+                showWiFiCode: { showWatcherWiFiCode = true },
+                passcodeChanged: { WatcherRelayKeychain.hostPasscode = $0 },
+                feedback: { OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled) })
         } else {
             SettingsRowCard {
                 SettingsInlineRow(
@@ -505,15 +466,10 @@ struct SettingsRootView: View {
     // MARK: - Storage
 
     @ViewBuilder private var storageRows: some View {
-        SettingsRowCard {
-            SettingsInlineRow(
-                title: "Frame.io",
-                help: SettingsHelpCopy.frameIO,
-                showTopDivider: false
-            ) {
-                frameioStatusControl
-            }
-        }
+        MonitorAccountSettings(title: "Frame.io", help: SettingsHelpCopy.frameIO,
+            state: frameioAccountState,
+            signIn: { Task { try? await model.connectFrameio() } },
+            signOut: { model.disconnectFrameio() })
         MonitorCacheSettings(
             cacheOriginals: Binding(get: { model.cacheFullResolution }, set: { model.cacheFullResolution = $0 }),
             sizeLabel: cacheSizeLabel, clearing: clearingCache,
@@ -553,32 +509,10 @@ struct SettingsRootView: View {
         }
     }
 
-    @ViewBuilder private var frameioStatusControl: some View {
-        if !model.isFrameioConfigured {
-            SettingsValueText(value: "Not configured")
-        } else if model.frameioConnecting {
-            ProgressView().controlSize(.small).tint(LiveDesign.accent)
-        } else if model.isFrameioConnected {
-            Button {
-                model.disconnectFrameio()
-            } label: {
-                Text("Log out")
-                    .font(LiveType.ui(size: 13, weight: .semibold))
-                    .foregroundStyle(LiveDesign.accent)
-            }
-            .buttonStyle(.zcTapTarget)
-        } else {
-            Button {
-                Task {
-                    try? await model.connectFrameio()
-                }
-            } label: {
-                Text("Sign in")
-                    .font(LiveType.ui(size: 13, weight: .semibold))
-                    .foregroundStyle(LiveDesign.accent)
-            }
-            .buttonStyle(.zcTapTarget)
-        }
+    private var frameioAccountState: MonitorAccountState {
+        if !model.isFrameioConfigured { return .notConfigured }
+        if model.frameioConnecting { return .connecting }
+        return model.isFrameioConnected ? .signedIn : .signedOut
     }
 
     private var cacheSizeLabel: String {

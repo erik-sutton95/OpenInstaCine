@@ -905,11 +905,10 @@ private fun StorageRows(model: AppModel, onClearCache: () -> Unit) {
     val bytes = OperatorMediaCache.byteCount(context)
     val cacheLabel =
         if (OperatorMediaCache.existingDir(context) == null) "Empty" else formatCacheSize(bytes)
-    SettingsRowCard {
-        SettingsInlineRow("Frame.io", SettingsHelpCopy.FRAME_IO, showTopDivider = false) {
-            SettingsValueText("Not configured")
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorAccountSettings(
+        title = "Frame.io", help = SettingsHelpCopy.FRAME_IO,
+        state = com.opencapture.monitorui.settings.MonitorAccountState.NOT_CONFIGURED,
+    )
     com.opencapture.monitorui.settings.MonitorCacheSettings(
         cacheOriginals = model.cacheFullResolution, sizeLabel = cacheLabel,
         cacheHelp = SettingsHelpCopy.CACHE_FULL_RESOLUTION,
