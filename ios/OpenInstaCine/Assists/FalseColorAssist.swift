@@ -202,60 +202,18 @@ struct FalseColorLongPressMenu: View {
     var onReferenceEnabled: (() -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SettingsInlineRow(
-                title: "Scale",
-                help: FalseColorAssist.scaleHelp,
-                showTopDivider: false,
-                stacked: true
-            ) {
-                SettingsSegmented(
-                    options: FalseColorAssist.scaleOptions,
-                    selected: FalseColorAssist.menuLabel(for: options.scale),
-                    compact: compact,
-                    stacked: true
-                ) { label in
-                    let scale = FalseColorAssist.scale(forMenuLabel: label)
-                    guard scale != options.scale else { return }
-                    options.scale = scale
-                }
-            }
-
-            if let rec709 {
-                SettingsInlineRow(title: "Read", help: FalseColorAssist.readHelp, stacked: true) {
-                    SettingsSegmented(
-                        options: FalseColorAssist.readOptions,
-                        selected: rec709.wrappedValue ? "709" : "LOG",
-                        compact: compact,
-                        stacked: true
-                    ) { label in
-                        FalseColorAssistHaptics.selection()
-                        rec709.wrappedValue = label == "709"
-                    }
-                }
-            }
-
-            SettingsInlineRow(title: "Reference key", stacked: true) {
-                FalseColorReference(
-                    scale: options.scale, transfer: transfer, inspector: true,
-                    rec709: rec709?.wrappedValue ?? false, clipByte: clipByte
-                )
-                .accessibilityLabel("False color reference key")
-            }
-
-            SettingsSwitchInlineRow(
-                title: "Reference Display",
-                help: FalseColorAssist.referenceHelp,
-                stacked: compact,
-                isOn: options.referenceEnabled
-            ) {
-                FalseColorAssistHaptics.selection()
-                options.referenceEnabled.toggle()
-                if options.referenceEnabled {
-                    onReferenceEnabled?()
-                }
-            }
-        }
+        MonitorFalseColorMenu(scales: FalseColorAssist.scaleOptions.map(FalseColorAssist.scale(forMenuLabel:)),
+            scale: $options.scale, referenceEnabled: $options.referenceEnabled, read709: rec709,
+            reference: FalseColorReference(scale: options.scale, transfer: transfer, inspector: true,
+                rec709: rec709?.wrappedValue ?? false, clipByte: clipByte).displayValues,
+            title: FalseColorAssist.menuLabel(for:), scaleHelp: FalseColorAssist.scaleHelp,
+            readHelp: FalseColorAssist.readHelp, referenceHelp: FalseColorAssist.referenceHelp, compact: compact,
+            selectionFeedback: { FalseColorAssistHaptics.selection() },
+            readFeedback: {
+                FalseColorAssistHaptics.selection(); FalseColorAssistHaptics.selection()
+            }, referenceFeedback: {
+                FalseColorAssistHaptics.selection(); FalseColorAssistHaptics.selection()
+            }, onReferenceEnabled: { onReferenceEnabled?() })
     }
 }
 

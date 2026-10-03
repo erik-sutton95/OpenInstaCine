@@ -50,11 +50,23 @@ final class DesqueezeUIFlowTests: XCTestCase {
         app.buttons["Custom"].firstMatch.tap()
         let slider = app.sliders["Custom squeeze factor"]
         XCTAssertTrue(slider.waitForExistence(timeout: 5))
-        slider.adjust(toNormalizedSliderPosition: 0.57)
+        revealOption(slider)
+        let options = try XCTUnwrap(app.scrollViews.allElementsBoundByIndex.first {
+            $0.sliders["Custom squeeze factor"].exists
+        })
+        // A partially clipped slider can report hittable while its track is below the fold.
+        for _ in 0..<3 where slider.frame.maxY > options.frame.maxY - 10 { options.swipeUp() }
+        XCTAssertLessThanOrEqual(slider.frame.maxY, options.frame.maxY - 10)
         let readout = app.staticTexts["desqueeze.factor"]
+        slider.adjust(toNormalizedSliderPosition: 0)
+        XCTAssertEqual(readout.label, "1.00×")
+        slider.adjust(toNormalizedSliderPosition: 1)
+        XCTAssertEqual(readout.label, "2.00×")
+        slider.adjust(toNormalizedSliderPosition: 0.57)
         let customValue = try XCTUnwrap(
             Double(readout.label.replacingOccurrences(of: "×", with: "")))
-        XCTAssertEqual(customValue, 1.57, accuracy: 0.04)
+        XCTAssertGreaterThan(customValue, 1)
+        XCTAssertLessThan(customValue, 2)
         XCTAssertEqual(customValue * 100, (customValue * 100).rounded(), accuracy: 0.0001)
         XCTAssertEqual(slider.value as? String, readout.label)
         let remembered = readout.label

@@ -148,33 +148,12 @@ struct NDLongPressMenu: View {
     var compact: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SettingsInlineRow(
-                title: NDAssist.notationTitle,
-                help: NDAssist.notationHelp,
-                showTopDivider: false,
-                stacked: true
-            ) {
-                SettingsSegmented(
-                    options: NDAssist.notationOptions,
-                    selected: store.notation.editorLabel,
-                    compact: true,
-                    stacked: compact
-                ) { label in
-                    guard
-                        let next = NDFilterNotation.allCases.first(where: {
-                            $0.editorLabel == label
-                        })
-                    else { return }
-                    store.notation = next
-                    store.persist()
-                }
-            }
-            Text(NDAssist.helpCopy)
-                .font(LiveType.ui(size: 13))
-                .foregroundStyle(LiveDesign.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        MonitorNDMenu(notation: Binding(get: { store.notation }, set: {
+            store.notation = $0; store.persist()
+        }), title: NDAssist.notationTitle, notationHelp: NDAssist.notationHelp,
+            help: NDAssist.helpCopy, compact: compact, selectionFeedback: {
+                OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+            })
     }
 }
 
