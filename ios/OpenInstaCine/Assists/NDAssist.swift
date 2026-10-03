@@ -214,32 +214,13 @@ private struct NDMeterLiveChip: View {
     }
 }
 
-/// Compact HUD chip. One label — Stops, ND32, or ND 0.3 — from the long-press setting.
+/// App binding keeps the inherited unknown marker content.
 struct NDMeterChip: View {
     var reading: NDFilterSuggestion?
     var notation: NDFilterNotation = NDAssist.defaultNotation
 
     var body: some View {
-        Text(reading?.chipLabel(notation) ?? "—")
-            .font(.system(size: 15, weight: .bold, design: .rounded))
-            .foregroundStyle(reading?.needsGlass == true ? LiveDesign.accent : LiveDesign.text)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .liveChromeCapsule()
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(NDAssist.accessibilityTitle)
-            .accessibilityValue(accessibilityValue)
-    }
-
-    private var accessibilityValue: String {
-        guard let reading else { return "waiting for picture" }
-        let label = reading.chipLabel(notation)
-        if reading.needsGlass {
-            return "\(label), \(reading.stopsLabel) stops over middle gray"
-        }
-        return "\(label), no ND"
+        MonitorNDFilterChip(reading: reading, notation: notation, emptyLabel: NDFilterRecommendation.noneLabel)
     }
 }
 

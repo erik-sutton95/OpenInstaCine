@@ -10,6 +10,70 @@ import SwiftUI
 
 @MainActor
 final class VideoDisplayOwnershipTests: XCTestCase {
+    func testSharedNDChipClearsTheAccentWhenPictureMeasurementDisappears() async throws {
+        let size = CGSize(width: 84, height: 30)
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        let host = UIHostingController(rootView: AnyView(EmptyView()))
+        host.view.backgroundColor = .black
+        host.safeAreaRegions = []
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        func render(_ reading: NDFilterSuggestion?, name: String) async throws -> [UInt8] {
+            let probe = PanelProbe()
+            probe.expectedSize = size
+            probe.laidOut = expectation(description: "native ND chip laid out")
+            let ready = try XCTUnwrap(probe.laidOut)
+            host.rootView = AnyView(ZStack(alignment: .topLeading) {
+                Color.black
+                ZStack {
+                    NDMeterChip(reading: reading)
+                    PanelProbeView(view: probe).id(ObjectIdentifier(probe)).allowsHitTesting(false)
+                }.frame(width: size.width, height: size.height)
+            }.ignoresSafeArea())
+            host.view.frame = window.bounds
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            await fulfillment(of: [ready], timeout: 5)
+            let displayed = expectation(description: "native ND chip submitted")
+            let frames = NativeFrameProbe(ready: displayed)
+            frames.start()
+            await fulfillment(of: [displayed], timeout: 5)
+            frames.stop()
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 2
+            let origin = probe.convert(CGPoint.zero, to: host.view)
+            let image = try XCTUnwrap(UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                XCTAssertTrue(host.view.drawHierarchy(in: CGRect(x: -origin.x, y: -origin.y,
+                    width: host.view.bounds.width, height: host.view.bounds.height), afterScreenUpdates: true))
+            }.cgImage)
+            var rgba = [UInt8](repeating: 0, count: 168 * 60 * 4)
+            let context = try XCTUnwrap(CGContext(data: &rgba, width: 168, height: 60,
+                bitsPerComponent: 8, bytesPerRow: 672, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: 168, height: 60))
+            let attachment = XCTAttachment(image: UIImage(cgImage: image))
+            attachment.name = "shared-ND-\(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            return rgba
+        }
+        func accentPixels(_ rgba: [UInt8]) -> Int {
+            var count = 0
+            for index in stride(from: 0, to: rgba.count, by: 4) {
+                let red = Int(rgba[index]), green = Int(rgba[index + 1]), blue = Int(rgba[index + 2])
+                if max(red, green, blue) - min(red, green, blue) > 80 { count += 1 }
+            }
+            return count
+        }
+        let hot = try await render(NDFilterRecommendation.suggestion(pictureStops: 6), name: "hot")
+        XCTAssertGreaterThan(accentPixels(hot), 100)
+        let absent = try await render(nil, name: "absent")
+        XCTAssertEqual(accentPixels(absent), 0)
+        let knownZero = try await render(NDFilterRecommendation.suggestion(pictureStops: 0), name: "zero")
+        XCTAssertEqual(accentPixels(knownZero), 0)
+    }
+
     func testSharedLevelOverlayClearsKnownGreenAndReplacesBubbleWithUnavailable() async throws {
         let size = CGSize(width: 300, height: 300)
         let feed = CGRect(origin: .zero, size: size)

@@ -1,18 +1,12 @@
 package com.opencapture.openpocketcine.assists
 
 import com.opencapture.openpocketcine.feed.fromColorMode
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.font.FontWeight
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorMaterial
 import com.opencapture.monitorui.MonitorWaveformScopePlot
@@ -105,18 +99,8 @@ internal fun NDMeterPanel(state: LiveAssistState, modifier: Modifier = Modifier)
     val transfer = state.scopeBundle.transfer
     val reading =
         NDFilterRecommendation.reading(state.scopeBundle.samples.histogramLuma, transfer)
-    Box(
-        modifier.fillMaxSize().padding(horizontal = 10.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            reading?.chipLabel(state.ndNotation) ?: "—",
-            color = if (reading?.needsGlass == true) LiveDesign.accent else LiveDesign.text,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-        )
-    }
+    com.opencapture.monitorui.MonitorNDFilterChip(reading, state.ndNotation, modifier,
+        emptyLabel = NDFilterRecommendation.NONE_LABEL)
 }
 
 private fun ScopeAssistBundle.resolvedTransfer(colorMode: Int): MonitorTransfer =

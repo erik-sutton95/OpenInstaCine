@@ -43,6 +43,42 @@ import org.junit.runner.RunWith
 /** Pixel evidence from the real HWUI/RenderEffect modifier, not an emulated blur model. */
 @RunWith(AndroidJUnit4::class)
 class MonitorBackdropRenderTest {
+    @Test fun sharedNDChipClearsTheAccentWhenPictureMeasurementDisappears() {
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            val reading = androidx.compose.runtime.mutableStateOf<NDFilterSuggestion?>(
+                NDFilterRecommendation.suggestion(6.0))
+            var bounds = Rect.Zero
+            var density = 1f
+            scenario.onActivity { activity ->
+                density = activity.resources.displayMetrics.density
+                activity.setContent {
+                    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+                        com.opencapture.monitorui.MonitorNDFilterChip(reading.value,
+                            modifier = Modifier.size(84.dp, 30.dp).onGloballyPositioned { bounds = it.boundsInWindow() },
+                            emptyLabel = NDFilterRecommendation.NONE_LABEL)
+                    }
+                }
+            }
+            fun accentPixels(image: Bitmap): Int {
+                var count = 0
+                for (y in bounds.top.roundToInt() until bounds.bottom.roundToInt()) {
+                    for (x in bounds.left.roundToInt() until bounds.right.roundToInt()) {
+                        val c = image.getPixel(x, y)
+                        val r = Color.red(c); val g = Color.green(c); val b = Color.blue(c)
+                        if (maxOf(r, g, b) - minOf(r, g, b) > 80) count++
+                    }
+                }
+                return count
+            }
+            val hot = capture(scenario, "shared-ND-hot")
+            assertTrue(accentPixels(hot) > 20 * density * density)
+            scenario.onActivity { reading.value = null }
+            assertEquals(0, accentPixels(capture(scenario, "shared-ND-absent")))
+            scenario.onActivity { reading.value = NDFilterRecommendation.suggestion(0.0) }
+            assertEquals(0, accentPixels(capture(scenario, "shared-ND-zero")))
+        }
+    }
+
     @Test fun sharedLevelOverlayClearsKnownGreenAndReplacesBubbleWithUnavailable() {
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
             val display = androidx.compose.runtime.mutableStateOf<com.opencapture.monitorui.MonitorLevelDisplay>(
