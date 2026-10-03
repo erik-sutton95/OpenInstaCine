@@ -1,12 +1,12 @@
 package com.opencapture.openpocketcine.media
 
+import com.opencapture.opencine.runtime.MonitorMediaReadSource
+import com.opencapture.opencine.runtime.MonitorMediaReadStream
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
@@ -35,38 +35,27 @@ object MediaTransfer {
             .retryOnConnectionFailure(false)
             .build()
 
+    /** Native driver preserves this client's timeout, redirect and retry configuration. */
+    fun nativeSource(url: String): MonitorMediaReadSource {
+        val call = client.newCall(Request.Builder().url(url).header("Accept", "*/*").get().build())
+        return object : MonitorMediaReadSource {
+            override fun cancel() { call.cancel() }
+            override fun open(): MonitorMediaReadStream {
+                val response = call.execute()
+                val body = response.body
+                return object : MonitorMediaReadStream {
+                    override val status = response.code
+                    override val contentLength = body.contentLength().takeIf { it > 0 }
+                    override val input = body.byteStream()
+                    override fun close() { response.close() }
+                }
+            }
+        }
+    }
+
     fun getBytes(route: MediaRoute, storage: Int, path: String): ByteArray {
         val (data, _) = performGet(route, storage, path)
         return data
-    }
-
-    fun downloadFile(
-        route: MediaRoute,
-        storage: Int,
-        path: String,
-        dest: File,
-        expectedSize: Long = 0,
-        onProgress: (Double) -> Unit = {},
-    ) {
-        var last: MediaTransferError = MediaTransferError.BadResponse
-        for (candidate in storageOrder(storage)) {
-            try {
-                downloadOnce(
-                    url = route.pathUrlString(candidate, path),
-                    dest = dest,
-                    expectedSize = expectedSize,
-                    onProgress = onProgress,
-                )
-                return
-            } catch (e: MediaTransferError.HttpStatus) {
-                last = e
-                if (e.code == 404 || e.code in 400..499) continue
-                throw e
-            } catch (e: MediaTransferError) {
-                last = e
-            }
-        }
-        throw last
     }
 
     /** In-memory GET for thumbs/SCR. Capped at [MAX_RAM_BYTES]. */
@@ -181,63 +170,6 @@ object MediaTransfer {
             if (written <= 0L) throw MediaTransferError.BadResponse
             if (expected > 0 && written >= expected) call.cancel()
             return sink.toByteArray()
-        }
-    }
-
-    private fun downloadOnce(
-        url: String,
-        dest: File,
-        expectedSize: Long,
-        onProgress: (Double) -> Unit,
-    ) {
-        dest.parentFile?.mkdirs()
-        val tmp = File(dest.parentFile, "${UUID.randomUUID()}.part")
-        val request =
-            Request.Builder()
-                .url(url)
-                .header("Accept", "*/*")
-                .get()
-                .build()
-        val call = client.newCall(request)
-        try {
-            call.execute().use { response ->
-                val code = response.code
-                if (code !in 200..299) throw MediaTransferError.HttpStatus(code)
-                val body = response.body ?: throw MediaTransferError.BadResponse
-                val headerLength = body.contentLength()
-                val expected = if (headerLength > 0) headerLength else expectedSize
-                tmp.outputStream().use { out ->
-                    val written =
-                        try {
-                            readUntilLength(body.byteStream(), out, expected) { onProgress(it) }
-                        } catch (e: IOException) {
-                            val already = tmp.length()
-                            if (already > 0 && expected > 0 && already >= expected) {
-                                already
-                            } else {
-                                throw e
-                            }
-                        }
-                    if (written <= 0L) throw MediaTransferError.BadResponse
-                    if (expected > 0 && written >= expected) call.cancel()
-                }
-            }
-        } catch (e: IOException) {
-            if (tmp.isFile && expectedSize > 0 && tmp.length() >= expectedSize) {
-                // Content-Length complete; camera kept the socket open.
-            } else {
-                tmp.delete()
-                throw e
-            }
-        }
-        if (!tmp.isFile || tmp.length() <= 0L) {
-            tmp.delete()
-            throw MediaTransferError.BadResponse
-        }
-        if (dest.exists()) dest.delete()
-        if (!tmp.renameTo(dest)) {
-            tmp.copyTo(dest, overwrite = true)
-            tmp.delete()
         }
     }
 

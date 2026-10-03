@@ -22,7 +22,7 @@ data class MediaFile(
     val handleShared: Boolean = false,
     /**
      * The handle read at the marker fixed position, before the base+step fit has vouched for it.
-     * Untrusted on its own — see `MediaManifest.withCmdHandles`. Zero when the record has no marker.
+     * Retained legacy index field. Zero when the original record had no marker.
      */
     val handleCandidate: Long = 0L,
 ) {
@@ -197,194 +197,16 @@ object MediaHTTP {
     }
 }
 
-data class MediaPageSliceInfo(
-    val declared: Int,
-    val records: Int,
-    val endMarker: Boolean,
-    val ended: Boolean,
-) {
-    val incomplete: Boolean
-        get() = declared in 1..MediaListCommand.COUNT_MAX && records < declared
-}
-
-data class MediaPageStep(
-    val fresh: List<MediaFile>,
-    val sdCursor: Long,
-    val internalCursor: Long,
-    val moreAvailable: Boolean,
-)
-
-/** `0x00/0x26` list payloads. Byte-identical to Osmosis / Mimo. */
+/** Legacy storage qualification retained for saved index and native playback addresses. */
 object MediaListCommand {
-    const val PAGE_SIZE = 45
-    const val COUNT_MAX = 512
-    const val NEWEST_SD = 0x00000001L
-    const val NEWEST_INTERNAL = 0x40000001L
     const val INTERNAL_BIT = 0x40000000L
-    const val SD_STORAGE = 0
-    const val INTERNAL_STORAGE = 1
-    const val SD_COUNTER: Int = 1
-    const val INTERNAL_COUNTER: Int = 2
-
-    val listTemplate: ByteArray =
-        byteArrayOf(
-            0x4A, 0x00, 0x2A, 0x10,
-            0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x01, 0x00, 0x00, 0x00,
-            0x2D, 0x00, 0x0D, 0x01, 0x00,
-            0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(),
-            0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(),
-            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00,
-        )
-
-    val triggerPayload: ByteArray =
-        byteArrayOf(
-            0x4A, 0x04, 0x0E, 0x10,
-            0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x01, 0x00, 0x00, 0x00,
-        )
-
-    fun listPayload(counter: Int, cursor: Long): ByteArray {
-        val payload = listTemplate.copyOf()
-        payload[4] = (counter and 0xFF).toByte()
-        payload[10] = (cursor and 0xFF).toByte()
-        payload[11] = ((cursor shr 8) and 0xFF).toByte()
-        payload[12] = ((cursor shr 16) and 0xFF).toByte()
-        payload[13] = ((cursor shr 24) and 0xFF).toByte()
-        return payload
-    }
-
     fun storeOf(file: MediaFile): Int {
         if (file.storageKnown) return file.storage
         val handle = if (file.handle != 0L) file.handle else file.cmdHandle
-        if (handle != 0L) return if ((handle and INTERNAL_BIT) == 0L) SD_STORAGE else INTERNAL_STORAGE
-        return if (file.group == INTERNAL_STORAGE) INTERNAL_STORAGE else SD_STORAGE
+        if (handle != 0L) return if ((handle and INTERNAL_BIT) == 0L) 0 else 1
+        return if (file.group == 1) 1 else 0
     }
-
-    /** Store-qualified because the same camera path may exist on both stores. */
     fun pageKey(file: MediaFile): String = "${storeOf(file)}:${file.path}"
-
-    fun storeSlice(page: List<MediaFile>, store: Int): List<MediaFile> =
-        page.filter { storeOf(it) == store }
-
-    fun oldestHandle(page: List<MediaFile>, store: Int, below: Long? = null): Long? =
-        storeSlice(page, store)
-            .map { it.handle }
-            .filter { it != 0L && (below == null || it < below) }
-            .minOrNull()
-
-    fun seedPagination(
-        page: List<MediaFile>,
-        seen: MutableSet<String>,
-        slices: Map<Int, MediaPageSliceInfo> = emptyMap(),
-    ): MediaPageStep =
-        pageStep(NEWEST_SD, NEWEST_INTERNAL, page, seen, slices, initial = true)
-
-    fun stepPagination(
-        sdCursor: Long,
-        internalCursor: Long,
-        page: List<MediaFile>,
-        seen: MutableSet<String>,
-        slices: Map<Int, MediaPageSliceInfo> = emptyMap(),
-    ): MediaPageStep =
-        pageStep(sdCursor, internalCursor, page, seen, slices, initial = false)
-
-    fun hasOlderPage(recordCount: Int, cursor: Long?): Boolean {
-        val c = cursor ?: return false
-        if (c <= 0L) return false
-        return recordCount >= PAGE_SIZE
-    }
-
-    fun storeHasOlderPage(
-        sliceSize: Int,
-        cursorMoved: Boolean,
-        info: MediaPageSliceInfo?,
-    ): Boolean =
-        when {
-            !cursorMoved -> false
-            info == null -> sliceSize >= PAGE_SIZE
-            info.incomplete -> true
-            info.endMarker -> false
-            else -> sliceSize >= PAGE_SIZE
-        }
-
-    private fun pageStep(
-        sdCursor: Long,
-        internalCursor: Long,
-        page: List<MediaFile>,
-        seen: MutableSet<String>,
-        slices: Map<Int, MediaPageSliceInfo>,
-        initial: Boolean,
-    ): MediaPageStep {
-        val fresh = page.filter { seen.add(pageKey(it)) }
-        val sdOldest = oldestHandle(page, SD_STORAGE, if (initial) null else sdCursor)
-        val internalOldest = oldestHandle(page, INTERNAL_STORAGE, if (initial) null else internalCursor)
-        val more =
-            fresh.isNotEmpty() &&
-                (
-                    storeHasOlderPage(
-                        storeSlice(page, SD_STORAGE).size,
-                        sdOldest != null,
-                        slices[SD_STORAGE],
-                    ) ||
-                        storeHasOlderPage(
-                            storeSlice(page, INTERNAL_STORAGE).size,
-                            internalOldest != null,
-                            slices[INTERNAL_STORAGE],
-                        )
-                )
-        return MediaPageStep(
-            fresh = fresh,
-            sdCursor = sdOldest ?: sdCursor,
-            internalCursor = internalOldest ?: internalCursor,
-            moreAvailable = more,
-        )
-    }
-}
-
-object MediaCommands {
-    const val SET_GENERAL = 0x00
-    const val SET_CAMERA = 0x02
-    const val CMD_MEDIA_LIST = 0x26
-    const val CMD_MEDIA_CHUNK = 0x27
-    const val CMD_MEDIA_DELETE = 0x28
-    const val CMD_PLAYBACK = 0x0C
-    const val CMD_MEDIA_FAVORITE = 0xBF
-
-    fun enterPlaybackPayload(): ByteArray = byteArrayOf(0x01, 0x01, 0x00, 0x01)
-
-    fun exitPlaybackPayload(): ByteArray = byteArrayOf(0x01, 0x01, 0x00, 0x00)
-
-    /** `0x00/0x28` delete. `[count][handle:u32][counter:u32] 00 [count:u32] 01 01 00 00`. */
-    fun deletePayload(handle: Long, counter: Long): ByteArray {
-        val out = ByteArray(18)
-        out[0] = 0x01
-        writeU32LE(out, 1, handle)
-        writeU32LE(out, 5, counter)
-        out[9] = 0x00
-        writeU32LE(out, 10, 1)
-        out[14] = 0x01
-        out[15] = 0x01
-        out[16] = 0x00
-        out[17] = 0x00
-        return out
-    }
-
-    /** `0x02/0xBF` star. `01 01 [handle:u32] [counter:u32] 00 [on:u8] 00 00 00`. */
-    fun favoritePayload(handle: Long, on: Boolean, counter: Long): ByteArray {
-        val out = ByteArray(15)
-        out[0] = 0x01
-        out[1] = 0x01
-        writeU32LE(out, 2, handle)
-        writeU32LE(out, 6, counter)
-        out[10] = 0x00
-        out[11] = if (on) 0x01 else 0x00
-        return out
-    }
-
-    fun isReplySuccess(payload: ByteArray): Boolean =
-        payload.isNotEmpty() && payload[0] == 0.toByte()
 }
 
 enum class MediaLibraryTab {
@@ -465,40 +287,6 @@ enum class MediaThumbnailSize {
 }
 
 object MediaLibraryQuery {
-    fun filtered(
-        files: List<MediaFile>,
-        tab: MediaLibraryTab,
-        formats: Set<String> = emptySet(),
-        resolutions: Set<String> = emptySet(),
-        dateStart: String? = null,
-        dateEnd: String? = null,
-        colors: Set<Int> = emptySet(),
-        shotColors: Map<String, Int> = emptyMap(),
-        storage: Int? = null,
-        localFavorites: Set<String> = emptySet(),
-    ): List<MediaFile> =
-        files.filter { file ->
-            when (tab) {
-                MediaLibraryTab.ALL -> true
-                MediaLibraryTab.VIDEOS -> file.kind == MediaKind.VIDEO
-                MediaLibraryTab.PHOTOS -> file.kind == MediaKind.PHOTO
-                MediaLibraryTab.FAVORITES -> file.isStarred || localFavorites.contains(file.path)
-            } &&
-                (formats.isEmpty() || formats.contains(file.fileExtension)) &&
-                (resolutions.isEmpty() || resolutions.contains(file.resolution.orEmpty())) &&
-                dateMatches(file.dateKey, dateStart, dateEnd) &&
-                (colors.isEmpty() || shotColors[file.path]?.let(colors::contains) == true) &&
-                (storage == null || file.storage == storage)
-        }
-
-    private fun dateMatches(key: String, start: String?, end: String?): Boolean {
-        if (start == null && end == null) return true
-        if (key.isEmpty()) return false
-        if (start != null && key < start) return false
-        if (end != null && key > end) return false
-        return true
-    }
-
     /** Filename `YYYYMMDD` as UTC calendar year-month-day. Not an instant. */
     fun dateKeyFromMillis(millis: Long): String {
         val date = java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneOffset.UTC).toLocalDate()
@@ -518,27 +306,6 @@ object MediaLibraryQuery {
         }.getOrNull()
     }
 
-    /** Offline library: keep only files the phone can play without the camera. */
-    fun cachedOnly(files: List<MediaFile>, cachedPaths: Set<String>): List<MediaFile> =
-        files.filter { cachedPaths.contains(it.path) }
-
-    fun sorted(files: List<MediaFile>, by: MediaLibrarySort): List<MediaFile> =
-        when (by) {
-            MediaLibrarySort.NEWEST ->
-                files.sortedByDescending { it.filenameTimestamp.orEmpty() }
-            MediaLibrarySort.OLDEST ->
-                files.sortedBy { it.filenameTimestamp.orEmpty() }
-            MediaLibrarySort.NAME ->
-                files.sortedWith { a, b -> a.filename.compareTo(b.filename, ignoreCase = true) }
-            MediaLibrarySort.RATING ->
-                files.sortedWith { lhs, rhs ->
-                    if (lhs.isStarred != rhs.isStarred) {
-                        if (lhs.isStarred) -1 else 1
-                    } else {
-                        rhs.filenameTimestamp.orEmpty().compareTo(lhs.filenameTimestamp.orEmpty())
-                    }
-                }
-        }
 }
 
 object MediaClipFormatting {
@@ -643,16 +410,3 @@ internal fun deletingPathExtension(path: String): String {
     if (dot <= slash) return path
     return path.substring(0, dot)
 }
-
-internal fun writeU32LE(dest: ByteArray, offset: Int, value: Long) {
-    dest[offset] = (value and 0xFF).toByte()
-    dest[offset + 1] = ((value shr 8) and 0xFF).toByte()
-    dest[offset + 2] = ((value shr 16) and 0xFF).toByte()
-    dest[offset + 3] = ((value shr 24) and 0xFF).toByte()
-}
-
-internal fun wrappingSub32(a: Long, b: Long): Long = (a - b) and 0xFFFF_FFFFL
-
-internal fun wrappingAdd32(a: Long, b: Long): Long = (a + b) and 0xFFFF_FFFFL
-
-internal fun wrappingMul32(a: Long, b: Long): Long = (a * b) and 0xFFFF_FFFFL

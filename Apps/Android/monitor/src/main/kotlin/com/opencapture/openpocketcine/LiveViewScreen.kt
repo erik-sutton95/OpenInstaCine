@@ -1001,7 +1001,6 @@ fun LiveViewScreen(model: AppModel) {
             val panel = cover
             LaunchedEffect(panel) {
                 assist.configureTool = null
-                model.session.setOperatorOverlayHeld(panel != null)
                 if (panel == null) {
                     val ready = vulkanSession?.windowReady == true
                     DiagnosticCenter.log(

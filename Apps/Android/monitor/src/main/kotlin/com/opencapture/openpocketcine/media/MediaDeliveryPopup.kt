@@ -109,7 +109,7 @@ private enum class DeliveryStep {
 @Composable
 fun MediaDeliveryHost(
     files: List<MediaFile>?,
-    controller: MediaLibraryController,
+    controller: LunaMediaPlaybackAdapter,
     onDismissPopup: () -> Unit,
 ) {
     var overlay by remember { mutableStateOf<MediaDeliveryOverlayState?>(null) }
@@ -175,7 +175,7 @@ fun MediaDeliveryHost(
 @Composable
 fun MediaDeliveryPopup(
     files: List<MediaFile>,
-    controller: MediaLibraryController,
+    controller: LunaMediaPlaybackAdapter,
     onDismiss: () -> Unit,
     onDeliver: (MediaDeliveryPostExportAction) -> Unit,
     busy: Boolean = false,
@@ -580,7 +580,7 @@ private fun FooterActionButton(title: String, enabled: Boolean, onClick: () -> U
 
 private suspend fun runDelivery(
     context: Context,
-    controller: MediaLibraryController,
+    controller: LunaMediaPlaybackAdapter,
     files: List<MediaFile>,
     action: MediaDeliveryPostExportAction,
     onProgress: (MediaDeliveryOverlayState) -> Unit,

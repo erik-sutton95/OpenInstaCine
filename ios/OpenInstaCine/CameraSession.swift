@@ -244,18 +244,15 @@ final class CameraSession {
     var gimbalLimitTiltSign: Double = 0
     @ObservationIgnored var gimbalStick = LunaStickStream()
 
-    // Media
-    var mediaFiles: [MediaFile] = []
-    var mediaFetchInProgress = false
-    var mediaFetchListedCount = 0
-    var mediaNote: String?
-    var isBrowsingMedia = false
+    // The shared actual library/cache owner. Source/playback compatibility stays in CameraMedia.
+    var mediaLibrary: MonitorMediaLibraryModel<LunaMediaLibraryPayload>!
+    @ObservationIgnored var mediaLibraryKey: String?
+    @ObservationIgnored var mediaLibraryServiceID: CameraSessionID?
     private(set) var cameraGalleryOpen = false
-    var mediaDownloadProgress: [String: Double] = [:]
-    var mediaCacheRevision: UInt64 = 0
-    var mediaLocalFavorites: Set<String> = []
     @ObservationIgnored let cameraMedia: CameraMedia
-    @ObservationIgnored var lunaFiles: [String: LunaMediaFile] = [:]
+    var playbackProgress: [String: Double] = [:]
+    var playbackMediaNote: String?
+    @ObservationIgnored var playbackTransfers: [String: (id: UUID, task: Task<URL, Error>)] = [:]
 
     // Focus / tracking / face AF
     var focusPoint: CGPoint = CGPoint(x: 0.5, y: 0.5)
@@ -334,12 +331,13 @@ final class CameraSession {
     init(
         backend: LunaCameraBackend, profile: CameraProfile = LunaShellMapping.profile,
         borrowing sharedDecoder: HevcDecoder? = nil, cameraMedia: CameraMedia? = nil,
+        mediaStorage: MonitorMediaCacheStorage? = nil,
         controlsOnly: Bool = false
     ) {
         isMultiviewControlsOnly = controlsOnly
         ownsBackend = sharedDecoder == nil && !controlsOnly
         self.profile = profile
-        self.cameraMedia = cameraMedia ?? CameraMedia()
+        self.cameraMedia = cameraMedia ?? CameraMedia(storage: mediaStorage)
         self.decoder = sharedDecoder ?? HevcDecoder()
         self.backend = backend
         adoptControl()
@@ -362,6 +360,7 @@ final class CameraSession {
         decoder.onParameterSetsChanged = { [weak self] in
             self?.requestKeyframe(reason: "encoder format change")
         }
+        configureMediaLibrary()
         activateBackend()
     }
 
@@ -497,6 +496,7 @@ final class CameraSession {
         reconnectTarget = nil
         isReconnecting = preserveMonitor
         connectedCamera = camera
+        configureMediaLibrary()
         connectionTargetID = camera.id
         if !incidentSessionActive { beginFeedIncidentSession() }
         if preserveMonitor { decoder.flushForRecovery() }

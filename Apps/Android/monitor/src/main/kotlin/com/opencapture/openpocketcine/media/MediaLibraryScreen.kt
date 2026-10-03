@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine.media
 
+import com.opencapture.opencine.appkit.*
+import com.opencapture.opencine.media.MediaAssetID
 import com.opencapture.openpocketcine.LocalOperatorHaptics
 import com.opencapture.monitorui.MonitorTab
 import com.opencapture.monitorui.monitorTabStrip
@@ -79,28 +81,24 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
-    val context = LocalContext.current
-    val controller = remember(model) { MediaLibraryController(context.applicationContext, model.session) }
+    val controller = model.mediaPlayback
+    val library = model.mediaLibrary
+    val state by library.state.collectAsState()
     val phase by model.session.phaseFlow.collectAsState()
-    val isLive = phase == ConnectionPhase.LIVE
+    val isLive = library.canRefresh && phase == ConnectionPhase.LIVE
     val scope = rememberCoroutineScope()
-    DisposableEffect(controller) {
-        controller.beginBrowse()
-        onDispose { controller.release() }
-    }
-    // iOS `refreshMediaAfterCapture`: a capture while the album is open re-lists the camera.
-    androidx.compose.runtime.LaunchedEffect(controller) { model.session.mediaCaptured.collect { controller.refreshAfterCapture() } }
-
-    var category by remember { mutableStateOf(MediaLibraryTab.ALL) }
-    var layout by remember { mutableStateOf(MediaBrowserLayout.GRID) }
-    var thumbnailSize by remember { mutableStateOf(MediaThumbnailSize.MEDIUM) }
-    var sortOrder by remember { mutableStateOf(MediaLibrarySort.NEWEST) }
+    androidx.compose.runtime.LaunchedEffect(library) { library.begin(); model.session.beginMediaBrowse() }
+    // The outer shell owns retirement. Composition/rotation/player covers borrow this model.
+    val category = MediaLibraryTab.valueOf(state.category.name)
+    val layout = MediaBrowserLayout.valueOf(state.layout.name)
+    val thumbnailSize = MediaThumbnailSize.valueOf(state.thumbnailSize.name)
+    val sortOrder = MediaLibrarySort.valueOf(state.sort.name)
     var filterOpen by remember { mutableStateOf(false) }
-    var formatFilters by remember { mutableStateOf(setOf<String>()) }
-    var resolutionFilters by remember { mutableStateOf(setOf<String>()) }
-    var dateStartKey by remember { mutableStateOf<String?>(null) }
-    var dateEndKey by remember { mutableStateOf<String?>(null) }
-    var colorFilters by remember { mutableStateOf(setOf<Int>()) }
+    val formatFilters = state.formats
+    val resolutionFilters = state.resolutions
+    val dateStartKey = state.dateStart
+    val dateEndKey = state.dateEnd
+    val colorFilters = state.colors.mapNotNull(String::toIntOrNull).toSet()
     var playing by remember { mutableStateOf<MediaFile?>(null) }
     var viewingPhoto by remember { mutableStateOf<MediaFile?>(null) }
     val activity = LocalActivity.current as? com.opencapture.openpocketcine.MainActivity
@@ -113,80 +111,26 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
             activity?.updateSystemBars()
         }
     }
-    var isSelecting by remember { mutableStateOf(false) }
-    var selectedIDs by remember { mutableStateOf(setOf<String>()) }
+    val isSelecting = state.selecting
+    val selectedIDs = state.selectedIDs.map { it.rawValue }.toSet()
     var deliveryFiles by remember { mutableStateOf<List<MediaFile>?>(null) }
     var confirmBatchDelete by remember { mutableStateOf(false) }
 
-    val localFavorites =
-        controller.files.filter { controller.isFavorite(it) }.map { it.path }.toSet()
-    val libraryFiles =
-        if (isLive) {
-            controller.files
-        } else {
-            MediaLibraryQuery.cachedOnly(
-                controller.files,
-                controller.files.filter { controller.isAvailableOffline(it) }.map { it.path }.toSet(),
-            )
-        }
-    val filterSource =
-        run {
-            var files =
-                MediaLibraryQuery.filtered(libraryFiles, tab = category, localFavorites = localFavorites)
-            if (category == MediaLibraryTab.FAVORITES) files = files.filter { controller.isFavorite(it) }
-            files
-        }
-    val shotColors =
-        filterSource.mapNotNull { file ->
-            val mode = controller.cachedShotColor(file)
-            if (mode >= 0) file.path to mode else null
-        }.toMap()
+    val filterSource = library.records(state.category).map { it.payload.file }
     val formatOptions = filterSource.map { it.fileExtension }.filter { it.isNotEmpty() }.toSet().sorted()
     val resolutionOptions = filterSource.mapNotNull { it.resolution }.filter { it.isNotEmpty() }.toSet().sorted()
-    val colorOptions =
-        shotColors.values.toSet().sorted().mapNotNull { mode ->
-            val label = com.opencapture.openpocketcine.session.CameraCommands.colorLabel(mode, profile = model.session.profile)
-            if (label == "—") null else mode to label
-        }
+    val colorOptions = library.records(state.category).mapNotNull { it.facts.color?.toIntOrNull() }
+        .toSet().sorted().map { mode -> mode to com.opencapture.openpocketcine.session.CameraCommands.colorLabel(mode, profile = model.session.profile) }
     val hasDates = filterSource.any { it.dateKey.isNotEmpty() }
-    var displayed =
-        MediaLibraryQuery.filtered(
-            libraryFiles,
-            tab = category,
-            formats = formatFilters,
-            resolutions = resolutionFilters,
-            dateStart = dateStartKey,
-            dateEnd = dateEndKey,
-            colors = colorFilters,
-            shotColors = shotColors,
-            localFavorites = localFavorites,
-        )
-    if (category == MediaLibraryTab.FAVORITES) {
-        displayed = displayed.filter { controller.isFavorite(it) }
-    }
-    displayed =
-        if (sortOrder == MediaLibrarySort.RATING) {
-            displayed.sortedWith { lhs, rhs ->
-                val left = controller.isFavorite(lhs)
-                val right = controller.isFavorite(rhs)
-                when {
-                    left != right -> if (left) -1 else 1
-                    else -> rhs.filenameTimestamp.orEmpty().compareTo(lhs.filenameTimestamp.orEmpty())
-                }
-            }
-        } else {
-            MediaLibraryQuery.sorted(displayed, sortOrder)
-        }
+    val displayedRecords = library.displayedRecords
+    val displayed = displayedRecords.map { it.payload.file.copy(isStarred = it.favorite) }
     val displayedVideos = displayed.filter { it.kind == MediaKind.VIDEO }
-    val selectedFiles = displayed.filter { selectedIDs.contains(it.id) }
-    val activeFilterCount =
-        formatFilters.size + resolutionFilters.size + colorFilters.size +
-            if (dateStartKey == null && dateEndKey == null) 0 else 1
-
+    val selectedFiles = library.selectedRecords.map { it.payload.file }
+    val activeFilterCount = state.activeFilterCount
     val headerCount =
         when {
-            controller.fetchInProgress && controller.listedCount == 0 -> "Scanning…"
-            controller.fetchInProgress -> "Listing… ${controller.listedCount} found"
+            state.fetching && state.fetchedCount == 0 -> "Scanning…"
+            state.fetching -> "Listing… ${state.fetchedCount} found"
             else -> {
                 val n = displayed.size
                 "$n item${if (n == 1) "" else "s"}"
@@ -202,7 +146,7 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
     val emptySubtitle =
         when {
             !isLive ->
-                if (controller.files.isEmpty()) MediaLibraryCopy.DISCONNECTED
+                if (state.records.isEmpty()) MediaLibraryCopy.DISCONNECTED
                 else MediaLibraryCopy.DISCONNECTED_EMPTY_CACHE
             activeFilterCount > 0 -> MediaLibraryCopy.FILTER_EMPTY
             category == MediaLibraryTab.FAVORITES -> MediaLibraryCopy.EMPTY_FAVORITES
@@ -213,7 +157,7 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
 
     fun open(file: MediaFile) {
         if (isSelecting) {
-            selectedIDs = selectedIDs.toggle(file.id)
+            controller.record(file)?.let { library.select(state.selectedIDs.toggle(it.asset.id)) }
             return
         }
         if (!isLive && !controller.isAvailableOffline(file)) return
@@ -221,13 +165,12 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
     }
 
     fun exitSelection() {
-        isSelecting = false
-        selectedIDs = emptySet()
+        library.clearSelection()
         confirmBatchDelete = false
     }
 
     fun dismiss() {
-        controller.endBrowse()
+        library.close(); model.session.endMediaBrowse()
         onClose()
     }
 
@@ -269,21 +212,21 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         if (compact) {
-                            CategoryStrip(category) { category = it }
+                            CategoryStrip(category) { library.filter(category = MonitorMediaCategoryFilter.valueOf(it.name)) }
                         } else {
                             val railScroll = rememberScrollState()
                             Column(Modifier.weight(1f).monitorScrollFade(railScroll).verticalScroll(railScroll)) {
                                 Column(Modifier.fillMaxWidth().monitorTabStrip()) {
                                     MediaLibraryTab.entries.forEach { tab ->
-                                        CategoryTab(tab, active = tab == category, fill = true) { category = tab }
+                                        CategoryTab(tab, active = tab == category, fill = true) { library.filter(category = MonitorMediaCategoryFilter.valueOf(tab.name)) }
                                     }
                                 }
                             }
                             MediaCatalogDisplayControls(
                                 list = layout == MediaBrowserLayout.LIST,
                                 thumbnailSize = thumbnailSize,
-                                onList = { layout = if (it) MediaBrowserLayout.LIST else MediaBrowserLayout.GRID },
-                                onThumbnailSize = { thumbnailSize = it },
+                                onList = { library.display(layout = if (it) com.opencapture.monitorui.MonitorMediaLayout.LIST else com.opencapture.monitorui.MonitorMediaLayout.GRID) },
+                                onThumbnailSize = { library.display(thumbnailSize = com.opencapture.monitorui.MonitorThumbnailSize.valueOf(it.name)) },
                             )
                         }
                     }
@@ -292,11 +235,11 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
                 Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         HeaderRow(
                             headerTitle = headerTitle, headerCount = headerCount,
-                            fetchInProgress = controller.fetchInProgress, isLive = isLive,
+                            fetchInProgress = state.fetching, isLive = isLive,
                             isSelecting = isSelecting,
                             sortOrder = sortOrder, filterOpen = filterOpen, activeFilterCount = activeFilterCount,
                             compact = portrait,
-                            onFilter = { filterOpen = !filterOpen }, onSort = { sortOrder = sortOrder.next },
+                            onFilter = { filterOpen = !filterOpen }, onSort = { library.display(sort = MonitorMediaSort.valueOf(sortOrder.next.name)) },
                         )
                         controller.downloadProgress.entries.firstOrNull()?.let { (path, progress) ->
                             val name = displayed.firstOrNull { it.path == path }?.filename ?: path.substringAfterLast('/')
@@ -317,16 +260,15 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
                                 onOpen = ::open,
                                 onSelectionChange = { nextSelecting, nextIds ->
                                     if (nextSelecting) filterOpen = false
-                                    isSelecting = nextSelecting
-                                    selectedIDs = nextIds
+                                    library.select(nextIds.map { MediaAssetID(it) }.toSet(), nextSelecting)
                                 },
                             )
                         }
                     if (isSelecting) SelectionTray(selectedFiles.size,
-                        cacheEnabled = isLive && selectedFiles.isNotEmpty(),
+                        cacheEnabled = selectedFiles.any(controller::canCache),
                         deleteEnabled = selectedFiles.any(controller::canDelete),
-                        onAll = { selectedIDs = displayed.map { it.id }.toSet() }, onClear = ::exitSelection,
-                        onCache = { scope.launch { selectedFiles.forEach { controller.download(it) } } },
+                        onAll = { library.selectAll() }, onClear = ::exitSelection,
+                        onCache = { scope.launch { library.selectedRecords.filter { controller.canCache(it.payload.file) }.forEach { runCatching { library.cacheOriginal(it.asset.id) } } } },
                         onStar = {
                             val makeFavorite = selectedFiles.any { !controller.isFavorite(it) }
                             selectedFiles.filter { controller.isFavorite(it) != makeFavorite }.forEach(controller::toggleFavorite)
@@ -338,8 +280,8 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
                         MediaCatalogDisplayControls(
                             list = layout == MediaBrowserLayout.LIST,
                             thumbnailSize = thumbnailSize,
-                            onList = { layout = if (it) MediaBrowserLayout.LIST else MediaBrowserLayout.GRID },
-                            onThumbnailSize = { thumbnailSize = it },
+                            onList = { library.display(layout = if (it) com.opencapture.monitorui.MonitorMediaLayout.LIST else com.opencapture.monitorui.MonitorMediaLayout.GRID) },
+                            onThumbnailSize = { library.display(thumbnailSize = com.opencapture.monitorui.MonitorThumbnailSize.valueOf(it.name)) },
                         )
                     }
                 }
@@ -357,25 +299,17 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
                 colorFilters = colorFilters,
                 dateStartKey = dateStartKey,
                 dateEndKey = dateEndKey,
-                onToggleFormat = { formatFilters = formatFilters.toggle(it) },
-                onToggleResolution = { resolutionFilters = resolutionFilters.toggle(it) },
-                onToggleColor = { colorFilters = colorFilters.toggle(it) },
+                onToggleFormat = { library.filter(formats = state.formats.toggle(it)) },
+                onToggleResolution = { library.filter(resolutions = state.resolutions.toggle(it)) },
+                onToggleColor = { library.filter(colors = state.colors.toggle(it.toString())) },
                 onDateStart = { next ->
-                    dateStartKey = next
-                    val end = dateEndKey
-                    if (next != null && end != null && next > end) dateEndKey = next
+                    library.filter(dateStart = next, dateEnd = if (next != null && dateEndKey != null && next > dateEndKey) next else dateEndKey)
                 },
                 onDateEnd = { next ->
-                    dateEndKey = next
-                    val start = dateStartKey
-                    if (next != null && start != null && next < start) dateStartKey = next
+                    library.filter(dateEnd = next, dateStart = if (next != null && dateStartKey != null && next < dateStartKey) next else dateStartKey)
                 },
                 onClear = {
-                    formatFilters = emptySet()
-                    resolutionFilters = emptySet()
-                    colorFilters = emptySet()
-                    dateStartKey = null
-                    dateEndKey = null
+                    library.resetFilters()
                 },
                 onClose = { filterOpen = false },
             )
@@ -481,7 +415,7 @@ private fun MediaGalleryPane(
     thumbnailSize: MediaThumbnailSize,
     category: MediaLibraryTab,
     sortOrder: MediaLibrarySort,
-    controller: MediaLibraryController,
+    controller: LunaMediaPlaybackAdapter,
     isSelecting: Boolean,
     selectedIDs: Set<String>,
     emptySubtitle: String,
@@ -491,24 +425,27 @@ private fun MediaGalleryPane(
 ) {
     val listState = rememberLazyListState()
     val gridState = rememberLazyGridState()
-    val ids = displayed.map { it.id }
+    val library = controller.library
+    val state by library.state.collectAsState()
+    fun identity(file: MediaFile) = controller.record(file)!!.asset.id.rawValue
+    val ids = displayed.map(::identity)
     val gallery: @Composable () -> Unit = {
         com.opencapture.monitorui.MonitorMediaSelectionHost(
             ids = ids,
             selecting = isSelecting,
             selected = selectedIDs,
             scroll = if (layout == MediaBrowserLayout.LIST) listState else gridState,
-            onOpen = { id -> displayed.firstOrNull { it.id == id }?.let(onOpen) },
+            onOpen = { id -> displayed.firstOrNull { identity(it) == id }?.let(onOpen) },
             onSelectionChange = onSelectionChange,
             sessionKey = "${category.name}/${layout.name}/${thumbnailSize.name}/${sortOrder.name}",
         ) { registry ->
         Box(Modifier.fillMaxSize()) {
             when {
-                displayed.isEmpty() && controller.fetchInProgress ->
-                    ScrollableGalleryPlaceholder { ListingState(controller.listedCount) }
+                displayed.isEmpty() && state.fetching ->
+                    ScrollableGalleryPlaceholder { ListingState(state.fetchedCount) }
                 displayed.isEmpty() ->
                     ScrollableGalleryPlaceholder {
-                        EmptyState(controller.fetchInProgress, controller.note ?: emptySubtitle)
+                        EmptyState(state.fetching, state.note ?: emptySubtitle)
                     }
                 layout == MediaBrowserLayout.LIST -> {
                     LazyColumn(
@@ -517,20 +454,20 @@ private fun MediaGalleryPane(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(bottom = 24.dp),
                     ) {
-                        items(displayed, key = { it.id }) { file ->
-                            com.opencapture.monitorui.MonitorMediaHitTarget(registry, file.id) {
+                        items(displayed, key = ::identity) { file ->
+                            com.opencapture.monitorui.MonitorMediaHitTarget(registry, identity(file)) {
                                 MediaClipListRow(
                                     file = file,
                                     controller = controller,
                                     onOpen = { onOpen(file) },
                                     isSelecting = isSelecting,
-                                    isSelected = selectedIDs.contains(file.id),
+                                    isSelected = selectedIDs.contains(identity(file)),
                                     onBeginSelection = {
-                                        if (!isSelecting) onSelectionChange(true, setOf(file.id))
+                                        if (!isSelecting) onSelectionChange(true, setOf(identity(file)))
                                     },
                                     onToggleSelection = {
-                                        val next = if (selectedIDs.contains(file.id)) selectedIDs - file.id
-                                            else selectedIDs + file.id
+                                        val next = if (selectedIDs.contains(identity(file))) selectedIDs - identity(file)
+                                            else selectedIDs + identity(file)
                                         onSelectionChange(true, next)
                                     },
                                 )
@@ -545,19 +482,19 @@ private fun MediaGalleryPane(
                         minOf(configuration.screenWidthDp, configuration.screenHeightDp) >= 600,
                     )
                     com.opencapture.monitorui.MonitorCatalogGrid(
-                        displayed, columns, key = { it.id }, modifier = Modifier.fillMaxSize(),
+                        displayed, columns, key = ::identity, modifier = Modifier.fillMaxSize(),
                         state = gridState,
                     ) { file ->
-                        com.opencapture.monitorui.MonitorMediaHitTarget(registry, file.id) {
+                        com.opencapture.monitorui.MonitorMediaHitTarget(registry, identity(file)) {
                             MediaClipCell(
                                 file, controller, onOpen = { onOpen(file) },
-                                isSelecting = isSelecting, isSelected = selectedIDs.contains(file.id),
+                                isSelecting = isSelecting, isSelected = selectedIDs.contains(identity(file)),
                                 onBeginSelection = {
-                                    if (!isSelecting) onSelectionChange(true, setOf(file.id))
+                                    if (!isSelecting) onSelectionChange(true, setOf(identity(file)))
                                 },
                                 onToggleSelection = {
-                                    val next = if (selectedIDs.contains(file.id)) selectedIDs - file.id
-                                        else selectedIDs + file.id
+                                    val next = if (selectedIDs.contains(identity(file))) selectedIDs - identity(file)
+                                        else selectedIDs + identity(file)
                                     onSelectionChange(true, next)
                                 },
                             )
@@ -570,8 +507,8 @@ private fun MediaGalleryPane(
     }
     if (connected) {
         androidx.compose.material3.pulltorefresh.PullToRefreshBox(
-            isRefreshing = controller.fetchInProgress,
-            onRefresh = { if (!controller.fetchInProgress) controller.refresh() },
+            isRefreshing = state.fetching,
+            onRefresh = { if (!state.fetching) library.refresh() },
             modifier = Modifier.fillMaxSize(),
         ) { gallery() }
     } else gallery()

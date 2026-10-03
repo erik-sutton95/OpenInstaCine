@@ -1,3 +1,4 @@
+import OpenCineMedia
 import CoreVideo
 import Insta360Apple
 import MonitorPresentation
@@ -29,7 +30,8 @@ final class AppModel {
     var discoveryFailure: ConnectionFailure?
 
     init(session: CameraSession? = nil) {
-        let session = session ?? CameraSession(backend: Self.makeBackend())
+        let mediaStorage = MonitorMediaCacheStorage()
+        let session = session ?? CameraSession(backend: Self.makeBackend(), mediaStorage: mediaStorage)
         self.session = session
         var port: any LunaConnectPort = session
         var defaults = UserDefaults.standard
@@ -72,9 +74,9 @@ final class AppModel {
     /// simulator app talks to the real camera.
     static func makeBackend() -> LunaCameraBackend {
         #if targetEnvironment(simulator)
-            LunaCameraBackend(useExistingNetwork: true, configuration: lunaConfiguration)
+            LunaCameraBackend(useExistingNetwork: true, configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO())
         #else
-            LunaCameraBackend(configuration: lunaConfiguration)
+            LunaCameraBackend(configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO())
         #endif
     }
 
@@ -575,6 +577,7 @@ final class AppModel {
     /// The monitor's camera changed (shown, replaced or gone): the app's own chrome and relay
     /// follow. The shell already dropped covers and retired the old camera's controls.
     func noteMonitorChanged() {
+        session.configureMediaLibrary(service: shell.monitor?.camera.services[(any CameraMediaService).self])
         if isLive { noteBecameLive() } else { noteLeftLive() }
     }
 
@@ -621,7 +624,10 @@ final class AppModel {
 
     func beginMediaBrowse() { session.beginMediaBrowse() }
     func endMediaBrowse() { session.endMediaBrowse() }
-    func refreshMedia() { Task { await session.refreshMedia() } }
+    func noteMediaCoverChanged(from old: ShellModel.Cover?, to new: ShellModel.Cover?) {
+        if old == .media, new != .media { session.endMediaBrowse() }
+    }
+    func refreshMedia() { session.refreshMedia() }
 
     /// Closes the monitor's camera (never a camera command), then the app's link.
     func disconnect() {
@@ -830,6 +836,9 @@ struct AppRoot: View {
         }
         .onChange(of: model.gimbalAnalogHeld) { _, held in
             if held { model.relayHost.reclaimControl() }
+        }
+        .onChange(of: model.shell.cover) { old, new in
+            model.noteMediaCoverChanged(from: old, to: new)
         }
         .onChange(of: model.shell.monitor?.id) { _, _ in model.noteMonitorChanged() }
         .onChange(of: model.session.phase) { _, _ in model.noteLinkPhase() }

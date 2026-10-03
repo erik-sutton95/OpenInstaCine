@@ -53,6 +53,13 @@ class AppModel(
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val session = PocketCameraSession(context, borrowing, controlLease)
+    private val mediaStorage = com.opencapture.opencine.appkit.MonitorMediaCacheStorage()
+    private val initialMedia = com.opencapture.openpocketcine.media.createLunaMediaLibrary(appContext, session, mediaStorage, null, scope)
+    var mediaLibrary by mutableStateOf(initialMedia.first)
+        private set
+    var mediaPlayback by mutableStateOf(initialMedia.second)
+        private set
+    private var mediaServiceID: com.opencapture.opencine.core.CameraSessionID? = null
     val scopeBus = com.opencapture.opencine.runtime.ScopeSampleBus()
     val inspectorPreview = com.opencapture.opencine.runtime.InspectorPreviewPipeline(scopeBus,
         { com.opencapture.openpocketcine.feed.Media3GlBackend(it) }, logTag = "OpcInspector")
@@ -465,7 +472,30 @@ class AppModel(
     fun prepareStartup() {
         coreVersion =
             if (SwiftCore.isAvailable) runCatching { SwiftCore.coreVersion() }.getOrNull() else null
-        scope.launch { shell.state.map { it.monitor?.id }.distinctUntilChanged().filterNotNull().collect { noteBecameLive() } }
+        scope.launch {
+            shell.state.map { it.monitor?.id }.distinctUntilChanged().collect {
+                val connected = shell.state.value.monitor?.camera
+                val service = connected?.services?.get<com.opencapture.opencine.media.CameraMediaService>()
+                val key = session.connectedCamera?.id?.takeIf { it.isNotEmpty() }
+                    ?: appContext.getSharedPreferences("openpocketcine.media", Context.MODE_PRIVATE).getString("opc.media.lastCameraID", null) ?: "unknown"
+                if (key != mediaPlayback.cameraId) {
+                    val retired = mediaLibrary; retired.close()
+                    val next = com.opencapture.openpocketcine.media.createLunaMediaLibrary(appContext, session, mediaStorage, service, scope)
+                    mediaLibrary = next.first; mediaPlayback = next.second
+                    scope.launch { retired.dispose() }
+                } else if (mediaServiceID != service?.sessionID) mediaLibrary.bind(service)
+                mediaServiceID = service?.sessionID
+                if (connected != null) noteBecameLive()
+            }
+        }
+        scope.launch {
+            shell.state.map { it.cover }.distinctUntilChanged().collect { cover ->
+                if (cover != ShellModel.Cover.MEDIA) { mediaLibrary.close(); session.endMediaBrowse() }
+            }
+        }
+        scope.launch { session.mediaCaptured.collect {
+            if (mediaLibrary.state.value.browsing && !mediaLibrary.state.value.fetching) mediaLibrary.refresh()
+        } }
         // The link ended (idle, or failed without recovery holding the picture): back to the cameras
         // page, as the old live switch did. Recovery while live stays the session's.
         scope.launch {
@@ -483,6 +513,7 @@ class AppModel(
     }
 
     fun close() {
+        mediaLibrary.close()
         inspectorPreview.close()
         gimbalGamepad.stopListening()
         scope.cancel()

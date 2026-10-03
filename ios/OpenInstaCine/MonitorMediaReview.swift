@@ -13,8 +13,40 @@
         static let pathPrefix = "UI-REVIEW/"
         static var isActive: Bool {
             guard let screen = MonitorUIReview.screen else { return false }
-            return ["media-fixture", "media-list", "media-selection", "playback"].contains(screen)
+            return ["media-fixture", "media-list", "media-selection", "media-owned", "playback"].contains(screen)
         }
+
+        static var usesActualLibrary: Bool { MonitorUIReview.screen == "media-owned" }
+
+        #if DEBUG
+            /// SIMULATED offline input to the actual app factory. The production gallery is
+            /// rendered with its actual common owner, never the standalone catalog fixture.
+            static func prepareOwnedIndex() {
+                guard usesActualLibrary else { return }
+                let directory = cacheRoot
+                let index = directory.appendingPathComponent("index.json")
+                guard !FileManager.default.fileExists(atPath: index.path) else { return }
+                do {
+                    let renderer = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32))
+                    let image = renderer.image { context in
+                        UIColor.systemGreen.setFill()
+                        context.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+                    }
+                    guard let bytes = image.jpegData(compressionQuality: 0.8) else { return }
+                    let files = (1...2).map { value in MediaFile(
+                        path: "UI-REVIEW/IMG_20261003_14000\(value)_00_00\(value).JPG",
+                        thumbPath: "UI-REVIEW/IMG_20261003_14000\(value)_00_00\(value).JPG",
+                        sizeBytes: UInt64(bytes.count), resolution: "32x32") }
+                    let originals = directory.appendingPathComponent("files", isDirectory: true)
+                    try FileManager.default.createDirectory(at: originals, withIntermediateDirectories: true)
+                    for file in files {
+                        try bytes.write(to: originals.appendingPathComponent(file.path.replacingOccurrences(of: "/", with: "_")))
+                    }
+                    let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+                    try encoder.encode(files).write(to: index)
+                } catch { assertionFailure("Could not prepare the isolated owned-gallery fixture: \(error)") }
+            }
+        #endif
 
         private static let sourceURL: URL? = {
             guard let path = ProcessInfo.processInfo.environment["OPV_SIM_FEED_CLIP"],
@@ -133,6 +165,10 @@
 
         var body: some View {
             GeometryReader { geometry in
+                if MonitorMediaReview.usesActualLibrary {
+                    MediaLibraryView(safeArea: OperatorPanelMetrics.resolvedDeviceSafeArea(
+                        geometry.safeAreaInsets, window: windowGeometry.safeArea))
+                } else {
                 MonitorMediaCatalog(
                     brand: "Review camera",
                     safeArea: OperatorPanelMetrics.resolvedDeviceSafeArea(
@@ -169,6 +205,7 @@
                         MonitorTheme.muted)
                 } filters: {
                     EmptyView()
+                }
                 }
             }
             .ignoresSafeArea().preferredColorScheme(.dark)
