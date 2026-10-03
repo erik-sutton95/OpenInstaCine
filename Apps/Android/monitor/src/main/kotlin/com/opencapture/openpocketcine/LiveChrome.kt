@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.monitorui.monitorChromeClickable
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateOffsetAsState
 import androidx.compose.animation.core.snap
@@ -312,49 +314,11 @@ fun LiveBottomChromeBand(
 }
 
 @Composable
-fun Modifier.chromeClickable(
-    enabled: Boolean = true,
-    onLongClick: (() -> Unit)? = null,
-    onClick: () -> Unit,
-): Modifier {
-    val interaction = remember { MutableInteractionSource() }
+fun Modifier.chromeClickable(enabled: Boolean = true, onLongClick: (() -> Unit)? = null,
+    onClick: () -> Unit): Modifier {
     val haptics = LocalOperatorHaptics.current
-    val pressed by interaction.collectIsPressedAsState()
-    val alpha by animateFloatAsState(if (pressed && enabled) 0.6f else 1f, tween(120), label = "chrome-a")
-    val scale by animateFloatAsState(if (pressed && enabled) 0.97f else 1f, tween(120), label = "chrome-s")
-    val press =
-        Modifier.graphicsLayer {
-            this.alpha = alpha
-            scaleX = scale
-            scaleY = scale
-        }
-    val clicks =
-        if (onLongClick != null) {
-            Modifier.combinedClickable(
-                enabled = enabled,
-                interactionSource = interaction,
-                indication = null,
-                onClick = {
-                    haptics.selection()
-                    onClick()
-                },
-                onLongClick = {
-                    haptics.longPress()
-                    onLongClick()
-                },
-            )
-        } else {
-            Modifier.clickable(
-                enabled = enabled,
-                interactionSource = interaction,
-                indication = null,
-                onClick = {
-                    haptics.selection()
-                    onClick()
-                },
-            )
-        }
-    return this.then(press).then(clicks)
+    return this.monitorChromeClickable(
+        enabled, onLongClick, { haptics.selection() }, { haptics.longPress() }, onClick)
 }
 
 object LiveChromeMetrics {

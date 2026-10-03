@@ -43,6 +43,57 @@ import org.junit.runner.RunWith
 /** Pixel evidence from the real HWUI/RenderEffect modifier, not an emulated blur model. */
 @RunWith(AndroidJUnit4::class)
 class MonitorBackdropRenderTest {
+    @Test fun sharedTrackingMarksRenderProjectedEdgesAndClearAnEmptySuccessor() {
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            val marks = androidx.compose.runtime.mutableStateOf(listOf(com.opencapture.monitorui.MonitorTrackingBracketValue(
+                com.opencapture.monitorui.MonitorTrackingRect(0.2, 0.3, 0.3, 0.4),
+                androidx.compose.ui.graphics.Color.Green)))
+            val focus = androidx.compose.runtime.mutableStateOf<com.opencapture.monitorui.MonitorFocusMark?>(
+                com.opencapture.monitorui.MonitorFocusMark(androidx.compose.ui.geometry.Offset(.8f, .45f),
+                    androidx.compose.ui.graphics.Color.Red, aeLocked = true, focusLocked = true))
+            var bounds = Rect.Zero
+            var density = 1f
+            scenario.onActivity { activity ->
+                density = activity.resources.displayMetrics.density
+                activity.setContent {
+                    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+                        com.opencapture.monitorui.MonitorTrackingLayer(marks.value, focus.value,
+                            Modifier.size(300.dp, 200.dp).onGloballyPositioned { bounds = it.boundsInWindow() })
+                    }
+                }
+            }
+            fun pixels(image: Bitmap, columns: IntRange, rows: IntRange, channel: Int): Int {
+                var count = 0
+                for (y in (bounds.top + rows.first * density).roundToInt() until
+                    (bounds.top + (rows.last + 1) * density).roundToInt()) {
+                    for (x in (bounds.left + columns.first * density).roundToInt() until
+                        (bounds.left + (columns.last + 1) * density).roundToInt()) {
+                        val c = image.getPixel(x, y)
+                        val rgb = listOf(Color.red(c), Color.green(c), Color.blue(c))
+                        if (rgb[channel] > 100 && rgb.indices.filter { it != channel }.all { rgb[it] < 30 }) count++
+                    }
+                }
+                return count
+            }
+            val active = capture(scenario, "shared-tracking-active")
+            assertTrue(pixels(active, 55..85, 55..90, 1) > 40 * density * density)
+            assertEquals(0, pixels(active, 99..111, 58..62, 1), "Bracket arms must leave the upper center open")
+            assertTrue(pixels(active, 200..280, 65..110, 0) > 20 * density * density)
+            scenario.onActivity {
+                marks.value = listOf(com.opencapture.monitorui.MonitorTrackingBracketValue(
+                    com.opencapture.monitorui.MonitorTrackingRect(0.5, 0.3, 0.3, 0.4),
+                    androidx.compose.ui.graphics.Color.Green))
+                focus.value = null
+            }
+            val projected = capture(scenario, "shared-tracking-projected")
+            assertEquals(0, pixels(projected, 55..85, 55..90, 1))
+            assertTrue(pixels(projected, 145..175, 55..90, 1) > 40 * density * density)
+            assertEquals(0, pixels(projected, 200..280, 65..110, 0), "Retired focus and its lock tags must clear")
+            scenario.onActivity { marks.value = emptyList() }
+            assertEquals(0, pixels(capture(scenario, "shared-tracking-cleared"), 0..299, 0..199, 1))
+        }
+    }
+
     @Test fun sharedNDChipClearsTheAccentWhenPictureMeasurementDisappears() {
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
             val reading = androidx.compose.runtime.mutableStateOf<NDFilterSuggestion?>(

@@ -686,6 +686,7 @@ struct FeedAlignedAssists: View {
                 ?? DesqueezeAssist.presentationRect(
                     sourceSize: sourceAspect.map { CGSize(width: $0, height: 1) } ?? proxy.size,
                     in: CGRect(origin: .zero, size: proxy.size), effects: assist.effects)
+            let marks = trackingMarks(shown: shown, focus: shownFocus)
             ZStack {
                 if guides {
                     GuidesAssist.overlay(feed: feed, assist: assist, fallback: guideAspect)
@@ -702,45 +703,36 @@ struct FeedAlignedAssists: View {
                 if assist.splitComparison, assist.isVisible(.lut) {
                     FeedSplitComparisonMarks(vertical: assist.splitVertical, feed: feed)
                 }
-                ForEach(Array(sceneFaces.enumerated()), id: \.offset) { _, box in
-                    TrackingBracketView(
-                        rect: feedRect(shown(box), in: focusFeed),
-                        color: LiveDesign.text.opacity(SceneFacePolicy.dimOpacity),
-                        lineWidth: 1.6
-                    )
-                }
-                if showFocusChrome {
-                    switch overlay {
-                    case .search(let box):
-                        TrackingBoxView(
-                            feed: focusFeed, box: shown(box))
-                        FocusBoxView(
-                            feed: focusFeed,
-                            normalized: shownFocus,
-                            aeLocked: aeLocked
-                        )
-                    case .subject(let box):
-                        SubjectBoxView(feed: focusFeed, box: shown(box))
-                    case .face(let box):
-                        TrackingBracketView(
-                            rect: feedRect(shown(box), in: focusFeed),
-                            color: LiveDesign.text.opacity(0.92),
-                            lineWidth: 1.6
-                        )
-                    case .focus:
-                        if showTapFocusBox || aeLocked {
-                            FocusBoxView(
-                                feed: focusFeed,
-                                normalized: shownFocus,
-                                aeLocked: aeLocked,
-                                focusLocked: focusLocked
-                            )
-                        }
-                    }
-                }
+                MonitorTrackingLayer(brackets: marks.brackets, focus: marks.focus, feed: focusFeed)
             }
         }
         .allowsHitTesting(false)
+    }
+
+    private func trackingMarks(shown: (TrackingBox) -> TrackingBox, focus: CGPoint) ->
+        (brackets: [MonitorTrackingBracketValue], focus: MonitorFocusMark?) {
+        func bracket(_ box: TrackingBox, _ color: Color, _ width: CGFloat) -> MonitorTrackingBracketValue {
+            let drawn = shown(box)
+            return .init(normalizedRect: CGRect(x: drawn.x, y: drawn.y, width: drawn.width, height: drawn.height),
+                color: color, lineWidth: width)
+        }
+        var brackets = sceneFaces.map { bracket($0, LiveDesign.text.opacity(SceneFacePolicy.dimOpacity), 1.6) }
+        var focusMark: MonitorFocusMark?
+        if showFocusChrome {
+            switch overlay {
+            case .search(let box):
+                brackets.append(bracket(box, LiveDesign.text.opacity(0.88), 1.5))
+                focusMark = .init(point: focus, color: aeLocked ? LiveDesign.aeLock : LiveDesign.accent, aeLocked: aeLocked)
+            case .subject(let box): brackets.append(bracket(box, LiveDesign.good, 2))
+            case .face(let box): brackets.append(bracket(box, LiveDesign.text.opacity(0.92), 1.6))
+            case .focus:
+                if showTapFocusBox || aeLocked {
+                    focusMark = .init(point: focus, color: aeLocked ? LiveDesign.aeLock : LiveDesign.accent,
+                        aeLocked: aeLocked, focusLocked: focusLocked)
+                }
+            }
+        }
+        return (brackets, focusMark)
     }
 
 }
@@ -770,167 +762,14 @@ private func feedRect(_ box: TrackingBox, in feed: CGRect) -> CGRect {
 }
 
 enum LiveTrackingChrome {
-    static let cancelSize: CGFloat = 28
-    /// Visible disc is `cancelSize`; the module + pinch-well hole is HIG 44.
-    static let cancelHitSize: CGFloat = 44
-
-    static func cornerRadius(for rect: CGRect) -> CGFloat {
-        min(LiveDesign.cornerRadius, max(6, min(rect.width, rect.height) * 0.12))
+    static let cancelSize = MonitorTrackingGeometry.cancelSize
+    static let cancelHitSize = MonitorTrackingGeometry.cancelHitSize
+    static func cornerRadius(for rect: CGRect) -> CGFloat { MonitorTrackingGeometry.cornerRadius(for: rect) }
+    static func cancelRect(box: TrackingBox, feed: CGRect, mirrored: Bool, flippedVertically: Bool = false) -> CGRect {
+        MonitorTrackingGeometry.cancelRect(for: feedRect(box.flipped(horizontal: mirrored, vertical: flippedVertically), in: feed))
     }
-
-    static func cancelRect(
-        box: TrackingBox, feed: CGRect, mirrored: Bool, flippedVertically: Bool = false
-    ) -> CGRect {
-        let rect = feedRect(
-            box.flipped(horizontal: mirrored, vertical: flippedVertically), in: feed)
-        let s = cancelHitSize
-        return CGRect(x: rect.maxX - s / 2, y: rect.minY - s / 2, width: s, height: s)
-    }
-
-    /// Corner-bracket arm. Leaves a gap ≥ 25% of the side so it reads as a
-    /// traditional tracking box, not a closed frame.
-    static func bracketArm(along length: CGFloat) -> CGFloat {
-        let proposed = length * 0.26
-        let minGap = max(8, length * 0.28)
-        return min(max(10, proposed), max(10, (length - minGap) / 2))
-    }
-
-    static func bracketPath(in size: CGSize) -> Path {
-        let w = size.width
-        let h = size.height
-        let ax = bracketArm(along: w)
-        let ay = bracketArm(along: h)
-        let r = min(
-            cornerRadius(for: CGRect(origin: .zero, size: size)),
-            max(0, ax - 1),
-            max(0, ay - 1)
-        )
-        var path = Path()
-        path.move(to: CGPoint(x: 0, y: ay))
-        path.addLine(to: CGPoint(x: 0, y: r))
-        if r >= 3 {
-            path.addQuadCurve(to: CGPoint(x: r, y: 0), control: CGPoint(x: 0, y: 0))
-        } else {
-            path.addLine(to: CGPoint(x: 0, y: 0))
-            path.addLine(to: CGPoint(x: r, y: 0))
-        }
-        path.addLine(to: CGPoint(x: ax, y: 0))
-        path.move(to: CGPoint(x: w - ax, y: 0))
-        path.addLine(to: CGPoint(x: w - r, y: 0))
-        if r >= 3 {
-            path.addQuadCurve(to: CGPoint(x: w, y: r), control: CGPoint(x: w, y: 0))
-        } else {
-            path.addLine(to: CGPoint(x: w, y: 0))
-            path.addLine(to: CGPoint(x: w, y: r))
-        }
-        path.addLine(to: CGPoint(x: w, y: ay))
-        path.move(to: CGPoint(x: w, y: h - ay))
-        path.addLine(to: CGPoint(x: w, y: h - r))
-        if r >= 3 {
-            path.addQuadCurve(to: CGPoint(x: w - r, y: h), control: CGPoint(x: w, y: h))
-        } else {
-            path.addLine(to: CGPoint(x: w, y: h))
-            path.addLine(to: CGPoint(x: w - r, y: h))
-        }
-        path.addLine(to: CGPoint(x: w - ax, y: h))
-        path.move(to: CGPoint(x: ax, y: h))
-        path.addLine(to: CGPoint(x: r, y: h))
-        if r >= 3 {
-            path.addQuadCurve(to: CGPoint(x: 0, y: h - r), control: CGPoint(x: 0, y: h))
-        } else {
-            path.addLine(to: CGPoint(x: 0, y: h))
-            path.addLine(to: CGPoint(x: 0, y: h - r))
-        }
-        path.addLine(to: CGPoint(x: 0, y: h - ay))
-        return path
-    }
-}
-
-private struct TrackingBracketView: View {
-    let rect: CGRect
-    let color: Color
-    var lineWidth: CGFloat = 2
-
-    var body: some View {
-        LiveTrackingChrome.bracketPath(in: rect.size)
-            .stroke(
-                color,
-                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
-            )
-            .shadow(color: .black.opacity(0.55), radius: 1)
-            .frame(width: rect.width, height: rect.height)
-            .position(x: rect.midX, y: rect.midY)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-}
-
-private struct TrackingBoxView: View {
-    let feed: CGRect
-    let box: TrackingBox
-
-    var body: some View {
-        TrackingBracketView(
-            rect: feedRect(box, in: feed),
-            color: LiveDesign.text.opacity(0.88),
-            lineWidth: 1.5
-        )
-    }
-}
-
-/// Locked subject: traditional corner-bracket box. Cancel X is chrome.
-private struct SubjectBoxView: View {
-    let feed: CGRect
-    let box: TrackingBox
-
-    var body: some View {
-        TrackingBracketView(rect: feedRect(box, in: feed), color: LiveDesign.good)
-    }
-}
-
-private struct FocusBoxView: View {
-    let feed: CGRect
-    let normalized: CGPoint
-    var aeLocked = false
-    var focusLocked = false
-
-    var body: some View {
-        let side = min(feed.width, feed.height) * LiveFeedFocusGesture.focusBoxSideFraction
-        let rect = CGRect(x: 0, y: 0, width: side, height: side)
-        let x = feed.minX + normalized.x * feed.width
-        let y = feed.minY + normalized.y * feed.height
-        // The tag sits right of the box, or left when the box is near the right edge.
-        let tagLeading = x + side / 2 + 26 > feed.maxX
-        ZStack {
-            RoundedRectangle(
-                cornerRadius: LiveTrackingChrome.cornerRadius(for: rect), style: .continuous
-            )
-            .stroke(aeLocked ? LiveDesign.aeLock : LiveDesign.accent, lineWidth: 1.5)
-            .shadow(color: .black.opacity(0.6), radius: 1)
-            .frame(width: side, height: side)
-            .position(x: x, y: y)
-            if aeLocked {
-                Text("AE-L")
-                    .font(MonitorTheme.font(9, weight: .semibold))
-                    .kerning(0.5)
-                    .foregroundStyle(LiveDesign.aeLock)
-                    .shadow(color: .black.opacity(0.8), radius: 1.5, y: 0.5)
-                    .fixedSize()
-                    .position(
-                        x: tagLeading ? x - side / 2 - 14 : x + side / 2 + 14, y: y - side / 2 + 6)
-            }
-            if focusLocked {
-                OpcIcon.lock
-                    .frame(width: 10, height: 10)
-                    .foregroundStyle(aeLocked ? LiveDesign.aeLock : LiveDesign.accent)
-                    .shadow(color: .black.opacity(0.8), radius: 1.5, y: 0.5)
-                    .position(
-                        x: tagLeading ? x - side / 2 - 10 : x + side / 2 + 10, y: y + side / 2 - 6)
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
+    static func bracketArm(along length: CGFloat) -> CGFloat { MonitorTrackingGeometry.bracketArm(along: length) }
+    static func bracketPath(in size: CGSize) -> Path { MonitorTrackingGeometry.bracketPath(in: size) }
 }
 
 typealias FeedGridView = MonitorFeedGrid

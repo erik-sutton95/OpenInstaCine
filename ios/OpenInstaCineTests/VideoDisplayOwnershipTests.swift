@@ -10,6 +10,85 @@ import SwiftUI
 
 @MainActor
 final class VideoDisplayOwnershipTests: XCTestCase {
+    /// SIMULATED marks exercise the actual native renderer and retained hosting controller.
+    func testSharedTrackingMarksRenderProjectedEdgesAndClearAnEmptySuccessor() async throws {
+        let size = CGSize(width: 300, height: 200)
+        let feed = CGRect(origin: .zero, size: size)
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        let host = UIHostingController(rootView: AnyView(EmptyView()))
+        host.view.backgroundColor = .black
+        host.safeAreaRegions = []
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        func render(_ rect: CGRect?, focus: MonitorFocusMark?, name: String) async throws -> [UInt8] {
+            let probe = PanelProbe()
+            probe.expectedSize = size
+            probe.laidOut = expectation(description: "native tracking marks laid out")
+            let ready = try XCTUnwrap(probe.laidOut)
+            let marks = rect.map { [MonitorTrackingBracketValue(normalizedRect: $0, color: .green)] } ?? []
+            host.rootView = AnyView(ZStack(alignment: .topLeading) {
+                Color.black
+                ZStack {
+                    MonitorTrackingLayer(brackets: marks, focus: focus, feed: feed)
+                    PanelProbeView(view: probe).id(ObjectIdentifier(probe)).allowsHitTesting(false)
+                }.frame(width: size.width, height: size.height)
+            }.ignoresSafeArea().transaction { $0.disablesAnimations = true })
+            host.view.frame = window.bounds
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            await fulfillment(of: [ready], timeout: 5)
+            let displayed = expectation(description: "native tracking marks submitted")
+            let frames = NativeFrameProbe(ready: displayed)
+            frames.start()
+            await fulfillment(of: [displayed], timeout: 5)
+            frames.stop()
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let origin = probe.convert(CGPoint.zero, to: host.view)
+            let image = try XCTUnwrap(UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                XCTAssertTrue(host.view.drawHierarchy(in: CGRect(x: -origin.x, y: -origin.y,
+                    width: host.view.bounds.width, height: host.view.bounds.height), afterScreenUpdates: true))
+            }.cgImage)
+            var rgba = [UInt8](repeating: 0, count: 300 * 200 * 4)
+            let context = try XCTUnwrap(CGContext(data: &rgba, width: 300, height: 200,
+                bitsPerComponent: 8, bytesPerRow: 1200, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.translateBy(x: 0, y: size.height)
+            context.scaleBy(x: 1, y: -1)
+            context.draw(image, in: feed)
+            let attachment = XCTAttachment(image: UIImage(cgImage: image))
+            attachment.name = "SIMULATED-shared-tracking-\(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            return rgba
+        }
+        func pixels(_ rgba: [UInt8], columns: Range<Int>, rows: Range<Int>, channel: Int) -> Int {
+            var count = 0
+            for y in rows { for x in columns {
+                let offset = (y * 300 + x) * 4
+                let rgb = (0..<3).map { Int(rgba[offset + $0]) }
+                if rgb[channel] > 100 && (0..<3).filter({ $0 != channel })
+                    .allSatisfy({ rgb[channel] - rgb[$0] > 80 }) { count += 1 }
+            } }
+            return count
+        }
+        let active = try await render(CGRect(x: 0.2, y: 0.3, width: 0.3, height: 0.4),
+            focus: MonitorFocusMark(point: CGPoint(x: 0.8, y: 0.45), color: .red, aeLocked: true, focusLocked: true),
+            name: "active")
+        XCTAssertGreaterThan(pixels(active, columns: 55..<86, rows: 55..<91, channel: 1), 40)
+        XCTAssertEqual(pixels(active, columns: 99..<112, rows: 58..<63, channel: 1), 0,
+            "Bracket arms must leave the upper center open")
+        XCTAssertGreaterThan(pixels(active, columns: 200..<281, rows: 65..<111, channel: 0), 20)
+        let projected = try await render(CGRect(x: 0.5, y: 0.3, width: 0.3, height: 0.4), focus: nil, name: "projected")
+        XCTAssertEqual(pixels(projected, columns: 55..<86, rows: 55..<91, channel: 1), 0)
+        XCTAssertGreaterThan(pixels(projected, columns: 145..<176, rows: 55..<91, channel: 1), 40)
+        XCTAssertEqual(pixels(projected, columns: 200..<281, rows: 65..<111, channel: 0), 0,
+            "Retired focus and its lock tags must clear")
+        let cleared = try await render(nil, focus: nil, name: "cleared")
+        XCTAssertEqual(pixels(cleared, columns: 0..<300, rows: 0..<200, channel: 1), 0)
+    }
+
     func testSharedNDChipClearsTheAccentWhenPictureMeasurementDisappears() async throws {
         let size = CGSize(width: 84, height: 30)
         let window = UIWindow(frame: UIScreen.main.bounds)
