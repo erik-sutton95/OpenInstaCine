@@ -5,7 +5,7 @@ import com.opencapture.openpocketcine.feed.fromColorMode
 import com.opencapture.openpocketcine.feed.LiveColorScience
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeDisplayScale
-import com.opencapture.opencine.media.ScopeExposureCeiling
+import com.opencapture.openpocketcine.feed.ScopeExposureCeiling
 import com.opencapture.opencine.media.ScopeClipSource
 import com.opencapture.openpocketcine.feed.WaveformIre
 import com.opencapture.openpocketcine.session.CameraStatus
@@ -243,13 +243,13 @@ object WaveformAxis {
 }
 
 object HistogramAssist {
-    const val PANEL_TITLE = "Histo"
-    const val CHIP = "RGBL"
-    const val CLIP_ZONE_IRE = 95.0
-    const val TRAFFIC_LAMP_WIDTH = 7.5f
-    const val TRAFFIC_LAMP_HEIGHT = 15f
-    const val TRAFFIC_OUTER_PAD = 6f
-    const val TRAFFIC_LINE_GAP = 4f
+    const val PANEL_TITLE = com.opencapture.monitorui.MonitorHistogramGeometry.PANEL_TITLE
+    const val CHIP = com.opencapture.monitorui.MonitorHistogramGeometry.CHIP
+    const val CLIP_ZONE_IRE = com.opencapture.monitorui.MonitorHistogramGeometry.CLIP_ZONE_IRE
+    const val TRAFFIC_LAMP_WIDTH = com.opencapture.monitorui.MonitorHistogramGeometry.TRAFFIC_LAMP_WIDTH
+    const val TRAFFIC_LAMP_HEIGHT = com.opencapture.monitorui.MonitorHistogramGeometry.TRAFFIC_LAMP_HEIGHT
+    const val TRAFFIC_OUTER_PAD = com.opencapture.monitorui.MonitorHistogramGeometry.TRAFFIC_OUTER_PAD
+    const val TRAFFIC_LINE_GAP = com.opencapture.monitorui.MonitorHistogramGeometry.TRAFFIC_LINE_GAP
     const val TRAFFIC_LIGHTS_TITLE = "Traffic Lights"
     const val TRAFFIC_LIGHTS_HELP = "Show small RGB edge blocks for crushed and clipped channels. Clip lights from about a third of a stop under the camera's clip, the same point zebra 100% and CineStop use."
     const val COMPENSATION_TITLE = "Crush/Clip Compensation"
@@ -260,15 +260,8 @@ object HistogramAssist {
         get() = TRAFFIC_OUTER_PAD + TRAFFIC_LAMP_WIDTH + TRAFFIC_LINE_GAP
 
     fun plotRect(width: Float, height: Float, density: Float = 1f): AssistRect {
-        val gutter = trafficGutter * density
-        val title = WaveformAxis.TITLE_HEIGHT * density
-        val bottom = WaveformAxis.BOTTOM_PAD * density
-        return AssistRect(
-            gutter,
-            title,
-            maxOf(1f, width - gutter * 2f),
-            maxOf(1f, height - title - bottom),
-        )
+        val rect = com.opencapture.monitorui.MonitorHistogramGeometry.plotRect(width, height, density)
+        return AssistRect(rect.left, rect.top, rect.width, rect.height)
     }
 
     fun plotX(ire: Double, rect: AssistRect, density: Float = 1f): Float =

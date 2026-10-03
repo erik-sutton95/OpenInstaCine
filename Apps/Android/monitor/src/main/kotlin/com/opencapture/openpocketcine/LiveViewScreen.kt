@@ -551,15 +551,8 @@ fun LiveViewScreen(model: AppModel) {
                 stretchToRect = desqueezeVisible,
             )
             session.setPlates(GpuOverlayBus.plateSnapshot())
-            session.syncAssists(
-                assist = assist,
+            session.updateEffects(
                 plan = effectsPlan,
-                canvasOriginX = canvasOrigin.x,
-                canvasOriginY = canvasOrigin.y,
-                wave = GpuOverlayBus.wave,
-                parade = GpuOverlayBus.parade,
-                histoRect = GpuOverlayBus.histo,
-                vector = GpuOverlayBus.vector,
                 uiScale = density.density,
                 pictureMirrored = liveViewFlip,
                 pictureFlippedVertically = flipV,

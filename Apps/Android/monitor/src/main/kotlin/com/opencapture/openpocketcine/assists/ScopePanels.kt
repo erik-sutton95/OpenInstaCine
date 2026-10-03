@@ -91,13 +91,6 @@ private val OverlayBlue = Color(72 / 255f, 148 / 255f, 255 / 255f, 0.62f)
 private val ParadeRed = Color(255 / 255f, 86 / 255f, 78 / 255f, 1f)
 private val ParadeGreen = Color(102 / 255f, 232 / 255f, 132 / 255f, 1f)
 private val ParadeBlue = Color(92 / 255f, 156 / 255f, 255 / 255f, 1f)
-private val HistoRedFill = Color(255 / 255f, 48 / 255f, 44 / 255f, 0.17f)
-private val HistoRedStroke = Color(255 / 255f, 48 / 255f, 44 / 255f, 0.96f)
-private val HistoGreenFill = Color(0f, 238 / 255f, 70 / 255f, 0.15f)
-private val HistoGreenStroke = Color(0f, 238 / 255f, 70 / 255f, 0.92f)
-private val HistoBlueFill = Color(45 / 255f, 76 / 255f, 255 / 255f, 0.19f)
-private val HistoBlueStroke = Color(45 / 255f, 76 / 255f, 255 / 255f, 0.94f)
-private val HistoLumaStroke = Color(245 / 255f, 242 / 255f, 232 / 255f, 0.58f)
 private val VectorRing = Color(220 / 255f, 235 / 255f, 225 / 255f, 0.55f)
 private val VectorFaint = Color(220 / 255f, 235 / 255f, 225 / 255f, 0.30f)
 private val MeterRed = Color(255 / 255f, 92 / 255f, 82 / 255f)
@@ -370,51 +363,9 @@ internal fun ParadePanel(state: LiveAssistState, colorMode: Int, modifier: Modif
 @Composable
 internal fun HistogramPanel(state: LiveAssistState, modifier: Modifier = Modifier,
     previewBundle: com.opencapture.openpocketcine.feed.ScopeAssistBundle? = null) {
-    val measurer = rememberTextMeasurer()
     val bundle = previewBundle ?: state.scopeBundle
-    val display = bundle.histogramDisplay
-    val traffic = bundle.traffic
-    Canvas(modifier.fillMaxSize()) {
-        val d = density
-        val plot = HistogramAssist.plotRect(this.size.width, this.size.height, d)
-        for (step in 1 until 4) {
-            val y = plot.minY + plot.height * step / 4f
-            drawLine(Color(220 / 255f, 235 / 255f, 225 / 255f, 0.06f), Offset(plot.minX, y), Offset(plot.maxX, y), 1f)
-        }
-        if (state.histoTrafficLights && traffic.anyClip) {
-            val clipStart = HistogramAssist.ireX(HistogramAssist.CLIP_ZONE_IRE, plot, d)
-            val clipEnd = HistogramAssist.ireX(100.0, plot, d)
-            drawRect(
-                ClipColor.copy(alpha = 0.14f),
-                Offset(clipStart, plot.minY),
-                Size((clipEnd - clipStart).coerceAtLeast(0f), plot.height),
-            )
-        }
-        val x0 = HistogramAssist.ireX(0.0, plot, d)
-        val x100 = HistogramAssist.ireX(100.0, plot, d)
-        // iOS HistogramScopePlot is SwiftUI Canvas (not Metal). Keep the
-        // bezier + shared RGBL peak on Compose even when WAVE/PARADE are GPU.
-        clipRect(x0, plot.minY, x100, plot.maxY) {
-            val peak =
-                maxOf(
-                    display.red.maxOrNull() ?: 0f,
-                    display.green.maxOrNull() ?: 0f,
-                    display.blue.maxOrNull() ?: 0f,
-                    display.luma.maxOrNull() ?: 0f,
-                    1f,
-                )
-            drawHistogramChannel(display.red, plot, peak, HistoRedFill, HistoRedStroke, 0.92f, d)
-            drawHistogramChannel(display.green, plot, peak, HistoGreenFill, HistoGreenStroke, 0.92f, d)
-            drawHistogramChannel(display.blue, plot, peak, HistoBlueFill, HistoBlueStroke, 0.92f, d)
-            drawHistogramLuma(display.luma, plot, peak, d)
-        }
-        drawLine(Boundary, Offset(x0, plot.minY), Offset(x0, plot.maxY), 1.25f)
-        drawLine(Boundary, Offset(x100, plot.minY), Offset(x100, plot.maxY), 1.25f)
-        if (state.histoTrafficLights) {
-            drawTrafficLamps(traffic, d)
-        }
-        drawScopeTitle(measurer, HistogramAssist.PANEL_TITLE.uppercase(), HistogramAssist.CHIP)
-    }
+    com.opencapture.monitorui.MonitorHistogramScopePlot(bundle.histogramDisplay, bundle.traffic,
+        state.histoTrafficLights, modifier)
 }
 
 @Composable
@@ -651,93 +602,6 @@ private fun DrawScope.drawParadeTrace(
 }
 
 private val ParadeLuma = LumaTrace
-
-private fun DrawScope.drawHistogramChannel(
-    bins: FloatArray,
-    plot: AssistRect,
-    peak: Float,
-    fill: Color,
-    stroke: Color,
-    alpha: Float,
-    density: Float,
-) {
-    val (fillPath, strokePath) = histogramPaths(bins, plot, peak, density)
-    if (fillPath.isEmpty) return
-    drawPath(fillPath, fill, alpha = alpha, blendMode = BlendMode.Plus)
-    drawPath(
-        strokePath,
-        stroke,
-        alpha = alpha,
-        style = Stroke(width = 1.8f, cap = StrokeCap.Round, join = StrokeJoin.Round),
-        blendMode = BlendMode.Plus,
-    )
-}
-
-private fun DrawScope.drawHistogramLuma(bins: FloatArray, plot: AssistRect, peak: Float, density: Float) {
-    val (_, strokePath) = histogramPaths(bins, plot, peak, density)
-    if (strokePath.isEmpty) return
-    drawPath(
-        strokePath,
-        HistoLumaStroke,
-        alpha = 0.58f,
-        style = Stroke(width = 1.4f, cap = StrokeCap.Round, join = StrokeJoin.Round),
-    )
-}
-
-private fun histogramPaths(bins: FloatArray, plot: AssistRect, peak: Float, density: Float): Pair<Path, Path> {
-    if (bins.size <= 1 || peak <= 0f || bins.none { it > 0f }) return Path() to Path()
-    val last = bins.lastIndex
-    fun point(index: Int): Offset {
-        val x = HistogramAssist.plotX(index / last.toDouble() * 100.0, plot, density)
-        val height = (bins[index] / peak) * plot.height
-        return Offset(x, plot.maxY - height)
-    }
-    val fill = Path()
-    fill.moveTo(HistogramAssist.plotX(0.0, plot, density), plot.maxY)
-    fill.lineTo(point(0).x, point(0).y)
-    val stroke = Path()
-    val first = point(0)
-    stroke.moveTo(first.x, first.y)
-    for (index in 1..last) {
-        val previous = point(index - 1)
-        val current = point(index)
-        val mid = Offset((previous.x + current.x) / 2f, (previous.y + current.y) / 2f)
-        fill.quadraticTo(previous.x, previous.y, mid.x, mid.y)
-        stroke.quadraticTo(previous.x, previous.y, mid.x, mid.y)
-    }
-    fill.lineTo(HistogramAssist.plotX(100.0, plot, density), plot.maxY)
-    fill.close()
-    return fill to stroke
-}
-
-private fun DrawScope.drawTrafficLamps(traffic: ScopeTrafficLightsReading, density: Float) {
-    val w = HistogramAssist.TRAFFIC_LAMP_WIDTH * density
-    val h = HistogramAssist.TRAFFIC_LAMP_HEIGHT * density
-    val left = HistogramAssist.TRAFFIC_OUTER_PAD * density
-    val right = size.width - HistogramAssist.TRAFFIC_OUTER_PAD * density - w
-    val crush = listOf(traffic.red.crush, traffic.green.crush, traffic.blue.crush)
-    val clip = listOf(traffic.red.clip, traffic.green.clip, traffic.blue.clip)
-    val colors = listOf(MeterRed, MeterGreen, MeterBlue)
-    colors.forEachIndexed { i, color ->
-        val y = 12f * density + i * (h + 3f * density)
-        drawLamp(left, y, w, h, color, crush[i])
-        drawLamp(right, y, w, h, color, clip[i])
-    }
-}
-
-private fun DrawScope.drawLamp(x: Float, y: Float, w: Float, h: Float, color: Color, hot: Boolean) {
-    val corner = CornerRadius(2.dp.toPx())
-    if (hot) {
-        drawRoundRect(color, Offset(x, y), Size(w, h), corner)
-    }
-    drawRoundRect(
-        color.copy(alpha = if (hot) 1f else 0.8f),
-        Offset(x, y),
-        Size(w, h),
-        corner,
-        style = Stroke(1.5.dp.toPx()),
-    )
-}
 
 private fun DrawScope.drawGoalPost(
     x: Float,

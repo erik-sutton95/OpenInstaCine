@@ -82,11 +82,13 @@ LUNA_OWNED=(
   OpenInstaCine/MonitorVideoBackdrop.swift
   OpenInstaCine/Assists/AssistInspectorImageRenderer.swift
   OpenInstaCine/Assists/FalseColorAssist.swift
+  OpenInstaCine/Assists/HistogramAssist.swift
   OpenInstaCine/MediaPlayer.swift
   OpenInstaCine/WatcherRelayClient.swift
   OpenInstaCine/Assists/AssistInspectorPreview.swift
   OpenInstaCineTests/AssistInspectorLifecycleTests.swift
   OpenInstaCineTests/AssistInspectorPreviewTests.swift
+  OpenInstaCineTests/HistogramAssistTests.swift
   OpenInstaCineTests/DecoderGenerationTests.swift
   OpenInstaCineTests/FirstConnectTests.swift
   OpenInstaCineTests/LiveFrameSampleTests.swift

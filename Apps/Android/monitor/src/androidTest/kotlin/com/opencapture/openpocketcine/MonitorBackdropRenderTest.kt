@@ -25,6 +25,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.opencapture.monitorui.MonitorMaterial
+import com.opencapture.monitorui.MonitorHistogramScopePlot
+import com.opencapture.opencine.media.ScopeHistogramDisplay
+import com.opencapture.opencine.media.ScopeTrafficLightsReading
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -39,6 +42,53 @@ import org.junit.runner.RunWith
 /** Pixel evidence from the real HWUI/RenderEffect modifier, not an emulated blur model. */
 @RunWith(AndroidJUnit4::class)
 class MonitorBackdropRenderTest {
+    @Test fun sharedHistogramKeepsTheSignalWhenEdgeLightsAreHidden() {
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            val display = ScopeHistogramDisplay.EMPTY.copy(red = FloatArray(256) {
+                if (it in 100 until 156) 20f else 0f
+            })
+            val traffic = ScopeTrafficLightsReading.NONE.let {
+                it.copy(red = it.red.copy(crush = true))
+            }
+            var bounds = Rect.Zero
+            var density = 1f
+            fun render(lights: Boolean): Bitmap {
+                scenario.onActivity { activity ->
+                    density = activity.resources.displayMetrics.density
+                    activity.setContent {
+                        Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black),
+                            contentAlignment = Alignment.Center) {
+                            MonitorHistogramScopePlot(display, traffic, lights,
+                                Modifier.size(250.dp, 77.dp).onGloballyPositioned {
+                                    bounds = it.boundsInWindow()
+                                })
+                        }
+                    }
+                }
+                return capture(scenario, "shared-histogram-${if (lights) "shown" else "hidden"}")
+            }
+            fun redPixels(image: Bitmap, xRange: IntRange): Int =
+                (bounds.top.roundToInt() until bounds.bottom.roundToInt()).sumOf { y ->
+                    xRange.count { x ->
+                        val color = image.getPixel(x, y)
+                        Color.red(color) > 180 && Color.green(color) < 170 && Color.blue(color) < 170
+                    }
+                }
+            val shown = render(true)
+            val hidden = render(false)
+            val edge = bounds.left.roundToInt() until (bounds.left + 17 * density).roundToInt()
+            val signal = (bounds.left + 20 * density).roundToInt() until
+                (bounds.left + 230 * density).roundToInt()
+            assertTrue(redPixels(shown, edge) > 60 * density * density,
+                "The source's crushed red channel must light its edge block")
+            assertEquals(0, redPixels(hidden, edge), "Hiding traffic lights removes their edge block")
+            val measured = redPixels(hidden, signal)
+            assertTrue(measured > 30 * density * density, "The ready-to-draw histogram remains visible")
+            assertEquals(measured, redPixels(shown, signal),
+                "The traffic-light preference cannot change the measured signal trace")
+        }
+    }
+
     @Test fun readoutBloomExtendsOutsideContentWithoutChangingLayoutOrForeground() {
         assumeTrue(Build.VERSION.SDK_INT >= 31)
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->

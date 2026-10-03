@@ -33,14 +33,14 @@ enum HistogramAssist {
     static let chip = "RGBL"
     static let plotTop: CGFloat = WaveformAxis.titleHeight
     /// OpenZCine `histogramReferenceX(95)` clip band — on WAVE’s IRE axis.
-    static let clipZoneIRE = 95.0
+    static let clipZoneIRE = MonitorUI.MonitorHistogramGeometry.clipZoneIRE
     /// Crush / clip lamp size — must match ``HistogramScopePlot`` blocks.
-    static let trafficLampWidth: CGFloat = 7.5
-    static let trafficLampHeight: CGFloat = 15
+    static let trafficLampWidth: CGFloat = MonitorUI.MonitorHistogramGeometry.trafficLampWidth
+    static let trafficLampHeight: CGFloat = MonitorUI.MonitorHistogramGeometry.trafficLampHeight
     /// Inset from the panel edge so the top lamp clears the rounded corner.
-    static let trafficOuterPad: CGFloat = 6
+    static let trafficOuterPad: CGFloat = MonitorUI.MonitorHistogramGeometry.trafficOuterPad
     /// Gap between a lamp column and the 0 / 100 stroke.
-    static let trafficLineGap: CGFloat = 4
+    static let trafficLineGap: CGFloat = MonitorUI.MonitorHistogramGeometry.trafficLineGap
 
     static let trafficLightsTitle = "Traffic Lights"
     static let trafficLightsHelp =
@@ -57,11 +57,7 @@ enum HistogramAssist {
     /// WAVE title / floor, with extra side chrome so crush sits left of 0
     /// and clip sits right of 100. IRE mapping inside the plot is ``WaveformAxis``.
     static func plotRect(in size: CGSize) -> CGRect {
-        CGRect(
-            x: trafficGutter,
-            y: WaveformAxis.titleHeight,
-            width: max(1, size.width - trafficGutter * 2),
-            height: max(1, size.height - WaveformAxis.titleHeight - WaveformAxis.bottomPad))
+        MonitorUI.MonitorHistogramGeometry.plotRect(in: size)
     }
 
     /// Left-to-right twin of ``WaveformAxis.plotY``.
