@@ -473,7 +473,6 @@ fun MediaPlayerScreen(
 
     LaunchedEffect(active.id) {
         assist.configureTool = null
-        com.opencapture.openpocketcine.feed.InspectorPreviewPipeline.sourceChanged(playback = true)
         ready = false
         loadError = null
         reachedEnd = false
@@ -713,6 +712,7 @@ fun MediaPlayerScreen(
                 PlaybackFeedView(
                     player = player,
                     scopeBus = model.scopeBus,
+                    preview = model.inspectorPreview,
                     backdrop = backdrop,
                     plan = effectsPlan,
                     mirrored = mirror < 0f,

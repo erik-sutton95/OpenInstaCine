@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference
 internal class LiveVulkanSession(
     context: Context,
     private val scopeBus: LiveScopeSampleBus,
+    private val preview: InspectorPreviewPipeline,
     private val onDecoderSurface: (Surface) -> Unit,
     private val onFirstFrame: () -> Unit,
     private val onFailed: () -> Unit,
@@ -136,6 +137,7 @@ internal class LiveVulkanSession(
             return
         }
         setScopeAttached(true)
+        preview.sourceChanged(scopeLifetime.ownedSource)
         pendingAttach = Triple(surface, width, height)
         if (handle == 0L) {
             ensureReader()
@@ -395,9 +397,9 @@ internal class LiveVulkanSession(
 
     /** Must run from `surfaceDestroyed` before that callback returns. */
     fun detachWindow() {
+        preview.sourceChanged(scopeLifetime.ownedSource)
         setScopeAttached(false)
         scopeFrames.invalidate()
-        InspectorPreviewPipeline.sourceChanged(playback = false)
         backdrop?.invalidate(this)
         pendingAttach = null
         presentGate.detach()
@@ -408,9 +410,9 @@ internal class LiveVulkanSession(
     }
 
     fun release() {
+        preview.sourceChanged(scopeLifetime.ownedSource)
         setScopeAttached(false, released = true)
         scopeFrames.invalidate()
-        InspectorPreviewPipeline.sourceChanged(playback = false)
         backdrop?.invalidate(this)
         presentGate.release()
         reader?.setOnImageAvailableListener(null, null)
@@ -502,8 +504,8 @@ internal class LiveVulkanSession(
         val now = System.nanoTime()
         var scopeIntervalNs = PocketScopeSampler.BASE_MIN_INTERVAL_NS
         var scopeDue = false
-        var previewTicket: InspectorPreviewAdmission.Ticket? = null
-        var backdropTicket: BackdropFrameAdmission.Ticket? = null
+        var previewTicket: com.opencapture.opencine.runtime.InspectorPreviewAdmission.Ticket? = null
+        var backdropTicket: com.opencapture.opencine.runtime.BackdropFrameAdmission.Ticket? = null
         val takeTap =
             if (wantSample && now - lastSampleNs >= PocketScopeSampler.BASE_MIN_INTERVAL_NS) {
                 val thermal =
@@ -515,7 +517,7 @@ internal class LiveVulkanSession(
                 val intervalNs = policy.tapIntervalNs(thermal, backdrop?.hasDemand(this) == true)
                 scopeIntervalNs = policy.minIntervalNs(thermal)
                 if (now - lastSampleNs >= intervalNs && sampleBusy.compareAndSet(false, true)) {
-                    previewTicket = InspectorPreviewPipeline.acquire(policy.previewOwner, playback = false, now)
+                    previewTicket = preview.acquire(policy.previewOwner, playback = false, now, scopeOwner)
                     backdropTicket = backdrop?.acquire(this, now)
                     scopeDue = policy.scopeWorkDue(now, lastScopeWorkNs, thermal)
                     if (scopeDue || previewTicket != null || backdropTicket != null) true
@@ -535,7 +537,7 @@ internal class LiveVulkanSession(
         held?.close()
         held = image
         if (!ok) {
-            if (takeTap) { sampleBusy.set(false); InspectorPreviewPipeline.cancel(previewTicket); backdrop?.cancel(backdropTicket) }
+            if (takeTap) { sampleBusy.set(false); preview.cancel(previewTicket); backdrop?.cancel(backdropTicket) }
             if (takeFace) faceWanted.set(true)
             if (presentGate.shouldFallbackOnSubmitFailure()) main.post(onFailed)
             return
@@ -589,10 +591,10 @@ internal class LiveVulkanSession(
                 val ticket = previewTicket
                 if (ticket != null) {
                     if (packed != null) {
-                        InspectorPreviewPipeline.submit(ticket,
+                        preview.submit(ticket,
                             InspectorPreviewFrame.fromTap(packed, TAP_W, TAP_H, bottomUp = false))
                         previewSubmitted = true
-                    } else InspectorPreviewPipeline.cancel(ticket)
+                    } else preview.cancel(ticket)
                 }
                 if (!scopeDue || !scopeFrames.isCurrent(sourceEpoch) ||
                     !scopeBus.isCurrent(scopeOwner)) return@execute
@@ -650,7 +652,7 @@ internal class LiveVulkanSession(
                 }
                 scopeHz.note(TAG, scopes = scopes, intervalNs = loggedIntervalNs)
             } catch (error: Exception) {
-                if (!previewSubmitted) InspectorPreviewPipeline.cancel(previewTicket)
+                if (!previewSubmitted) preview.cancel(previewTicket)
                 Log.w(TAG, "scope tap failed", error)
             } finally {
                 if (!backdropSubmitted) backdrop?.cancel(backdropTicket)

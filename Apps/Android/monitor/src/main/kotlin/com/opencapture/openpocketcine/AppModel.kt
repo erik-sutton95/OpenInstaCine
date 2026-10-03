@@ -53,6 +53,8 @@ class AppModel(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val session = PocketCameraSession(context, borrowing, controlLease)
     val scopeBus = com.opencapture.opencine.runtime.ScopeSampleBus()
+    val inspectorPreview = com.opencapture.opencine.runtime.InspectorPreviewPipeline(scopeBus,
+        { com.opencapture.openpocketcine.feed.Media3GlBackend(it) }, logTag = "OpcInspector")
     val assist = LiveAssistState.from(appContext)
 
     /**
@@ -480,6 +482,7 @@ class AppModel(
     }
 
     fun close() {
+        inspectorPreview.close()
         gimbalGamepad.stopListening()
         scope.cancel()
         // The activity ends: its camera session ends with it, without restarting discovery.
