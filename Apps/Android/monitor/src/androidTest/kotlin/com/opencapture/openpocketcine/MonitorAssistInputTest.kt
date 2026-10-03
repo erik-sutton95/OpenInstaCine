@@ -28,6 +28,44 @@ import org.junit.runner.RunWith
 /** Exercises the real separate popup window, including its offset parent and hit delivery. */
 @RunWith(AndroidJUnit4::class)
 class MonitorAssistInputTest {
+    @Test fun trackingCancelDeliversOneTapFromOutsideItsVisibleDisc() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            var calls = 0
+            var feedback = 0
+            var density = 1f
+            var origin = Offset.Zero
+            scenario.onActivity { activity ->
+                density = activity.resources.displayMetrics.density
+                activity.setContent {
+                    Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionOnScreen() }) {
+                        com.opencapture.monitorui.MonitorTrackingCancelButton(
+                            com.opencapture.monitorui.MonitorRect(40f, 100f, 44f, 44f),
+                            androidx.compose.ui.graphics.Color.Green, androidx.compose.ui.graphics.Color.Black,
+                            onClick = { calls++ }, feedback = { feedback++ })
+                    }
+                }
+            }
+            SystemClock.sleep(350)
+            instrumentation.waitForIdleSync()
+            // Twenty points from center is outside the 14 point disc radius,
+            // and within the shared 22 point input radius.
+            val target = origin + Offset(82f * density, 122f * density)
+            val down = SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action,
+                    target.x, target.y, 0).apply { source = InputDevice.SOURCE_TOUCHSCREEN }
+                instrumentation.uiAutomation.injectInputEvent(event, true)
+                event.recycle()
+            }
+            instrumentation.waitForIdleSync()
+            scenario.onActivity {
+                assertEquals(1, calls)
+                assertEquals(1, feedback)
+            }
+        }
+    }
+
     @Test fun readoutShadowPreservesStatusRowAlignment() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
