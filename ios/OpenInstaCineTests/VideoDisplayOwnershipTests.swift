@@ -9,6 +9,65 @@ import SwiftUI
 
 @MainActor
 final class VideoDisplayOwnershipTests: XCTestCase {
+    @MainActor private final class PanelProbe: UIView {
+        var expectedSize = CGSize.zero
+        var laidOut: XCTestExpectation?
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            if bounds.size == expectedSize {
+                let pending = laidOut
+                laidOut = nil
+                pending?.fulfill()
+            }
+        }
+    }
+    @MainActor private struct PanelProbeView: UIViewRepresentable {
+        let view: PanelProbe
+        func makeUIView(context: Context) -> PanelProbe { view }
+        func updateUIView(_ uiView: PanelProbe, context: Context) { uiView.setNeedsLayout() }
+    }
+
+    func testSharedMovablePanelRetainsNativeContentAndFitsProtectedGeometry() async throws {
+        let probe = PanelProbe()
+        probe.backgroundColor = .red
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 874, height: 402))
+        let host = UIHostingController(rootView: AnyView(EmptyView()))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        for canvas in [CGRect(x: 0, y: 0, width: 874, height: 402),
+            CGRect(x: 0, y: 0, width: 402, height: 874)] {
+            let movement = MonitorScopePanelPlacement.bounds(in: canvas,
+                clearance: EdgeInsets(top: 64, leading: 0, bottom: 96, trailing: 74))
+            let layout = MonitorScopePanelLayout(baseSize: MonitorScopePanelSize.waveform,
+                preferredSize: CGSize(width: 400, height: 245), center: CGPoint(x: 4000, y: 4000),
+                scale: 1.6, canvas: canvas, movementBounds: movement)
+            probe.expectedSize = layout.size
+            probe.laidOut = expectation(description: "actual panel content laid out")
+            let ready = probe.laidOut!
+            window.frame = canvas
+            host.rootView = AnyView(MonitorMovableScopePanel(layout: layout, resizeLabel: "Resize scope",
+                onMove: { _ in XCTFail("Layout must not persist a drag") },
+                onResize: { _ in XCTFail("Layout must not rewrite the scale") }) {
+                    PanelProbeView(view: probe)
+                }.ignoresSafeArea())
+            host.view.frame = canvas
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            await fulfillment(of: [ready], timeout: 5)
+            XCTAssertTrue(probe.window === window)
+            let frame = probe.convert(probe.bounds, to: host.view)
+            XCTAssertEqual(frame.width, layout.size.width, accuracy: 1)
+            XCTAssertEqual(frame.height, layout.size.height, accuracy: 1)
+            XCTAssertEqual(frame.midX, layout.center.x, accuracy: 1)
+            XCTAssertEqual(frame.midY, layout.center.y, accuracy: 1)
+            XCTAssertGreaterThanOrEqual(frame.minX, movement.minX)
+            XCTAssertGreaterThanOrEqual(frame.minY, movement.minY)
+            XCTAssertLessThanOrEqual(frame.maxX, movement.maxX)
+            XCTAssertLessThanOrEqual(frame.maxY + MonitorScopePanelPlacement.gripBottomExtent, movement.maxY)
+        }
+    }
+
     @MainActor private final class ScopeProbe {
         var view: MTKView?
         var changed: XCTestExpectation?

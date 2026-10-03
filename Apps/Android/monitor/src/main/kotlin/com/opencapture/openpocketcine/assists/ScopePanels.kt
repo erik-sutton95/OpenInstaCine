@@ -5,58 +5,31 @@ import com.opencapture.openpocketcine.feed.fromColorMode
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorMaterial
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.opencapture.monitorui.MonitorWaveformScopePlot
@@ -68,16 +41,10 @@ import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.NDFilterRecommendation
 import com.opencapture.openpocketcine.LocalOperatorHaptics
 
-import com.opencapture.openpocketcine.reportChromeFrame
-import com.opencapture.openpocketcine.feed.LocalGpuLive
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeAssistBundle
 import com.opencapture.openpocketcine.feed.ScopeChannelLight
-import com.opencapture.openpocketcine.feed.ScopeTrafficLightsReading
 import com.opencapture.openpocketcine.feed.WaveformIre
-import kotlin.math.roundToInt
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 private val PanelShape = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
 private val ChipShape = RoundedCornerShape(percent = 50)
@@ -88,209 +55,23 @@ private val MeterYellow = Color(245 / 255f, 208 / 255f, 82 / 255f)
 
 @Composable
 internal fun MovableAssistPanel(
-    tool: LiveAssistTool,
-    base: AssistSize,
-    scale: Double,
-    stored: StoredCenter?,
-    canvas: AssistRect,
-    placementBounds: AssistRect,
-    defaultCenter: AssistPoint,
-    enabled: Boolean,
-    onStore: (StoredCenter) -> Unit,
-    onScale: ((Double) -> Unit)? = null,
-    onOpenOptions: ((ChromeRect) -> Unit)? = null,
-    onActivate: () -> Unit = {},
-    fillPlate: Boolean = true,
-    chip: Boolean = false,
-    content: @Composable (AssistSize) -> Unit,
+    tool: LiveAssistTool, base: AssistSize, scale: Double, stored: StoredCenter?,
+    canvas: AssistRect, placementBounds: AssistRect, defaultCenter: AssistPoint, enabled: Boolean,
+    onStore: (StoredCenter) -> Unit, onScale: ((Double) -> Unit)? = null,
+    onOpenOptions: ((ChromeRect) -> Unit)? = null, onActivate: () -> Unit = {},
+    fillPlate: Boolean = true, chip: Boolean = false, content: @Composable (AssistSize) -> Unit,
 ) {
-    val density = LocalDensity.current
     val haptics = LocalOperatorHaptics.current
-    val preferred = MovablePanelMath.panelSize(base, scale)
-    val gripPx = with(density) { MovablePanelMath.gripPadDp.dp.toPx() }
-    val minimumHit = with(density) { MovablePanelMath.MIN_GRIP_HIT_DP.dp.toPx() }
-    val usable = placementBounds.width >= minimumHit && placementBounds.height >= minimumHit
-    val sizePx = MovablePanelMath.fittedSize(
-        with(density) { AssistSize(preferred.width.dp.toPx(), preferred.height.dp.toPx()) },
-        placementBounds, gripPx)
-    val sizeDp = AssistSize(sizePx.width / density.density, sizePx.height / density.density)
-    val gripPadDp = MovablePanelMath.gripPadDp
-    val gripHit = MovablePanelMath.gripHitSize(sizeDp.width, sizeDp.height)
-    val gripOrigin = MovablePanelMath.gripHitOrigin(sizeDp.width, sizeDp.height)
-    val gripOverhang = MovablePanelMath.gripOverhang(sizeDp.width, sizeDp.height)
-    var session by remember(tool) { mutableStateOf<AssistPoint?>(null) }
-    var origin by remember { mutableStateOf<AssistPoint?>(null) }
-    var resizeOrigin by remember { mutableStateOf<Double?>(null) }
-    var active by remember { mutableStateOf(false) }
-    var panelCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    var gripCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    LaunchedEffect(canvas.width, canvas.height) {
-        if (!active) session = null
-    }
-    var panelFrame by remember { mutableStateOf(ChromeRect(0f, 0f, 0f, 0f)) }
-    val rawCenter =
-        MovablePanelMath.resolvedCenter(
-            session = session,
-            stored = stored,
-            defaultCenter = defaultCenter,
-            size = sizePx,
-            bounds = canvas,
-        )
-    val center = MovablePanelMath.clampWithGrip(rawCenter, sizePx, placementBounds, gripPx)
-    val placementState = rememberUpdatedState(placementBounds)
-    val centerState = rememberUpdatedState(center)
-    val sizeState = rememberUpdatedState(sizePx)
-    val scaleState = rememberUpdatedState(scale)
-    val canvasState = rememberUpdatedState(canvas)
-    if (!usable) return
-    val snapGrid = with(density) { MovablePanelMath.POSITION_GRID.dp.toPx() }
-    val plateShape = if (chip) ChipShape else PanelShape
-    Box(
-        Modifier
-            .offset {
-                IntOffset(
-                    (center.x - sizePx.width / 2f - gripOverhang.x * density.density).roundToInt(),
-                    (center.y - sizePx.height / 2f - gripOverhang.y * density.density).roundToInt(),
-                )
-            }
-            .size((sizeDp.width + gripPadDp + gripOverhang.x).dp,
-                (sizeDp.height + MovablePanelMath.GRIP_BOTTOM_EXTERIOR_DP + gripOverhang.y).dp),
-    ) {
-        Box(
-            Modifier
-                .offset(gripOverhang.x.dp, gripOverhang.y.dp)
-                .size(sizeDp.width.dp, sizeDp.height.dp)
-                .align(Alignment.TopStart)
-                .then(if (onOpenOptions != null) Modifier.reportChromeFrame { panelFrame = it } else Modifier)
-                // iOS ScopeMiniChrome: shadow outside, one clip, overlay hairline.
-                // shadow(clip=true)+clip+Offscreen+border stacked a thick inner edge.
-                .shadow(
-                    elevation = 16.dp,
-                    shape = plateShape,
-                    clip = false,
-                    ambientColor = Color.Black.copy(alpha = 0.34f),
-                    spotColor = Color.Black.copy(alpha = 0.34f),
-                )
-                .clip(plateShape)
-                .then(if (fillPlate) Modifier.monitorMaterial(MonitorMaterial.Scope, plateShape) else Modifier)
-                .onGloballyPositioned { panelCoords = it }
-                .pointerInput(tool, enabled, base, canvas, placementBounds, density.density) {
-                    detectPanelDrag(
-                        holdMs = AssistLongPress.PANEL_MS,
-                        enabled = enabled,
-                        onDown = onActivate,
-                        onLongPress = onOpenOptions?.let { present -> {
-                            haptics.confirm()
-                            present(panelFrame)
-                        } },
-                        onStart = {
-                            origin = centerState.value
-                            active = true
-                            haptics.confirm()
-                        },
-                        onDrag = { translation ->
-                            val start = origin ?: centerState.value
-                            val size = sizeState.value
-                            val proposed = AssistPoint(start.x + translation.x, start.y + translation.y)
-                            val snapped =
-                                MovablePanelMath.clampWithGrip(
-                                    MovablePanelMath.snap(proposed, snapGrid),
-                                    size,
-                                    placementState.value,
-                                    gripPx,
-                                )
-                            session = snapped
-                        },
-                        onEnd = { _ ->
-                            if (canvas == canvasState.value && placementBounds == placementState.value) {
-                                session?.let { onStore(StoredCenter(it, canvas)) }
-                            } else session = null
-                            origin = null
-                            active = false
-                        },
-                        toRoot = { local -> panelCoords?.localToRoot(local) ?: local },
-                    )
-                },
-        ) {
-            content(sizeDp)
-            Canvas(Modifier.matchParentSize()) {
-                val stroke = 1.dp.toPx()
-                val inset = stroke / 2f
-                val radius =
-                    if (chip) {
-                        (this.size.minDimension / 2f - inset).coerceAtLeast(0f)
-                    } else {
-                        (LiveDesign.CORNER_RADIUS_DP.dp.toPx() - inset).coerceAtLeast(0f)
-                    }
-                drawRoundRect(
-                    color = LiveDesign.hairline,
-                    topLeft = Offset(inset, inset),
-                    size = Size(this.size.width - stroke, this.size.height - stroke),
-                    cornerRadius = CornerRadius(radius, radius),
-                    style = Stroke(stroke),
-                )
-            }
-        }
-        if (onScale != null) {
-            val reachPx = with(density) { (base.width + base.height).dp.toPx() }.coerceAtLeast(1f)
-            Box(
-                Modifier
-                    .align(Alignment.TopStart)
-                    .offset((gripOrigin.x + gripOverhang.x).dp, (gripOrigin.y + gripOverhang.y).dp)
-                    .size(gripHit.dp)
-                    .background(Color.Transparent)
-                    .onGloballyPositioned { gripCoords = it }
-                    .pointerInput(tool, enabled, reachPx) {
-                        detectPanelDrag(
-                            holdMs = AssistLongPress.PANEL_MS,
-                            enabled = enabled,
-                            onDown = onActivate,
-                            onStart = {
-                                resizeOrigin = scaleState.value
-                                active = true
-                                haptics.confirm()
-                            },
-                            onDrag = { translation ->
-                                val start = resizeOrigin ?: scaleState.value
-                                val delta = (translation.x + translation.y) / reachPx
-                                onScale(start + delta)
-                            },
-                            onEnd = {
-                                resizeOrigin = null
-                                active = false
-                            },
-                            toRoot = { local -> gripCoords?.localToRoot(local) ?: local },
-                        )
-                    },
-            ) {
-                val visual = MovablePanelMath.gripVisualOrigin(gripHit)
-                Canvas(
-                    Modifier
-                        .offset(visual.x.dp, visual.y.dp)
-                        .size(MovablePanelMath.GRIP_VISUAL_DP.dp),
-                ) {
-                    val stroke = 1.5.dp.toPx()
-                    val color = if (active) LiveDesign.accent else LiveDesign.muted
-                    drawLine(
-                        color,
-                        Offset(0f, size.height),
-                        Offset(size.width, size.height),
-                        stroke,
-                        cap = StrokeCap.Square,
-                    )
-                    drawLine(
-                        color,
-                        Offset(size.width, 0f),
-                        Offset(size.width, size.height),
-                        stroke,
-                        cap = StrokeCap.Square,
-                    )
-                }
-            }
-        }
-    }
+    com.opencapture.monitorui.MonitorMovableScopePanel(
+        identity = tool.name, base = base, scale = scale, stored = stored, canvas = canvas,
+        placementBounds = placementBounds, defaultCenter = defaultCenter, enabled = enabled,
+        onStore = onStore, onScale = onScale,
+        onOpenOptions = onOpenOptions?.let { open -> { rect -> open(ChromeRect(rect.x, rect.y, rect.width, rect.height)) } },
+        anchorOrigin = com.opencapture.openpocketcine.LocalLiveCanvasOrigin.current,
+        onActivate = onActivate, onConfirm = { haptics.confirm() },
+        fillPlate = fillPlate, chip = chip, content = content,
+    )
 }
-
 @Composable
 internal fun WaveformPanel(state: LiveAssistState, colorMode: Int, modifier: Modifier = Modifier,
     previewBundle: com.opencapture.openpocketcine.feed.ScopeAssistBundle? = null) {

@@ -122,23 +122,7 @@ enum HistogramAssist {
     }
 
     /// OpenZCine `MovablePanelStoredCenter` — centre as a fraction of the overlay bounds.
-    struct StoredCenter: Codable, Equatable, Sendable {
-        var xFraction: Double
-        var yFraction: Double
-
-        init(center: CGPoint, in bounds: CGRect) {
-            let width = max(bounds.width, 1)
-            let height = max(bounds.height, 1)
-            xFraction = Double((center.x - bounds.minX) / width)
-            yFraction = Double((center.y - bounds.minY) / height)
-        }
-
-        func center(in bounds: CGRect) -> CGPoint {
-            CGPoint(
-                x: bounds.minX + CGFloat(xFraction) * bounds.width,
-                y: bounds.minY + CGFloat(yFraction) * bounds.height)
-        }
-    }
+    typealias StoredCenter = MonitorScopeStoredCenter
 
     struct Options: Equatable, Codable, Sendable {
         var trafficLights: Bool
@@ -376,6 +360,10 @@ final class HistogramAssistStore {
         beginDrag(center: center, in: bounds)
     }
 
+    func cancelDrag(bounds: CGRect) {
+        ScopeCanvasSlot.assign(&sessionCenter, &sessionCenterPortrait, in: bounds, nil)
+    }
+
     func endDrag(bounds: CGRect) {
         guard let center = sessionCenter(in: bounds) else { return }
         var next = options
@@ -468,149 +456,37 @@ private struct HistogramCrushClipSegmented: View {
     }
 }
 
-/// OpenZCine `MovablePanel` specialised for histogram — direct drag + L-corner resize.
 struct HistogramMovablePanel<Content: View>: View {
     let canvas: CGRect
     let feed: CGRect
     var chromeClearance: EdgeInsets = EdgeInsets()
     @ViewBuilder var content: () -> Content
-
     @Environment(\.interfaceLocked) private var interfaceLocked
-    private var movementBounds: CGRect {
-        ScopePanelPlacement.bounds(in: canvas, clearance: chromeClearance)
-    }
     private var store: HistogramAssistStore { HistogramAssist.store }
-
-    @State private var dragOrigin: CGPoint?
-    @State private var isDragging = false
-    @State private var snapCell = 0
-    @State private var isResizing = false
-    @State private var resizeStartScale = 1.0
-
-    private var gripCornerInset: CGFloat {
-        HistogramAssist.gripVisualSize - HistogramAssist.gripExteriorGap
-    }
-
     var body: some View {
-        let size = ScopePanelPlacement.fittedSize(
-            HistogramAssist.panelSize(scale: store.presentationScale(in: canvas)),
-            in: movementBounds)
+        let bounds = ScopePanelPlacement.bounds(in: canvas, clearance: chromeClearance)
+        let scale = store.presentationScale(in: canvas)
+        let preferred = HistogramAssist.panelSize(scale: scale)
+        let size = ScopePanelPlacement.fittedSize(preferred, in: bounds)
         let fallback = HistogramAssist.defaultCenter(
             feed: feed, size: size, bounds: canvas, chromeClearance: chromeClearance)
-        let rawCenter = HistogramAssist.resolvedCenter(
-            session: store.sessionCenter(in: canvas),
-            stored: store.storedCenter(in: canvas),
-            defaultCenter: fallback,
-            size: size,
-            bounds: canvas)
-        let center = ScopePanelPlacement.clamp(rawCenter, size: size, in: movementBounds)
-        let gripPad = HistogramAssist.gripHitSize - gripCornerInset
-        ZStack(alignment: .topLeading) {
-            content()
-                .overlay(alignment: .bottomTrailing) {
-                    resizeHandle
-                        .offset(x: gripPad, y: ScopePanelPlacement.gripBottomExtent)
+        let center = HistogramAssist.resolvedCenter(session: store.sessionCenter(in: canvas),
+            stored: store.storedCenter(in: canvas), defaultCenter: fallback, size: size, bounds: canvas)
+        MonitorMovableScopePanel(layout: MonitorScopePanelLayout(baseSize: HistogramAssist.baseSize,
+            preferredSize: preferred, center: center, scale: scale, canvas: canvas, movementBounds: bounds),
+            enabled: !interfaceLocked, resizeLabel: "Resize histogram",
+            onMove: { event in
+                switch event {
+                case .began(let center): store.beginDrag(center: center, in: canvas)
+                case .changed(let center): store.drag(to: center, in: canvas)
+                case .ended: store.endDrag(bounds: canvas)
+                case .cancelled(let retiredCanvas): store.cancelDrag(bounds: retiredCanvas)
                 }
-                .frame(width: size.width, height: size.height, alignment: .topLeading)
-                .padding(HistogramAssist.dragHitPadding)
-                .contentShape(Rectangle())
-                .padding(-HistogramAssist.dragHitPadding)
-                .gesture(interfaceLocked ? nil : panelDragGesture(center: center))
-        }
-        .frame(
-            width: size.width + gripPad,
-            height: size.height + ScopePanelPlacement.gripBottomExtent,
-            alignment: .topLeading
-        )
-        .opacity(ScopePanelPlacement.isUsable(movementBounds) ? 1 : 0)
-        .shadow(color: .black.opacity((isDragging || isResizing) ? 0.5 : 0), radius: 18, y: 8)
-        .position(x: center.x + gripPad / 2, y: center.y + ScopePanelPlacement.gripBottomExtent / 2)
-        .sensoryFeedback(trigger: isDragging) { _, dragging in
-            dragging ? .impact(flexibility: .rigid, intensity: 1) : nil
-        }
-        .sensoryFeedback(.selection, trigger: snapCell)
-        .sensoryFeedback(trigger: isResizing) { _, resizing in
-            resizing ? .impact(flexibility: .rigid, intensity: 0.8) : nil
-        }
-        .animation(.easeOut(duration: 0.14), value: isDragging)
-        .animation(.easeOut(duration: 0.14), value: isResizing)
-        .allowsHitTesting(!interfaceLocked && ScopePanelPlacement.isUsable(movementBounds))
-    }
-
-    private func panelDragGesture(center: CGPoint) -> some Gesture {
-        DragGesture(minimumDistance: 4, coordinateSpace: .global)
-            .onChanged { drag in
-                if !isDragging {
-                    isDragging = true
-                    dragOrigin = center
-                    store.beginDrag(center: center, in: canvas)
-                }
-                guard let origin = dragOrigin else { return }
-                let proposed = CGPoint(
-                    x: origin.x + drag.translation.width,
-                    y: origin.y + drag.translation.height)
-                let size = ScopePanelPlacement.fittedSize(
-                    HistogramAssist.panelSize(scale: store.presentationScale(in: canvas)),
-                    in: movementBounds)
-                let snapped = ScopePanelPlacement.clamp(
-                    HistogramAssist.snap(proposed), size: size, in: movementBounds)
-                let cell = HistogramAssist.hapticCell(snapped)
-                if cell != snapCell { snapCell = cell }
-                store.drag(to: snapped, in: canvas)
-            }
-            .onEnded { _ in
-                store.endDrag(bounds: canvas)
-                isDragging = false
-                dragOrigin = nil
-            }
-    }
-
-    private var resizeHandle: some View {
-        let gripColor = isResizing ? LiveDesign.accent : LiveDesign.muted
-        return HistogramCornerResizeGrip()
-            .stroke(gripColor, style: StrokeStyle(lineWidth: 1.5, lineCap: .square))
-            .frame(
-                width: HistogramAssist.gripVisualSize, height: HistogramAssist.gripVisualSize,
-                alignment: .bottomTrailing
-            )
-            .offset(y: ScopePanelPlacement.gripTopInterior - gripCornerInset)
-            .frame(
-                width: HistogramAssist.gripHitSize, height: HistogramAssist.gripHitSize,
-                alignment: .topLeading
-            )
-            .contentShape(Rectangle())
-            .gesture(interfaceLocked ? nil : resizeGesture)
-            .accessibilityLabel("Resize histogram")
-    }
-
-    private var resizeGesture: some Gesture {
-        DragGesture(minimumDistance: 4, coordinateSpace: .global)
-            .onChanged { drag in
-                if !isResizing {
-                    isResizing = true
-                    resizeStartScale = store.presentationScale(in: canvas)
-                }
-                let reach = HistogramAssist.baseSize.width + HistogramAssist.baseSize.height
-                let delta = (drag.translation.width + drag.translation.height) / reach
-                store.setScale(resizeStartScale + delta)
-            }
-            .onEnded { _ in isResizing = false }
+            }, onResize: { store.setScale($0) }, content: content)
     }
 }
 
-/// OpenZCine `CornerResizeGrip` — L-bracket at the bottom-trailing exterior corner.
-struct HistogramCornerResizeGrip: Shape {
-    func path(in rect: CGRect) -> Path {
-        let leg = min(rect.width, rect.height)
-        let vertex = CGPoint(x: rect.maxX, y: rect.maxY)
-        var path = Path()
-        path.move(to: vertex)
-        path.addLine(to: CGPoint(x: vertex.x - leg, y: vertex.y))
-        path.move(to: vertex)
-        path.addLine(to: CGPoint(x: vertex.x, y: vertex.y - leg))
-        return path
-    }
-}
+
 
 /// OpenZCine `OperatorSettingsHaptics.selection`.
 private enum HistogramAssistHaptics {

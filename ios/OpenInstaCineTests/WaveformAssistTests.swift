@@ -237,4 +237,20 @@ final class WaveformAssistTests: XCTestCase {
         XCTAssertEqual(decoded.storedCenter?.yFraction ?? 0, 0.4, accuracy: 0.001)
         XCTAssertNil(decoded.storedCenterPortrait)
     }
+
+    @MainActor
+    func testRetiredDragLeavesOtherOrientationAndSavedCoordinatesUntouched() {
+        let landscape = CGRect(x: 0, y: 0, width: 874, height: 402)
+        let portrait = CGRect(x: 0, y: 0, width: 402, height: 874)
+        let options = WaveformAssist.Options(storedCenter:
+            WaveformAssist.StoredCenter(center: CGPoint(x: 120, y: 80), in: landscape))
+        let store = WaveformAssistStore(options: options)
+        store.beginDrag(center: CGPoint(x: 300, y: 200), in: landscape)
+        store.beginDrag(center: CGPoint(x: 200, y: 400), in: portrait)
+        store.cancelDrag(bounds: landscape)
+        store.endDrag(bounds: landscape)
+        XCTAssertNil(store.sessionCenter(in: landscape))
+        XCTAssertEqual(store.sessionCenter(in: portrait), CGPoint(x: 200, y: 400))
+        XCTAssertEqual(store.options, options, "A late release cannot save the retired orientation")
+    }
 }

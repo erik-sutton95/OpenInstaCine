@@ -9,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import com.opencapture.monitorui.monitorReadoutShadow
@@ -42,6 +43,127 @@ import org.junit.runner.RunWith
 /** Pixel evidence from the real HWUI/RenderEffect modifier, not an emulated blur model. */
 @RunWith(AndroidJUnit4::class)
 class MonitorBackdropRenderTest {
+    @Test fun sharedMovablePanelDragsResizesHoldsAndHonorsLock() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            val enabled = androidx.compose.runtime.mutableStateOf(true)
+            val scale = androidx.compose.runtime.mutableStateOf(1.0)
+            val stored = androidx.compose.runtime.mutableStateOf<com.opencapture.monitorui.MonitorScopeStoredCenter?>(null)
+            val canvas = androidx.compose.runtime.mutableStateOf(com.opencapture.monitorui.MonitorScopeRect(0f, 0f, 1080f, 2000f))
+            var windowBounds = Rect.Zero
+            var rootBounds = Rect.Zero
+            var stores = 0
+            var opens = 0
+            var opened: com.opencapture.monitorui.MonitorScopeRect? = null
+            var density = 1f
+            scenario.onActivity { activity ->
+                density = activity.resources.displayMetrics.density
+                activity.setContent {
+                    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)
+                        .onGloballyPositioned { canvas.value = com.opencapture.monitorui.MonitorScopeRect(
+                            0f, 0f, it.size.width.toFloat(), it.size.height.toFloat()) }) {
+                        val c = canvas.value
+                        com.opencapture.monitorui.MonitorMovableScopePanel(
+                            identity = "wave", base = com.opencapture.monitorui.MonitorScopePanelSize.waveform,
+                            scale = scale.value, stored = stored.value, canvas = c,
+                            placementBounds = com.opencapture.monitorui.MonitorScopeRect(8 * density, 8 * density,
+                                c.width - 16 * density, c.height - 16 * density),
+                            defaultCenter = com.opencapture.monitorui.MonitorScopePoint(c.midX, c.midY),
+                            enabled = enabled.value,
+                            anchorOrigin = androidx.compose.ui.geometry.Offset(20 * density, 30 * density),
+                            onStore = { stored.value = it; stores++ },
+                            onScale = { scale.value = it.coerceIn(0.6, 1.6) },
+                            onOpenOptions = { opened = it; opens++ },
+                        ) {
+                            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Red)
+                                .onGloballyPositioned { windowBounds = it.boundsInWindow()
+                                    rootBounds = it.boundsInRoot() })
+                        }
+                    }
+                }
+            }
+            fun gesture(start: androidx.compose.ui.geometry.Offset, end: androidx.compose.ui.geometry.Offset,
+                hold: Boolean = false, beforeUp: (() -> Unit)? = null) {
+                val downTime = android.os.SystemClock.uptimeMillis()
+                fun send(action: Int, point: androidx.compose.ui.geometry.Offset) {
+                    val event = android.view.MotionEvent.obtain(downTime,
+                        android.os.SystemClock.uptimeMillis(), action, point.x, point.y, 0)
+                    event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                    instrumentation.sendPointerSync(event)
+                    event.recycle()
+                }
+                send(android.view.MotionEvent.ACTION_DOWN, start)
+                if (hold) android.os.SystemClock.sleep(380)
+                else for (step in 1..12) {
+                    android.os.SystemClock.sleep(16)
+                    send(android.view.MotionEvent.ACTION_MOVE, start + (end - start) * (step / 12f))
+                }
+                beforeUp?.invoke()
+                send(android.view.MotionEvent.ACTION_UP, end)
+                instrumentation.waitForIdleSync()
+            }
+            capture(scenario, "shared-panel-initial")
+            val initial = windowBounds
+            gesture(initial.center, initial.center + androidx.compose.ui.geometry.Offset(24 * density, 36 * density))
+            capture(scenario, "shared-panel-dragged")
+            assertEquals(1, stores, "A real drag persists once at release")
+            assertTrue(windowBounds.left > initial.left + 16 * density)
+            assertTrue(windowBounds.top > initial.top + 24 * density)
+            val restored = stored.value!!.center(canvas.value)
+            assertEquals(rootBounds.center.x, restored.x, 1f)
+            assertEquals(rootBounds.center.y, restored.y, 1f)
+
+            val beforeHold = rootBounds
+            gesture(windowBounds.center, windowBounds.center, hold = true)
+            capture(scenario, "shared-panel-held")
+            assertEquals(1, opens)
+            assertEquals(1, stores, "Opening options must not persist a drag")
+            assertEquals(beforeHold.left / density - 20f, opened!!.x, 0.5f)
+            assertEquals(beforeHold.top / density - 30f, opened!!.y, 0.5f)
+            assertEquals(beforeHold.width / density, opened!!.width, 0.5f)
+
+            fun grip(): androidx.compose.ui.geometry.Offset {
+                val origin = com.opencapture.monitorui.MonitorScopePanelMath.gripHitOrigin(
+                    windowBounds.width / density, windowBounds.height / density)
+                val hit = com.opencapture.monitorui.MonitorScopePanelMath.gripHitSize(
+                    windowBounds.width / density, windowBounds.height / density)
+                return androidx.compose.ui.geometry.Offset(windowBounds.left + (origin.x + hit / 2) * density,
+                    windowBounds.top + (origin.y + hit / 2) * density)
+            }
+            val originalWidth = windowBounds.width
+            val resizeStart = grip()
+            gesture(resizeStart, resizeStart + androidx.compose.ui.geometry.Offset(24 * density, 24 * density))
+            capture(scenario, "shared-panel-resized")
+            assertTrue(scale.value > 1.05, "The real corner changes the operator scale")
+            assertTrue(windowBounds.width > originalWidth + 10 * density)
+            assertEquals(1, stores, "Resize does not rewrite normalized placement")
+
+            scenario.onActivity { enabled.value = false }
+            capture(scenario, "shared-panel-locked")
+            val locked = windowBounds
+            val lockedScale = scale.value
+            gesture(locked.center, locked.center + androidx.compose.ui.geometry.Offset(30 * density, 30 * density))
+            gesture(grip(), grip() + androidx.compose.ui.geometry.Offset(30 * density, 30 * density))
+            gesture(locked.center, locked.center, hold = true)
+            capture(scenario, "shared-panel-lock-verified")
+            assertEquals(locked, windowBounds)
+            assertEquals(lockedScale, scale.value)
+            assertEquals(1, stores)
+            assertEquals(1, opens)
+
+            scenario.onActivity { enabled.value = true }
+            capture(scenario, "shared-panel-unlocked")
+            gesture(windowBounds.center, windowBounds.center + androidx.compose.ui.geometry.Offset(-24 * density, -24 * density),
+                beforeUp = {
+                    scenario.onActivity { enabled.value = false }
+                    capture(scenario, "shared-panel-lock-during-drag")
+                })
+            capture(scenario, "shared-panel-cancelled")
+            assertEquals(1, stores, "Locking during a drag must retire it without saving a partial move")
+            assertEquals(locked, windowBounds, "Cancelled movement restores the saved panel position")
+        }
+    }
+
     @Test fun sharedScopeBrightnessZeroClearsRetainedTraceAndKeepsGuides() {
         for (kind in listOf("wave", "parade", "vector")) {
             ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->

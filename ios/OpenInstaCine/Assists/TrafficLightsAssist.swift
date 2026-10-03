@@ -192,23 +192,7 @@ enum TrafficLightsAssist {
     }
 
     /// Normalized centre — OpenZCine `MovablePanelStoredCenter`.
-    struct StoredCenter: Codable, Equatable, Sendable {
-        var xFraction: Double
-        var yFraction: Double
-
-        init(center: CGPoint, in bounds: CGRect) {
-            let width = max(bounds.width, 1)
-            let height = max(bounds.height, 1)
-            xFraction = Double((center.x - bounds.minX) / width)
-            yFraction = Double((center.y - bounds.minY) / height)
-        }
-
-        func center(in bounds: CGRect) -> CGPoint {
-            CGPoint(
-                x: bounds.minX + CGFloat(xFraction) * bounds.width,
-                y: bounds.minY + CGFloat(yFraction) * bounds.height)
-        }
-    }
+    typealias StoredCenter = MonitorScopeStoredCenter
 
     static func clampedScale(_ value: Double) -> Double {
         min(max(value, scaleRange.lowerBound), scaleRange.upperBound)
@@ -444,143 +428,33 @@ struct TrafficLightsMovablePanel<Content: View>: View {
     let defaultCenter: CGPoint
     let bounds: CGRect
     var placementBounds: CGRect? = nil
-    private var movementBounds: CGRect { placementBounds ?? ScopePanelPlacement.bounds(in: bounds) }
     @ViewBuilder var content: () -> Content
-
-    @State private var dragOrigin: CGPoint?
-    @State private var isDragging = false
-    @State private var snapCell = 0
-    @State private var isResizing = false
-    @State private var resizeStartScale = 1.0
     @State private var sessionCenter: CGPoint?
     @State private var sessionCenterPortrait: CGPoint?
-
-    private var gripHitSize: CGFloat { TrafficLightsAssist.gripHitSize }
-    private var gripVisualSize: CGFloat { TrafficLightsAssist.gripVisualSize }
-    private var dragHitPadding: CGFloat { TrafficLightsAssist.dragHitPadding }
-    private var gripExteriorGap: CGFloat { TrafficLightsAssist.gripExteriorGap }
-    private var gripCornerInset: CGFloat { gripVisualSize - gripExteriorGap }
-
     var body: some View {
-        let center = clamp(resolvedCenter())
-        let gripPad = gripHitSize - gripCornerInset
-        ZStack(alignment: .topLeading) {
-            content()
-                .overlay(alignment: .bottomTrailing) {
-                    resizeHandle
-                        .offset(x: gripPad, y: ScopePanelPlacement.gripBottomExtent)
-                }
-                .frame(width: size.width, height: size.height, alignment: .topLeading)
-                .padding(dragHitPadding)
-                .contentShape(Rectangle())
-                .padding(-dragHitPadding)
-                .gesture(panelDragGesture(center: center))
-        }
-        .frame(
-            width: size.width + gripPad,
-            height: size.height + ScopePanelPlacement.gripBottomExtent,
-            alignment: .topLeading
-        )
-        .opacity(ScopePanelPlacement.isUsable(movementBounds) ? 1 : 0)
-        .allowsHitTesting(ScopePanelPlacement.isUsable(movementBounds))
-        .shadow(color: .black.opacity((isDragging || isResizing) ? 0.5 : 0), radius: 18, y: 8)
-        .position(x: center.x + gripPad / 2, y: center.y + ScopePanelPlacement.gripBottomExtent / 2)
-        .sensoryFeedback(trigger: isDragging) { _, dragging in
-            dragging ? .impact(flexibility: .rigid, intensity: 1) : nil
-        }
-        .sensoryFeedback(.selection, trigger: snapCell)
-        .sensoryFeedback(trigger: isResizing) { _, resizing in
-            resizing ? .impact(flexibility: .rigid, intensity: 0.8) : nil
-        }
-        .animation(.easeOut(duration: 0.14), value: isDragging)
-        .animation(.easeOut(duration: 0.14), value: isResizing)
-    }
-
-    private var resizeHandle: some View {
-        let gripColor = isResizing ? LiveDesign.accent : LiveDesign.muted
-        return TrafficLightsCornerGrip()
-            .stroke(gripColor, style: StrokeStyle(lineWidth: 1.5, lineCap: .square))
-            .frame(width: gripVisualSize, height: gripVisualSize, alignment: .bottomTrailing)
-            .offset(y: ScopePanelPlacement.gripTopInterior - gripCornerInset)
-            .frame(width: gripHitSize, height: gripHitSize, alignment: .topLeading)
-            .contentShape(Rectangle())
-            .gesture(resizeGesture)
-    }
-
-    private func panelDragGesture(center: CGPoint) -> some Gesture {
-        DragGesture(minimumDistance: 4, coordinateSpace: .global)
-            .onChanged { drag in
-                if !isDragging {
-                    isDragging = true
-                    dragOrigin = center
-                }
-                guard let origin = dragOrigin else { return }
-                let proposed = CGPoint(
-                    x: origin.x + drag.translation.width,
-                    y: origin.y + drag.translation.height)
-                let snapped = clamp(TrafficLightsAssist.snap(proposed))
-                let cell = TrafficLightsAssist.hapticCell(snapped)
-                if cell != snapCell { snapCell = cell }
-                ScopeCanvasSlot.assign(
-                    &sessionCenter, &sessionCenterPortrait, in: bounds, snapped)
-            }
-            .onEnded { _ in
-                if let final = ScopeCanvasSlot.pick(
-                    sessionCenter, sessionCenterPortrait, in: bounds)
-                {
-                    let stored = TrafficLightsAssist.StoredCenter(center: final, in: bounds)
-                    if ScopeCanvasSlot.forBounds(bounds) == .portrait {
-                        store.positionPortrait = stored
-                    } else {
-                        store.position = stored
-                    }
-                    store.persist()
-                }
-                isDragging = false
-                dragOrigin = nil
-            }
-    }
-
-    private var resizeGesture: some Gesture {
-        DragGesture(minimumDistance: 4, coordinateSpace: .global)
-            .onChanged { drag in
-                if !isResizing {
-                    isResizing = true
-                    resizeStartScale = store.scale
-                }
-                let reach = TrafficLightsAssist.baseSize.width + TrafficLightsAssist.baseSize.height
-                let delta = (drag.translation.width + drag.translation.height) / reach
-                store.scale = TrafficLightsAssist.clampedScale(resizeStartScale + delta)
-            }
-            .onEnded { _ in
-                isResizing = false
-                store.persist()
-            }
-    }
-
-    private func resolvedCenter() -> CGPoint {
-        TrafficLightsAssist.resolvedCenter(
+        let movement = placementBounds ?? ScopePanelPlacement.bounds(in: bounds)
+        let center = TrafficLightsAssist.resolvedCenter(
             session: ScopeCanvasSlot.pick(sessionCenter, sessionCenterPortrait, in: bounds),
             stored: ScopeCanvasSlot.pick(store.position, store.positionPortrait, in: bounds),
-            defaultCenter: defaultCenter,
-            size: size,
-            bounds: bounds)
-    }
-
-    private func clamp(_ point: CGPoint) -> CGPoint {
-        ScopePanelPlacement.clamp(point, size: size, in: movementBounds)
-    }
-}
-
-private struct TrafficLightsCornerGrip: Shape {
-    func path(in rect: CGRect) -> Path {
-        let leg = min(rect.width, rect.height)
-        let vertex = CGPoint(x: rect.maxX, y: rect.maxY)
-        var path = Path()
-        path.move(to: vertex)
-        path.addLine(to: CGPoint(x: vertex.x - leg, y: vertex.y))
-        path.move(to: vertex)
-        path.addLine(to: CGPoint(x: vertex.x, y: vertex.y - leg))
-        return path
+            defaultCenter: defaultCenter, size: size, bounds: bounds)
+        MonitorMovableScopePanel(layout: MonitorScopePanelLayout(baseSize: TrafficLightsAssist.baseSize,
+            preferredSize: size, center: center, scale: store.scale, canvas: bounds, movementBounds: movement),
+            resizeLabel: "Resize traffic lights",
+            onMove: { event in
+                switch event {
+                case .began: break
+                case .cancelled(let retiredCanvas):
+                    ScopeCanvasSlot.assign(&sessionCenter, &sessionCenterPortrait, in: retiredCanvas, nil)
+                case .changed(let center):
+                    ScopeCanvasSlot.assign(&sessionCenter, &sessionCenterPortrait, in: bounds, center)
+                case .ended:
+                    guard let center = ScopeCanvasSlot.pick(sessionCenter, sessionCenterPortrait, in: bounds) else { return }
+                    let stored = TrafficLightsAssist.StoredCenter(center: center, in: bounds)
+                    if ScopeCanvasSlot.forBounds(bounds) == .portrait { store.positionPortrait = stored }
+                    else { store.position = stored }
+                    store.persist()
+                }
+            }, onResize: { store.scale = TrafficLightsAssist.clampedScale($0) },
+            onResizeEnded: { store.persist() }, content: content)
     }
 }

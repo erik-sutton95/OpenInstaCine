@@ -7,40 +7,9 @@ import SwiftUI
 typealias ScopePalette = MonitorUI.MonitorScopePalette
 
 /// Landscape and portrait keep independent stored centres.
-enum ScopeCanvasSlot: String, Sendable {
-    case landscape
-    case portrait
+typealias ScopeCanvasSlot = MonitorScopeCanvasSlot
 
-    static func forBounds(_ bounds: CGRect) -> Self {
-        bounds.height > bounds.width ? .portrait : .landscape
-    }
-
-    static func pick<T>(_ landscape: T?, _ portrait: T?, in bounds: CGRect) -> T? {
-        switch forBounds(bounds) {
-        case .portrait: portrait
-        case .landscape: landscape
-        }
-    }
-
-    static func assign<T>(
-        _ landscape: inout T?, _ portrait: inout T?, in bounds: CGRect, _ value: T?
-    ) {
-        switch forBounds(bounds) {
-        case .portrait: portrait = value
-        case .landscape: landscape = value
-        }
-    }
-}
-
-enum ScopePanelSize {
-    static let waveform = CGSize(width: 250, height: 153)
-    static let parade = CGSize(width: 250, height: 153)
-    static let histogram = CGSize(width: 250, height: 77)
-    static let vectorscope = CGSize(width: 190, height: 190)
-    static let trafficLights = CGSize(width: 74, height: 168)
-    /// Compact HUD chip (ND number + stops), not a scope plate.
-    static let ndMeter = CGSize(width: 84, height: 30)
-}
+typealias ScopePanelSize = MonitorScopePanelSize
 
 /// Display level from `ScopeDisplayScale` → y inside `rect`.
 ///
@@ -473,42 +442,7 @@ private struct ScopeBundleScope<Content: View>: View {
     var body: some View { content(model.monitorSamples.displayBundle) }
 }
 
-private struct ScopeMiniChrome<Content: View>: View {
-    let title: String
-    let chip: String
-    let size: CGSize
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            content()
-            HStack(spacing: 4) {
-                Text(title.uppercased())
-                    .font(.system(size: 6.5, weight: .bold, design: .monospaced))
-                    .foregroundStyle(LiveDesign.text.opacity(0.6))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-                Spacer(minLength: 2)
-                Text(chip)
-                    .font(.system(size: 6.5, weight: .bold, design: .monospaced))
-                    .foregroundStyle(MonitorTheme.accent.opacity(0.92))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-            }
-            .padding(.horizontal, 7)
-            .padding(.top, 5)
-            .padding(.bottom, 2)
-        }
-        .frame(width: size.width, height: size.height)
-        .compositingGroup()
-        .monitorGlass(
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous), density: .scope
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .shadow(color: .black.opacity(0.34), radius: 11, y: 8)
-        .allowsHitTesting(false)
-    }
-}
+private typealias ScopeMiniChrome = MonitorScopePanelPlate
 
 /// OpenZCine `drawVectorscopeGraticule` — ring, crosshair, dashed I-phase
 /// skin line, 75% boxes. Geometry lives on ``VectorscopeGraticule`` so the

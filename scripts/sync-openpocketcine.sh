@@ -70,6 +70,7 @@ LUNA_OWNED=(
   # source adapters and generation checks; donor publishers cannot be restored.
   OpenInstaCine/LiveFrameSample.swift
   OpenInstaCine/LiveScopes.swift
+  OpenInstaCine/ScopePanelPlacement.swift
   OpenInstaCine/ScopeTraceMetalView.swift
   OpenInstaCine/Assists/WaveformAssist.swift
   OpenInstaCine/Assists/ParadeAssist.swift
@@ -89,6 +90,8 @@ LUNA_OWNED=(
   OpenInstaCine/Assists/AssistInspectorImageRenderer.swift
   OpenInstaCine/Assists/FalseColorAssist.swift
   OpenInstaCine/Assists/HistogramAssist.swift
+  OpenInstaCine/Assists/NDAssist.swift
+  OpenInstaCine/Assists/TrafficLightsAssist.swift
   OpenInstaCine/MediaPlayer.swift
   OpenInstaCine/WatcherRelayClient.swift
   OpenInstaCine/Assists/AssistInspectorPreview.swift
