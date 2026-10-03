@@ -870,6 +870,52 @@ final class MonitorUIFlowTests: XCTestCase {
         }
     }
 
+    func testCommonDisplayControlsKeepLiveAndCleanIndependentAfterRelaunch() throws {
+        app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "settings"
+        app.launch()
+        func openDisplay() {
+            let tabs = app.scrollViews["monitor.settings.tabs"]
+            XCTAssertTrue(tabs.waitForExistence(timeout: 10))
+            let tab = app.buttons["monitor.settings.tab.Display"]
+            reveal(tab, in: tabs, portrait: true)
+            tab.tap()
+        }
+        func control(_ mode: String) -> XCUIElement {
+            let button = app.buttons["monitor.settings.display.toggle.\(mode).Status Bar"]
+            for _ in 0..<12 where !button.isHittable { app.swipeUp() }
+            XCTAssertTrue(button.isHittable, "The actual common visibility switch must be reachable: \(app.debugDescription)")
+            return button
+        }
+        openDisplay()
+        let live = control("live")
+        let originalLive = try XCTUnwrap(live.value as? String)
+        XCTAssertTrue(["On", "Off"].contains(originalLive))
+        live.tap()
+        let changedLive = originalLive == "On" ? "Off" : "On"
+        XCTAssertEqual(live.value as? String, changedLive)
+        let clean = control("clean")
+        let originalClean = try XCTUnwrap(clean.value as? String)
+        XCTAssertTrue(["On", "Off"].contains(originalClean))
+        clean.tap()
+        let changedClean = originalClean == "On" ? "Off" : "On"
+        XCTAssertEqual(clean.value as? String, changedClean)
+        capture("SIMULATED-common-display-clean-controls")
+        app.terminate()
+        app.launch()
+        openDisplay()
+        let restoredLive = control("live")
+        XCTAssertEqual(restoredLive.value as? String, changedLive)
+        restoredLive.tap()
+        XCTAssertEqual(restoredLive.value as? String, originalLive)
+        let restoredClean = control("clean")
+        XCTAssertEqual(restoredClean.value as? String, changedClean,
+            "Restoring Live must preserve the independent Clean layout")
+        restoredClean.tap()
+        XCTAssertEqual(restoredClean.value as? String, originalClean)
+        rotate(.landscapeLeft)
+        capture("SIMULATED-common-display-restored-landscape")
+    }
+
     func testCommonCachePreferenceSurvivesRelaunchAndClearCanBeCancelled() throws {
         app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "settings"
         app.launch()

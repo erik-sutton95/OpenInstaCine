@@ -477,13 +477,11 @@ fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {
     val phaseLabel = connectionPhaseLabel(phase, failure)
     val view = LocalView.current
     var legalKind by remember { mutableStateOf<LegalKind?>(null) }
-    var expandedDisp by remember { mutableStateOf<PocketDispMode?>(null) }
     var confirmClearCache by remember { mutableStateOf(false) }
     var showLutPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(model.chromeEditorReturnMode) {
-        val returning = model.chromeEditorReturnMode ?: return@LaunchedEffect
-        expandedDisp = returning
+        if (model.chromeEditorReturnMode == null) return@LaunchedEffect
         model.chromeEditorReturnMode = null
     }
 
@@ -508,7 +506,7 @@ fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {
                 OperatorSettingsTab.SHARING -> SharingRows()
                 OperatorSettingsTab.ASSIST -> AssistRows(model, status.monitorColorMode) { showLutPicker = true }
                 OperatorSettingsTab.CONTROLS -> ControlsRows(model)
-                OperatorSettingsTab.DISPLAY -> DisplayRows(model, isLive, expandedDisp) { expandedDisp = it }
+                OperatorSettingsTab.DISPLAY -> DisplayRows(model, isLive)
                 OperatorSettingsTab.STORAGE -> StorageRows(model) { confirmClearCache = true }
                 OperatorSettingsTab.SYSTEM -> SystemRows(model) { legalKind = it }
             }
@@ -1069,65 +1067,44 @@ private fun ControlsRows(model: AppModel) {
 }
 
 @Composable
-private fun DisplayRows(
-    model: AppModel,
-    isLive: Boolean,
-    expandedDisp: PocketDispMode?,
-    onExpandDisp: (PocketDispMode?) -> Unit,
-) {
+internal fun DisplayRows(model: AppModel, isLive: Boolean) {
     val view = LocalView.current
     com.opencapture.monitorui.settings.MonitorPanelSettings(
         hdrDisplay = model.hdrDisplay, help = SettingsHelpCopy.HDR_DISPLAY,
         onChange = model::updateHdrDisplay, feedback = { operatorHaptic(view, model.hapticsEnabled) },
     )
-    PocketDispMode.entries.forEach { mode ->
-        SettingsRowCard(
-            title = mode.settingsTitle,
-            onReset = {
-                operatorHaptic(view, model.hapticsEnabled)
-                resetDispChrome(model, mode)
-            },
-        ) {
-            Text(
-                mode.settingsCaption,
-                style = LiveType.ui(10.5f),
-                color = LiveDesign.muted,
-                modifier = Modifier.padding(vertical = 5.dp),
-            )
-            DispSectionBody(model, mode, isLive, view)
-        }
-    }
-}
-
-@Composable
-private fun DispSectionBody(model: AppModel, mode: PocketDispMode, isLive: Boolean, view: View) {
-    if (isLive) {
-        SettingsActionPill(
-            title = "Edit view",
-            modifier = Modifier.padding(vertical = 8.dp),
-            onClick = {
+    val status by model.session.chromeStatus.collectAsState()
+    val capabilities = remember(status) { model.monitorLayout() }
+    val sections = PocketDispMode.entries.map { mode ->
+        val chrome = model.chrome(mode)
+        com.opencapture.monitorui.settings.MonitorDisplaySection(
+            id = mode.name, title = mode.settingsTitle, caption = mode.settingsCaption,
+            reset = { operatorHaptic(view, model.hapticsEnabled); resetDispChrome(model, mode) },
+            edit = if (isLive) ({
                 operatorHaptic(view, model.hapticsEnabled)
                 model.beginChromeEditing(mode)
+            }) else null,
+            unavailableEditHelp = "Connect to arrange this on the monitor.",
+            visibility = dispToggleSpecs.filter {
+                when (it.section) {
+                    PocketDispSection.GIMBAL_STICK -> capabilities.gimbal
+                    PocketDispSection.ZOOM_CHIP -> capabilities.zoom
+                    else -> true
+                }
+            }.map { spec ->
+                com.opencapture.monitorui.settings.MonitorDisplayToggle(
+                    id = mode.name + "." + spec.section.name, title = spec.title,
+                    isOn = chrome.isVisible(spec.section), help = spec.help, action = {
+                        operatorHaptic(view, model.hapticsEnabled)
+                        model.toggleChrome(spec.section, mode)
+                    })
             },
-        )
-    } else {
-        Text(
-            "Connect to arrange this on the monitor.",
-            style = LiveType.ui(11f, FontWeight.SemiBold),
-            color = LiveDesign.muted,
-            modifier = Modifier.padding(vertical = 6.dp),
+            pinsTitle = "View assists that stay on in clean view",
+            pins = if (mode == PocketDispMode.CLEAN) cleanViewPins(model, view) else emptyList(),
+            style = com.opencapture.monitorui.settings.MonitorDisplaySectionStyle.CONTROLS,
         )
     }
-    DispToggles(model, mode, view)
-    if (mode == PocketDispMode.CLEAN) {
-        Text(
-            "View assists that stay on in clean view",
-            style = LiveType.ui(11f, FontWeight.SemiBold),
-            color = LiveDesign.muted,
-            modifier = Modifier.padding(top = 8.dp, bottom = 6.dp),
-        )
-        CleanViewPinStrip(model, view)
-    }
+    com.opencapture.monitorui.settings.MonitorDisplaySections(sections = sections)
 }
 
 private data class DispToggleSpec(val section: PocketDispSection, val title: String, val help: String)
@@ -1165,57 +1142,18 @@ private val dispToggleSpecs =
         DispToggleSpec(PocketDispSection.FOCUS_BOX, "AF Box", "Focus and face-tracking brackets on the feed."),
     )
 
-@Composable
-private fun DispToggles(model: AppModel, mode: PocketDispMode, view: View) {
-    val chrome = model.chrome(mode)
-    val status by model.session.chromeStatus.collectAsState()
-    // The camera's declarations change with what the session reports.
-    val capabilities = remember(status) { model.monitorLayout() }
-    dispToggleSpecs.filter {
-        when (it.section) {
-            PocketDispSection.GIMBAL_STICK -> capabilities.gimbal
-            PocketDispSection.ZOOM_CHIP -> capabilities.zoom
-            else -> true
-        }
-    }.forEach { spec ->
-        SettingsSwitchInlineRow(
-            title = spec.title,
-            help = spec.help,
-            showTopDivider = true,
-            isOn = chrome.isVisible(spec.section),
-        ) {
-            operatorHaptic(view, model.hapticsEnabled)
-            model.toggleChrome(spec.section, mode)
-        }
+private fun cleanViewPins(model: AppModel, view: View): List<com.opencapture.monitorui.settings.MonitorDisplayToggle> =
+    CleanPinTool.entries.filter { it != CleanPinTool.AUDIO || model.monitorLayout().audio }.map { tool ->
+        com.opencapture.monitorui.settings.MonitorDisplayToggle(
+            id = "clean.pin." + tool.key, title = tool.title,
+            isOn = model.assist.pinned.any { it.name == tool.key },
+            accessibilityLabel = "Keep ${tool.title} in clean view", action = {
+                operatorHaptic(view, model.hapticsEnabled)
+                val next = toggledCleanPins(model.assist.pinned.map { it.name }.toSet(), tool.key)
+                model.assist.pinned = next.mapNotNull(LiveAssistTool::fromPersisted).toSet()
+                model.updateCleanViewPinnedTools(next)
+            })
     }
-}
-
-@Composable
-private fun CleanViewPinStrip(model: AppModel, view: View) {
-    val assist = model.assist
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        CleanPinTool.entries.filter { it != CleanPinTool.AUDIO || model.monitorLayout().audio }.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                row.forEach { tool ->
-                    val on = assist.pinned.any { it.name == tool.key }
-                    DisplayToggleItem(
-                        title = tool.title,
-                        isOn = on,
-                        modifier = Modifier.weight(1f),
-                        onToggle = {
-                            operatorHaptic(view, model.hapticsEnabled)
-                            val next = toggledCleanPins(assist.pinned.map { it.name }.toSet(), tool.key)
-                            assist.pinned =
-                                next.mapNotNull(LiveAssistTool::fromPersisted).toSet()
-                            model.updateCleanViewPinnedTools(next)
-                        },
-                    )
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
 
 @Composable
 private fun StorageRows(model: AppModel, onClearCache: () -> Unit) {

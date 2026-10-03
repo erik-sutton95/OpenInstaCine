@@ -485,157 +485,68 @@ struct SettingsRootView: View {
                 hdrDisplay: Bindable(model).hdrDisplay, help: SettingsHelpCopy.hdrDisplay,
                 feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }
             )
-            dispSectionCard(
-                .live,
-                reset: { model.dispLive = .liveDefaults }
-            )
-            dispSectionCard(
-                .clean,
-                reset: { model.dispClean = .cleanDefaults }
-            )
+            MonitorDisplaySections(sections: PocketDispMode.allCases.map { mode in
+                MonitorDisplaySection(
+                    id: mode.rawValue, title: mode.settingsTitle, caption: mode.settingsCaption,
+                    reset: {
+                        OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled)
+                        if mode == .clean { model.dispClean = .cleanDefaults }
+                        else { model.dispLive = .liveDefaults }
+                    },
+                    editHint: SettingsHelpCopy.editView,
+                    edit: model.isLive ? { model.beginChromeEditing(mode) } : nil,
+                    unavailableEditHelp: "Connect to arrange this on the monitor.",
+                    visibility: displayVisibility(mode),
+                    pinsTitle: "View assists that stay on in clean view",
+                    pins: mode == .clean ? cleanPins : [], style: .controls)
+            })
         }
-        .onAppear {
-            model.chromeEditorReturnMode = nil
-        }
+        .onAppear { model.chromeEditorReturnMode = nil }
     }
 
-    @ViewBuilder
-    private func dispSectionCard(
-        _ section: PocketDispMode,
-        reset: @escaping () -> Void
-    ) -> some View {
-        SettingsRowCard(title: section.settingsTitle, onReset: reset) {
-            Text(section.settingsCaption)
-                .font(MonitorTheme.font(10.5)).foregroundStyle(MonitorTheme.muted)
-                .padding(.vertical, 5)
-            dispSectionBody(section)
-        }
-    }
-
-    @ViewBuilder
-    private func dispSectionBody(_ section: PocketDispMode) -> some View {
-        if model.isLive {
-            SettingsActionPill(title: "Edit view") {
-                model.beginChromeEditing(section)
-            }
-            .padding(.vertical, 8)
-            .accessibilityHint(SettingsHelpCopy.editView)
-        } else {
-            Text("Connect to arrange this on the monitor.")
-                .font(LiveType.ui(size: 11, weight: .semibold))
-                .foregroundStyle(LiveDesign.muted)
-                .padding(.vertical, 6)
-        }
-        dispToggles(section == .clean ? Bindable(model).dispClean : Bindable(model).dispLive)
-        if section == .clean {
-            cleanViewPinBlock
-        }
-    }
-
-    @ViewBuilder
-    private var cleanViewPinBlock: some View {
-        Text("View assists that stay on in clean view")
-            .font(LiveType.ui(size: 11, weight: .semibold))
-            .foregroundStyle(LiveDesign.muted)
-            .padding(.top, 8)
-        CleanViewPinStrip()
-    }
-
-    @ViewBuilder
-    private func dispToggles(_ chrome: Binding<PocketDispChrome>) -> some View {
-        SettingsSwitchInlineRow(
-            title: "Status Bar",
-            help: "REC, timecode, format, and FPS along the top of the feed.",
-            showTopDivider: true,
-            isOn: chrome.wrappedValue.statusBar
-        ) { chrome.wrappedValue.statusBar.toggle() }
-        SettingsSwitchInlineRow(
-            title: "Tool Bar",
-            help: "The view-assist strip under the feed.",
-            isOn: chrome.wrappedValue.toolBar
-        ) { chrome.wrappedValue.toolBar.toggle() }
-        SettingsSwitchInlineRow(
-            title: "Camera Values",
-            help: "ISO, shutter, white balance, and the rest of the capture strip.",
-            isOn: chrome.wrappedValue.cameraValues
-        ) { chrome.wrappedValue.cameraValues.toggle() }
-        SettingsSwitchInlineRow(
-            title: "Lock Button",
-            help: "Side-rail lock. Remounts while the interface is locked.",
-            isOn: chrome.wrappedValue.lockButton
-        ) { chrome.wrappedValue.lockButton.toggle() }
-        SettingsSwitchInlineRow(
-            title: "Batteries",
-            help: "Phone and camera battery cluster.",
-            isOn: chrome.wrappedValue.batteries
-        ) { chrome.wrappedValue.batteries.toggle() }
-        SettingsSwitchInlineRow(
-            title: "REC",
-            help: "Standby / recording chip on the status bar.",
-            isOn: chrome.wrappedValue.recReadout
-        ) { chrome.wrappedValue.recReadout.toggle() }
-        if OsmoMonitorPresentation.capabilities(model.session).timecode {
-            SettingsSwitchInlineRow(
-                title: "Timecode",
-                help: "Running timecode on the status bar.",
-                isOn: chrome.wrappedValue.timecode
-            ) { chrome.wrappedValue.timecode.toggle() }
-        }
-        SettingsSwitchInlineRow(
-            title: "Format",
-            help: "Recording resolution and frame rate.",
-            isOn: chrome.wrappedValue.format
-        ) { chrome.wrappedValue.format.toggle() }
-        SettingsSwitchInlineRow(
-            title: "Color",
-            help: "Color mode chip on the status bar.",
-            isOn: chrome.wrappedValue.color
-        ) { chrome.wrappedValue.color.toggle() }
-        SettingsSwitchInlineRow(
-            title: "Storage",
-            help: "Remaining media time on the status bar.",
-            isOn: chrome.wrappedValue.storage
-        ) { chrome.wrappedValue.storage.toggle() }
-        SettingsSwitchInlineRow(
-            title: "FPS",
-            help: "Live-view rate and link bars.",
-            isOn: chrome.wrappedValue.fps
-        ) { chrome.wrappedValue.fps.toggle() }
-        SettingsSwitchInlineRow(
-            title: "Record",
-            help: "Rail record lamp. Stays available while rolling.",
-            isOn: chrome.wrappedValue.railRecord
-        ) { chrome.wrappedValue.railRecord.toggle() }
-        SettingsSwitchInlineRow(
-            title: "Media",
-            help: "Rail media button.",
-            isOn: chrome.wrappedValue.railMedia
-        ) { chrome.wrappedValue.railMedia.toggle() }
-        SettingsSwitchInlineRow(
-            title: "Settings",
-            help: "Rail settings button. Always an escape hatch.",
-            isOn: chrome.wrappedValue.railSettings
-        ) { chrome.wrappedValue.railSettings.toggle() }
+    private func displayVisibility(_ mode: PocketDispMode) -> [MonitorDisplayToggle] {
+        let chrome = mode == .clean ? Bindable(model).dispClean : Bindable(model).dispLive
         let capabilities = OsmoMonitorPresentation.capabilities(model.session)
-        if capabilities.zoom {
-            SettingsSwitchInlineRow(
-                title: "Zoom Chip",
-                help: "Live zoom readout on the feed.",
-                isOn: chrome.wrappedValue.zoomChip
-            ) { chrome.wrappedValue.zoomChip.toggle() }
+        let values: [(String, String, WritableKeyPath<PocketDispChrome, Bool>, Bool)] = [
+            ("Status Bar", "REC, timecode, format, and FPS along the top of the feed.", \.statusBar, true),
+            ("Tool Bar", "The view-assist strip under the feed.", \.toolBar, true),
+            ("Camera Values", "ISO, shutter, white balance, and the rest of the capture strip.", \.cameraValues, true),
+            ("Lock Button", "Side-rail lock. Remounts while the interface is locked.", \.lockButton, true),
+            ("Batteries", "Phone and camera battery cluster.", \.batteries, true),
+            ("REC", "Standby / recording chip on the status bar.", \.recReadout, true),
+            ("Timecode", "Running timecode on the status bar.", \.timecode, capabilities.timecode),
+            ("Format", "Recording resolution and frame rate.", \.format, true),
+            ("Color", "Color mode chip on the status bar.", \.color, true),
+            ("Storage", "Remaining media time on the status bar.", \.storage, true),
+            ("FPS", "Live-view rate and link bars.", \.fps, true),
+            ("Record", "Rail record lamp. Stays available while rolling.", \.railRecord, true),
+            ("Media", "Rail media button.", \.railMedia, true),
+            ("Settings", "Rail settings button. Always an escape hatch.", \.railSettings, true),
+            ("Zoom Chip", "Live zoom readout on the feed.", \.zoomChip, capabilities.zoom),
+            ("Gimbal Stick", "On-screen gimbal stick.", \.gimbalStick, capabilities.gimbal),
+            ("AF Box", "Focus and face-tracking brackets on the feed.", \.focusBox, true),
+        ]
+        return values.filter { $0.3 }.map { title, help, field, _ in
+            MonitorDisplayToggle(id: mode.rawValue + "." + title, title: title,
+                isOn: chrome.wrappedValue[keyPath: field], help: help) {
+                OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+                chrome.wrappedValue[keyPath: field].toggle()
+            }
         }
-        if capabilities.gimbal {
-            SettingsSwitchInlineRow(
-                title: "Gimbal Stick",
-                help: "On-screen gimbal stick.",
-                isOn: chrome.wrappedValue.gimbalStick
-            ) { chrome.wrappedValue.gimbalStick.toggle() }
+    }
+
+    private var cleanPins: [MonitorDisplayToggle] {
+        LiveAssistTool.cleanPinCases.filter {
+            $0 != .audioMeters || OsmoMonitorPresentation.capabilities(model.session).audio
+        }.map { tool in
+            MonitorDisplayToggle(id: "clean.pin." + tool.rawValue,
+                title: tool.displaySettingsTitle,
+                isOn: model.assist.cleanViewPinnedTools.contains(tool),
+                accessibilityLabel: "Keep \(tool.displaySettingsTitle) in clean view") {
+                OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled)
+                model.assist.toggleCleanViewPin(tool)
+            }
         }
-        SettingsSwitchInlineRow(
-            title: "AF Box",
-            help: "Focus and face-tracking brackets on the feed.",
-            isOn: chrome.wrappedValue.focusBox
-        ) { chrome.wrappedValue.focusBox.toggle() }
     }
 
     // MARK: - Storage
@@ -759,28 +670,5 @@ struct SettingsRootView: View {
         let version = info?["CFBundleShortVersionString"] as? String ?? "0.1"
         let build = info?["CFBundleVersion"] as? String ?? "1"
         return "\(version) (\(build))"
-    }
-}
-
-/// One switch per cinema view-assist tool — the DISP 2 keep list.
-struct CleanViewPinStrip: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 116), spacing: 7)], spacing: 7) {
-            // A camera without live audio levels offers no AUDIO pin.
-            ForEach(LiveAssistTool.cleanPinCases.filter { $0 != .audioMeters || OsmoMonitorPresentation.capabilities(model.session).audio }) { tool in
-                DisplayToggleItem(
-                    title: tool.displaySettingsTitle,
-                    isOn: model.assist.cleanViewPinnedTools.contains(tool)
-                ) {
-                    OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled)
-                    model.assist.toggleCleanViewPin(tool)
-                }
-                .accessibilityLabel("Keep \(tool.displaySettingsTitle) in clean view")
-                .accessibilityValue(
-                    model.assist.cleanViewPinnedTools.contains(tool) ? "On" : "Off")
-            }
-        }
     }
 }
