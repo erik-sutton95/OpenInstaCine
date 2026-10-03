@@ -2,6 +2,7 @@ import Insta360Apple
 import Insta360AppleTestSupport
 import Insta360Protocol
 import OpenCineCore
+import OpenCineMedia
 import OpenPocketViewCore
 import XCTest
 
@@ -55,6 +56,21 @@ final class CoreRecordControlTests: XCTestCase {
 /// media host, EV calibration and Core session, never cross.
 @MainActor
 final class SessionIsolationTests: XCTestCase {
+    func testActualLunaConnectionPortProducesSessionScopedMediaService() async throws {
+        let shell = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
+        let first = shell.openSession()
+        let media = try XCTUnwrap(shell.mediaService(for: first.id))
+        XCTAssertEqual(media.sessionID, first.id)
+        XCTAssertNil(shell.mediaService(for: CameraSessionID()))
+        do { _ = try await media.openBrowse(); XCTFail("An unconnected source cannot browse") }
+        catch let error as MediaServiceError { XCTAssertEqual(error, .unavailable) }
+        let next = shell.openSession()
+        XCTAssertNotEqual(next.id, first.id)
+        XCTAssertNil(shell.mediaService(for: first.id))
+        do { _ = try await media.openBrowse(); XCTFail("A replaced source cannot browse") }
+        catch let error as MediaServiceError { XCTAssertEqual(error, .unavailable) }
+        next.close(.requested)
+    }
     private func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<300 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
         XCTAssertTrue(condition(), "timed out")

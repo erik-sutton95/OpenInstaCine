@@ -5,6 +5,8 @@ import Insta360Apple
 import Insta360Protocol
 import Observation
 import OpenCineAppKit
+import struct OpenCineCore.CameraSessionID
+import OpenCineMedia
 import OpenPocketViewCore
 import UIKit
 import os
@@ -1376,6 +1378,10 @@ extension CameraSession: LunaConnectPort {
         let next = backend.openSession()
         next.configureLens(zoomDomain: 1...zoomCeiling)
         return next
+    }
+
+    func mediaService(for session: CameraSessionID) -> (any CameraMediaService)? {
+        backend.mediaService(for: session)
     }
 
     func forget(cameraID: UUID) { backend.forget(cameraID: cameraID) }
