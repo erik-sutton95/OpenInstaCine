@@ -53,69 +53,17 @@ extension LiveAssistState {
 
 struct DesqueezeLongPressMenu: View {
     @Bindable var assist: LiveAssistState
-
-    private var selected: String {
-        assist.desqueezeCustom
-            ? "Custom" : DesqueezeRatio.matching(assist.desqueezeFactor)?.rawValue ?? "Custom"
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SettingsInlineRow(
-                title: "Squeeze factor", help: DesqueezeAssist.help,
-                showTopDivider: false, stacked: true
-            ) {
-                VStack(spacing: 6) {
-                    choices(Array(DesqueezeRatio.allCases.prefix(4)).map(\.rawValue))
-                    choices(Array(DesqueezeRatio.allCases.suffix(3)).map(\.rawValue) + ["Custom"])
-                }
-            }
-            if assist.desqueezeCustom {
-                SettingsInlineRow(
-                    title: "Custom", help: "Adjust from 1.00× to 2.00× in 0.01 steps.",
-                    stacked: true
-                ) {
-                    VStack(alignment: .trailing, spacing: 6) {
-                        Text(String(format: "%.2f×", assist.desqueezeFactor))
-                            .font(LiveType.ui(size: 13, weight: .semibold, design: .monospaced))
-                            .accessibilityIdentifier("desqueeze.factor")
-                        Slider(
-                            value: Binding(
-                                get: { assist.desqueezeFactor },
-                                set: { assist.updateDesqueezeCustom($0) }),
-                            in: DesqueezeAssist.factorRange, step: DesqueezeAssist.factorStep
-                        ) { editing in
-                            if !editing { assist.persist() }
-                        }
-                        .tint(LiveDesign.accent)
-                        .accessibilityLabel("Custom squeeze factor")
-                        .accessibilityValue(String(format: "%.2f×", assist.desqueezeFactor))
-                    }
-                }
-            }
-            SettingsInlineRow(
-                title: "Direction", help: "Choose the squeeze direction of your lens or adapter.",
-                stacked: true
-            ) {
-                SettingsSegmented(
-                    options: ["Horizontal", "Vertical"],
-                    selected: assist.desqueezeHorizontal ? "Horizontal" : "Vertical", stacked: true
-                ) {
-                    assist.desqueezeHorizontal = $0 == "Horizontal"
-                    assist.persist()
-                }
-            }
-        }
-        .onDisappear { assist.persist() }
-    }
-
-    private func choices(_ options: [String]) -> some View {
-        SettingsSegmented(options: options, selected: selected, stacked: true) { value in
-            if let preset = DesqueezeRatio(rawValue: value) {
-                assist.selectDesqueezePreset(preset)
-            } else {
-                assist.selectDesqueezeCustom()
-            }
-        }
+        MonitorDesqueezeMenu(selected: assist.desqueezeCustom ? nil : DesqueezeRatio.matching(assist.desqueezeFactor),
+            custom: assist.desqueezeCustom, factor: Binding(get: { assist.desqueezeFactor }, set: {
+                assist.updateDesqueezeCustom($0)
+            }), horizontal: Binding(get: { assist.desqueezeHorizontal }, set: {
+                assist.desqueezeHorizontal = $0; assist.persist()
+            }), help: DesqueezeAssist.help, selectionFeedback: {
+                OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+            }, onSelect: {
+                if let preset = $0 { assist.selectDesqueezePreset(preset) }
+                else { assist.selectDesqueezeCustom() }
+            }, onFinish: { assist.persist() })
     }
 }

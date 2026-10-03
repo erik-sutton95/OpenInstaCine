@@ -379,6 +379,11 @@ private fun FocusBox(nx: Float, ny: Float) {
 
 @Composable
 internal fun FalseColorReferenceRuler(state: LiveAssistState, colorMode: Int, modifier: Modifier = Modifier) {
+    com.opencapture.monitorui.MonitorFalseColorReference(falseColorReferenceValues(state, colorMode), modifier)
+}
+
+internal fun falseColorReferenceValues(state: LiveAssistState, colorMode: Int):
+    com.opencapture.monitorui.MonitorFalseColorReferenceValues {
     val transfer = MonitorTransfer.fromColorMode(colorMode)
     val rec709 = state.falseColorRec709
     val segments = FalseColorReference.segments(state.falseColorScale, transfer, rec709, state.scopeCeiling)
@@ -388,8 +393,7 @@ internal fun FalseColorReferenceRuler(state: LiveAssistState, colorMode: Int, mo
         } else {
             emptyList()
         }
-    com.opencapture.monitorui.MonitorFalseColorReference(
-        com.opencapture.monitorui.MonitorFalseColorReferenceValues(
+    return com.opencapture.monitorui.MonitorFalseColorReferenceValues(
             subtitle = "${state.falseColorScale.menuLabel} · ${FalseColorReference.curveKeyLabel(colorMode, rec709)}",
             segments = segments.mapIndexed { index, segment ->
                 com.opencapture.monitorui.MonitorFalseColorReferenceSegment(index,
@@ -398,7 +402,7 @@ internal fun FalseColorReferenceRuler(state: LiveAssistState, colorMode: Int, mo
             markers = markers.mapIndexed { index, marker ->
                 com.opencapture.monitorui.MonitorFalseColorReferenceMarker(index, marker.label, marker.fraction)
             },
-            axisLabels = FalseColorReference.axisLabels(state.falseColorScale)), modifier)
+            axisLabels = FalseColorReference.axisLabels(state.falseColorScale))
 }
 
 private fun panelPx(

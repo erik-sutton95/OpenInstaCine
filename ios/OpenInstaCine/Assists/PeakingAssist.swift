@@ -123,56 +123,13 @@ struct PeakingLongPressMenu: View {
     var compact: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SettingsInlineRow(
-                title: "Sensitivity",
-                help: PeakingAssist.sensitivityHelp,
-                showTopDivider: false,
-                stacked: true
-            ) {
-                SettingsSegmented(
-                    options: PeakingAssist.sensitivityOptions,
-                    selected: options.sensitivity.rawValue,
-                    compact: compact,
-                    stacked: true
-                ) {
-                    guard let level = PeakingAssist.Sensitivity(rawValue: $0),
-                        level != options.sensitivity
-                    else { return }
-                    options.sensitivity = level
-                }
-            }
-            SettingsInlineRow(
-                title: "Color",
-                help: PeakingAssist.colorHelp,
-                stacked: compact
-            ) {
-                PeakingColorDots(
-                    selected: options.color,
-                    compact: compact
-                ) { color in
-                    guard color != options.color else { return }
-                    PeakingAssistHaptics.selection()
-                    options.color = color
-                }
-            }
-        }
-    }
-}
-
-/// OpenZCine `SettingsColorDots` + `SettingsPalette.peaking` (token swatches, not overlay RGB).
-private struct PeakingColorDots: View {
-    let selected: PeakingAssist.Color
-    var compact: Bool = false
-    let onSelect: (PeakingAssist.Color) -> Void
-
-    var body: some View {
-        MonitorSettingsColorDots(colors: PeakingAssist.palette.map {
+        MonitorPeakingMenu(options: $options, colors: PeakingAssist.palette.map {
             .init(value: $0, title: $0.rawValue, color: $0.swatch)
-        }, selected: selected, compact: compact, background: LiveDesign.background,
-            border: LiveDesign.hairline, onSelect: onSelect).buttonStyle(.zcTapTarget)
+        }, sensitivityHelp: PeakingAssist.sensitivityHelp, colorHelp: PeakingAssist.colorHelp,
+            compact: compact, feedback: { PeakingAssistHaptics.selection() })
     }
 }
+
 /// OpenZCine `OperatorSettingsHaptics.selection` (light tap; Pocket has no haptics preference yet).
 private enum PeakingAssistHaptics {
     @MainActor

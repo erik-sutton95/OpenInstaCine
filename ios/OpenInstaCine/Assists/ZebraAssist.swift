@@ -295,116 +295,26 @@ struct ZebraLongPressMenu: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SettingsInlineRow(
-                title: ZebraAssist.unitsTitle,
-                help: ZebraAssist.unitsHelp,
-                showTopDivider: false,
-                stacked: compact
-            ) {
-                SettingsSegmented(
-                    options: ZebraAssist.unitOptions,
-                    selected: options.unit.editorLabel,
-                    compact: compact,
-                    stacked: compact
-                ) {
-                    let unit = ZebraAssist.Unit.fromEditorLabel($0)
-                    guard unit != options.unit else { return }
-                    options.unit = unit
-                }
-            }
-            zebraZoneRow(
-                title: ZebraAssist.highlightTitle,
-                help: ZebraAssist.highlightHelp,
-                enabled: options.highlightEnabled,
-                onEnabledToggle: {
-                    ZebraAssistHaptics.selection()
-                    options.highlightEnabled.toggle()
-                },
-                value: Binding(
-                    get: { options.highlightIRE },
-                    set: { options.highlightIRE = min(100, max(0, $0)) }),
-                colors: ZebraAssist.highlightPalette,
-                selectedColor: options.highlightColor
-            ) { color in
-                options.highlightColor = color
-            }
-            zebraZoneRow(
-                title: ZebraAssist.midtoneTitle,
-                help: ZebraAssist.midtoneHelp,
-                enabled: options.midtoneEnabled,
-                onEnabledToggle: {
-                    ZebraAssistHaptics.selection()
-                    options.midtoneEnabled.toggle()
-                },
-                value: Binding(
-                    get: { options.midtoneIRE },
-                    set: { options.midtoneIRE = min(100, max(0, $0)) }),
-                colors: ZebraAssist.midtonePalette,
-                selectedColor: options.midtoneColor
-            ) { color in
-                options.midtoneColor = color
-            }
-        }
+        MonitorZebraMenu(units: ZebraAssist.Unit.allCases, unit: $options.unit, title: { $0.editorLabel },
+            unitsTitle: ZebraAssist.unitsTitle, unitsHelp: ZebraAssist.unitsHelp,
+            highlightHelp: ZebraAssist.highlightHelp, midtoneHelp: ZebraAssist.midtoneHelp,
+            highlight: zone(enabled: $options.highlightEnabled, threshold: $options.highlightIRE,
+                colors: ZebraAssist.highlightPalette, paint: $options.highlightColor),
+            midtone: zone(enabled: $options.midtoneEnabled, threshold: $options.midtoneIRE,
+                colors: ZebraAssist.midtonePalette, paint: $options.midtoneColor), compact: compact,
+            selectionFeedback: { ZebraAssistHaptics.selection() }, toggleFeedback: {
+                ZebraAssistHaptics.selection(); ZebraAssistHaptics.selection()
+            })
     }
-
-    private func zebraZoneRow(
-        title: String,
-        help: String,
-        enabled: Bool,
-        onEnabledToggle: @escaping () -> Void,
-        value: Binding<Double>,
-        colors: [ZebraAssist.StripeColor],
-        selectedColor: ZebraAssist.StripeColor,
-        onColor: @escaping (ZebraAssist.StripeColor) -> Void
-    ) -> some View {
-        VStack(spacing: 0) {
-            SettingsSwitchInlineRow(
-                title: title, help: help, isOn: enabled, action: onEnabledToggle)
-            VStack(alignment: .leading, spacing: 0) {
-                SettingsInlineRow(title: "Threshold") {
-                    HStack(spacing: 9) {
-                        Slider(value: value, in: 0...100, step: 1)
-                            .frame(minWidth: 76, idealWidth: 110, maxWidth: 140)
-                            .tint(MonitorTheme.accent)
-                            .accessibilityLabel("\(title) threshold")
-                        Text(
-                            "\(options.displayValue(for: value.wrappedValue, transfer: transfer, clipByte: clipByte))"
-                        )
-                        .font(MonitorTheme.font(12, weight: .medium)).monospacedDigit()
-                        .foregroundStyle(MonitorTheme.secondary)
-                        .frame(width: 34, alignment: .trailing)
-                    }
-                }
-                SettingsInlineRow(title: "Colour") {
-                    ZebraColorDots(
-                        colors: colors, selected: selectedColor, compact: compact, onSelect: onColor
-                    )
-                }
-            }
-            .padding(.leading, 14)
-            .opacity(enabled ? 1 : 0.4)
-            .disabled(!enabled)
-        }
-    }
-
-}
-
-/// OpenZCine `SettingsColorDots` + highlight / midtone palettes (token swatches, not overlay RGB).
-private struct ZebraColorDots: View {
-    let colors: [ZebraAssist.StripeColor]
-    let selected: ZebraAssist.StripeColor
-    var compact: Bool = false
-    let onSelect: (ZebraAssist.StripeColor) -> Void
-
-    var body: some View {
-        MonitorSettingsColorDots(colors: colors.map { .init(value: $0, title: $0.rawValue, color: $0.swatch) }, selected: selected, compact: compact, background: LiveDesign.background,
-            border: LiveDesign.hairline) { color in
-            ZebraAssistHaptics.selection()
-            onSelect(color)
-        }.buttonStyle(.zcTapTarget)
+    private func zone(enabled: Binding<Bool>, threshold: Binding<Double>, colors: [ZebraAssist.StripeColor],
+        paint: Binding<ZebraAssist.StripeColor>) -> MonitorZebraZone<ZebraAssist.StripeColor> {
+        MonitorZebraZone(enabled: enabled, threshold: Binding(get: { threshold.wrappedValue }, set: {
+            threshold.wrappedValue = min(100, max(0, $0))
+        }), displayValue: options.displayValue(for: threshold.wrappedValue, transfer: transfer, clipByte: clipByte),
+            colors: colors.map { .init(value: $0, title: $0.rawValue, color: $0.swatch) }, paint: paint)
     }
 }
+
 /// OpenZCine `OperatorSettingsHaptics.selection` (light tap; Pocket has no haptics preference yet).
 private enum ZebraAssistHaptics {
     @MainActor

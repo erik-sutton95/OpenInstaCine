@@ -47,72 +47,16 @@ private struct GuidesLongPressMenu: View {
     @Bindable var assist: LiveAssistState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SettingsInlineRow(title: "Family", showTopDivider: false) {
-                MonitorCaptureTabs(
-                    options: GuideFamily.allCases.map(\.rawValue),
-                    selection: assist.guideFamily.rawValue, title: { $0 }
-                ) { value in
-                    guard let family = GuideFamily(rawValue: value), family != assist.guideFamily
-                    else { return }
-                    OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
-                    assist.guideFamily = family
-                    assist.persist()
-                }
-            }
-            SettingsInlineRow(title: "Ratios", stacked: true) {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 62), spacing: 6)], spacing: 6) {
-                    MonitorSnapshotRows(GuideAspect.ratios(for: assist.guideFamily)) { ratio in
-                        Button {
-                            OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
-                            assist.toggleGuide(ratio)
-                        } label: {
-                            GuidesGlassChoice(
-                                title: ratio.rawValue,
-                                isSelected: assist.selectedGuides.contains(ratio))
-                        }
-                        .buttonStyle(.zcTapTarget)
-                        .accessibilityAddTraits(
-                            assist.selectedGuides.contains(ratio) ? .isSelected : [])
-                    }
-                }
-            }
-            SettingsSwitchInlineRow(title: "Mask outside frame", isOn: assist.guideMask) {
-                OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
-                assist.guideMask.toggle()
-                assist.persist()
-            }
-        }
+        MonitorGuidesMenu(family: Binding(get: { assist.guideFamily }, set: {
+            assist.guideFamily = $0; assist.persist()
+        }), selected: assist.selectedGuides, mask: Binding(get: { assist.guideMask }, set: {
+            OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+            assist.guideMask = $0; assist.persist()
+        }), feedback: {
+            OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+        }, onToggle: { assist.toggleGuide($0) })
     }
 }
 
 /// Native guide rendering and the union mask belong to the common monitor UI.
 typealias AspectGuideFrameView = MonitorAspectGuideFrames
-
-/// OpenZCine `GlassChoice`.
-private struct GuidesGlassChoice: View {
-    let title: String
-    var isSelected = false
-
-    var body: some View {
-        Text(title)
-            .font(MonitorTheme.font(11, weight: .medium))
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .allowsTightening(true)
-            .foregroundStyle(
-                isSelected ? Color(red: 8 / 255, green: 25 / 255, blue: 31 / 255) : LiveDesign.text
-            )
-            .padding(.horizontal, 2)
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: 36)
-            .background(
-                isSelected ? LiveDesign.accent : LiveDesign.glassBright,
-                in: RoundedRectangle(cornerRadius: LiveDesign.cornerRadius)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: LiveDesign.cornerRadius)
-                    .stroke(isSelected ? LiveDesign.accentDim : LiveDesign.hairline, lineWidth: 1)
-            )
-    }
-}

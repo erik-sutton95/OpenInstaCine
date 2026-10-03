@@ -37,16 +37,11 @@ private struct GridLongPressMenu: View {
     @Bindable var assist: LiveAssistState
 
     var body: some View {
-        VStack(spacing: 0) {
-            MonitorSnapshotRows(GridAssist.Option.allCases) { option in
-                SettingsSwitchInlineRow(
-                    title: option.rawValue, showTopDivider: option != .thirds,
-                    isOn: isOn(option)
-                ) {
-                    OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
-                    toggle(option)
-                }
-            }
+        MonitorGridMenu(selected: Set(GridAssist.Option.allCases.filter(isOn)), feedback: {
+            OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+        }) { option in
+            OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
+            toggle(option)
         }
     }
 

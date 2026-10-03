@@ -21,6 +21,8 @@ import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistTool
 import com.opencapture.openpocketcine.assists.PeakingColor
 import com.opencapture.openpocketcine.assists.WaveformMode
+import com.opencapture.openpocketcine.assists.ZebraUnit
+import com.opencapture.monitorui.MonitorAudioOrientation
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -74,6 +76,52 @@ class ScopeTuningInputTest {
             val beforeSameFraction = persists
             tap(node(fixture) { it.contentDescription?.toString() == "0.5" })
             scenario.onActivity { assertEquals(beforeSameFraction, persists) }
+        }
+    }
+
+    @Test fun zebraUnitChangesOnlyItsDisplayAxisAndDisabledZoneRejectsInput() {
+        val state = LiveAssistState()
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            val fixture = mount(scenario, LiveAssistTool.ZEBRA, state)
+            val original = state.zebraHighlightIRE
+            tap(node(fixture) { it.text?.toString() == "0-255" })
+            scenario.onActivity {
+                assertEquals(ZebraUnit.NATIVE, state.zebraUnit)
+                assertEquals(original, state.zebraHighlightIRE, "Changing display units must retain the stored threshold")
+            }
+            var threshold = node(fixture) { it.contentDescription?.toString() == "Highlight threshold" }
+            assertEquals(255f, threshold.rangeInfo.max)
+            assertTrue(threshold.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id,
+                Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 255f) }))
+            settle()
+            scenario.onActivity { assertEquals(100.0, state.zebraHighlightIRE, 0.0001) }
+            tap(node(fixture) { it.text?.toString() == "IRE" })
+            scenario.onActivity { assertEquals(ZebraUnit.IRE, state.zebraUnit) }
+            threshold = node(fixture) { it.contentDescription?.toString() == "Highlight threshold" && it.rangeInfo?.max == 100f }
+            assertEquals(100f, threshold.rangeInfo.max)
+            tap(node(fixture) { it.contentDescription?.toString() == "Highlight" })
+            scenario.onActivity { assertTrue(!state.zebraHighlight) }
+            threshold = node(fixture) { it.contentDescription?.toString() == "Highlight threshold" }
+            threshold.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id,
+                Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 10f) })
+            settle()
+            scenario.onActivity {
+                assertEquals(100.0, state.zebraHighlightIRE, "Disabled input must retain its last threshold")
+                assertTrue(state.zebraMidtone, "Highlight controls must not disable the independent midtone zone")
+            }
+        }
+    }
+
+    @Test fun audioOrientationAndDBSwitchReachTheirExistingStateAndPersistCallbacks() {
+        var persists = 0
+        val state = LiveAssistState(onPersist = { persists++ })
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            val fixture = mount(scenario, LiveAssistTool.AUDIO, state)
+            tap(node(fixture) { it.text?.toString() == "Horizontal" })
+            scenario.onActivity { assertEquals(MonitorAudioOrientation.HORIZONTAL, state.audioOrientation) }
+            val beforeDB = persists
+            tap(node(fixture) { it.contentDescription?.toString() == "Show dB values" })
+            scenario.onActivity { assertTrue(state.audioShowDB); assertTrue(persists > beforeDB) }
         }
     }
 

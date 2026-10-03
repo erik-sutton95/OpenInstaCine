@@ -35,37 +35,14 @@ struct AudioLongPressMenu: View {
     var compact = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Orientation").font(MonitorTheme.font(11, weight: .semibold))
-            MonitorSegmentedControl(
-                options: AudioAssist.Orientation.allCases,
-                selection: Binding(
-                    get: { store.options.orientation },
-                    set: {
-                        store.options.orientation = $0
-                        store.persist()
-                    }),
-                stacked: true, title: { $0.rawValue },
-                onSelectionFeedback: {
-                    OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled)
-                }
-            )
-            .buttonStyle(MonitorButtonStyle())
-            Toggle(
-                "Show dB values",
-                isOn: Binding(
-                    get: { store.options.showsDB },
-                    set: {
-                        store.options.showsDB = $0
-                        store.persist()
-                    })
-            )
-            .font(MonitorTheme.font(12)).tint(MonitorTheme.accent)
-            Text(model.assist.gradesClip ? AudioAssist.playbackHelpCopy : AudioAssist.helpCopy)
-                .font(MonitorTheme.font(compact ? 11 : 12))
-                .foregroundStyle(MonitorTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        MonitorAudioMenu(orientation: Binding(get: { store.options.orientation }, set: {
+            store.options.orientation = $0; store.persist()
+        }), showsDB: Binding(get: { store.options.showsDB }, set: {
+            store.options.showsDB = $0; store.persist()
+        }), help: model.assist.gradesClip ? AudioAssist.playbackHelpCopy : AudioAssist.helpCopy,
+            compact: compact, orientationFeedback: {
+                OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled)
+            })
     }
 }
 

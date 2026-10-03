@@ -38,9 +38,5 @@ enum CrosshairAssist {
 struct CrosshairLongPressMenu: View {
     var compact: Bool = false
 
-    var body: some View {
-        Text(CrosshairAssist.helpCopy)
-            .font(LiveType.ui(size: compact ? 11 : 13))
-            .foregroundStyle(LiveDesign.muted)
-    }
+    var body: some View { MonitorAssistHelp(CrosshairAssist.helpCopy, compact: compact) }
 }
