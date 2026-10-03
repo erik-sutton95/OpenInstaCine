@@ -69,8 +69,24 @@ class AssistSettingsCompositionInputTest {
                             }
                         }
                     }
-                    settle()
-                    nativeControl("Reset to defaults")
+                    val tag = when (tool) {
+                        MonitorAssistTool.FALSE -> "falseColor"
+                        MonitorAssistTool.ZEBRA -> "zebra"
+                        MonitorAssistTool.WAVE -> "waveform"
+                        MonitorAssistTool.PARADE -> "parade"
+                        MonitorAssistTool.HISTO -> "histogram"
+                        MonitorAssistTool.VECTOR -> "vectorscope"
+                        MonitorAssistTool.PEAK -> "peaking"
+                        MonitorAssistTool.LIGHTS -> "trafficLights"
+                        else -> error("Unexpected settings tool")
+                    }
+                    val deadline = SystemClock.uptimeMillis() + 5_000
+                    do {
+                        settle()
+                        val root = instrumentation.uiAutomation.rootInActiveWindow
+                        if (root != null && findTag(root, "settings.assist.$tag") != null) return
+                    } while (SystemClock.uptimeMillis() < deadline)
+                    error("Actual current assist card missing: $tag")
                 }
                 mount(MonitorAssistTool.ZEBRA)
                 val red = nativeControl("Red")
@@ -142,6 +158,14 @@ class AssistSettingsCompositionInputTest {
         if (root.contentDescription?.toString() == description) return root
         for (index in 0 until root.childCount) root.getChild(index)?.let { child ->
             find(child, description)?.let { return it }
+        }
+        return null
+    }
+
+    private fun findTag(root: AccessibilityNodeInfo, tag: String): AccessibilityNodeInfo? {
+        if (root.viewIdResourceName == tag) return root
+        for (index in 0 until root.childCount) root.getChild(index)?.let { child ->
+            findTag(child, tag)?.let { return it }
         }
         return null
     }
