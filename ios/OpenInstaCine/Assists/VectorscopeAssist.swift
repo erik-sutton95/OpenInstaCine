@@ -7,8 +7,8 @@ import UIKit
 /// OpenZCine vectorscope operator options + `MovablePanel` (id `"vector"`).
 ///
 /// Long-press toolbar rows (`AssistQuickSettingsContent.vectorscopeRows`):
-/// * Trace Zoom — 1x / 2x / 4x (graticule stays at unity)
-/// * Brightness — 0…200% (default 100; unity baseline, unlike WAVE/PARADE’s /400)
+/// * Trace Zoom - 1x / 2x / 4x (graticule stays at unity)
+/// * Brightness - 0…200% (default 100; unity baseline, unlike WAVE/PARADE’s /400)
 ///
 /// Always-on plot (no popup toggle in OpenZCine): 75% graticule, 123° I-phase
 /// skin line, colour density rendering (log alpha + `traceTint` + 1.1-bin blur
@@ -35,12 +35,12 @@ enum VectorscopeAssist {
     /// OpenZCine `AssistConfiguration.Scopes.VectorscopeZoom`.
     typealias Zoom = MonitorVectorscopeZoom
 
-    /// OpenZCine `MovablePanelStoredCenter` — centre as a fraction of the overlay bounds.
+    /// OpenZCine `MovablePanelStoredCenter` - centre as a fraction of the overlay bounds.
     typealias StoredCenter = MonitorScopeStoredCenter
 
     typealias Options = MonitorVectorscopeOptions
 
-    /// OpenZCine `Scopes.brightnessMultiplier` — vectorscope keeps the unity baseline.
+    /// OpenZCine `Scopes.brightnessMultiplier` - vectorscope keeps the unity baseline.
     static func intensity(_ brightness: Int) -> Double {
         Double(Options.clampedBrightness(brightness)) / 100
     }
@@ -52,7 +52,7 @@ enum VectorscopeAssist {
             height: (baseSize.height * clamped).rounded())
     }
 
-    /// OpenZCine `ScopeMini` vectorscope chip — `MON · 1X`.
+    /// OpenZCine `ScopeMini` vectorscope chip - `MON · 1X`.
     static func chip(zoom: Zoom) -> String {
         "MON · \(zoom.rawValue.uppercased())"
     }
@@ -111,7 +111,7 @@ enum VectorscopeAssist {
         VectorscopeLongPressMenu(options: options, compact: compact)
     }
 
-    /// Binds the shared vectorscope store. `assist` is unused — options live off
+    /// Binds the shared vectorscope store. `assist` is unused - options live off
     /// `LiveAssistState` so parallel assist agents do not collide on that blob.
     @MainActor
     static func longPressMenu(
@@ -149,7 +149,9 @@ typealias VectorscopeAssistStore = MonitorScopePanelStore<MonitorVectorscopeOpti
 struct VectorscopeLongPressMenu: View {
     @Binding var options: VectorscopeAssist.Options
     var compact: Bool = false
-    var body: some View {
+    var body: some View { commonMenu.buttonStyle(.zcTapTarget) }
+
+    var commonMenu: MonitorVectorscopeMenu {
         MonitorVectorscopeMenu(zoom: Binding(get: { options.zoom }, set: {
             guard $0 != options.zoom else { return }
             VectorscopeAssistHaptics.selection(); options.zoom = $0
@@ -161,7 +163,6 @@ struct VectorscopeLongPressMenu: View {
             brightnessHelp: "Raise trace intensity when the chroma plot is hard to read.",
             brightnessRange: VectorscopeAssist.brightnessRange, compact: compact,
             zoomFeedback: { OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled) })
-            .buttonStyle(.zcTapTarget)
     }
 }
 

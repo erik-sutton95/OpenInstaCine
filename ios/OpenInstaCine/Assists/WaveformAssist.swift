@@ -7,8 +7,8 @@ import UIKit
 /// OpenZCine waveform operator options + `MovablePanel` (id `"wave"`).
 ///
 /// Long-press toolbar rows (`AssistQuickSettingsContent.waveformRows`):
-/// * Mode — Luma / RGB
-/// * Brightness — 0…200% (default 100; OpenZCine `/400`, so 100% = 0.25)
+/// * Mode - Luma / RGB
+/// * Brightness - 0…200% (default 100; OpenZCine `/400`, so 100% = 0.25)
 /// * Safe Border Clip / Crush / Middle Gray
 ///
 /// Size is the L-corner grip only (OpenZCine dropped Small/Medium/Large; no
@@ -18,7 +18,7 @@ import UIKit
 /// are safe-border guides. Hold the panel (no drag) or long-press WAVE
 /// on the assist bar to open options.
 /// On the panel: 0.3s long-press then drag to reposition (4pt snap, 22pt haptic grid).
-/// No pinch-resize — OpenZCine scales only from the L-corner grip.
+/// No pinch-resize - OpenZCine scales only from the L-corner grip.
 enum WaveformAssist {
     static let panelID = "wave"
     static let baseSize = ScopePanelSize.waveform
@@ -41,12 +41,12 @@ enum WaveformAssist {
 
     typealias GuideLines = MonitorScopeGuides
 
-    /// OpenZCine `MovablePanelStoredCenter` — centre as a fraction of the overlay bounds.
+    /// OpenZCine `MovablePanelStoredCenter` - centre as a fraction of the overlay bounds.
     typealias StoredCenter = MonitorScopeStoredCenter
 
     typealias Options = MonitorWaveformOptions
 
-    /// OpenZCine `waveformParadeBrightnessMultiplier` — 100% = former 25%.
+    /// OpenZCine `waveformParadeBrightnessMultiplier` - 100% = former 25%.
     static func intensity(_ brightness: Int) -> Double {
         Double(Options.clampedBrightness(brightness)) / 400
     }
@@ -164,7 +164,9 @@ typealias WaveformAssistStore = MonitorScopePanelStore<MonitorWaveformOptions>
 struct WaveformLongPressMenu: View {
     @Binding var options: WaveformAssist.Options
     var compact: Bool = false
-    var body: some View {
+    var body: some View { commonMenu.buttonStyle(.zcTapTarget) }
+
+    var commonMenu: MonitorScopeTraceMenu<WaveformAssist.Mode> {
         MonitorScopeTraceMenu(modes: WaveformAssist.Mode.allCases, mode: $options.mode,
             brightness: Binding(get: { options.brightness }, set: {
                 let next = WaveformAssist.Options.clampedBrightness($0)
@@ -175,7 +177,6 @@ struct WaveformLongPressMenu: View {
             compact: compact, modeFeedback: {
                 OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
             }, guideFeedback: { WaveformAssistHaptics.selection() })
-            .buttonStyle(.zcTapTarget)
     }
 }
 

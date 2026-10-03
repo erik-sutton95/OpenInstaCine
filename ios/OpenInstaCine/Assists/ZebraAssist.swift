@@ -5,11 +5,11 @@ import UIKit
 
 /// OpenZCine `AssistConfiguration.Zebra` + long-press rows (`AssistQuickSettingsContent.zebraRows`).
 ///
-/// OpenZCine exposes exactly these operator controls — there is no fill-vs-stripe / pattern picker
+/// OpenZCine exposes exactly these operator controls - there is no fill-vs-stripe / pattern picker
 /// (stripes always paint the zone colour) and no extra bands beyond dual zebra:
-/// * Units — 0-255 / IRE (`Zebra.Unit`; stored thresholds stay on the 0–100 monitoring axis)
-/// * Highlight — enable, threshold, fill colour White / Amber / Red
-/// * Midtone — enable, threshold, fill colour Amber / Cyan / Green
+/// * Units - 0-255 / IRE (`Zebra.Unit`; stored thresholds stay on the 0–100 monitoring axis)
+/// * Highlight - enable, threshold, fill colour White / Amber / Red
+/// * Midtone - enable, threshold, fill colour Amber / Cyan / Green
 ///
 /// Defaults follow `AssistConfiguration.Zebra` (IRE, white / amber, midtone 55) except highlight:
 /// 99, one IRE under the live-tap ceiling so the typical D-Log2 243–247 shelf paints (#136).
@@ -29,7 +29,7 @@ enum ZebraAssist {
     static let midtoneHelp =
         "Midtone zebra gives a curve-compensated reference band for faces or key subject exposure."
 
-    /// OpenZCine `ImageEffectsCompositor.blendStripedZebra` — `CIStripesGenerator`.
+    /// OpenZCine `ImageEffectsCompositor.blendStripedZebra` - `CIStripesGenerator`.
     enum StripeLook {
         static let width: CGFloat = 5
         static let sharpness: CGFloat = 1
@@ -61,7 +61,7 @@ enum ZebraAssist {
         }
     }
 
-    /// OpenZCine `AssistConfiguration.Zebra.StripeColor` — GPU fill lives on ``ZebraPaint``.
+    /// OpenZCine `AssistConfiguration.Zebra.StripeColor` - GPU fill lives on ``ZebraPaint``.
     typealias StripeColor = ZebraPaint
 
     /// OpenZCine `SettingsPalette.highlight`.
@@ -158,7 +158,7 @@ enum ZebraAssist {
     }
 
     /// Zone flags + IRE + stripe fill the GPU zebra pass reads (OpenZCine `ZebraSettings` minus unit).
-    /// Unit is editor-only — stored thresholds stay on the 0–100 monitoring axis.
+    /// Unit is editor-only - stored thresholds stay on the 0–100 monitoring axis.
     struct OverlaySpec: Equatable, Sendable {
         var highlightEnabled: Bool
         var highlightIRE: Double
@@ -294,20 +294,22 @@ struct ZebraLongPressMenu: View {
         model.monitorSamples.exposureCeiling.clipByte(transfer: transfer)
     }
 
-    var body: some View {
+    var body: some View { commonMenu(transfer: transfer, clipByte: clipByte) }
+
+    func commonMenu(transfer: MonitorTransfer, clipByte: Int) -> MonitorZebraMenu<ZebraAssist.Unit, ZebraAssist.StripeColor> {
         MonitorZebraMenu(units: ZebraAssist.Unit.allCases, unit: $options.unit, title: { $0.editorLabel },
             unitsTitle: ZebraAssist.unitsTitle, unitsHelp: ZebraAssist.unitsHelp,
             highlightHelp: ZebraAssist.highlightHelp, midtoneHelp: ZebraAssist.midtoneHelp,
             highlight: zone(enabled: $options.highlightEnabled, threshold: $options.highlightIRE,
-                colors: ZebraAssist.highlightPalette, paint: $options.highlightColor),
+                colors: ZebraAssist.highlightPalette, paint: $options.highlightColor, transfer: transfer, clipByte: clipByte),
             midtone: zone(enabled: $options.midtoneEnabled, threshold: $options.midtoneIRE,
-                colors: ZebraAssist.midtonePalette, paint: $options.midtoneColor), compact: compact,
+                colors: ZebraAssist.midtonePalette, paint: $options.midtoneColor, transfer: transfer, clipByte: clipByte), compact: compact,
             selectionFeedback: { ZebraAssistHaptics.selection() }, toggleFeedback: {
                 ZebraAssistHaptics.selection(); ZebraAssistHaptics.selection()
             })
     }
     private func zone(enabled: Binding<Bool>, threshold: Binding<Double>, colors: [ZebraAssist.StripeColor],
-        paint: Binding<ZebraAssist.StripeColor>) -> MonitorZebraZone<ZebraAssist.StripeColor> {
+        paint: Binding<ZebraAssist.StripeColor>, transfer: MonitorTransfer, clipByte: Int) -> MonitorZebraZone<ZebraAssist.StripeColor> {
         MonitorZebraZone(enabled: enabled, threshold: Binding(get: { threshold.wrappedValue }, set: {
             threshold.wrappedValue = min(100, max(0, $0))
         }), displayValue: options.displayValue(for: threshold.wrappedValue, transfer: transfer, clipByte: clipByte),

@@ -9,10 +9,10 @@ import UIKit
 /// OpenZCine histogram operator options + `MovablePanel` (id `"histo"`).
 ///
 /// Long-press toolbar rows (`AssistQuickSettingsContent.histogramRows`):
-/// * Traffic Lights — RGB crush/clip edge blocks
-/// * Crush/Clip Compensation — 0…1 stop, shared with the goal-post meter
+/// * Traffic Lights - RGB crush/clip edge blocks
+/// * Crush/Clip Compensation - 0…1 stop, shared with the goal-post meter
 ///
-/// Plot geometry is WAVE’s `WaveformAxis` — IRE 0 / 100 on the plot edges,
+/// Plot geometry is WAVE’s `WaveformAxis` - IRE 0 / 100 on the plot edges,
 /// same paper-black / live-tap clip mapping as WAVE / PARADE. Crush / clip
 /// lamps sit outside those strokes. No 0 / 50 / 100 labels. On the panel:
 /// 0.3s long-press then drag to reposition (4pt snap,
@@ -34,9 +34,9 @@ enum HistogramAssist {
     static let panelTitle = "Histo"
     static let chip = "RGBL"
     static let plotTop: CGFloat = WaveformAxis.titleHeight
-    /// OpenZCine `histogramReferenceX(95)` clip band — on WAVE’s IRE axis.
+    /// OpenZCine `histogramReferenceX(95)` clip band - on WAVE’s IRE axis.
     static let clipZoneIRE = MonitorUI.MonitorHistogramGeometry.clipZoneIRE
-    /// Crush / clip lamp size — must match ``HistogramScopePlot`` blocks.
+    /// Crush / clip lamp size - must match ``HistogramScopePlot`` blocks.
     static let trafficLampWidth: CGFloat = MonitorUI.MonitorHistogramGeometry.trafficLampWidth
     static let trafficLampHeight: CGFloat = MonitorUI.MonitorHistogramGeometry.trafficLampHeight
     /// Inset from the panel edge so the top lamp clears the rounded corner.
@@ -76,7 +76,7 @@ enum HistogramAssist {
 
     typealias CrushClipCompensation = MonitorCrushClipCompensation
 
-    /// OpenZCine `MovablePanelStoredCenter` — centre as a fraction of the overlay bounds.
+    /// OpenZCine `MovablePanelStoredCenter` - centre as a fraction of the overlay bounds.
     typealias StoredCenter = MonitorScopeStoredCenter
 
     typealias Options = MonitorHistogramOptions
@@ -193,7 +193,9 @@ typealias HistogramAssistStore = MonitorScopePanelStore<MonitorHistogramOptions>
 struct HistogramLongPressMenu: View {
     @Binding var options: HistogramAssist.Options
     var compact: Bool = false
-    var body: some View {
+    var body: some View { commonMenu }
+
+    var commonMenu: MonitorHistogramMenu {
         MonitorHistogramMenu(trafficLights: $options.trafficLights,
             compensation: Binding(get: { options.crushClipCompensation }, set: {
                 guard $0 != options.crushClipCompensation else { return }

@@ -260,7 +260,7 @@ private fun DashLegend(
  * (iOS `SettingsInlineRow`). When [stacked] is true (two-column View Assist
  * cards), the control sits under the title at full width.
  *
- * [help] renders the same "?" badge iOS puts beside the title — the copy that
+ * [help] renders the same "?" badge iOS puts beside the title - the copy that
  * explains what a control actually does lives there, not in a caption, so the
  * row stays one line until an operator asks.
  */
@@ -289,7 +289,7 @@ fun SettingsSwitchRow(
     com.opencapture.monitorui.settings.MonitorSettingsSwitchInlineRow(title = title, isOn = isOn, help = help, showTopDivider = showTopDivider, stacked = stacked, testTag = testTag, onToggle = onToggle)
 }
 
-/** iOS `SettingsSwitchInlineRow` — Pocket call-site alias of [SettingsSwitchRow]. */
+/** iOS `SettingsSwitchInlineRow` - Pocket call-site alias of [SettingsSwitchRow]. */
 @Composable
 fun SettingsSwitchInlineRow(
     title: String,
@@ -316,7 +316,7 @@ fun SettingsSwitchInlineRow(
  * copy in a glass popover.
  *
  * ponytail: a transcription of the private badge in media/PlaybackAssistOptions.kt
- * (the assist popups own theirs) — settings cannot see it. Hoist one copy if a
+ * (the assist popups own theirs) - settings cannot see it. Hoist one copy if a
  * third surface ever needs it.
  */
 @Composable
@@ -357,7 +357,7 @@ fun SettingsColorDots(
 /** One named swatch for [SettingsColorDots] (iOS `SettingsColorDots.Dot`). */
 typealias SettingsColorDot = com.opencapture.monitorui.settings.MonitorSettingsColorDot
 
-/** iOS `SettingsPalette` — zone-scoped stripe/peaking colours. */
+/** iOS `SettingsPalette` - zone-scoped stripe/peaking colours. */
 object SettingsPalette {
     val highlight: List<SettingsColorDot> =
         listOf(
@@ -441,7 +441,7 @@ fun SettingsValueText(value: String) {
     com.opencapture.monitorui.settings.MonitorSettingsValueText(value = value)
 }
 
-/** Accent inline action ("Open", "Sign in") — the iOS System-tab link button treatment. */
+/** Accent inline action ("Open", "Sign in") - the iOS System-tab link button treatment. */
 @Composable
 fun SettingsLinkAction(
     title: String,
@@ -464,7 +464,7 @@ fun SettingsLinkAction(
 }
 
 /**
- * Quiet utility text link — mirrors the startup header's Privacy/Terms
+ * Quiet utility text link - mirrors the startup header's Privacy/Terms
  * treatment (iOS `StartupHeader.legalLink`): deliberately dimmer than row
  * titles so it never competes with them.
  */
@@ -524,46 +524,5 @@ fun PanelCloseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
             tint = LiveDesign.text,
             modifier = Modifier.size(13.dp),
         )
-    }
-}
-
-/** Compact settings key; uses the same transfer-aware bands as the live reference. */
-@Composable
-fun SettingsFalseColorKey(
-    scale: FalseColorScale,
-    colorMode: Int,
-    ceiling: ScopeClipSource = ScopeExposureCeiling.UNOBSERVED,
-) {
-    val transfer = MonitorTransfer.fromColorMode(colorMode)
-    val segments = FalseColorReference.segments(scale, transfer, ceiling = ceiling)
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Canvas(Modifier.fillMaxWidth().height(11.dp)) {
-            drawRect(Color.White.copy(alpha = 0.5f))
-            segments.forEach { segment ->
-                val lo = segment.lowerFraction.toFloat()
-                val hi = segment.upperFraction.toFloat()
-                drawRect(
-                    Color(segment.band.red.toFloat(), segment.band.green.toFloat(), segment.band.blue.toFloat()),
-                    Offset(size.width * lo, 0f),
-                    Size(maxOf(1f, size.width * (hi - lo)), size.height),
-                )
-            }
-        }
-        if (scale.usesSceneStops) {
-            BoxWithConstraints(Modifier.fillMaxWidth().height(12.dp)) {
-                val rulerWidth = maxWidth
-                FalseColorReference.sceneStopMarkers(transfer, ceiling = ceiling).forEach { marker ->
-                    Text(marker.label, style = LiveType.mono(7f), color = LiveDesign.muted,
-                        modifier = Modifier.offset(x = (rulerWidth * marker.fraction.toFloat() - 8.dp)
-                            .coerceIn(0.dp, (rulerWidth - 16.dp).coerceAtLeast(0.dp))))
-                }
-            }
-        } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                FalseColorReference.axisLabels(scale).forEach { label ->
-                    Text(label, style = LiveType.ui(7f), color = LiveDesign.muted)
-                }
-            }
-        }
     }
 }

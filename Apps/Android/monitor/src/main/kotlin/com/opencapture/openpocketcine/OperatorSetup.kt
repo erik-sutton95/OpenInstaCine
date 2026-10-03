@@ -82,7 +82,6 @@ import com.opencapture.monitorui.settings.MonitorMotionToggleSetting
 import com.opencapture.monitorui.MonitorJoystickSize
 import com.opencapture.monitorui.MonitorLinkHealth
 import com.opencapture.openpocketcine.assists.CrushClipCompensation
-import com.opencapture.openpocketcine.settings.SettingsFalseColorKey
 import com.opencapture.openpocketcine.assists.FalseColorScale
 import com.opencapture.openpocketcine.assists.HistogramAssist
 import com.opencapture.openpocketcine.assists.LiveAssistState
@@ -137,7 +136,7 @@ object SettingsHelpCopy {
     const val CAMERA_WIFI =
         "SSID joined for this session. The password stays in the Android Keystore on this phone."
     const val SAVED_CAMERAS =
-        "Pair from the home list. Settings does not start a new pair — that stays on Your cameras."
+        "Pair from the home list. Settings does not start a new pair - that stays on Your cameras."
     const val EDIT_VIEW = "Opens the monitor with an eye on each element you can show or hide."
     const val FRAME_IO =
         "Sign in to upload clips from the share popup. Frame.io needs the internet, so the phone hops off the camera Wi‑Fi for the upload."
@@ -148,7 +147,7 @@ object SettingsHelpCopy {
     const val HAPTICS =
         "Short confirmation pulses for switches, settings, and gimbal limits. A connected controller also rumbles at a stop."
     const val JOYSTICK_SENSITIVITY =
-        "How far a stick throw moves the gimbal — on-screen and a connected game controller. Small throws crawl; full throw is fastest. 4 is the captured feel. 5 reaches full speed sooner; 1 is the slowest."
+        "How far a stick throw moves the gimbal - on-screen and a connected game controller. Small throws crawl; full throw is fastest. 4 is the captured feel. 5 reaches full speed sooner; 1 is the slowest."
     const val VIRTUAL_JOYSTICK_SIZE =
         "How large the on-screen stick is. Medium is the default. Large is easier to grab; Small keeps more of the picture clear."
     const val VIRTUAL_JOYSTICK_INVERT_PAN =
@@ -166,7 +165,7 @@ object SettingsHelpCopy {
     const val KEEP_SCREEN_AWAKE =
         "Prevents auto-lock while OpenInstaCine is open. A monitor should stay lit. Android may still dim when the device overheats."
     const val HDR_DISPLAY =
-        "Outdoor panel brightness, not a grade. WAVE, HISTO, PARADE, VECTOR, zebras and false color still read the decoded camera signal — judge exposure there, not from how bright the picture looks. Screen recording drops back to a normal SDR picture so the file is not HDR-boosted. This is not the camera's HDR/HLG color mode. Off by default."
+        "Outdoor panel brightness, not a grade. WAVE, HISTO, PARADE, VECTOR, zebras and false color still read the decoded camera signal - judge exposure there, not from how bright the picture looks. Screen recording drops back to a normal SDR picture so the file is not HDR-boosted. This is not the camera's HDR/HLG color mode. Off by default."
     const val THEME = "Charcoal field-monitor chrome with Sky Blue accents, tuned for low reflection on set."
     const val SUPPORT = "Connection, live view, controls, and troubleshooting."
     const val REPORT = "Opens a public issue form on GitHub for this project."
@@ -179,7 +178,7 @@ object SettingsHelpCopy {
     const val FEATURE = "Start an idea in this project's feature-request discussion."
     const val SOURCE =
         "View the OpenInstaCine project on GitHub. Opening this may leave the camera Wi-Fi if that is the only network."
-    const val LINK_HEALTH = "How healthy the camera link is right now — delivery, not radio RSSI."
+    const val LINK_HEALTH = "How healthy the camera link is right now - delivery, not radio RSSI."
     const val CLEAR_CACHE =
         "Removes downloaded clip files from this phone. The clip list stays so you can cache them again from the camera."
     const val LUT_LOOK = "Looks apply on this phone. The file on the camera is unchanged."
@@ -188,9 +187,9 @@ object SettingsHelpCopy {
     const val APP_VERSION = "Current OpenInstaCine build from the native project metadata."
     const val LOCAL_CACHE = "Originals and playback proxies downloaded from the camera."
     const val CACHE_FULL_RESOLUTION =
-        "Download the original camera file when you open a clip. Off keeps only the 720p proxy to save space. Share needs the original — connect the camera if it is not cached."
+        "Download the original camera file when you open a clip. Off keeps only the 720p proxy to save space. Share needs the original - connect the camera if it is not cached."
     const val FEED_UPSCALER =
-        "How the live-view frame is enlarged to fill the panel. The camera sends far fewer pixels than the panel has, so something always does this. Off is a plain sample, Fast is a fixed sharpening kernel, and Quality is the OS spatial upscaler.\n\nAI is different in kind: it is a machine-learning model that INFERS detail the camera never captured. It gives the sharpest-looking picture, but the fine texture it adds is invented — plausible rather than real — so it can suggest crispness the lens did not record. Judge critical focus on Quality or Fast, and treat AI as a viewing aid rather than evidence.\n\nOnly the options this device supports are shown."
+        "How the live-view frame is enlarged to fill the panel. The camera sends far fewer pixels than the panel has, so something always does this. Off is a plain sample, Fast is a fixed sharpening kernel, and Quality is the OS spatial upscaler.\n\nAI is different in kind: it is a machine-learning model that INFERS detail the camera never captured. It gives the sharpest-looking picture, but the fine texture it adds is invented - plausible rather than real - so it can suggest crispness the lens did not record. Judge critical focus on Quality or Fast, and treat AI as a viewing aid rather than evidence.\n\nOnly the options this device supports are shown."
     const val FALSE_COLOR_SCALE =
         "The camera color mode selects D-Log, D-Log2, Rec.709, or HLG automatically. " +
             "CineStop paints five stops around 18% gray, read through the " +
@@ -274,7 +273,7 @@ internal object OperatorLinkHealth {
 
     fun compactFps(incoming: String): String {
         val compact = if (incoming.endsWith(".00")) incoming.dropLast(3) else incoming
-        return compact.ifEmpty { "—" }
+        return compact.ifEmpty { "-" }
     }
 
     fun formatMeasuredFps(fps: Double): String {
@@ -296,7 +295,7 @@ internal object OperatorLinkHealth {
         if (phase == ConnectionPhase.FAILED) return "FAIL"
         if (recovering) return "RECOV"
         if (measuredFps > 0.0) return compactFps(formatMeasuredFps(measuredFps))
-        return if (!isLive && phase == ConnectionPhase.IDLE) "—" else "LINK"
+        return if (!isLive && phase == ConnectionPhase.IDLE) "-" else "LINK"
     }
 
     fun liveTileDetail(
@@ -394,19 +393,6 @@ internal enum class CleanPinTool(val key: String, val title: String) {
     DESQUEEZE("DESQ", "Anamorphic Desqueeze"),
     MIRROR("MIRROR", "Mirror"),
     AUDIO("AUDIO", "Audio Levels"),
-}
-
-internal enum class AssistCard(val title: String) {
-    FALSE_COLOR("False Color"),
-    WAVEFORM("Waveform"),
-    HISTOGRAM("Histogram"),
-    PEAKING("Peaking"),
-    ZEBRA("Zebra"),
-    PARADE("Parade"),
-    VECTORSCOPE("Vectorscope"),
-    TRAFFIC_LIGHTS("Traffic Lights"),
-    EV("EV Meter"),
-    DESQUEEZE("Anamorphic Desqueeze"),
 }
 
 internal fun connectionPhaseLabel(phase: ConnectionPhase, failure: String?): String =
@@ -618,41 +604,9 @@ private fun SharingRows() {
 }
 
 @Composable
-private fun AssistRows(model: AppModel, statusColorMode: Int, onOpenLut: () -> Unit) {
+internal fun AssistRows(model: AppModel, statusColorMode: Int, onOpenLut: () -> Unit) {
     val assist = model.assist
-    val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
-
-    if (isPortrait) {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            FalseColorAssistCard(assist, statusColorMode)
-            ZebraAssistCard(assist, statusColorMode)
-            WaveformAssistCard(assist)
-            ParadeAssistCard(assist)
-            HistogramAssistCard(assist)
-            VectorscopeAssistCard(assist)
-            PeakingAssistCard(assist)
-            TrafficLightsAssistCard(assist)
-        }
-    } else {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FalseColorAssistCard(assist, statusColorMode)
-                WaveformAssistCard(assist)
-                HistogramAssistCard(assist)
-                PeakingAssistCard(assist)
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ZebraAssistCard(assist, statusColorMode)
-                ParadeAssistCard(assist)
-                VectorscopeAssistCard(assist)
-                TrafficLightsAssistCard(assist)
-            }
-        }
-    }
+    com.opencapture.monitorui.settings.MonitorViewAssistSettings(assistSettingsSections(assist, statusColorMode))
 
     SettingsRowCard(title = "EV Meter") {
         SettingsSwitchInlineRow(
@@ -692,299 +646,89 @@ private fun AssistRows(model: AppModel, statusColorMode: Int, onOpenLut: () -> U
     }
 }
 
-@Composable
-private fun FalseColorAssistCard(assist: LiveAssistState, colorMode: Int) {
-    SettingsRowCard(
-        title = "False Color",
-        onReset = {
-            assist.setFalseColor(scale = FalseColorScale.SCENE_STOPS, reference = true)
+/** Facts use the actual app state, saved actions and sampled source calibration. */
+internal fun assistSettingsSections(assist: LiveAssistState, colorMode: Int):
+    List<com.opencapture.monitorui.settings.MonitorAssistSettingsSection> {
+    val transfer = MonitorTransfer.fromColorMode(colorMode)
+    val maximum = ZebraEditor.editorMaximum(assist.zebraUnit)
+    return listOf(
+        com.opencapture.monitorui.settings.MonitorAssistSettingsSection.FalseColor(
+            listOf("CineStop", "Video", "IRE", "Limits").map(FalseColorScale::fromMenuLabel),
+            assist.falseColorScale, { assist.setFalseColor(scale = it) }, { it.menuLabel },
+            readChoice = null, reference = settingsFalseColorReferenceValues(assist, colorMode),
+            referenceEnabled = assist.falseColorReference,
+            onReferenceEnabled = { assist.setFalseColor(reference = it) },
+            scaleHelp = SettingsHelpCopy.FALSE_COLOR_SCALE, readHelp = "",
+            referenceHelp = SettingsHelpCopy.FALSE_COLOR_REFERENCE,
+            reset = { assist.setFalseColor(scale = FalseColorScale.SCENE_STOPS, reference = true) }),
+        com.opencapture.monitorui.settings.MonitorAssistSettingsSection.ZebraSliders(
+            ZebraUnit.entries, assist.zebraUnit, { it.editorLabel }, assist::updateZebraUnit,
+            SettingsHelpCopy.ZEBRA_UNITS, SettingsHelpCopy.ZEBRA_HIGHLIGHT, SettingsHelpCopy.ZEBRA_MIDTONE,
+            com.opencapture.monitorui.MonitorZebraZone(assist.zebraHighlight,
+                ZebraEditor.displayValue(assist.zebraHighlightIRE, assist.zebraUnit, transfer, assist.scopeCeiling),
+                maximum, assist.zebraHighlightColor, SettingsPalette.highlight,
+                onEnabled = { assist.setZebraHighlight(enabled = !assist.zebraHighlight) },
+                onThreshold = { assist.setZebraHighlight(ire = ZebraEditor.ireFromDisplay(it, assist.zebraUnit, transfer, assist.scopeCeiling)) },
+                onPaint = { assist.setZebraHighlight(color = it) }, allowsEditingWhenOff = true),
+            com.opencapture.monitorui.MonitorZebraZone(assist.zebraMidtone,
+                ZebraEditor.displayValue(assist.zebraMidtoneIRE, assist.zebraUnit, transfer, assist.scopeCeiling),
+                maximum, assist.zebraMidtoneColor, SettingsPalette.midtone,
+                onEnabled = { assist.setZebraMidtone(enabled = !assist.zebraMidtone) },
+                onThreshold = { assist.setZebraMidtone(ire = ZebraEditor.ireFromDisplay(it, assist.zebraUnit, transfer, assist.scopeCeiling)) },
+                onPaint = { assist.setZebraMidtone(color = it) }, allowsEditingWhenOff = true),
+            reset = {
+                assist.updateZebraUnit(ZebraUnit.IRE)
+                assist.setZebraHighlight(enabled = true, ire = LiveZebra.HIGHLIGHT_IRE, color = ZebraPaint.WHITE)
+                assist.setZebraMidtone(enabled = true, ire = LiveZebra.MIDTONE_IRE, color = ZebraPaint.AMBER)
+            }),
+        com.opencapture.monitorui.settings.MonitorAssistSettingsSection.Trace.waveform(
+            WaveformMode.entries, assist.waveMode, { assist.setWaveform(mode = it) }, { it.label },
+            assist.waveBrightness, { assist.setWaveform(brightness = it) }, assist.waveGuides,
+            { assist.setWaveform(guides = it) },
+            reset = { assist.setWaveform(mode = WaveformMode.RGB, brightness = 100, guides = ScopeGuides()) }),
+        com.opencapture.monitorui.settings.MonitorAssistSettingsSection.Trace.parade(
+            ParadeMode.entries, assist.paradeMode, { assist.setParade(mode = it) }, { it.label },
+            assist.paradeBrightness, { assist.setParade(brightness = it) }, assist.paradeGuides,
+            { assist.setParade(guides = it) },
+            reset = { assist.setParade(mode = ParadeMode.RGB, brightness = 100, guides = ScopeGuides()) }),
+        com.opencapture.monitorui.settings.MonitorAssistSettingsSection.Histogram(
+            assist.histoTrafficLights, { assist.setHistogram(traffic = !assist.histoTrafficLights) },
+            assist.crushClipCompensation, { assist.setHistogram(compensation = it) },
+            HistogramAssist.TRAFFIC_LIGHTS_HELP, HistogramAssist.COMPENSATION_HELP,
+            reset = { assist.setHistogram(traffic = true, compensation = CrushClipCompensation.ZERO) }),
+        com.opencapture.monitorui.settings.MonitorAssistSettingsSection.Vectorscope(
+            assist.vectorZoom, { assist.setVectorscope(zoom = it) },
+            assist.vectorBrightness, { assist.setVectorscope(brightness = it) },
+            reset = { assist.setVectorscope(zoom = VectorscopeZoom.X1, brightness = 100) }),
+        com.opencapture.monitorui.settings.MonitorAssistSettingsSection.Peaking(
+            assist.peakingSensitivity, assist.peakingColor, SettingsPalette.peaking,
+            SettingsHelpCopy.PEAKING_SENSITIVITY, SettingsHelpCopy.PEAKING_COLOR,
+            { assist.setPeaking(sense = it) }, { assist.setPeaking(color = it) },
+            reset = { assist.setPeaking(color = PeakingColor.RED, sense = PeakingSense.MED) }),
+        com.opencapture.monitorui.settings.MonitorAssistSettingsSection.TrafficLights(
+            assist.crushClipCompensation, assist::setCompensation, SettingsHelpCopy.TRAFFIC_LIGHTS_COMPENSATION,
+            reset = { assist.setCompensation(CrushClipCompensation.ZERO) }),
+    )
+}
+
+/** Preserve the settings key's raw-signal policy; the long-press Read choice stays independent. */
+private fun settingsFalseColorReferenceValues(assist: LiveAssistState, colorMode: Int):
+    com.opencapture.monitorui.MonitorFalseColorReferenceValues {
+    val transfer = MonitorTransfer.fromColorMode(colorMode)
+    val segments = com.opencapture.openpocketcine.assists.FalseColorReference.segments(
+        assist.falseColorScale, transfer, ceiling = assist.scopeCeiling)
+    val markers = if (assist.falseColorScale.usesSceneStops)
+        com.opencapture.openpocketcine.assists.FalseColorReference.sceneStopMarkers(transfer, ceiling = assist.scopeCeiling)
+        else emptyList()
+    return com.opencapture.monitorui.MonitorFalseColorReferenceValues(
+        subtitle = assist.falseColorScale.menuLabel,
+        segments = segments.mapIndexed { index, segment ->
+            com.opencapture.monitorui.MonitorFalseColorReferenceSegment(index, segment.lowerFraction,
+                segment.upperFraction, segment.band.red, segment.band.green, segment.band.blue)
         },
-    ) {
-        SettingsInlineRow(
-            "Scale",
-            SettingsHelpCopy.FALSE_COLOR_SCALE,
-            showTopDivider = false,
-            stacked = true,
-        ) {
-            SettingsSegmented(
-                options = listOf("CineStop", "Video", "IRE", "Limits"),
-                selected = assist.falseColorScale.menuLabel,
-            ) { label ->
-                assist.setFalseColor(scale = FalseColorScale.fromMenuLabel(label))
-            }
-        }
-        SettingsInlineRow(title = "Reference key", stacked = true) {
-            SettingsFalseColorKey(assist.falseColorScale, colorMode, assist.scopeCeiling)
-        }
-        SettingsSwitchInlineRow(
-            title = "Reference Display",
-            isOn = assist.falseColorReference,
-            help = SettingsHelpCopy.FALSE_COLOR_REFERENCE,
-            stacked = true,
-        ) {
-            assist.setFalseColor(reference = !assist.falseColorReference)
-        }
-    }
-}
-
-@Composable
-private fun PeakingAssistCard(assist: LiveAssistState) {
-    SettingsRowCard(
-        title = "Peaking",
-        onReset = { assist.setPeaking(color = PeakingColor.RED, sense = PeakingSense.MED) },
-    ) {
-        SettingsInlineRow(
-            "Sensitivity",
-            SettingsHelpCopy.PEAKING_SENSITIVITY,
-            showTopDivider = false,
-            stacked = true,
-        ) {
-            SettingsSegmented(
-                options = PeakingSense.entries.map { it.label },
-                selected = assist.peakingSensitivity.label,
-            ) { label ->
-                assist.setPeaking(sense = PeakingSense.fromPersisted(label))
-            }
-        }
-        SettingsInlineRow("Color", SettingsHelpCopy.PEAKING_COLOR, stacked = true) {
-            SettingsColorDots(
-                dots = SettingsPalette.peaking,
-                selectedName = assist.peakingColor.label,
-            ) { name ->
-                assist.setPeaking(color = PeakingColor.fromPersisted(name))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ZebraAssistCard(assist: LiveAssistState, colorMode: Int) {
-    SettingsRowCard(
-        title = "Zebra",
-        onReset = {
-            assist.updateZebraUnit(ZebraUnit.IRE)
-            assist.setZebraHighlight(enabled = true, ire = LiveZebra.HIGHLIGHT_IRE, color = ZebraPaint.WHITE)
-            assist.setZebraMidtone(enabled = true, ire = LiveZebra.MIDTONE_IRE, color = ZebraPaint.AMBER)
-        },
-    ) {
-        SettingsInlineRow(
-            "Units",
-            SettingsHelpCopy.ZEBRA_UNITS,
-            showTopDivider = false,
-            stacked = true,
-        ) {
-            SettingsSegmented(
-                options = listOf("0-255", "IRE"),
-                selected = assist.zebraUnit.editorLabel,
-            ) { label ->
-                assist.updateZebraUnit(ZebraUnit.fromEditorLabel(label))
-            }
-        }
-        val transfer = MonitorTransfer.fromColorMode(colorMode)
-        val maximum = ZebraEditor.editorMaximum(assist.zebraUnit)
-        ZebraZoneRow(
-            title = "Highlight",
-            help = SettingsHelpCopy.ZEBRA_HIGHLIGHT,
-            enabled = assist.zebraHighlight,
-            value = ZebraEditor.displayValue(assist.zebraHighlightIRE, assist.zebraUnit, transfer, assist.scopeCeiling),
-            maximum = maximum,
-            selectedColor = assist.zebraHighlightColor.label,
-            palette = SettingsPalette.highlight,
-            onEnabled = { assist.setZebraHighlight(enabled = !assist.zebraHighlight) },
-            onValue = {
-                assist.setZebraHighlight(ire = ZebraEditor.ireFromDisplay(it, assist.zebraUnit, transfer, assist.scopeCeiling))
-            },
-            onColor = { assist.setZebraHighlight(color = ZebraPaint.fromPersisted(it)) },
-        )
-        ZebraZoneRow(
-            title = "Midtone",
-            help = SettingsHelpCopy.ZEBRA_MIDTONE,
-            enabled = assist.zebraMidtone,
-            value = ZebraEditor.displayValue(assist.zebraMidtoneIRE, assist.zebraUnit, transfer, assist.scopeCeiling),
-            maximum = maximum,
-            selectedColor = assist.zebraMidtoneColor.label,
-            palette = SettingsPalette.midtone,
-            onEnabled = { assist.setZebraMidtone(enabled = !assist.zebraMidtone) },
-            onValue = {
-                assist.setZebraMidtone(ire = ZebraEditor.ireFromDisplay(it, assist.zebraUnit, transfer, assist.scopeCeiling))
-            },
-            onColor = { assist.setZebraMidtone(color = ZebraPaint.fromPersisted(it)) },
-        )
-    }
-}
-
-@Composable
-private fun ZebraZoneRow(
-    title: String,
-    help: String,
-    enabled: Boolean,
-    value: Int,
-    maximum: Int,
-    selectedColor: String,
-    palette: List<SettingsColorDot>,
-    onEnabled: () -> Unit,
-    onValue: (Int) -> Unit,
-    onColor: (String) -> Unit,
-) {
-    SettingsSwitchInlineRow(title = title, help = help, isOn = enabled, onToggle = onEnabled)
-    Column(
-        Modifier
-            .padding(start = 14.dp)
-            .alpha(if (enabled) 1f else 0.4f),
-    ) {
-        SettingsInlineRow(title = "Threshold") {
-            SettingsValueSlider(
-                value = value.coerceIn(0, maximum),
-                range = 0..maximum,
-                label = "$value",
-                labelWidth = 34,
-                onChange = onValue,
-            )
-        }
-        SettingsInlineRow(title = "Colour") {
-            SettingsColorDots(dots = palette, selectedName = selectedColor, onSelect = onColor)
-        }
-    }
-}
-
-@Composable
-private fun WaveformAssistCard(assist: LiveAssistState) {
-    SettingsRowCard(
-        title = "Waveform",
-        onReset = { assist.setWaveform(mode = WaveformMode.RGB, brightness = 100, guides = ScopeGuides()) },
-    ) {
-        SettingsInlineRow("Mode", showTopDivider = false, stacked = true) {
-            SettingsSegmented(
-                options = WaveformMode.entries.map { it.label },
-                selected = assist.waveMode.label,
-            ) { label ->
-                assist.setWaveform(mode = WaveformMode.fromPersisted(label))
-            }
-        }
-        SettingsInlineRow("Brightness", SettingsHelpCopy.WAVEFORM_BRIGHTNESS, stacked = true) {
-            SettingsPercentSlider(value = assist.waveBrightness, range = 0..200) {
-                assist.setWaveform(brightness = it)
-            }
-        }
-        ScopeGuideRows(assist.waveGuides) { assist.setWaveform(guides = it) }
-    }
-}
-
-@Composable
-private fun ParadeAssistCard(assist: LiveAssistState) {
-    SettingsRowCard(
-        title = "Parade",
-        onReset = { assist.setParade(mode = ParadeMode.RGB, brightness = 100, guides = ScopeGuides()) },
-    ) {
-        SettingsInlineRow("Mode", showTopDivider = false, stacked = true) {
-            SettingsSegmented(
-                options = ParadeMode.entries.map { it.label },
-                selected = assist.paradeMode.label,
-            ) { label ->
-                assist.setParade(mode = ParadeMode.fromPersisted(label))
-            }
-        }
-        SettingsInlineRow("Brightness", SettingsHelpCopy.PARADE_BRIGHTNESS, stacked = true) {
-            SettingsPercentSlider(value = assist.paradeBrightness, range = 0..200) {
-                assist.setParade(brightness = it)
-            }
-        }
-        ScopeGuideRows(assist.paradeGuides) { assist.setParade(guides = it) }
-    }
-}
-
-@Composable
-private fun HistogramAssistCard(assist: LiveAssistState) {
-    SettingsRowCard(
-        title = "Histogram",
-        onReset = {
-            assist.setHistogram(traffic = true, compensation = CrushClipCompensation.ZERO)
-        },
-    ) {
-        SettingsSwitchRow(
-            title = HistogramAssist.TRAFFIC_LIGHTS_TITLE,
-            isOn = assist.histoTrafficLights,
-            help = HistogramAssist.TRAFFIC_LIGHTS_HELP,
-            showTopDivider = false,
-            stacked = true,
-        ) {
-            assist.setHistogram(traffic = !assist.histoTrafficLights)
-        }
-        SettingsInlineRow(
-            title = HistogramAssist.COMPENSATION_TITLE,
-            help = HistogramAssist.COMPENSATION_HELP,
-            stacked = true,
-        ) {
-            CrushClipControl(assist.crushClipCompensation) { assist.setHistogram(compensation = it) }
-        }
-    }
-}
-
-@Composable
-private fun VectorscopeAssistCard(assist: LiveAssistState) {
-    SettingsRowCard(
-        title = "Vectorscope",
-        onReset = { assist.setVectorscope(zoom = VectorscopeZoom.X1, brightness = 100) },
-    ) {
-        SettingsInlineRow(
-            "Trace Zoom",
-            SettingsHelpCopy.VECTORSCOPE_ZOOM,
-            showTopDivider = false,
-            stacked = true,
-        ) {
-            SettingsSegmented(
-                options = VectorscopeZoom.entries.map { it.label },
-                selected = assist.vectorZoom.label,
-            ) { label ->
-                assist.setVectorscope(zoom = VectorscopeZoom.fromPersisted(label))
-            }
-        }
-        SettingsInlineRow("Brightness", SettingsHelpCopy.VECTORSCOPE_BRIGHTNESS, stacked = true) {
-            SettingsPercentSlider(value = assist.vectorBrightness, range = 0..200) {
-                assist.setVectorscope(brightness = it)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TrafficLightsAssistCard(assist: LiveAssistState) {
-    SettingsRowCard(
-        title = "Traffic Lights",
-        onReset = { assist.setCompensation(CrushClipCompensation.ZERO) },
-    ) {
-        SettingsInlineRow(
-            title = HistogramAssist.COMPENSATION_TITLE,
-            help = SettingsHelpCopy.TRAFFIC_LIGHTS_COMPENSATION,
-            showTopDivider = false,
-            stacked = true,
-        ) {
-            CrushClipControl(assist.crushClipCompensation) { assist.setCompensation(it) }
-        }
-    }
-}
-
-@Composable
-private fun CrushClipControl(selected: CrushClipCompensation, onSelect: (CrushClipCompensation) -> Unit) {
-    SettingsCrushClipSegmented(
-        options = CrushClipCompensation.entries.map { it.label to it.compactLabel },
-        selectedLabel = selected.label,
-    ) { label ->
-        CrushClipCompensation.entries.firstOrNull { it.label == label }?.let(onSelect)
-    }
-}
-
-@Composable
-private fun ScopeGuideRows(guides: ScopeGuides, onChange: (ScopeGuides) -> Unit) {
-    SettingsSwitchRow("Safe Border Clip", isOn = guides.clip, stacked = true) {
-        onChange(guides.copy(clip = !guides.clip))
-    }
-    SettingsSwitchRow("Safe Border Crush", isOn = guides.crush, stacked = true) {
-        onChange(guides.copy(crush = !guides.crush))
-    }
-    SettingsSwitchRow("Middle Gray", isOn = guides.middle, stacked = true) {
-        onChange(guides.copy(middle = !guides.middle))
-    }
+        markers = markers.mapIndexed { index, marker ->
+            com.opencapture.monitorui.MonitorFalseColorReferenceMarker(index, marker.label, marker.fraction)
+        }, axisLabels = com.opencapture.openpocketcine.assists.FalseColorReference.axisLabels(assist.falseColorScale))
 }
 
 @Composable

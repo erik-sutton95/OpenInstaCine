@@ -7,7 +7,7 @@ import UIKit
 ///
 /// Long-press options:
 /// * Scale: CineStop / Video / IRE / Limits
-/// * Reference Display — compact color key over live view; turning it on arms False Color
+/// * Reference Display - compact color key over live view; turning it on arms False Color
 enum FalseColorAssist {
     /// OpenZCine Scale help, Luna curves in the first sentence.
     static let scaleHelp =
@@ -108,11 +108,22 @@ enum FalseColorAssist {
         FalseColorAssistMenuHost(assist: assist, compact: compact)
     }
 
+    @MainActor
+    static func commonMenu(assist: LiveAssistState, compact: Bool = false,
+        transfer: MonitorTransfer, clipByte: Int) -> MonitorFalseColorMenu<FalseColorScaleKind> {
+        longPressMenu(options: Binding(get: { assist.falseColorOptions }, set: {
+            assist.falseColorOptions = $0; assist.persist()
+        }), compact: compact, transfer: transfer, clipByte: clipByte,
+            rec709: Binding(get: { assist.falseColorRec709 }, set: {
+                assist.falseColorRec709 = $0; assist.persist()
+            }), onReferenceEnabled: { assist.falseColor = true }).commonMenu
+    }
+
     static func longPressMenu(_ assist: LiveAssistState) -> some View {
         longPressMenu(assist: assist)
     }
 
-    /// OpenZCine `FalseColorReference` — 264×52 glass ruler with sparse zone chips.
+    /// OpenZCine `FalseColorReference` - 264×52 glass ruler with sparse zone chips.
     static func referenceDisplay(
         scale: FalseColorScaleKind, colorMode: ColorMode = .normal, rec709: Bool, clipByte: Int
     ) -> FalseColorReference {
@@ -169,26 +180,8 @@ private struct FalseColorAssistMenuHost: View {
     var body: some View {
         let transfer =
             model.monitorTransfer ?? model.monitorColorMode.map(MonitorTransfer.init) ?? .rec709
-        FalseColorAssist.longPressMenu(
-            options: Binding(
-                get: { assist.falseColorOptions },
-                set: {
-                    assist.falseColorOptions = $0
-                    assist.persist()
-                }
-            ),
-            compact: compact,
-            transfer: transfer,
-            clipByte: model.monitorSamples.exposureCeiling.clipByte(transfer: transfer),
-            rec709: Binding(
-                get: { assist.falseColorRec709 },
-                set: {
-                    assist.falseColorRec709 = $0
-                    assist.persist()
-                }
-            ),
-            onReferenceEnabled: { assist.falseColor = true }
-        )
+        FalseColorAssist.commonMenu(assist: assist, compact: compact, transfer: transfer,
+            clipByte: model.monitorSamples.exposureCeiling.clipByte(transfer: transfer))
     }
 }
 
@@ -201,7 +194,9 @@ struct FalseColorLongPressMenu: View {
     var rec709: Binding<Bool>? = nil
     var onReferenceEnabled: (() -> Void)? = nil
 
-    var body: some View {
+    var body: some View { commonMenu }
+
+    var commonMenu: MonitorFalseColorMenu<FalseColorScaleKind> {
         MonitorFalseColorMenu(scales: FalseColorAssist.scaleOptions.map(FalseColorAssist.scale(forMenuLabel:)),
             scale: $options.scale, referenceEnabled: $options.referenceEnabled, read709: rec709,
             reference: FalseColorReference(scale: options.scale, transfer: transfer, inspector: true,
@@ -226,7 +221,7 @@ private enum FalseColorAssistHaptics {
 
 // MARK: - On-feed reference ruler (OpenZCine `FalseColorReference`)
 
-/// OpenZCine `FalseColorReference` — 264×52 glass ruler with proportional zone chips.
+/// OpenZCine `FalseColorReference` - 264×52 glass ruler with proportional zone chips.
 struct FalseColorReference: View {
     struct Segment: Equatable, Identifiable {
         let id: Int
@@ -268,7 +263,7 @@ struct FalseColorReference: View {
         self.clipByte = clipByte
     }
 
-    /// OpenZCine `FalseColorReference.curveKeyLabel` — Pocket transfers, compact keys.
+    /// OpenZCine `FalseColorReference.curveKeyLabel` - Pocket transfers, compact keys.
     static func curveKeyLabel(_ transfer: MonitorTransfer) -> String {
         switch transfer {
         case .rec709: "709"

@@ -290,66 +290,27 @@ struct SettingsRootView: View {
     // MARK: - View Assist
 
     @ViewBuilder private var assistRows: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(spacing: 8) {
-                    assistToolCard("False Color", reset: resetFalseColor) {
-                        FalseColorAssist.longPressMenu(assist: model.assist, compact: true)
-                    }
-                    assistToolCard("Waveform", reset: resetWaveform) {
-                        WaveformAssist.longPressMenu(assist: model.assist, compact: true)
-                    }
-                    assistToolCard("Histogram", reset: resetHistogram) {
-                        HistogramAssist.longPressMenu(assist: model.assist, compact: true)
-                    }
-                    assistToolCard("Peaking", reset: resetPeaking) {
-                        PeakingAssist.longPressMenu(assist: model.assist, compact: true)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .top)
-                VStack(spacing: 8) {
-                    assistToolCard("Zebra", reset: resetZebra) {
-                        ZebraAssist.longPressMenu(assist: model.assist, compact: true)
-                    }
-                    assistToolCard("Parade", reset: resetParade) {
-                        ParadeAssist.longPressMenu(assist: model.assist, compact: true)
-                    }
-                    assistToolCard("Vectorscope", reset: resetVectorscope) {
-                        VectorscopeAssist.longPressMenu(assist: model.assist, compact: true)
-                    }
-                    assistToolCard("Traffic Lights", reset: resetTrafficLights) {
-                        TrafficLightsAssist.longPressMenu(assist: model.assist, compact: true)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .top)
-            }
-            VStack(spacing: 8) {
-                assistToolCard("False Color", reset: resetFalseColor) {
-                    FalseColorAssist.longPressMenu(assist: model.assist, compact: true)
-                }
-                assistToolCard("Zebra", reset: resetZebra) {
-                    ZebraAssist.longPressMenu(assist: model.assist, compact: true)
-                }
-                assistToolCard("Waveform", reset: resetWaveform) {
-                    WaveformAssist.longPressMenu(assist: model.assist, compact: true)
-                }
-                assistToolCard("Parade", reset: resetParade) {
-                    ParadeAssist.longPressMenu(assist: model.assist, compact: true)
-                }
-                assistToolCard("Histogram", reset: resetHistogram) {
-                    HistogramAssist.longPressMenu(assist: model.assist, compact: true)
-                }
-                assistToolCard("Vectorscope", reset: resetVectorscope) {
-                    VectorscopeAssist.longPressMenu(assist: model.assist, compact: true)
-                }
-                assistToolCard("Peaking", reset: resetPeaking) {
-                    PeakingAssist.longPressMenu(assist: model.assist, compact: true)
-                }
-                assistToolCard("Traffic Lights", reset: resetTrafficLights) {
-                    TrafficLightsAssist.longPressMenu(assist: model.assist, compact: true)
-                }
-            }
-        }
+        let transfer = model.monitorTransfer ?? model.monitorColorMode.map(MonitorTransfer.init) ?? .rec709
+        let clipByte = model.monitorSamples.exposureCeiling.clipByte(transfer: transfer)
+        let feedback = { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }
+        MonitorViewAssistSettings(sections: [
+            .falseColor(FalseColorAssist.commonMenu(assist: model.assist, compact: true,
+                transfer: transfer, clipByte: clipByte), reset: { feedback(); resetFalseColor() }),
+            .zebra(ZebraAssist.longPressMenu(assist: model.assist, compact: true)
+                .commonMenu(transfer: transfer, clipByte: clipByte), reset: { feedback(); resetZebra() }),
+            .waveform(WaveformAssist.longPressMenu(assist: model.assist, compact: true).commonMenu,
+                reset: { feedback(); resetWaveform() }),
+            .parade(ParadeAssist.longPressMenu(assist: model.assist, compact: true).commonMenu,
+                reset: { feedback(); resetParade() }),
+            .histogram(HistogramAssist.longPressMenu(assist: model.assist, compact: true).commonMenu,
+                reset: { feedback(); resetHistogram() }),
+            .vectorscope(VectorscopeAssist.longPressMenu(assist: model.assist, compact: true).commonMenu,
+                reset: { feedback(); resetVectorscope() }),
+            .peaking(PeakingAssist.longPressMenu(assist: model.assist, compact: true).commonMenu,
+                reset: { feedback(); resetPeaking() }),
+            .trafficLights(TrafficLightsAssist.longPressMenu(assist: model.assist, compact: true).commonMenu,
+                reset: { feedback(); resetTrafficLights() }),
+        ]).buttonStyle(.zcTapTarget)
 
         SettingsRowCard(title: "EV Meter") {
             SettingsSwitchInlineRow(
@@ -372,14 +333,6 @@ struct SettingsRootView: View {
                 SettingsActionPill(title: "Open") { showLUTPicker = true }
             }
         }
-    }
-
-    @ViewBuilder
-    private func assistToolCard<Content: View>(
-        _ title: String, reset: @escaping () -> Void, @ViewBuilder content: () -> Content
-    ) -> some View {
-        SettingsRowCard(title: title, onReset: reset) { content() }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func resetFalseColor() {

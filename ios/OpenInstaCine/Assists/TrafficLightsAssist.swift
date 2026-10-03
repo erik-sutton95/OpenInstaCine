@@ -6,7 +6,7 @@ import OpenPocketViewCore
 import SwiftUI
 import UIKit
 
-/// OpenZCine Traffic Lights — `AssistQuickSettingsContent.trafficLightsRows` plus
+/// OpenZCine Traffic Lights - `AssistQuickSettingsContent.trafficLightsRows` plus
 /// `MovablePanel(id: "traffic-lights")` (direct drag + corner resize).
 ///
 /// Long-press options are **only** Crush/Clip Compensation (0 / 0.25 / 0.5 / 0.75 / 1.0 stops).
@@ -32,7 +32,7 @@ enum TrafficLightsAssist {
     static let gripVisualSize: CGFloat = 14
     static let gripExteriorGap: CGFloat = 2
 
-    /// OpenZCine `TrafficLightsMeterMini` chrome — 74×168 landscape box.
+    /// OpenZCine `TrafficLightsMeterMini` chrome - 74×168 landscape box.
     static let meterTitle = MonitorTrafficLightsGeometry.meterTitle
     static let accessibilityTitle = MonitorTrafficLightsGeometry.accessibilityTitle
     static let titleSize = MonitorTrafficLightsGeometry.titleSize
@@ -65,13 +65,13 @@ enum TrafficLightsAssist {
 
     typealias CrushClipCompensation = MonitorCrushClipCompensation
 
-    /// OpenZCine `TrafficLightsBarSide` — which half of a goal-post shows fill.
+    /// OpenZCine `TrafficLightsBarSide` - which half of a goal-post shows fill.
     typealias BarSide = MonitorTrafficLightsGeometry.BarSide
 
-    /// OpenZCine `TrafficLightsChannelDisplay` — display transform only (not IRE).
+    /// OpenZCine `TrafficLightsChannelDisplay` - display transform only (not IRE).
     typealias ChannelDisplay = MonitorTrafficLightsGeometry.ChannelDisplay
 
-    /// OpenZCine `TrafficLightsMeter.channelDisplay` — centre-anchored single-sided fill.
+    /// OpenZCine `TrafficLightsMeter.channelDisplay` - centre-anchored single-sided fill.
     static func channelDisplay(
         for channel: ScopeChannelLight,
         balanceCenter center: Double = balanceCenter,
@@ -88,7 +88,7 @@ enum TrafficLightsAssist {
         MonitorTrafficLightsGeometry.channelDisplay(level: level, balanceCenter: center, deadZone: deadZone)
     }
 
-    /// OpenZCine `TrafficLightsMeterMini` column width — 11pt locked, or spread when `fillsWidth`.
+    /// OpenZCine `TrafficLightsMeterMini` column width - 11pt locked, or spread when `fillsWidth`.
     static func columnWidth(fillsWidth: Bool, panelWidth: CGFloat, uiScale: CGFloat) -> CGFloat {
         MonitorTrafficLightsGeometry.columnWidth(fillsWidth: fillsWidth, panelWidth: panelWidth, uiScale: uiScale)
     }
@@ -102,7 +102,7 @@ enum TrafficLightsAssist {
         MonitorTrafficLightsGeometry.accessibilityValue(for: reading)
     }
 
-    /// Normalized centre — OpenZCine `MovablePanelStoredCenter`.
+    /// Normalized centre - OpenZCine `MovablePanelStoredCenter`.
     typealias StoredCenter = MonitorScopeStoredCenter
 
     static func clampedScale(_ value: Double) -> Double {
@@ -200,7 +200,9 @@ typealias TrafficLightsAssistStore = MonitorTrafficLightsPreferenceStore
 struct TrafficLightsLongPressMenu: View {
     var assist: LiveAssistState
     var compact: Bool = false
-    var body: some View {
+    var body: some View { commonMenu }
+
+    var commonMenu: MonitorCrushClipMenu {
         MonitorCrushClipMenu(compensation: Binding(get: { TrafficLightsAssist.sharedCompensation() }, set: { match in
             guard match != TrafficLightsAssist.sharedCompensation() else { return }
             TrafficLightsAssistHaptics.selection()

@@ -5,9 +5,9 @@ import UIKit
 
 /// OpenZCine `Peaking` operator options + long-press rows (`AssistQuickSettingsContent.peakingRows`).
 ///
-/// OpenZCine exposes exactly two peaking controls — there is no type / style / thickness picker:
-/// * Sensitivity — Low / Med / High (`Peaking.Sensitivity`)
-/// * Color — White / Blue / Red / Green (`Peaking.Color`)
+/// OpenZCine exposes exactly two peaking controls - there is no type / style / thickness picker:
+/// * Sensitivity - Low / Med / High (`Peaking.Sensitivity`)
+/// * Color - White / Blue / Red / Green (`Peaking.Color`)
 ///
 /// Defaults match `AssistConfiguration`: red, medium. The GPU compositor reads ``overlay(from:)``.
 enum PeakingAssist {
@@ -21,7 +21,7 @@ enum PeakingAssist {
     typealias Color = MonitorPeakingColor
     typealias Sensitivity = MonitorPeakingSense
 
-    /// OpenZCine `SettingsPalette.peaking` order — White / Blue / Red / Green.
+    /// OpenZCine `SettingsPalette.peaking` order - White / Blue / Red / Green.
     static let palette: [Color] = Color.allCases
     /// Segmented-control copy in `peakingRows`.
     static let sensitivityOptions = Sensitivity.allCases.map(\.rawValue)
@@ -41,7 +41,7 @@ enum PeakingAssist {
         OverlaySpec(color: color, sensitivity: sensitivity)
     }
 
-    /// OpenZCine `AssistQuickSettingsContent.peakingRows` — Sensitivity segmented + Color dots.
+    /// OpenZCine `AssistQuickSettingsContent.peakingRows` - Sensitivity segmented + Color dots.
     static func longPressMenu(
         options: Binding<Options>,
         compact: Bool = false
@@ -70,7 +70,7 @@ enum PeakingAssist {
         longPressMenu(assist: assist)
     }
 
-    /// OpenZCine `peakingRows` Sensitivity tap — same-value is a no-op (`SettingsSegmented`).
+    /// OpenZCine `peakingRows` Sensitivity tap - same-value is a no-op (`SettingsSegmented`).
     @MainActor
     static func selectSensitivity(_ raw: String, assist: LiveAssistState) {
         guard let level = Sensitivity(rawValue: raw),
@@ -80,7 +80,7 @@ enum PeakingAssist {
         assist.persist()
     }
 
-    /// OpenZCine `peakingRows` Color tap — same-value is a no-op (`SettingsColorDots`).
+    /// OpenZCine `peakingRows` Color tap - same-value is a no-op (`SettingsColorDots`).
     @MainActor
     static func selectColor(_ raw: String, assist: LiveAssistState) {
         guard let color = Color(rawValue: raw),
@@ -90,7 +90,7 @@ enum PeakingAssist {
         assist.persist()
     }
 
-    /// OpenZCine `resetPeaking` — red / medium.
+    /// OpenZCine `resetPeaking` - red / medium.
     @MainActor
     static func reset(_ assist: LiveAssistState) {
         assist.peakingOptions = .default
@@ -122,7 +122,9 @@ struct PeakingLongPressMenu: View {
     @Binding var options: PeakingAssist.Options
     var compact: Bool = false
 
-    var body: some View {
+    var body: some View { commonMenu }
+
+    var commonMenu: MonitorPeakingMenu {
         MonitorPeakingMenu(options: $options, colors: PeakingAssist.palette.map {
             .init(value: $0, title: $0.rawValue, color: $0.swatch)
         }, sensitivityHelp: PeakingAssist.sensitivityHelp, colorHelp: PeakingAssist.colorHelp,
