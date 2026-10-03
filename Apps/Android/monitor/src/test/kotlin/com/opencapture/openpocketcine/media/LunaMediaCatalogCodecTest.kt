@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.media
 
+import android.content.SharedPreferences
 import com.opencapture.opencine.appkit.*
 import com.opencapture.opencine.core.CameraSessionID
 import com.opencapture.opencine.core.ControlEpoch
@@ -7,8 +8,12 @@ import com.opencapture.opencine.insta360.luna.LunaMediaCatalogRecord
 import com.opencapture.opencine.insta360.luna.LunaMediaCatalogRecordSource
 import com.opencapture.opencine.insta360.shell.CameraMediaItem
 import com.opencapture.opencine.media.*
+import com.opencapture.openpocketcine.session.CameraCommands
+import com.opencapture.openpocketcine.session.CameraProfile
 import kotlinx.coroutines.test.runTest
 import org.json.JSONArray
+import org.json.JSONObject
+import java.lang.reflect.Proxy
 import java.nio.file.Files
 import kotlin.test.*
 
@@ -21,6 +26,35 @@ class LunaMediaCatalogCodecTest {
         storageKnown = false, group = 4, handleShared = true)
     private fun bytes(files: List<MediaFile>): ByteArray = JSONArray().apply { files.forEach { put(it.toJson()) } }
         .toString().toByteArray()
+    @Test fun legacyUnknownShotColorStaysStoredButIsOmittedFromFilterOptions() {
+        val root = Files.createTempDirectory("luna-color-options-").toFile()
+        try {
+            val preferences = Proxy.newProxyInstance(SharedPreferences::class.java.classLoader,
+                arrayOf(SharedPreferences::class.java)) { _, method, _ ->
+                throw AssertionError("Unexpected preferences access: ${method.name}")
+            } as SharedPreferences
+            val cache = MediaCache(root, preferences)
+            val cameraID = "saved-camera"
+            val unknown = 65_534
+            val custom = 65_535
+            val stored = listOf(CameraCommands.COLOR_NORMAL, CameraCommands.COLOR_ILOG, unknown, custom)
+                .associate { mode -> file().copy(path = "/saved/$mode.mp4") to mode }
+            val colors = JSONObject().apply { stored.forEach { (file, mode) -> put(file.path, mode) } }
+                .toString().toByteArray()
+            val colorFile = cache.colorStoreFile(cameraID)
+            colorFile.parentFile!!.mkdirs(); colorFile.writeBytes(colors)
+            val codec = LunaMediaCatalogCodec(null) { file -> cache.shotColor(file.path, cameraID).takeIf { it >= 0 } }
+            val index = bytes(stored.keys.toList())
+            val records = codec.decode(index)
+            assertEquals(unknown.toString(), records.single { stored[it.payload.file] == unknown }.facts.color)
+            val profile = CameraProfile(colorLabels = mapOf(CameraCommands.COLOR_NORMAL to "Standard", custom to "Custom log"))
+            val facts = records.map { it.facts.color }
+            assertEquals(listOf(CameraCommands.COLOR_NORMAL to "Standard", custom to "Custom log",
+                CameraCommands.COLOR_ILOG to "I-Log"), mediaColorOptions(facts + facts + listOf(null, "unknown"), profile))
+            assertContentEquals(index, codec.encode(records))
+            assertContentEquals(colors, colorFile.readBytes())
+        } finally { root.deleteRecursively() }
+    }
     @Test fun legacyBytesFieldsAndAddressesStayCompatible() {
         val codec = LunaMediaCatalogCodec(null) { null }
         val original = bytes(listOf(file()))
