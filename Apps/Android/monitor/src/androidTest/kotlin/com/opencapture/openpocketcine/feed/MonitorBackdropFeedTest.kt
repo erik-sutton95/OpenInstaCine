@@ -25,7 +25,7 @@ class MonitorBackdropFeedTest {
         instrumentation.runOnMainSync { feed.attach(next) }
         assertNull(feed.acquire(next, 1_000_000_000))
         feed.submit(stale, frame(255, 0, 0), FeedEffectsRenderPlan.IDENTITY)
-        var ticket: BackdropFrameAdmission.Ticket? = null
+        var ticket: com.opencapture.opencine.runtime.BackdropFrameAdmission.Ticket? = null
         await { ticket = feed.acquire(next, 1_000_000_000); ticket != null }
         feed.submit(checkNotNull(ticket), frame(0, 255, 0), FeedEffectsRenderPlan.IDENTITY)
         await { feed.source.image != null }
@@ -40,6 +40,28 @@ class MonitorBackdropFeedTest {
         instrumentation.runOnMainSync { feed.setActive(false) }
         assertNull(feed.source.image)
         assertNull(feed.acquire(next, 2_000_000_000))
+    }
+
+    @Test fun retainedBackdropPixelsSurviveLaterTapsAndSourceReplacement() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val feed = MonitorBackdropFeed(instrumentation.targetContext)
+        val owner = Any()
+        instrumentation.runOnMainSync { feed.attach(owner); feed.setActive(true) }
+        fun publish(r: Int, g: Int, b: Int, at: Long): Bitmap {
+            var ticket: com.opencapture.opencine.runtime.BackdropFrameAdmission.Ticket? = null
+            await { ticket = feed.acquire(owner, at); ticket != null }
+            val previous = feed.source.image
+            feed.submit(checkNotNull(ticket), frame(r, g, b), FeedEffectsRenderPlan.IDENTITY)
+            await { feed.source.image != null && feed.source.image !== previous }
+            return assertNotNull(feed.source.image)
+        }
+        val held = publish(255, 0, 0, 0)
+        publish(0, 255, 0, 1_000_000_000)
+        publish(0, 0, 255, 2_000_000_000)
+        assertEquals(Color.RED, held.getPixel(100, 60))
+        assertFalse(held.isMutable, "Published pixels cannot be rewritten by another tap")
+        instrumentation.runOnMainSync { feed.attach(Any()); feed.setActive(false) }
+        assertEquals(Color.RED, held.getPixel(100, 60))
     }
 
     @Test fun rawOrientationAndRealGradeRemainBoundedAcrossResize() {

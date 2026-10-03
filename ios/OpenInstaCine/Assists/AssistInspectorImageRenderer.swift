@@ -15,6 +15,7 @@ final class AssistInspectorImageRenderer: @unchecked Sendable {
         fileprivate let ticket: MonitorPreviewAdmission.Ticket
     }
 
+    let falseColorMapper = PocketFalseColorMap()
     private let queue = DispatchQueue(label: "opv.assist-inspector", qos: .utility)
     private let lock = NSLock()
     private var admission = MonitorPreviewAdmission()
@@ -134,13 +135,13 @@ final class AssistInspectorImageRenderer: @unchecked Sendable {
         )
         .transformed(by: transform)
         if effects.falseColor {
-            PocketFalseColorMap.warm(
+            falseColorMapper.warm(
                 scale: effects.falseColorScale, mode: effects.colorMode,
                 rec709: effects.falseColorRec709, clipByte: effects.resolvedClipByte,
                 hasLUT: effects.lutDimension >= 2)
         }
         let product = LiveMonitorCompositor.applyProduct(
-            to: codes, effects: effects, display: identity)
+            to: codes, effects: effects, display: identity, mapper: falseColorMapper)
         var result = product.image
         let outputScale = min(
             1,

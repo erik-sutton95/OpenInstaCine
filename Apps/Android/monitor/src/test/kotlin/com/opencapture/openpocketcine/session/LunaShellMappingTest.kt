@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.openpocketcine.feed.fromColorMode
+
 import com.opencapture.opencine.insta360.shell.CameraColorProfile
 import com.opencapture.opencine.insta360.shell.CameraExposure
 import com.opencapture.opencine.insta360.shell.CameraFocusMode

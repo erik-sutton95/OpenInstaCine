@@ -6,6 +6,7 @@ import XCTest
 
 /// Pins OpenZCine `falseColorRows` + `FalseColorScale.legendStops` against what we ship.
 final class FalseColorAssistTests: XCTestCase {
+    private let mapper = PocketFalseColorMap()
     /// This test's monitored source (XCTest makes a fresh one per test).
     private let ceiling = ScopeExposureCeiling()
 
@@ -14,12 +15,12 @@ final class FalseColorAssistTests: XCTestCase {
         try warmOverlayCubes(scale: .ire, mode: .dLog2)
         for iso in [125, 200, 400, 800, 1600] {
             let previous = try XCTUnwrap(
-                PocketFalseColorMap.overlayPairData(
+                mapper.overlayPairData(
                     scale: .ire, mode: .dLog2, rec709: false,
                     clipByte: ceiling.clipByte(transfer: .dlog2)))
             ceiling.setISO(iso)
             let retained = try XCTUnwrap(
-                PocketFalseColorMap.overlayPairData(
+                mapper.overlayPairData(
                     scale: .ire, mode: .dLog2, rec709: false,
                     clipByte: ceiling.clipByte(transfer: .dlog2)),
                 "Exposure updates must not remove false color while warming")
@@ -28,7 +29,7 @@ final class FalseColorAssistTests: XCTestCase {
             XCTAssertEqual(retained.weight, previous.weight)
             try warmOverlayCubes(scale: .ire, mode: .dLog2)
             XCTAssertEqual(
-                PocketFalseColorMap.overlayPairData(
+                mapper.overlayPairData(
                     scale: .ire, mode: .dLog2, rec709: false,
                     clipByte: ceiling.clipByte(transfer: .dlog2))?.clipByte,
                 ceiling.clipByte(transfer: .dlog2))
@@ -39,17 +40,17 @@ final class FalseColorAssistTests: XCTestCase {
         ceiling.setISO(1600)
         try warmOverlayCubes(scale: .limits, mode: .dLog2)
         let original = try XCTUnwrap(
-            PocketFalseColorMap.overlayPairData(
+            mapper.overlayPairData(
                 scale: .limits, mode: .dLog2, rec709: false,
                 clipByte: ceiling.clipByte(transfer: .dlog2)))
         ceiling.setISO(125)
-        _ = PocketFalseColorMap.overlayPairData(
+        _ = mapper.overlayPairData(
             scale: .limits, mode: .dLog2, rec709: false,
             clipByte: ceiling.clipByte(transfer: .dlog2))
         ceiling.setISO(1600)
         for _ in 0..<50 {
             let maps = try XCTUnwrap(
-                PocketFalseColorMap.overlayPairData(
+                mapper.overlayPairData(
                     scale: .limits, mode: .dLog2, rec709: false,
                     clipByte: ceiling.clipByte(transfer: .dlog2)))
             XCTAssertEqual(maps.clipByte, original.clipByte)
@@ -101,7 +102,7 @@ final class FalseColorAssistTests: XCTestCase {
     /// match it band for band (the `zip` in `legendStops` would silently truncate).
     func testLegendLabelsMatchCoreFalseColorBands() {
         for scale in FalseColorScaleKind.allCases where !scale.liveScale.usesSceneStops {
-            let core = PocketFalseColorMap.bands(
+            let core = mapper.bands(
                 scale: scale, transfer: .dlog2, rec709: false,
                 clipByte: ceiling.clipByte(transfer: .dlog2)
             ).map(\.label)
@@ -172,7 +173,7 @@ final class FalseColorAssistTests: XCTestCase {
     }
 
     func testCineStopPaintsEveryStopFlat() {
-        let cube = PocketFalseColorMap.overlayPaintCube(
+        let cube = mapper.overlayPaintCube(
             scale: .sceneStops, transfer: .dlog2, rec709: false,
             clipByte: ceiling.clipByte(transfer: .dlog2))
         func sample(stops: Double) -> (red: Float, green: Float, blue: Float) {
@@ -195,7 +196,7 @@ final class FalseColorAssistTests: XCTestCase {
         let over = cube.map(red: 1, green: 1, blue: 1)
         XCTAssertGreaterThan(over.red, 0.8, "past the live-tap ceiling is clip red")
         XCTAssertLessThan(over.green, 0.3)
-        let weight = PocketFalseColorMap.overlayWeightCube(
+        let weight = mapper.overlayWeightCube(
             scale: .sceneStops, transfer: .dlog2, rec709: false,
             clipByte: ceiling.clipByte(transfer: .dlog2)
         )
@@ -267,7 +268,7 @@ final class FalseColorAssistTests: XCTestCase {
     }
 
     func testIREOverlayPaintsRec709GreyGreenAndDLog2GreyAsAGap() {
-        let rec709Cube = PocketFalseColorMap.overlayPaintCube(
+        let rec709Cube = mapper.overlayPaintCube(
             scale: .ire, transfer: .rec709, rec709: false,
             clipByte: ceiling.clipByte(transfer: .rec709))
         let rec709Grey = Float(MonitorTransfer.rec709.middleGrayEncoded)
@@ -276,14 +277,14 @@ final class FalseColorAssistTests: XCTestCase {
             rec709.green, rec709.red,
             "Rec.709 18% grey is WAVE ~41 (18%MG green)")
 
-        let cube = PocketFalseColorMap.overlayPaintCube(
+        let cube = mapper.overlayPaintCube(
             scale: .ire, transfer: .dlog2, rec709: false,
             clipByte: ceiling.clipByte(transfer: .dlog2))
         let g = Float(MonitorTransfer.dlog2.middleGrayEncoded)
         let mapped = cube.map(red: g, green: g, blue: g)
         XCTAssertEqual(mapped.red, mapped.green, accuracy: 0.06, "D-Log2 18% is an IRE gap")
         XCTAssertEqual(mapped.green, mapped.blue, accuracy: 0.06)
-        let weight = PocketFalseColorMap.overlayWeightCube(
+        let weight = mapper.overlayWeightCube(
             scale: .ire, transfer: .dlog2, rec709: false,
             clipByte: ceiling.clipByte(transfer: .dlog2)
         )
@@ -297,7 +298,7 @@ final class FalseColorAssistTests: XCTestCase {
             early.red, over.red, "byte 188 is recoverable D-Log2 highlight, not the clip band")
 
         let dlogC = Float(223) / 255
-        let dlogClip = PocketFalseColorMap.overlayPaintCube(
+        let dlogClip = mapper.overlayPaintCube(
             scale: .ire, transfer: .dlog, rec709: false, clipByte: ceiling.clipByte(transfer: .dlog)
         )
         .map(red: dlogC, green: dlogC, blue: dlogC)
@@ -307,7 +308,7 @@ final class FalseColorAssistTests: XCTestCase {
 
     func testPostLUTCodesAreADifferentIREBand() throws {
         let g = Float(MonitorTransfer.dlog2.middleGrayEncoded)
-        let pre = PocketFalseColorMap.overlayPaintCube(
+        let pre = mapper.overlayPaintCube(
             scale: .stops, transfer: .dlog2, rec709: false,
             clipByte: ceiling.clipByte(transfer: .dlog2)
         )
@@ -316,7 +317,7 @@ final class FalseColorAssistTests: XCTestCase {
             throw XCTSkip("official D-Log2 cube must load")
         }
         let graded = look.map(red: g, green: g, blue: g)
-        let post = PocketFalseColorMap.overlayPaintCube(
+        let post = mapper.overlayPaintCube(
             scale: .stops, transfer: .dlog2, rec709: false,
             clipByte: ceiling.clipByte(transfer: .dlog2)
         )
@@ -333,7 +334,7 @@ final class FalseColorAssistTests: XCTestCase {
         let encoded = Float(
             ScopeDisplayScale.signalNative(
                 monitorPercent: 20, transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2)))
-        let overlay = PocketFalseColorMap.overlayPaintCube(
+        let overlay = mapper.overlayPaintCube(
             scale: .stops, transfer: .dlog2, rec709: false,
             clipByte: ceiling.clipByte(transfer: .dlog2)
         )
@@ -343,20 +344,20 @@ final class FalseColorAssistTests: XCTestCase {
         XCTAssertGreaterThan(overlay.red, 0.12)
 
         let grey = Float(MonitorTransfer.dlog2.middleGrayEncoded)
-        let dlog2 = PocketFalseColorMap.cube(
+        let dlog2 = mapper.cube(
             scale: .stops, transfer: .dlog2, rec709: false,
             clipByte: ceiling.clipByte(transfer: .dlog2)
         )
         .map(red: grey, green: grey, blue: grey)
         XCTAssertEqual(dlog2.red, dlog2.green, accuracy: 0.06, "D-Log2 18% is a Video gap")
         let rec709Grey = Float(MonitorTransfer.rec709.middleGrayEncoded)
-        let rec709 = PocketFalseColorMap.cube(
+        let rec709 = mapper.cube(
             scale: .stops, transfer: .rec709, rec709: false,
             clipByte: ceiling.clipByte(transfer: .rec709)
         )
         .map(red: rec709Grey, green: rec709Grey, blue: rec709Grey)
         XCTAssertGreaterThan(rec709.green, rec709.red, "Rec.709 18% hits 41–48 green")
-        let overlayWeight = PocketFalseColorMap.overlayWeightCube(
+        let overlayWeight = mapper.overlayWeightCube(
             scale: .stops, transfer: .dlog2, rec709: false,
             clipByte: ceiling.clipByte(transfer: .dlog2)
         )
@@ -373,14 +374,14 @@ final class FalseColorAssistTests: XCTestCase {
     ) throws {
         let started = ProcessInfo.processInfo.systemUptime
         let clip = ceiling.clipByte(transfer: MonitorTransfer(mode))
-        PocketFalseColorMap.warm(scale: scale, mode: mode, rec709: false, clipByte: clip)
+        mapper.warm(scale: scale, mode: mode, rec709: false, clipByte: clip)
         // This bounds functional setup, not a live-performance benchmark. The
         // two cold 64³ lattices already take about five seconds in unoptimized
         // simulator builds, so normal host contention must not skip pixel checks.
         let deadline = started + 30
         while ProcessInfo.processInfo.systemUptime < deadline {
             let ready =
-                PocketFalseColorMap.overlayPairData(
+                mapper.overlayPairData(
                     scale: scale, mode: mode, rec709: false, clipByte: clip)?.clipByte == clip
             if ready {
                 if recordReadinessDuration {
@@ -411,11 +412,11 @@ final class FalseColorAssistTests: XCTestCase {
         fx.falseColorScale = .ire
         fx.colorMode = .normal
 
-        let withoutLUT = LiveMonitorCompositor.apply(to: codes, effects: fx, display: identity)
+        let withoutLUT = LiveMonitorCompositor.apply(to: codes, effects: fx, display: identity, mapper: mapper)
         let look = BuiltInLook.mono.cube()
         fx.lutDimension = look.size
         fx.lutRGBA = look.rgbaComponents.withUnsafeBytes { Data($0) }
-        let withLUT = LiveMonitorCompositor.apply(to: codes, effects: fx, display: identity)
+        let withLUT = LiveMonitorCompositor.apply(to: codes, effects: fx, display: identity, mapper: mapper)
 
         let a = Self.sampleRGB(withoutLUT)
         let b = Self.sampleRGB(withLUT)
@@ -440,7 +441,7 @@ final class FalseColorAssistTests: XCTestCase {
         fx.falseColor = true
         fx.falseColorScale = .stops
         fx.colorMode = .dLog2
-        let product = LiveMonitorCompositor.applyProduct(to: codes, effects: fx, display: codes)
+        let product = LiveMonitorCompositor.applyProduct(to: codes, effects: fx, display: codes, mapper: mapper)
         let rgb = Self.sampleRGB(product.image)
         XCTAssertEqual(rgb.0, rgb.1, accuracy: 0.06, "Video gap is WAVE gray")
         XCTAssertEqual(rgb.1, rgb.2, accuracy: 0.06)
@@ -459,13 +460,13 @@ final class FalseColorAssistTests: XCTestCase {
         fx.lutDimension = look.size
         fx.lutRGBA = look.rgbaComponents.withUnsafeBytes { Data($0) }
 
-        let painted = LiveMonitorCompositor.apply(to: codes, effects: fx, display: codes)
+        let painted = LiveMonitorCompositor.apply(to: codes, effects: fx, display: codes, mapper: mapper)
         let gradedOnly = {
             var lutOnly = LiveImageEffects()
             lutOnly.lutDimension = look.size
             lutOnly.lutRGBA = fx.lutRGBA
             lutOnly.colorMode = .dLog2
-            return LiveMonitorCompositor.apply(to: codes, effects: lutOnly)
+            return LiveMonitorCompositor.apply(to: codes, effects: lutOnly, mapper: mapper)
         }()
         let a = Self.sampleRGB(painted)
         let b = Self.sampleRGB(gradedOnly)
@@ -477,11 +478,11 @@ final class FalseColorAssistTests: XCTestCase {
         fx.lutDimension = 0
         fx.lutRGBA = Data()
         let clipOff = Self.sampleRGB(
-            LiveMonitorCompositor.apply(to: clip, effects: fx, display: clip))
+            LiveMonitorCompositor.apply(to: clip, effects: fx, display: clip, mapper: mapper))
         fx.lutDimension = look.size
         fx.lutRGBA = look.rgbaComponents.withUnsafeBytes { Data($0) }
         let clipOn = Self.sampleRGB(
-            LiveMonitorCompositor.apply(to: clip, effects: fx, display: clip))
+            LiveMonitorCompositor.apply(to: clip, effects: fx, display: clip, mapper: mapper))
         // Overlay paint is the authored band on both paths — no DeviceRGB
         // remake, so no display-compensated lattice.
         XCTAssertEqual(clipOff.0, clipOn.0, accuracy: 0.04)
@@ -504,7 +505,7 @@ final class FalseColorAssistTests: XCTestCase {
         fx.falseColor = true
         fx.falseColorScale = .stops
         fx.colorMode = .dLog2
-        let overlay = LiveMonitorCompositor.assistOverlay(from: codes, effects: fx)
+        let overlay = LiveMonitorCompositor.assistOverlay(from: codes, effects: fx, mapper: mapper)
         XCTAssertGreaterThan(
             Self.maxAlpha(overlay), 0.85,
             "Video gap is WAVE gray over the picture, not a transparent hole")

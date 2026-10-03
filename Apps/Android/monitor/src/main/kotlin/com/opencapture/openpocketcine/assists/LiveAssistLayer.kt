@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine.assists
 
+import com.opencapture.openpocketcine.feed.fromColorMode
+
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorMaterial
 import androidx.compose.foundation.Canvas
@@ -38,6 +40,8 @@ import com.opencapture.openpocketcine.LiveDesign
 
 import com.opencapture.openpocketcine.feed.GpuOverlayBus
 import com.opencapture.openpocketcine.feed.LiveScopeSampleBus
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.session.CameraStatus
 import kotlin.math.roundToInt
@@ -66,6 +70,7 @@ fun LiveAssistLayer(
     state.syncVisible(tools, guideRatio)
     LiveAssistLayer(
         state = state,
+        scopeBus = remember { LiveScopeSampleBus() },
         status = status,
         focus = focus,
         modifier = modifier,
@@ -77,6 +82,7 @@ fun LiveAssistLayer(
 @Composable
 fun LiveAssistLayer(
     state: LiveAssistState,
+    scopeBus: LiveScopeSampleBus,
     status: CameraStatus,
     focus: Pair<Float, Float>?,
     modifier: Modifier = Modifier,
@@ -113,7 +119,8 @@ fun LiveAssistLayer(
         } else {
             { state.isVisible(it) }
         }
-    state.acceptScopeBundle(LiveScopeSampleBus.bundle)
+    val scopePublication by scopeBus.publications.collectAsState()
+    state.acceptScopeBundle(scopePublication.bundle)
     BoxWithConstraints(
         modifier
             .fillMaxSize(),

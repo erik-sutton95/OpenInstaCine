@@ -97,7 +97,7 @@ final class AppModel {
     var focusBoxLocked = false
     var assist = LiveAssistState()
     /// Decoded-frame scopes. Filled by `HevcDecoder.handleDecodedFrame` — not camera DUML.
-    var frameSamples = LiveFrameSampleBus()
+    var frameSamples = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
     @ObservationIgnored var inspectorPreview = AssistInspectorImageRenderer()
     @ObservationIgnored let liveBackdrop = MonitorVideoBackdropRenderer()
     @ObservationIgnored let playbackBackdrop = MonitorVideoBackdropRenderer()
@@ -628,7 +628,6 @@ final class AppModel {
         focusBoxLocked = false
         shell.close()
         session.disconnect()
-        frameSamples.reset()
     }
 
     /// Recovery card: leave the held frame for the saved-camera list.

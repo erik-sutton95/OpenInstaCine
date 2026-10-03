@@ -2,12 +2,72 @@ import CoreImage
 import Metal
 import QuartzCore
 import XCTest
+import OpenCineApple
 import os
 
 @testable import OpenInstaCine
 
 @MainActor
+private final class TestPresentationOptions {
+    var value = MonitorPresentationOptions(upscaler: .lanczos)
+}
+
+@MainActor
 final class FeedPresentationTests: XCTestCase {
+    func testNativeHostKeepsItsLayerWhenOperatorDisplayChoicesChange() {
+        let options = TestPresentationOptions()
+        let host = MonitorPictureHost(frame: CGRect(x: 0, y: 0, width: 64, height: 48),
+            options: { _ in options.value })
+        host.layoutSubviews()
+        let layer = host.layer
+        let generation = host.debugPresentGeneration
+        options.value.hdr = true
+        options.value.hdrGain = 2
+        options.value.upscaler = .spatial
+        host.layoutSubviews()
+        XCTAssertTrue(host.layer === layer)
+        XCTAssertEqual((layer as? CAMetalLayer)?.pixelFormat, .rgba16Float)
+        XCTAssertTrue(layer.wantsExtendedDynamicRangeContent)
+        XCTAssertGreaterThan(host.debugPresentGeneration, generation)
+        options.value.hdr = false
+        host.layoutSubviews()
+        XCTAssertTrue(host.layer === layer)
+        XCTAssertEqual((layer as? CAMetalLayer)?.pixelFormat, .bgra8Unorm)
+        XCTAssertFalse(layer.wantsExtendedDynamicRangeContent)
+    }
+
+    func testRetiredModelCompletionCannotPublishOrReleaseTheNewSession() throws {
+        var state = MonitorAsyncFrameState()
+        let old = try XCTUnwrap(state.reserve(slot: 0).ticket)
+        state.reset()
+        let successor = try XCTUnwrap(state.reserve(slot: 1).ticket)
+        XCTAssertFalse(state.complete(old))
+        XCTAssertNil(state.readyIndex)
+        XCTAssertNil(state.reserve(slot: 2).ticket, "Old completion must not release the new flight")
+        XCTAssertTrue(state.complete(successor))
+        XCTAssertEqual(state.readyIndex, 1)
+        let next = try XCTUnwrap(state.reserve(slot: 2).ticket)
+        XCTAssertFalse(state.complete(successor), "Repeated completion must not release another frame")
+        XCTAssertNil(state.reserve(slot: 0).ticket)
+        XCTAssertTrue(state.complete(next))
+        XCTAssertEqual(state.readyIndex, 2)
+    }
+
+    func testModelFailureLeavesHeldOutputAndAllowsTheNextRetry() throws {
+        var state = MonitorAsyncFrameState()
+        let first = try XCTUnwrap(state.reserve(slot: 0).ticket)
+        XCTAssertTrue(state.complete(first))
+        let failed = try XCTUnwrap(state.reserve(slot: 1).ticket)
+        XCTAssertTrue(state.complete(failed, failure: "refused"))
+        let report = state.reserve(slot: 2)
+        XCTAssertEqual(report.failure, "refused")
+        XCTAssertNil(report.ticket)
+        XCTAssertEqual(report.readyIndex, 0)
+        let retry = try XCTUnwrap(state.reserve(slot: 2).ticket)
+        XCTAssertTrue(state.complete(retry))
+        XCTAssertEqual(state.readyIndex, 2)
+    }
+
     func testRecoveryKeepsHeldPictureButOldGPUCompletionCannotProveNewSourcePresented() async throws
     {
         let feed = try makeFeed()

@@ -16,7 +16,7 @@ class FeedUpscaleTest {
         for (iso in listOf(100, 400, 1600, 6400)) {
             for (byte in 0..255) {
                 val signal = byte / 255.0
-                assertEquals(signal * 100, ScopeDisplayScale.monitorPercent(signal, transfer, iso), 1e-8)
+                assertEquals(signal * 100, ScopeDisplayScale.monitorPercent(signal, transfer, iso, ceiling = ScopeExposureCeiling.UNOBSERVED), 1e-8)
             }
             assertEquals(255, ScopeExposureCeiling().clipByte(transfer, iso))
         }
@@ -60,9 +60,9 @@ class LiveColorScienceTest {
         val bundleA = PocketScopeSampler.sample(pixels, 4, 4, 16, MonitorTransfer.DLOG2, includePoints = false, ceiling = a)
         val bundleB = PocketScopeSampler.sample(pixels, 4, 4, 16, MonitorTransfer.DLOG2, includePoints = false, ceiling = b)
         assertEquals(800, bundleA.iso)
-        assertSame(a, bundleA.ceiling)
+        assertEquals(231, bundleA.ceiling.clipByte(MonitorTransfer.DLOG2))
         assertEquals(1600, bundleB.iso)
-        assertSame(b, bundleB.ceiling)
+        assertEquals(248, bundleB.ceiling.clipByte(MonitorTransfer.DLOG2))
         assertEquals(100.0, WaveformIre.ire(231 / 255.0, MonitorTransfer.DLOG2, ceiling = a), 1e-9)
         assertEquals(100.0, WaveformIre.ire(248 / 255.0, MonitorTransfer.DLOG2, ceiling = b), 1e-9)
         assertTrue(WaveformIre.ire(247 / 255.0, MonitorTransfer.DLOG2, ceiling = b) < 100.0)
@@ -111,16 +111,16 @@ class LiveColorScienceTest {
         assertEquals(247, ScopeExposureCeiling().clipByte(MonitorTransfer.DLOG2, 3200))
         assertEquals(
             ScopeDisplayScale.CLIP_LEVEL,
-            ScopeDisplayScale.waveformLevel(247.0 / 255, MonitorTransfer.DLOG2, 1600),
+            ScopeDisplayScale.waveformLevel(247.0 / 255, MonitorTransfer.DLOG2, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED),
             1e-9,
         )
         assertEquals(
             ScopeDisplayScale.CLIP_LEVEL,
-            ScopeDisplayScale.waveformLevel(223.0 / 255, MonitorTransfer.DLOG, 1600),
+            ScopeDisplayScale.waveformLevel(223.0 / 255, MonitorTransfer.DLOG, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED),
             1e-9,
         )
         assertTrue(
-            ScopeDisplayScale.waveformLevel(188.0 / 255, MonitorTransfer.DLOG2, 1600) <
+            ScopeDisplayScale.waveformLevel(188.0 / 255, MonitorTransfer.DLOG2, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED) <
                 ScopeDisplayScale.CLIP_LEVEL - 0.05,
         )
         val ignored = ScopeExposureCeiling().observeTapMax(255, MonitorTransfer.DLOG2)
@@ -130,25 +130,25 @@ class LiveColorScienceTest {
     @Test
     fun paperBlackAndEighteenPercentOnWave() {
         val black = LiveColorScience.encode(0.0, MonitorTransfer.DLOG2)
-        assertEquals(0.0, ScopeDisplayScale.monitorPercent(black, MonitorTransfer.DLOG2, 1600), 1e-9)
+        assertEquals(0.0, ScopeDisplayScale.monitorPercent(black, MonitorTransfer.DLOG2, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED), 1e-9)
         val grey = LiveColorScience.encode(0.18, MonitorTransfer.DLOG2)
-        assertEquals(30.50, ScopeDisplayScale.monitorPercent(grey, MonitorTransfer.DLOG2, 1600), 0.5)
-        assertEquals(100.0, ScopeDisplayScale.monitorPercent(247.0 / 255, MonitorTransfer.DLOG2, 1600), 0.05)
+        assertEquals(30.50, ScopeDisplayScale.monitorPercent(grey, MonitorTransfer.DLOG2, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED), 0.5)
+        assertEquals(100.0, ScopeDisplayScale.monitorPercent(247.0 / 255, MonitorTransfer.DLOG2, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED), 0.05)
         val dlogGrey = LiveColorScience.encode(0.18, MonitorTransfer.DLOG)
-        assertEquals(39.88, ScopeDisplayScale.monitorPercent(dlogGrey, MonitorTransfer.DLOG, 400), 0.5)
-        assertEquals(0.0, WaveformIre.ire(black, MonitorTransfer.DLOG2, 1600), 1e-9)
-        assertEquals(30.50, WaveformIre.ire(grey, MonitorTransfer.DLOG2, 1600), 0.5)
-        assertEquals(100.0, WaveformIre.ire(247.0 / 255, MonitorTransfer.DLOG2, 1600), 0.05)
+        assertEquals(39.88, ScopeDisplayScale.monitorPercent(dlogGrey, MonitorTransfer.DLOG, 400, ceiling = ScopeExposureCeiling.UNOBSERVED), 0.5)
+        assertEquals(0.0, WaveformIre.ire(black, MonitorTransfer.DLOG2, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED), 1e-9)
+        assertEquals(30.50, WaveformIre.ire(grey, MonitorTransfer.DLOG2, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED), 0.5)
+        assertEquals(100.0, WaveformIre.ire(247.0 / 255, MonitorTransfer.DLOG2, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED), 0.05)
     }
 
     @Test
     fun signalNativeInvertsMonitorPercent() {
         for (transfer in transfers) {
             for (percent in listOf(0.0, 18.0, 55.0, 100.0)) {
-                val native = ScopeDisplayScale.signalNative(percent, transfer)
+                val native = ScopeDisplayScale.signalNative(percent, transfer, ceiling = ScopeExposureCeiling.UNOBSERVED)
                 assertEquals(
                     percent,
-                    ScopeDisplayScale.monitorPercent(native, transfer),
+                    ScopeDisplayScale.monitorPercent(native, transfer, ceiling = ScopeExposureCeiling.UNOBSERVED),
                     1e-6,
                     "$transfer $percent",
                 )
@@ -162,7 +162,7 @@ class LiveColorScienceTest {
         bins[16] = 100
         bins[78] = 50
         bins[247] = 25
-        val out = WaveformIre.remapHistogram(bins, MonitorTransfer.DLOG2)
+        val out = WaveformIre.remapHistogram(bins, MonitorTransfer.DLOG2, ceiling = ScopeExposureCeiling.UNOBSERVED)
         assertEquals(175, out.sum())
         assertEquals(100, out[0])
         assertEquals(25, out[255])
@@ -172,12 +172,12 @@ class LiveColorScienceTest {
 
     @Test
     fun trafficEdgesFollowTheAnchors() {
-        val dlog2 = ScopeAnchors.make(MonitorTransfer.DLOG2, 1600)
+        val dlog2 = ScopeAnchors.make(MonitorTransfer.DLOG2, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED)
         assertEquals(247, dlog2.clipEdgeByte)
         assertEquals(240, dlog2.clipFloorByte)
         assertTrue(dlog2.clipFloorByte > 188)
-        assertEquals(223, ScopeAnchors.make(MonitorTransfer.DLOG, 1600).clipEdgeByte)
-        assertEquals(223, ScopeAnchors.make(MonitorTransfer.DLOG, 400).clipEdgeByte)
+        assertEquals(223, ScopeAnchors.make(MonitorTransfer.DLOG, 1600, ceiling = ScopeExposureCeiling.UNOBSERVED).clipEdgeByte)
+        assertEquals(223, ScopeAnchors.make(MonitorTransfer.DLOG, 400, ceiling = ScopeExposureCeiling.UNOBSERVED).clipEdgeByte)
     }
 
     private data class SpikeCase(
@@ -202,7 +202,7 @@ class LiveColorScienceTest {
                 transfers.map { SpikeCase("curve top clips", it, 255, crush = false, clip = true) }
         for (case in cases) {
             val bins = spike(case.code)
-            val reading = ScopeTrafficLights.reading(bins, bins, bins, case.transfer)
+            val reading = ScopeTrafficLights.reading(bins, bins, bins, case.transfer, ceiling = ScopeExposureCeiling.UNOBSERVED)
             val label = "${case.name}: ${case.transfer.name} code ${case.code}"
             assertEquals(case.crush, reading.anyCrush, label)
             assertEquals(case.clip, reading.anyClip, label)
@@ -214,7 +214,7 @@ class LiveColorScienceTest {
         val bins = IntArray(256)
         bins[16] = 5
         bins[128] = 95
-        val strict = ScopeTrafficLights.reading(bins, bins, bins, MonitorTransfer.DLOG2, threshold = 0.10)
+        val strict = ScopeTrafficLights.reading(bins, bins, bins, MonitorTransfer.DLOG2, threshold = 0.10, ceiling = ScopeExposureCeiling.UNOBSERVED)
         val forgiving =
             ScopeTrafficLights.reading(
                 bins,
@@ -222,7 +222,7 @@ class LiveColorScienceTest {
                 bins,
                 MonitorTransfer.DLOG2,
                 threshold = CrushClipCompensation.QUARTER.pixelFractionThreshold,
-            )
+             ceiling = ScopeExposureCeiling.UNOBSERVED)
         assertFalse(strict.red.crush)
         assertTrue(forgiving.red.crush)
         assertFalse(forgiving.red.clip)
@@ -239,7 +239,7 @@ class LiveColorScienceTest {
                 blue = mid,
                 transfer = MonitorTransfer.DLOG2,
                 luma = luma,
-            )
+             ceiling = ScopeExposureCeiling.UNOBSERVED)
         assertTrue(reading.anyClip)
         assertTrue(reading.red.clip)
         assertTrue(reading.green.clip)

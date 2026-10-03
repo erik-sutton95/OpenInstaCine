@@ -13,9 +13,7 @@ struct MonitorVideoBackdropConfiguration: Equatable {
     var geometry: [CGFloat] = []
 }
 
-/// VT / AVPlayer source buffers stay immutable while retained. The working
-/// raster's shared mutable outputs are explicitly excluded from identity caching.
-/// Future producers must preserve this contract or also opt out of caching.
+/// VT, AVPlayer and leased native working buffers stay immutable while retained.
 struct MonitorVideoBackdropSource: Equatable, @unchecked Sendable {
     var buffer: CVPixelBuffer
     var effects: LiveImageEffects
@@ -53,13 +51,13 @@ final class MonitorVideoBackdropRenderer: @unchecked Sendable {
     /// state so a held source with those looks settles instead of re-rendering
     /// at the backdrop cap. Read before rendering: a change during the render
     /// makes the next comparison miss once, never keeps a stale look.
-    static func externalLookState(_ sources: [MonitorVideoBackdropSource]) -> [Int] {
+    private func externalLookState(_ sources: [MonitorVideoBackdropSource]) -> [Int] {
         sources.flatMap { source -> [Int] in
             let effects = source.effects
             guard effects.falseColor || effects.zebra else { return [] }
             let maps =
                 effects.falseColor
-                ? PocketFalseColorMap.overlayPairData(
+                ? imageRenderer.falseColorMapper.overlayPairData(
                     scale: effects.falseColorScale, mode: effects.colorMode,
                     rec709: effects.falseColorRec709, clipByte: effects.resolvedClipByte)?
                     .clipByte ?? -1
@@ -182,12 +180,8 @@ final class MonitorVideoBackdropRenderer: @unchecked Sendable {
                         guard isCurrent(ticket) else { return nil }
                         let input = Input(
                             canvasSize: canvasSize, surroundRGB: surroundRGB, sources: sources,
-                            externalLook: Self.externalLookState(sources))
-                        var canCache =
-                            !sources.isEmpty
-                            && sources.allSatisfy {
-                                !FeedWorkingRaster.isReusableOutput($0.buffer)
-                            }
+                            externalLook: externalLookState(sources))
+                        var canCache = !sources.isEmpty
                         if let previous = cachedSnapshot(for: input, ticket: ticket), canCache {
                             isUnchanged = true
                             return previous

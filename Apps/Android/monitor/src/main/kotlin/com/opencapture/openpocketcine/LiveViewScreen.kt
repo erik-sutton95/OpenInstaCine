@@ -278,6 +278,8 @@ fun LiveViewScreen(model: AppModel) {
             if (OpcVulkan.isAvailable && !VulkanCrashGuard.isTripped(context)) {
                 LiveVulkanSession(
                     context = context,
+                    scopeBus = model.scopeBus,
+                    preview = model.inspectorPreview,
                     backdrop = backdrop,
                     onDecoderSurface = { model.session.attachSurface(it) },
                     onFirstFrame = { model.session.noteLiveFrame() },
@@ -606,6 +608,8 @@ fun LiveViewScreen(model: AppModel) {
                     flippedVertically = flipV,
                     stretchToRect = desqueezeVisible,
                     backdrop = backdrop,
+                    scopeBus = model.scopeBus,
+                    preview = model.inspectorPreview,
                     sourceIdentity = model.session.connectedCamera ?: model.session,
                     sourceReady = hasPicture,
                     sourceActive = scopeSourceActive,
@@ -732,6 +736,7 @@ fun LiveViewScreen(model: AppModel) {
             Box(Modifier.fillMaxSize().zIndex(1f)) {
                 LiveAssistLayer(
                     state = assist,
+                    scopeBus = model.scopeBus,
                     status = status,
                     focus = if (model.chromeSectionMounts(PocketDispSection.FOCUS_BOX)) focusPoint else null,
                     tracking = trackingHud,
@@ -1253,6 +1258,8 @@ private fun LiveFeedPresenter(
     flippedVertically: Boolean,
     stretchToRect: Boolean,
     backdrop: MonitorBackdropFeed,
+    scopeBus: com.opencapture.opencine.runtime.ScopeSampleBus,
+    preview: com.opencapture.opencine.runtime.InspectorPreviewPipeline,
     sourceIdentity: Any,
     sourceReady: Boolean,
     sourceActive: Boolean,
@@ -1273,6 +1280,8 @@ private fun LiveFeedPresenter(
         remember {
             LiveFeedEffectsSession(
                 context = context,
+                scopeBus = scopeBus,
+                preview = preview,
                 backdrop = backdrop,
                 onDecoderSurface = { attach.value(it) },
                 onGpuFailed = { gpuFailed = true },
@@ -1282,7 +1291,7 @@ private fun LiveFeedPresenter(
         }
     DisposableEffect(session) {
         onDispose {
-            session.detachDisplay()
+            session.close()
             textureViewOut.value(null)
         }
     }

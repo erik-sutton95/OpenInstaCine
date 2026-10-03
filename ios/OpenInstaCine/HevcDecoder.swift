@@ -125,10 +125,19 @@ final class HevcDecoder {
                 buffer, isNewSourceFrame: false, timeNs: lastDecodedTimeNs)
         }
     }
+    nonisolated private let samplePublication = OSAllocatedUnfairLock<LiveFrameSampleBus.Source?>(initialState: nil)
+    private var sampleSource: LiveFrameSampleBus.Source? {
+        get { samplePublication.withLock { $0 } }
+        set { samplePublication.withLock { $0 = newValue } }
+    }
     weak var sampleBus: LiveFrameSampleBus? {
         didSet {
-            // The engine measures and ratchets the ceiling of the bus it publishes into.
-            if let sampleBus { assistEngine.adopt(exposureCeiling: sampleBus.exposureCeiling) }
+            if sampleBus !== oldValue {
+                oldValue?.closeSource(sampleSource)
+                sampleSource = sampleBus?.openSource(.live)
+            }
+            // Calibration history belongs to the same lease as publication.
+            if let sampleSource { assistEngine.adopt(exposureCeiling: sampleSource.exposureCeiling) }
             if shouldStartVT, vt.session == nil, vt.format != nil { rebuildVT() }
         }
     }
@@ -297,7 +306,7 @@ final class HevcDecoder {
     var backdropEffects: LiveImageEffects {
         var result = effects
         // FALSE / ZEBRA thresholds follow this source's own ceiling.
-        result.clipByte = sampleBus?.exposureCeiling.clipByte(
+        result.clipByte = sampleSource?.exposureCeiling.clipByte(
             transfer: MonitorTransfer(result.colorMode))
         result.mirror = presentedPictureFlip ?? pictureFlip
         // Until the current Metal product owns the picture, use identity.
@@ -569,6 +578,7 @@ final class HevcDecoder {
         if isNewSourceFrame { pipelineMetrics.assistInput() }
         // One MainActor hop per engine callback — a second per-frame Task for the frame
         // counters doubled main-queue pressure at 25 fps for two one-line writes.
+        let publicationSource = samplePublication.withLock { $0 }
         assistEngine.submit(imageBuffer, effects: effects, transfer: transfer, timeNs: sourceTimeNs)
         {
             [weak self] result in
@@ -588,11 +598,11 @@ final class HevcDecoder {
                         at: ProcessInfo.processInfo.systemUptime, completedAt: completedAt)
                 }
                 let presented = self.applyAssistResult(
-                    result, generation: generation, isNewSourceFrame: isNewSourceFrame)
+                    result, generation: generation, publicationSource: publicationSource, isNewSourceFrame: isNewSourceFrame)
                 // Cached repaints cannot refresh camera or watcher liveness.
                 if result.shouldPresent && isNewSourceFrame {
                     self.lastSourceFrameAt = sourceTime
-                    self.sampleBus?.noteDecodedFrame()
+                    self.sampleBus?.noteDecodedFrame(publicationSource)
                 }
                 if presented && isNewSourceFrame {
                     self.publishWatchPreview(result)
@@ -641,7 +651,11 @@ final class HevcDecoder {
         vt.resetCounters()
         assistEngine.reset()
         pipelineMetrics.reset()
-        sampleBus?.reset()
+        if let sampleBus, sampleBus.isCurrent(sampleSource) {
+            sampleBus.closeSource(sampleSource)
+            sampleSource = sampleBus.openSource(.live)
+            if let sampleSource { assistEngine.adopt(exposureCeiling: sampleSource.exposureCeiling) }
+        }
         // VT was invalidated before clearing state. Release its old layer image
         // too: an in-app disconnect must not leave a picture from the prior GOP.
         vtOwnsHardwareDecode = false
@@ -968,22 +982,25 @@ final class HevcDecoder {
 
     private func applyAssistResult(
         _ result: LiveAssistEngine.Result, generation: StreamGeneration,
+        publicationSource: LiveFrameSampleBus.Source?,
         isNewSourceFrame: Bool = true
     ) -> Bool {
         // The inspector borrows raw main-feed pixels even when no scope is
         // enabled. Retaining the buffer performs no copy or scope calculation;
         // only an actual scope bundle advances the bus's observable generation.
-        sampleBus?.publish(
+        if let sampleBus {
+            guard sampleBus.publish(publicationSource,
             source: result.source,
             transfer: result.transfer,
-            colorMode: result.colorMode,
-            bundle: result.bundle)
+            reportedTransfer: MonitorTransfer(result.colorMode),
+            bundle: result.bundle) else { return false }
+        }
         if result.shouldPresent {
             lastDecodedBuffer = result.source
-            lastDecodedTimeNs = result.timeNs
+            lastDecodedTimeNs = result.timeNs ?? 0
             if let onSourceFrame {
                 let lease = vt.fence.lease(
-                    result.source, generation: generation, timeNs: result.timeNs)
+                    result.source, generation: generation, timeNs: result.timeNs ?? 0)
                 vt.fence.publish(lease, to: onSourceFrame)
                 lease.release()
             }
