@@ -5,7 +5,6 @@ import androidx.core.content.edit
 import com.opencapture.monitorui.MonitorJoystickSize
 import com.opencapture.opencine.appkit.MonitorOperatorPreferences
 import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.feed.FeedUpscaleSwitch
 import com.opencapture.openpocketcine.feed.FeedUpscaler
 import com.opencapture.openpocketcine.lut.LutCatalog
 import org.json.JSONObject
@@ -19,7 +18,7 @@ enum class PocketDispMode(val title: String, val settingsTitle: String, val sett
     CLEAN(
         "Clean",
         "DISP 2 · Clean",
-        "A stripped-back image. Same elements as DISP 1 — status, tool and capture bars start off. Pin which view assists stay on.",
+        "A stripped-back image. Same elements as DISP 1; status, tool and capture bars start off. Pin which view assists stay on.",
     ),
 }
 
@@ -352,14 +351,10 @@ object OperatorPrefs {
         prefs(context).edit { putStringSet(CLEAN_PINS, HashSet(resolvedCleanPins(value))) }
     }
 
-    fun feedUpscaler(context: Context): FeedUpscaler {
-        val value = FeedUpscaler.fromStored(prefs(context).getString(FEED_UPSCALER, null))
-        FeedUpscaleSwitch.rendererReads = value
-        return value
-    }
+    fun feedUpscaler(context: Context): FeedUpscaler =
+        FeedUpscaler.fromStored(prefs(context).getString(FEED_UPSCALER, null))
 
     fun setFeedUpscaler(context: Context, value: FeedUpscaler) {
-        FeedUpscaleSwitch.rendererReads = value
         prefs(context).edit { putString(FEED_UPSCALER, value.label) }
     }
 
