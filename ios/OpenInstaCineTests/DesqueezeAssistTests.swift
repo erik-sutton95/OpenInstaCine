@@ -4,6 +4,7 @@ import XCTest
 
 @testable import OpenInstaCine
 
+@MainActor
 final class DesqueezeAssistTests: XCTestCase {
     /// This test's monitored source (XCTest makes a fresh one per test).
     private let ceiling = ScopeExposureCeiling()

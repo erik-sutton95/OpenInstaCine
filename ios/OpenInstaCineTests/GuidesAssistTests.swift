@@ -4,6 +4,7 @@ import XCTest
 @testable import OpenInstaCine
 
 /// Pins OpenZCine `AssistConfiguration.Guides` + `rectForRatio` onto PocketCine.
+@MainActor
 final class GuidesAssistTests: XCTestCase {
     func testFilmAndSocialListsMatchOpenZCine() {
         XCTAssertEqual(

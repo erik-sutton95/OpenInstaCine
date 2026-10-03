@@ -50,7 +50,7 @@ enum PeakingAssist {
     }
 
     /// Binds ``LiveAssistState`` color / sensitivity and persists on change.
-    static func longPressMenu(
+    @MainActor static func longPressMenu(
         assist: LiveAssistState,
         compact: Bool = false
     ) -> PeakingLongPressMenu {
@@ -66,7 +66,7 @@ enum PeakingAssist {
         )
     }
 
-    static func longPressMenu(_ assist: LiveAssistState) -> PeakingLongPressMenu {
+    @MainActor static func longPressMenu(_ assist: LiveAssistState) -> PeakingLongPressMenu {
         longPressMenu(assist: assist)
     }
 

@@ -3,6 +3,7 @@ import XCTest
 
 @testable import OpenInstaCine
 
+@MainActor
 final class MirrorAssistTests: XCTestCase {
     func testFeedScaleIsHorizontalNotVertical() {
         let off = MirrorAssist.feedScale(mirrored: false)

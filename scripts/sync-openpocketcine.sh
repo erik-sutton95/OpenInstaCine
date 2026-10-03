@@ -109,6 +109,7 @@ LUNA_OWNED=(
   OpenInstaCine/MediaPlayer.swift
   OpenInstaCine/WatcherRelayClient.swift
   OpenInstaCine/Assists/AssistInspectorPreview.swift
+  OpenInstaCine/Assists/AssistLongPressChrome.swift
   OpenInstaCineTests/AssistInspectorLifecycleTests.swift
   OpenInstaCineTests/AssistInspectorPreviewTests.swift
   OpenInstaCineTests/HistogramAssistTests.swift
