@@ -30,35 +30,35 @@ enum TrafficLightsAssist {
     static let gripExteriorGap: CGFloat = 2
 
     /// OpenZCine `TrafficLightsMeterMini` chrome — 74×168 landscape box.
-    static let meterTitle = "TL"
-    static let accessibilityTitle = "Traffic Lights"
-    static let titleSize: CGFloat = 8.5
-    static let titleSpacing: CGFloat = 6
-    static let columnSpacing: CGFloat = 6
-    static let postSpacing: CGFloat = 4
-    static let panelPad: CGFloat = 8
-    static let trackWidth: CGFloat = 11
-    static let columnHeight: CGFloat = 108
-    static let indicatorSize: CGFloat = 8
-    static let fillsWidthMaxColumn: CGFloat = 44
-    static let trackCorner: CGFloat = 2
-    static let minBarHeight: CGFloat = 1.5
-    static let centerLineFactor: CGFloat = 0.85
+    static let meterTitle = MonitorTrafficLightsGeometry.meterTitle
+    static let accessibilityTitle = MonitorTrafficLightsGeometry.accessibilityTitle
+    static let titleSize = MonitorTrafficLightsGeometry.titleSize
+    static let titleSpacing = MonitorTrafficLightsGeometry.titleSpacing
+    static let columnSpacing = MonitorTrafficLightsGeometry.columnSpacing
+    static let postSpacing = MonitorTrafficLightsGeometry.postSpacing
+    static let panelPad = MonitorTrafficLightsGeometry.panelPad
+    static let trackWidth = MonitorTrafficLightsGeometry.trackWidth
+    static let columnHeight = MonitorTrafficLightsGeometry.columnHeight
+    static let indicatorSize = MonitorTrafficLightsGeometry.indicatorSize
+    static let fillsWidthMaxColumn = MonitorTrafficLightsGeometry.fillsWidthMaxColumn
+    static let trackCorner = MonitorTrafficLightsGeometry.trackCorner
+    static let minBarHeight = MonitorTrafficLightsGeometry.minBarHeight
+    static let centerLineFactor = MonitorTrafficLightsGeometry.centerLineFactor
     static let segmentMinWidth: CGFloat = 46
     static let segmentMinHeight: CGFloat = 34
-    static let meterRedRGB: (Double, Double, Double) = (255, 92, 82)
-    static let meterGreenRGB: (Double, Double, Double) = (86, 235, 132)
-    static let meterBlueRGB: (Double, Double, Double) = (96, 158, 255)
-    static let leanBalanced = "balanced"
-    static let leanOver = "over"
-    static let leanUnder = "under"
-    static let flagClip = "clip"
-    static let flagCrush = "crush"
-    static let channelNames = ["red", "green", "blue"]
+    static let meterRedRGB = MonitorTrafficLightsGeometry.meterRedRGB
+    static let meterGreenRGB = MonitorTrafficLightsGeometry.meterGreenRGB
+    static let meterBlueRGB = MonitorTrafficLightsGeometry.meterBlueRGB
+    static let leanBalanced = MonitorTrafficLightsGeometry.leanBalanced
+    static let leanOver = MonitorTrafficLightsGeometry.leanOver
+    static let leanUnder = MonitorTrafficLightsGeometry.leanUnder
+    static let flagClip = MonitorTrafficLightsGeometry.flagClip
+    static let flagCrush = MonitorTrafficLightsGeometry.flagCrush
+    static let channelNames = MonitorTrafficLightsGeometry.channelNames
 
     /// OpenZCine `TrafficLightsMeter.balanceCenter` / `balanceDeadZone`.
-    static let balanceCenter = 0.5
-    static let balanceDeadZone = 0.03
+    static let balanceCenter = MonitorTrafficLightsGeometry.balanceCenter
+    static let balanceDeadZone = MonitorTrafficLightsGeometry.balanceDeadZone
 
     /// OpenZCine `AssistConfiguration.CrushClipCompensation`.
     enum CrushClipCompensation: Int, CaseIterable, Codable, Equatable, Sendable, Identifiable {
@@ -118,19 +118,10 @@ enum TrafficLightsAssist {
     }
 
     /// OpenZCine `TrafficLightsBarSide` — which half of a goal-post shows fill.
-    enum BarSide: Equatable, Sendable {
-        case neutral
-        case over
-        case under
-    }
+    typealias BarSide = MonitorTrafficLightsGeometry.BarSide
 
     /// OpenZCine `TrafficLightsChannelDisplay` — display transform only (not IRE).
-    struct ChannelDisplay: Equatable, Sendable {
-        var side: BarSide
-        var barFill: Double
-
-        static let neutral = ChannelDisplay(side: .neutral, barFill: 0)
-    }
+    typealias ChannelDisplay = MonitorTrafficLightsGeometry.ChannelDisplay
 
     /// OpenZCine `TrafficLightsMeter.channelDisplay` — centre-anchored single-sided fill.
     static func channelDisplay(
@@ -138,7 +129,7 @@ enum TrafficLightsAssist {
         balanceCenter center: Double = balanceCenter,
         deadZone: Double = balanceDeadZone
     ) -> ChannelDisplay {
-        channelDisplay(level: channel.level, balanceCenter: center, deadZone: deadZone)
+        MonitorTrafficLightsGeometry.channelDisplay(for: channel, balanceCenter: center, deadZone: deadZone)
     }
 
     static func channelDisplay(
@@ -146,49 +137,21 @@ enum TrafficLightsAssist {
         balanceCenter center: Double = balanceCenter,
         deadZone: Double = balanceDeadZone
     ) -> ChannelDisplay {
-        let deviation = level - center
-        if abs(deviation) <= deadZone { return .neutral }
-        if deviation > 0 {
-            let span = max(1 - center, .leastNonzeroMagnitude)
-            return ChannelDisplay(side: .over, barFill: min(1, deviation / span))
-        }
-        let span = max(center, .leastNonzeroMagnitude)
-        return ChannelDisplay(side: .under, barFill: min(1, abs(deviation) / span))
+        MonitorTrafficLightsGeometry.channelDisplay(level: level, balanceCenter: center, deadZone: deadZone)
     }
 
     /// OpenZCine `TrafficLightsMeterMini` column width — 11pt locked, or spread when `fillsWidth`.
     static func columnWidth(fillsWidth: Bool, panelWidth: CGFloat, uiScale: CGFloat) -> CGFloat {
-        if fillsWidth {
-            return min(
-                fillsWidthMaxColumn,
-                max(trackWidth * uiScale, (panelWidth - 16 * uiScale) / 6))
-        }
-        return trackWidth * uiScale
+        MonitorTrafficLightsGeometry.columnWidth(fillsWidth: fillsWidth, panelWidth: panelWidth, uiScale: uiScale)
     }
 
     static func meterColor(_ rgb: (Double, Double, Double)) -> Color {
-        Color(red: rgb.0 / 255, green: rgb.1 / 255, blue: rgb.2 / 255)
+        MonitorTrafficLightsGeometry.meterColor(rgb)
     }
 
     /// OpenZCine `trafficLightsAccessibilityValue`.
     static func accessibilityValue(for reading: ScopeTrafficLightsReading) -> String {
-        func channel(_ name: String, _ ch: ScopeChannelLight) -> String {
-            let shown = channelDisplay(for: ch)
-            let lean: String
-            switch shown.side {
-            case .neutral: lean = leanBalanced
-            case .over: lean = leanOver
-            case .under: lean = leanUnder
-            }
-            let flags = [ch.clip ? flagClip : nil, ch.crush ? flagCrush : nil].compactMap { $0 }
-            let flagSuffix = flags.isEmpty ? "" : " (\(flags.joined(separator: ", ")))"
-            return "\(name) \(lean)\(flagSuffix)"
-        }
-        return [
-            channel(channelNames[0], reading.red),
-            channel(channelNames[1], reading.green),
-            channel(channelNames[2], reading.blue),
-        ].joined(separator: ", ")
+        MonitorTrafficLightsGeometry.accessibilityValue(for: reading)
     }
 
     /// Normalized centre — OpenZCine `MovablePanelStoredCenter`.

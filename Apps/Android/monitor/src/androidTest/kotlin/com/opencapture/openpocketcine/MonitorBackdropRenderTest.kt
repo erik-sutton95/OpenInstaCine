@@ -43,6 +43,53 @@ import org.junit.runner.RunWith
 /** Pixel evidence from the real HWUI/RenderEffect modifier, not an emulated blur model. */
 @RunWith(AndroidJUnit4::class)
 class MonitorBackdropRenderTest {
+    @Test fun sharedTrafficMeterPlacesOverUnderBarsAndClearsTheNextReading() {
+        ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+            val reading = androidx.compose.runtime.mutableStateOf(ScopeTrafficLightsReading.NONE)
+            var density = 1f
+            var bounds = Rect.Zero
+            scenario.onActivity { activity ->
+                density = activity.resources.displayMetrics.density
+                activity.setContent {
+                    Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black)) {
+                        com.opencapture.monitorui.MonitorTrafficLightsMeter(reading.value,
+                            Modifier.size(74.dp, 168.dp).onGloballyPositioned { bounds = it.boundsInWindow() })
+                    }
+                }
+            }
+            fun pixels(image: Bitmap, lane: IntRange, rows: IntRange, component: Int): Int {
+                var count = 0
+                val x0 = (bounds.left + lane.first * density).roundToInt()
+                val x1 = (bounds.left + (lane.last + 1) * density).roundToInt()
+                val y0 = (bounds.top + rows.first * density).roundToInt()
+                val y1 = (bounds.top + (rows.last + 1) * density).roundToInt()
+                for (y in y0 until y1) for (x in x0 until x1) {
+                    val color = image.getPixel(x, y)
+                    val channels = listOf(Color.red(color), Color.green(color), Color.blue(color))
+                    val dominant = channels[component]
+                    if (dominant > 45 && channels.indices.filter { it != component }
+                            .all { dominant > channels[it] * 1.4 }) count++
+                }
+                return count
+            }
+            val neutral = capture(scenario, "shared-traffic-neutral")
+            scenario.onActivity { reading.value = ScopeTrafficLightsReading(
+                com.opencapture.opencine.media.ScopeChannelLight(clip = true, crush = false, level = 0.9),
+                com.opencapture.opencine.media.ScopeChannelLight(clip = false, crush = true, level = 0.1),
+                com.opencapture.opencine.media.ScopeChannelLight(clip = false, crush = false, level = 0.5)) }
+            val active = capture(scenario, "shared-traffic-active")
+            assertTrue(pixels(active, 14..26, 42..84, 0) - pixels(neutral, 14..26, 42..84, 0) > 100 * density * density)
+            assertTrue(pixels(active, 31..43, 92..137, 1) - pixels(neutral, 31..43, 92..137, 1) > 100 * density * density)
+            assertTrue(pixels(active, 14..26, 92..137, 0) < 5 * density * density)
+            assertTrue(pixels(active, 31..43, 42..84, 1) < 5 * density * density)
+            assertTrue(pixels(active, 48..60, 42..137, 2) < 5 * density * density)
+            scenario.onActivity { reading.value = ScopeTrafficLightsReading.NONE }
+            val cleared = capture(scenario, "shared-traffic-cleared")
+            assertEquals(0, pixels(cleared, 14..26, 42..84, 0))
+            assertEquals(0, pixels(cleared, 31..43, 92..137, 1))
+        }
+    }
+
     @Test fun sharedAspectMaskLeavesTheUnionClearAndDimsItsCorners() {
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
             val masked = androidx.compose.runtime.mutableStateOf(false)

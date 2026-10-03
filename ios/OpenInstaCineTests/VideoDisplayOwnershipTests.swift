@@ -9,6 +9,74 @@ import SwiftUI
 
 @MainActor
 final class VideoDisplayOwnershipTests: XCTestCase {
+    func testSharedTrafficMeterPlacesOverAndUnderBarsAndClearsTheirSuccessor() async throws {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 74, height: 168))
+        let host = UIHostingController(rootView: AnyView(EmptyView()))
+        host.view.backgroundColor = .black
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        func render(_ reading: ScopeTrafficLightsReading) async throws -> [UInt8] {
+            let probe = PanelProbe()
+            probe.expectedSize = CGSize(width: 74, height: 168)
+            probe.laidOut = expectation(description: "native meter laid out")
+            let ready = try XCTUnwrap(probe.laidOut)
+            host.rootView = AnyView(ZStack {
+                MonitorTrafficLightsMeter(reading: reading)
+                PanelProbeView(view: probe).id(ObjectIdentifier(probe)).allowsHitTesting(false)
+            }.frame(width: 74, height: 168).ignoresSafeArea()
+                .transaction { $0.disablesAnimations = true })
+            host.view.frame = window.bounds
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            await fulfillment(of: [ready], timeout: 5)
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 2
+            let captured = UIGraphicsImageRenderer(bounds: host.view.bounds, format: format).image { _ in
+                XCTAssertTrue(host.view.drawHierarchy(in: host.view.bounds, afterScreenUpdates: true))
+            }
+            let image = try XCTUnwrap(captured.cgImage)
+            var rgba = [UInt8](repeating: 0, count: 148 * 336 * 4)
+            let context = try XCTUnwrap(CGContext(data: &rgba, width: 148, height: 336,
+                bitsPerComponent: 8, bytesPerRow: 148 * 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: 148, height: 336))
+            let attachment = XCTAttachment(image: UIImage(cgImage: image))
+            attachment.name = "shared-traffic-meter"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            return rgba
+        }
+        func pixels(_ rgba: [UInt8], lane: Range<Int>, rows: Range<Int>, component: Int) -> Int {
+            var count = 0
+            for y in rows { for x in lane {
+                let at = (y * 148 + x) * 4
+                let dominant = Int(rgba[at + component])
+                if dominant > 45 && (0..<3).filter({ $0 != component }).allSatisfy({
+                    Double(dominant) > Double(rgba[at + $0]) * 1.4
+                }) { count += 1 }
+            } }
+            return count
+        }
+        let neutral = try await render(.none)
+        let active = try await render(ScopeTrafficLightsReading(
+            red: ScopeChannelLight(clip: true, crush: false, level: 0.9),
+            green: ScopeChannelLight(clip: false, crush: true, level: 0.1),
+            blue: ScopeChannelLight(clip: false, crush: false, level: 0.5)))
+        XCTAssertGreaterThan(pixels(active, lane: 18..<47, rows: 85..<173, component: 0)
+            - pixels(neutral, lane: 18..<47, rows: 85..<173, component: 0), 300)
+        XCTAssertGreaterThan(pixels(active, lane: 59..<89, rows: 185..<280, component: 1)
+            - pixels(neutral, lane: 59..<89, rows: 185..<280, component: 1), 300)
+        XCTAssertLessThan(pixels(active, lane: 18..<47, rows: 185..<280, component: 0), 10)
+        XCTAssertLessThan(pixels(active, lane: 59..<89, rows: 85..<173, component: 1), 10)
+        XCTAssertLessThan(pixels(active, lane: 102..<132, rows: 85..<280, component: 2), 10)
+        let cleared = try await render(.none)
+        XCTAssertEqual(pixels(cleared, lane: 18..<47, rows: 85..<173, component: 0),
+            pixels(neutral, lane: 18..<47, rows: 85..<173, component: 0))
+        XCTAssertEqual(pixels(cleared, lane: 59..<89, rows: 185..<280, component: 1),
+            pixels(neutral, lane: 59..<89, rows: 185..<280, component: 1))
+    }
+
     func testSharedAspectMaskLeavesBothGuideArmsClearAndOnlyDimsTheirExterior() throws {
         let feed = CGRect(x: 20, y: 20, width: 320, height: 180)
         let renderer = ImageRenderer(content: ZStack(alignment: .topLeading) {

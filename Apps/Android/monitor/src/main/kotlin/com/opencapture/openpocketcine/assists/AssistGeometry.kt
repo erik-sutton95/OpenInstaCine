@@ -197,53 +197,7 @@ object VectorscopeGraticule {
     private fun AssistRect.scopeRect() = com.opencapture.monitorui.MonitorScopeRect(x, y, width, height)
 }
 
-object TrafficLightsAssist {
-    const val METER_TITLE = "TL"
-    const val TITLE_SIZE = 8.5f
-    const val TITLE_SPACING = 6f
-    const val COLUMN_SPACING = 6f
-    const val POST_SPACING = 4f
-    const val PANEL_PAD = 8f
-    const val TRACK_WIDTH = 11f
-    const val COLUMN_HEIGHT = 108f
-    const val INDICATOR_SIZE = 8f
-    const val TRACK_CORNER = 2f
-    const val MIN_BAR_HEIGHT = 1.5f
-    const val CENTER_LINE_FACTOR = 0.85f
-    const val BALANCE_CENTER = 0.5
-    const val BALANCE_DEAD_ZONE = 0.03
-    val meterRedRGB = Triple(255.0, 92.0, 82.0)
-    val meterGreenRGB = Triple(86.0, 235.0, 132.0)
-    val meterBlueRGB = Triple(96.0, 158.0, 255.0)
 
-    enum class BarSide {
-        NEUTRAL,
-        OVER,
-        UNDER,
-    }
-
-    data class ChannelDisplay(val side: BarSide, val barFill: Double) {
-        companion object {
-            val neutral = ChannelDisplay(BarSide.NEUTRAL, 0.0)
-        }
-    }
-
-    fun channelDisplay(
-        level: Double,
-        center: Double = BALANCE_CENTER,
-        deadZone: Double = BALANCE_DEAD_ZONE,
-    ): ChannelDisplay {
-        val deviation = level - center
-        if (abs(deviation) <= deadZone) return ChannelDisplay.neutral
-        return if (deviation > 0) {
-            val span = maxOf(1 - center, Double.MIN_VALUE)
-            ChannelDisplay(BarSide.OVER, minOf(1.0, deviation / span))
-        } else {
-            val span = maxOf(center, Double.MIN_VALUE)
-            ChannelDisplay(BarSide.UNDER, minOf(1.0, abs(deviation) / span))
-        }
-    }
-}
 
 typealias MovablePanelMath = com.opencapture.monitorui.MonitorScopePanelMath
 

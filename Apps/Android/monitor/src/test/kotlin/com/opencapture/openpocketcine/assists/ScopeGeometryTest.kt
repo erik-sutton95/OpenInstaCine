@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine.assists
 
+import com.opencapture.monitorui.MonitorTrafficLightsGeometry as TrafficLightsAssist
+
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraStatus
