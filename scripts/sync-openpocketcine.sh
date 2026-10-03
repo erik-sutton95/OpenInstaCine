@@ -93,6 +93,9 @@ LUNA_OWNED=(
   OpenInstaCine/Assists/AudioAssistStore.swift
   OpenInstaCine/Assists/AudioAssist.swift
   OpenInstaCine/Assists/HistogramAssist.swift
+  OpenInstaCine/Assists/PeakingAssist.swift
+  OpenInstaCine/Assists/ZebraAssist.swift
+  OpenInstaCine/Assists/DesqueezeAssist.swift
   OpenInstaCine/Assists/NDAssist.swift
   OpenInstaCine/Assists/TrafficLightsAssist.swift
   OpenInstaCine/Assists/GridAssist.swift

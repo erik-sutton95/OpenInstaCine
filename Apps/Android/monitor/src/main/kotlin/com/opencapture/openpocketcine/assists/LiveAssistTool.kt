@@ -93,56 +93,9 @@ typealias GuideFamily = com.opencapture.monitorui.MonitorGuideFamily
 
 typealias GuideAspect = com.opencapture.monitorui.MonitorGuideAspect
 
-enum class PeakingColor(val label: String) {
-    WHITE("White"),
-    BLUE("Blue"),
-    RED("Red"),
-    GREEN("Green"),
-    ;
+typealias PeakingColor = com.opencapture.opencine.media.MonitorPeakingColor
 
-    /** Overlay RGB OpenZCine paints on focused edges. */
-    val rgb: Triple<Double, Double, Double>
-        get() =
-            when (this) {
-                WHITE -> Triple(246.0 / 255, 241.0 / 255, 226.0 / 255)
-                BLUE -> Triple(64.0 / 255, 142.0 / 255, 255.0 / 255)
-                RED -> Triple(255.0 / 255, 72.0 / 255, 64.0 / 255)
-                GREEN -> Triple(74.0 / 255, 220.0 / 255, 132.0 / 255)
-            }
-
-    companion object {
-        fun fromPersisted(raw: String): PeakingColor =
-            entries.firstOrNull { it.label == raw || it.name == raw } ?: RED
-    }
-}
-
-enum class PeakingSense(val label: String) {
-    LOW("Low"),
-    MED("Med"),
-    HIGH("High"),
-    ;
-
-    val ratioThreshold: Double
-        get() =
-            when (this) {
-                LOW -> 2.30
-                MED -> 2.10
-                HIGH -> 1.90
-            }
-
-    val noiseGate: Double
-        get() =
-            when (this) {
-                LOW -> 0.00522
-                MED -> 0.00174
-                HIGH -> 0.00058
-            }
-
-    companion object {
-        fun fromPersisted(raw: String): PeakingSense =
-            entries.firstOrNull { it.label == raw || it.name == raw } ?: MED
-    }
-}
+typealias PeakingSense = com.opencapture.opencine.media.MonitorPeakingSense
 
 /**
  * [persisted] is the saved key. [STOPS] is the scale now labeled Video; its key stays
@@ -189,30 +142,7 @@ enum class ZebraUnit(val persisted: String, val editorLabel: String) {
     }
 }
 
-enum class ZebraPaint(val label: String) {
-    WHITE("White"),
-    AMBER("Amber"),
-    RED("Red"),
-    CYAN("Cyan"),
-    GREEN("Green"),
-    ;
-
-    /** Overlay RGB iOS `ZebraPaint.rgb` paints on the feed. */
-    val rgb: Triple<Double, Double, Double>
-        get() =
-            when (this) {
-                WHITE -> Triple(1.0, 1.0, 1.0)
-                AMBER -> Triple(1.0, 0.72, 0.2)
-                RED -> Triple(1.0, 0.15, 0.15)
-                CYAN -> Triple(0.0, 0.85, 0.9)
-                GREEN -> Triple(0.2, 0.9, 0.35)
-            }
-
-    companion object {
-        fun fromPersisted(raw: String): ZebraPaint =
-            entries.firstOrNull { it.label == raw || it.name == raw } ?: WHITE
-    }
-}
+typealias ZebraPaint = com.opencapture.opencine.media.MonitorZebraPaint
 
 typealias WaveformMode = com.opencapture.monitorui.MonitorWaveformMode
 
@@ -221,32 +151,7 @@ typealias ParadeMode = com.opencapture.monitorui.MonitorParadeMode
 typealias VectorscopeZoom = com.opencapture.monitorui.MonitorVectorscopeZoom
 
 /** OpenZCine `AssistConfiguration.CrushClipCompensation` — shared HISTO + LIGHTS. */
-enum class CrushClipCompensation(val raw: Int, val label: String, val compactLabel: String) {
-    ZERO(0, "0", "0"),
-    QUARTER(2, "0.25", "¼"),
-    HALF(5, "0.5", "½"),
-    THREE_QUARTER(7, "0.75", "¾"),
-    ONE(10, "1.0", "1"),
-    ;
-
-    val stops: Double
-        get() =
-            when (this) {
-                ZERO -> 0.0
-                QUARTER -> 0.25
-                HALF -> 0.5
-                THREE_QUARTER -> 0.75
-                ONE -> 1.0
-            }
-
-    val pixelFractionThreshold: Double
-        get() = stops / 10.0
-
-    companion object {
-        fun fromRaw(value: Int): CrushClipCompensation =
-            entries.firstOrNull { it.raw == value } ?: if (value > 10) ONE else ZERO
-    }
-}
+typealias CrushClipCompensation = com.opencapture.opencine.media.MonitorCrushClipCompensation
 
 object LiveZebra {
     const val HIGHLIGHT_IRE = 99.0

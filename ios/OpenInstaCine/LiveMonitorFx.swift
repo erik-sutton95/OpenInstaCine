@@ -1,3 +1,4 @@
+import OpenCineMedia
 import CoreImage
 import OpenCineApple
 import Metal
@@ -150,24 +151,7 @@ enum FalseColorScaleKind: String, CaseIterable, Codable, Sendable {
     case limits = "Limits"
 }
 
-enum ZebraPaint: String, CaseIterable, Codable, Sendable {
-    case white = "White"
-    case amber = "Amber"
-    case red = "Red"
-    case cyan = "Cyan"
-    case green = "Green"
-
-    /// OpenZCine `ImageEffectsCompositor.zebraRGB`.
-    var rgb: (Double, Double, Double) {
-        switch self {
-        case .white: (1, 1, 1)
-        case .amber: (1, 0.72, 0.2)
-        case .red: (1, 0.15, 0.15)
-        case .cyan: (0, 0.85, 0.9)
-        case .green: (0.2, 0.9, 0.35)
-        }
-    }
-}
+typealias ZebraPaint = MonitorZebraPaint
 
 typealias LiveMonitorWorkingSpace = OpenCineApple.MonitorWorkingSpace
 

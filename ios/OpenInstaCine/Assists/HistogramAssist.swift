@@ -1,5 +1,6 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineMedia
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -72,54 +73,7 @@ enum HistogramAssist {
     /// Panel-edge inset for the crush / clip columns (outside 0 / 100).
     static var trafficHorizontalInset: CGFloat { trafficOuterPad }
 
-    /// OpenZCine `AssistConfiguration.CrushClipCompensation`.
-    enum CrushClipCompensation: Int, CaseIterable, Codable, Equatable, Sendable, Identifiable {
-        case zero = 0
-        case quarter = 2
-        case half = 5
-        case threeQuarter = 7
-        case one = 10
-
-        var id: Int { rawValue }
-
-        var label: String {
-            switch self {
-            case .zero: "0"
-            case .quarter: "0.25"
-            case .half: "0.5"
-            case .threeQuarter: "0.75"
-            case .one: "1.0"
-            }
-        }
-
-        var compactLabel: String {
-            switch self {
-            case .zero: "0"
-            case .quarter: "¼"
-            case .half: "½"
-            case .threeQuarter: "¾"
-            case .one: "1"
-            }
-        }
-
-        var stops: Double {
-            switch self {
-            case .zero: 0
-            case .quarter: 0.25
-            case .half: 0.5
-            case .threeQuarter: 0.75
-            case .one: 1.0
-            }
-        }
-
-        /// OpenZCine: each quarter-stop adds 2.5 percentage points (0 → 0%, 1.0 → 10%).
-        var pixelFractionThreshold: Double { stops / 10.0 }
-
-        init(from decoder: any Decoder) throws {
-            let raw = try decoder.singleValueContainer().decode(Int.self)
-            self = CrushClipCompensation(rawValue: raw) ?? (raw > 10 ? .one : .zero)
-        }
-    }
+    typealias CrushClipCompensation = MonitorCrushClipCompensation
 
     /// OpenZCine `MovablePanelStoredCenter` — centre as a fraction of the overlay bounds.
     typealias StoredCenter = MonitorScopeStoredCenter

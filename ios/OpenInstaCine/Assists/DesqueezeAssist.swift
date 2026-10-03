@@ -1,36 +1,20 @@
 import MonitorUI
+import OpenCineMedia
 import OpenPocketViewCore
 import SwiftUI
 
-enum DesqueezeRatio: String, CaseIterable, Codable {
-    case x11 = "1.1×"
-    case x12 = "1.2×"
-    case x133 = "1.33×"
-    case x15 = "1.5×"
-    case x16 = "1.6×"
-    case x18 = "1.8×"
-    case x2 = "2.0×"
-
-    var factor: Double { Double(rawValue.dropLast()) ?? 1.33 }
-
-    static func matching(_ factor: Double) -> DesqueezeRatio? {
-        allCases.first { abs($0.factor - factor) < 0.005 }
-    }
-}
+typealias DesqueezeRatio = MonitorDesqueezePreset
 
 /// Local optical correction, following the same factor range as the reference monitor.
 enum DesqueezeAssist {
-    static let factorRange = 1.0...2.0
-    static let factorStep = 0.01
+    static let factorRange = MonitorAnamorphicDesqueeze.factorRange
+    static let factorStep = MonitorAnamorphicDesqueeze.factorStep
     static let help =
         "Match your anamorphic lens or adapter. Horizontal widens the picture; Vertical "
         + "corrects a rotated adapter. The full picture fits on screen. Recordings, exports "
         + "and scope measurements stay unchanged."
 
-    static func snap(_ value: Double) -> Double {
-        guard value.isFinite else { return 1.33 }
-        return (min(2, max(1, value)) * 100 + 0.000_000_1).rounded() / 100
-    }
+    static func snap(_ value: Double) -> Double { MonitorAnamorphicDesqueeze.snap(value) }
 
     static func presentationRect(
         sourceSize: CGSize, in container: CGRect, effects: LiveImageEffects

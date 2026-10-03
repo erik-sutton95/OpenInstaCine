@@ -1,4 +1,5 @@
 import MonitorUI
+import OpenCineMedia
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -60,62 +61,7 @@ enum TrafficLightsAssist {
     static let balanceCenter = MonitorTrafficLightsGeometry.balanceCenter
     static let balanceDeadZone = MonitorTrafficLightsGeometry.balanceDeadZone
 
-    /// OpenZCine `AssistConfiguration.CrushClipCompensation`.
-    enum CrushClipCompensation: Int, CaseIterable, Codable, Equatable, Sendable, Identifiable {
-        case zero = 0
-        case quarter = 2
-        case half = 5
-        case threeQuarter = 7
-        case one = 10
-
-        var id: Int { rawValue }
-
-        /// Operator-facing label in stops (OpenZCine `label`).
-        var label: String {
-            switch self {
-            case .zero: "0"
-            case .quarter: "0.25"
-            case .half: "0.5"
-            case .threeQuarter: "0.75"
-            case .one: "1.0"
-            }
-        }
-
-        /// In-app compact glyphs (OpenZCine `compactLabel`).
-        var compactLabel: String {
-            switch self {
-            case .zero: "0"
-            case .quarter: "¼"
-            case .half: "½"
-            case .threeQuarter: "¾"
-            case .one: "1"
-            }
-        }
-
-        var stops: Double {
-            switch self {
-            case .zero: 0
-            case .quarter: 0.25
-            case .half: 0.5
-            case .threeQuarter: 0.75
-            case .one: 1.0
-            }
-        }
-
-        /// Fraction of channel energy in the crush/clip band required to light a lamp.
-        /// Each quarter-stop adds 2.5 percentage points (0 → 0%, 1.0 → 10%).
-        var pixelFractionThreshold: Double { stops / 10.0 }
-
-        init(from decoder: any Decoder) throws {
-            let raw = try decoder.singleValueContainer().decode(Int.self)
-            self = CrushClipCompensation(rawValue: raw) ?? (raw > 10 ? .one : .zero)
-        }
-
-        func encode(to encoder: any Encoder) throws {
-            var c = encoder.singleValueContainer()
-            try c.encode(rawValue)
-        }
-    }
+    typealias CrushClipCompensation = MonitorCrushClipCompensation
 
     /// OpenZCine `TrafficLightsBarSide` — which half of a goal-post shows fill.
     typealias BarSide = MonitorTrafficLightsGeometry.BarSide
