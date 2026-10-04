@@ -130,6 +130,26 @@ network switch. Physical leave/rejoin, an already-running native rejoin, real Ad
 and popup interaction remain untested. Existing Android sources/manifests and saved credentials
 are unchanged; delivery UI composition and multi-camera route admission remain later slices.
 
+### Shared delivery panel (SHELL-03 I5c, fifth increment)
+
+The actual iOS destination/options popup, compact delivery overlay and Android native-share
+popup now compose OpenCine's mirrored delivery values and native panel. The shared panel owns
+the header, destination rows, optional export controls, project/network section and fixed
+footer; this app projects its existing source facts and receives typed actions. Destination
+artwork is the bounded app slot. Configuration, project polling/alerts, internet-hop ownership,
+native sharing and export callbacks stay here. The existing delivery runner, popup begin/close
+runtime and Android delivery operation retain their prior bytes. This retires 739 net product
+source lines across the three app UI files.
+
+The shared Swift suite and strict checks, both-architecture app build-for-testing, and actual
+Android app unit/lint/debug/release/test packaging pass. Two permanent native rendering
+regressions prove that the action footer remains visible at both constrained card heights and
+known progress remains visible beside a network-switch spinner. The original six route lifetime
+tests retain their source and separate prior passing evidence. Compile and rendered fixtures
+use simulated source facts, with no upload or network switch. Android adopts the shared panel's
+export heading and native segmented/material controls; actual Android input, physical delivery,
+Adobe sign-in/upload and camera leave/rejoin remain untested. The app pin has not moved.
+
 ## What changes for users
 
 Nothing is meant to look different. Underneath:

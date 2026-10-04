@@ -1,5 +1,9 @@
 package com.opencapture.openpocketcine.media
 
+import com.opencapture.monitorui.MonitorMediaDeliveryValue
+import com.opencapture.monitorui.MonitorMediaDeliveryPanel
+import com.opencapture.monitorui.MonitorMediaDeliveryProgress
+import com.opencapture.monitorui.MonitorMediaDeliveryProgressValue
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorMaterial
 import com.opencapture.monitorui.monitorScrollFade
@@ -222,109 +226,48 @@ fun MediaDeliveryPopup(
             },
         contentAlignment = Alignment.BottomCenter,
     ) {
-        Column(
-            Modifier
-                .navigationBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .widthIn(max = 620.dp)
-                .fillMaxWidth()
-                .heightIn(max = 520.dp)
-                .clip(androidx.compose.foundation.shape.RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .monitorMaterial(MonitorMaterial.Delivery)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) {}
-                .padding(16.dp),
-        ) {
-            when (step) {
-                DeliveryStep.DESTINATION -> DestinationHeader(onClose = onDismiss)
-                DeliveryStep.OPTIONS ->
-                    OptionsHeader(
-                        title = destination?.title ?: "Share",
-                        onBack = { step = DeliveryStep.DESTINATION },
-                        onClose = onDismiss,
-                    )
-            }
-            Spacer(Modifier.height(12.dp))
-            val bodyScroll = rememberScrollState()
-            Column(
-                Modifier.weight(1f, fill = false).monitorScrollFade(bodyScroll).verticalScroll(bodyScroll),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    "${files.size} clip${if (files.size == 1) "" else "s"}",
-                    style = LiveType.ui(12.5f, FontWeight.SemiBold),
-                    color = LiveDesign.text,
-                )
-                if (cachedCount < files.size) {
-                    Text(
-                        if (controller.isLive) {
-                            "${files.size - cachedCount} on-camera clip(s) will be cached from the camera first."
-                        } else {
-                            "${files.size - cachedCount} on-camera clip(s) will be skipped — reconnect to cache them."
-                        },
-                        style = LiveType.ui(12f, FontWeight.Medium),
-                        color = LiveDesign.muted,
-                    )
-                }
-                when (step) {
-                    DeliveryStep.DESTINATION -> {
-                        Text(
-                            "DESTINATION",
-                            style = LiveType.mono(10f, FontWeight.Bold),
-                            color = LiveDesign.muted,
-                        )
-                        DestinationRow(
-                            enabled = hasDeliverable,
-                            onClick = {
-                                destination = MediaDeliveryDestination.NATIVE_SHARE
-                                step = DeliveryStep.OPTIONS
-                            },
-                        )
-                        MediaDeliveryUpcoming.titles.forEach { title ->
-                            UpcomingDestinationRow(title)
-                        }
+        val notices = if (cachedCount < files.size) listOf(MonitorMediaDeliveryValue.Notice(
+            if (controller.isLive) "${files.size - cachedCount} on-camera clip(s) will be cached from the camera first."
+            else "${files.size - cachedCount} on-camera clip(s) will be skipped; reconnect to cache them."
+        )) else emptyList()
+        val nativeShare = MediaDeliveryDestination.NATIVE_SHARE
+        MonitorMediaDeliveryPanel(
+            value = MonitorMediaDeliveryValue(
+                step = if (step == DeliveryStep.DESTINATION) MonitorMediaDeliveryValue.Step.DESTINATION else MonitorMediaDeliveryValue.Step.OPTIONS,
+                title = destination?.title ?: "Share",
+                selectionLabel = "${files.size} clip${if (files.size == 1) "" else "s"}",
+                notices = notices,
+                destinations = listOf(MonitorMediaDeliveryValue.Destination(nativeShare.name, nativeShare.title, nativeShare.subtitle, hasDeliverable)),
+                upcoming = MediaDeliveryUpcoming.titles,
+                export = if (step == DeliveryStep.OPTIONS && files.size == 1)
+                    MonitorMediaDeliveryValue.Export(filename = files.first().filename) else null,
+                footer = if (step == DeliveryStep.OPTIONS) MonitorMediaDeliveryValue.Footer(
+                    postExport = MonitorMediaDeliveryValue.Choices("", options = listOf(
+                        MonitorMediaDeliveryValue.Choice(MediaDeliveryPostExportAction.SYSTEM_SHARE.name, "Share"),
+                        MonitorMediaDeliveryValue.Choice(MediaDeliveryPostExportAction.SAVE_TO_PHOTOS.name, "Save to Photos")
+                    ), selectedID = shareAction.name),
+                    actionTitle = if (shareAction == MediaDeliveryPostExportAction.SAVE_TO_PHOTOS) "Save to Photos" else "Share",
+                    enabled = canContinue
+                ) else null
+            ),
+            onAction = { action ->
+                when (action) {
+                    MonitorMediaDeliveryValue.Action.Close -> onDismiss()
+                    MonitorMediaDeliveryValue.Action.Back -> step = DeliveryStep.DESTINATION
+                    MonitorMediaDeliveryValue.Action.Begin -> if (canContinue) onDeliver(shareAction)
+                    is MonitorMediaDeliveryValue.Action.Destination -> if (action.id == nativeShare.name && hasDeliverable) {
+                        destination = nativeShare; step = DeliveryStep.OPTIONS
                     }
-                    DeliveryStep.OPTIONS -> {
-                        if (files.size == 1) {
-                            Column(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clip(MediaCornerShape)
-                                    .background(Color.White.copy(alpha = .04f), MediaCornerShape)
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text("Filename", style = LiveType.ui(12f, FontWeight.SemiBold), color = LiveDesign.muted)
-                                Text(
-                                    files.first().filename,
-                                    style = LiveType.mono(13f, FontWeight.Medium),
-                                    color = LiveDesign.text,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
+                    is MonitorMediaDeliveryValue.Action.Selection -> if (action.selection == MonitorMediaDeliveryValue.Selection.POST_EXPORT) {
+                        MediaDeliveryPostExportAction.entries.firstOrNull { it.name == action.id }?.let { shareAction = it }
                     }
+                    else -> Unit // This adapter supplies no other optional controls or service.
                 }
-            }
-            if (step == DeliveryStep.OPTIONS) {
-                Spacer(Modifier.height(12.dp))
-                SegmentedShareAction(selected = shareAction, onSelect = { shareAction = it })
-                Spacer(Modifier.height(10.dp))
-                FooterActionButton(
-                    title =
-                        if (shareAction == MediaDeliveryPostExportAction.SAVE_TO_PHOTOS) {
-                            "Save to Photos"
-                        } else {
-                            "Share"
-                        },
-                    enabled = canContinue,
-                    onClick = { onDeliver(shareAction) },
-                )
-            }
-        }
+            },
+            modifier = Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp)
+                .widthIn(max = 620.dp).fillMaxWidth(),
+            destinationIcon = { OpcIcon(OpcIcon.SHARE, null, Modifier.size(18.dp), LiveDesign.text) }
+        )
     }
     }
 }
@@ -335,56 +278,12 @@ fun MediaDeliveryProgressOverlay(
     onCancel: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier
-            .widthIn(max = 420.dp)
-            .fillMaxWidth()
-            .shadow(12.dp, MediaCapsuleShape, ambientColor = Color.Black.copy(alpha = 0.35f))
-            .clip(MediaCapsuleShape)
-            .mediaSheetPlate(MediaCapsuleShape)
-            .padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        if (state.isPreparing) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                color = LiveDesign.accent,
-                strokeWidth = 2.dp,
-            )
-        } else {
-            // Native share is Android's only destination (iOS shows the destination glyph).
-            OpcIcon(OpcIcon.SHARE, null, Modifier.size(13.dp), LiveDesign.accent)
-        }
-        Column(Modifier.weight(1f)) {
-            Text(
-                state.statusLine,
-                style = LiveType.ui(12f, FontWeight.SemiBold),
-                color = LiveDesign.text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            state.batchLine?.let { batch ->
-                Text(
-                    batch,
-                    style = LiveType.mono(10f, FontWeight.Medium),
-                    color = LiveDesign.muted,
-                    maxLines = 1,
-                )
-            }
-        }
-        if (!state.isPreparing) {
-            MediaGlassTrack(fraction = state.overallFraction.toFloat(), trackWidth = 44.dp)
-        }
-        if (onCancel != null) {
-            Text(
-                "Cancel",
-                style = LiveType.ui(11f, FontWeight.SemiBold),
-                color = LiveDesign.muted,
-                modifier = Modifier.chromeClickable(onClick = onCancel),
-            )
-        }
-    }
+    MonitorMediaDeliveryProgress(
+        value = MonitorMediaDeliveryProgressValue(state.statusLine, state.batchLine, state.overallFraction, state.isPreparing),
+        onCancel = onCancel,
+        modifier = modifier.widthIn(max = 420.dp),
+        destinationIcon = { OpcIcon(OpcIcon.SHARE, null, Modifier.size(13.dp), LiveDesign.accent) }
+    )
 }
 
 @Composable
@@ -401,181 +300,6 @@ fun MediaDeliveryCompletionToast(message: String, modifier: Modifier = Modifier)
                 .mediaSheetPlate(MediaCapsuleShape)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
     )
-}
-
-@Composable
-private fun DestinationHeader(onClose: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        OpcIcon(OpcIcon.SHARE, contentDescription = null, tint = LiveDesign.text, modifier = Modifier.size(13.dp))
-        Text(
-            "SHARE",
-            style = LiveType.ui(9f, FontWeight.SemiBold),
-            color = LiveDesign.text,
-        )
-        Spacer(Modifier.weight(1f))
-        MediaCloseButton(onClick = onClose, size = 30.dp)
-    }
-}
-
-@Composable
-private fun OptionsHeader(title: String, onBack: () -> Unit, onClose: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Row(Modifier.chromeClickable(onClick = onBack), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OpcIcon(OpcIcon.CHEVRON_LEFT, null, Modifier.size(12.dp), LiveDesign.accent)
-            Text("Back", style = LiveType.ui(12.5f, FontWeight.SemiBold), color = LiveDesign.accent)
-        }
-        Column(Modifier.weight(1f)) {
-            Text(title, style = LiveType.ui(12.5f, FontWeight.SemiBold), color = LiveDesign.text)
-            Text("Options", style = LiveType.ui(11f, FontWeight.Medium), color = LiveDesign.muted)
-        }
-        MediaCloseButton(onClick = onClose, size = 30.dp)
-    }
-}
-
-@Composable
-private fun UpcomingDestinationRow(title: String) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(MediaCornerShape)
-            .background(LiveDesign.hairline.copy(alpha = 0.2f), MediaCornerShape)
-            .padding(horizontal = 12.dp, vertical = 14.dp)
-            .semantics { contentDescription = "$title, Coming soon" },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        OpcIcon(
-            OpcIcon.FOLDER,
-            contentDescription = null,
-            tint = LiveDesign.muted,
-            modifier = Modifier.size(24.dp),
-        )
-        Text(
-            title,
-            modifier = Modifier.weight(1f),
-            style = LiveType.ui(14f, FontWeight.SemiBold),
-            color = LiveDesign.muted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            "Coming soon",
-            style = LiveType.ui(11f, FontWeight.Medium),
-            color = LiveDesign.muted,
-        )
-    }
-}
-
-@Composable
-private fun DestinationRow(enabled: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(MediaCornerShape)
-            .background(Color.White.copy(alpha = .04f), MediaCornerShape)
-            .chromeClickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        OpcIcon(
-            OpcIcon.SHARE,
-            contentDescription = null,
-            tint = if (enabled) LiveDesign.text else LiveDesign.faint,
-            modifier = Modifier.size(18.dp),
-        )
-        Column(Modifier.weight(1f)) {
-            Text(
-                MediaDeliveryDestination.NATIVE_SHARE.title,
-                style = LiveType.ui(11.5f, FontWeight.SemiBold),
-                color = if (enabled) LiveDesign.text else LiveDesign.faint,
-            )
-            Text(
-                MediaDeliveryDestination.NATIVE_SHARE.subtitle,
-                style = LiveType.ui(11f, FontWeight.Medium),
-                color = LiveDesign.muted,
-            )
-        }
-        OpcIcon(
-            OpcIcon.CHEVRON_RIGHT,
-            contentDescription = null,
-            tint = LiveDesign.faint,
-            modifier = Modifier.size(12.dp),
-        )
-    }
-}
-
-@Composable
-private fun SegmentedShareAction(
-    selected: MediaDeliveryPostExportAction,
-    onSelect: (MediaDeliveryPostExportAction) -> Unit,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(MediaCornerShape)
-            .background(Color.White.copy(alpha = .04f), MediaCornerShape)
-            .padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        listOf(
-            MediaDeliveryPostExportAction.SYSTEM_SHARE to "Share",
-            MediaDeliveryPostExportAction.SAVE_TO_PHOTOS to "Save to Photos",
-        ).forEach { (action, label) ->
-            val on = selected == action
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(MediaCornerShape)
-                    .background(if (on) LiveDesign.accent.copy(alpha = 0.28f) else Color.Transparent)
-                    .chromeClickable { onSelect(action) }
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    label,
-                    style = LiveType.ui(12f, FontWeight.SemiBold),
-                    color = if (on) LiveDesign.text else LiveDesign.muted,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun FooterActionButton(title: String, enabled: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .clip(MediaCornerShape)
-            .background(
-                if (enabled) LiveDesign.accent.copy(alpha = 0.22f) else LiveDesign.hairline.copy(alpha = 0.25f),
-                MediaCornerShape,
-            )
-            .border(
-                1.dp,
-                if (enabled) LiveDesign.accent.copy(alpha = 0.55f) else Color.White.copy(alpha = .04f),
-                MediaCornerShape,
-            )
-            .chromeClickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            title,
-            style = LiveType.ui(12.5f, FontWeight.SemiBold),
-            color = if (enabled) LiveDesign.text else LiveDesign.faint,
-        )
-    }
 }
 
 private suspend fun runDelivery(

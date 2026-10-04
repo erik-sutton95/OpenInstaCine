@@ -1,3 +1,4 @@
+import MonitorPresentation
 import MonitorUI
 import OpenCineFrameIO
 import OpenPocketViewCore
@@ -138,43 +139,11 @@ struct MediaDeliveryOverlay: View {
     var onCancel: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            if state.isPreparingClip || state.isSwitchingNetworks {
-                ProgressView().controlSize(.small).tint(LiveDesign.accent)
-            } else {
-                state.destination.icon.frame(width: 13, height: 13)
-                    .foregroundStyle(LiveDesign.accent)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(state.statusLine)
-                    .font(LiveType.ui(size: 12, weight: .semibold))
-                    .foregroundStyle(LiveDesign.text)
-                    .lineLimit(1)
-                if state.totalClips > 1 {
-                    Text("Clip \(min(state.clipIndex, state.totalClips)) of \(state.totalClips)")
-                        .font(MonitorTheme.font(10, weight: .medium)).monospacedDigit()
-                        .foregroundStyle(LiveDesign.muted)
-                }
-            }
-            Spacer(minLength: 4)
-            if !state.isPreparingClip {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(LiveDesign.hairline.opacity(0.55))
-                        Capsule()
-                            .fill(LiveDesign.accent)
-                            .frame(width: max(4, geo.size.width * state.overallFraction))
-                    }
-                }
-                .frame(width: 44, height: 4)
-            }
-            Button("Cancel", action: onCancel)
-                .font(LiveType.ui(size: 11, weight: .semibold))
-                .foregroundStyle(LiveDesign.muted)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .monitorGlass(in: RoundedRectangle(cornerRadius: 12), density: .delivery)
+        MonitorMediaDeliveryProgress(value: .init(status: state.statusLine,
+            batch: state.totalClips > 1 ? "Clip \(min(state.clipIndex, state.totalClips)) of \(state.totalClips)" : nil,
+            fraction: state.overallFraction, preparing: state.isPreparingClip || state.isSwitchingNetworks,
+            showsProgress: !state.isPreparingClip),
+            onCancel: onCancel) { state.destination.icon }
     }
 }
 
