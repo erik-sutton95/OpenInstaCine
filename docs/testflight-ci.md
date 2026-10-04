@@ -20,10 +20,9 @@ Every successful archive runs `tools/sentry-verify-ios-dsn.py --require`: an
 archive without a real `https` DSN fails, even with symbol uploads off. See
 [`sentry-deployment.md`](sentry-deployment.md).
 
-The `ci_scripts/` hooks are synced (renamed) from OpenPocketCine. The helpers they
-call (`tools/sentry-*`, `scripts/ios-release-notes*.sh`) are OpenInstaCine copies
-retargeted to the `openinstacine-*` Sentry projects; `scripts/sync-openpocketcine.sh`
-never overwrites them and warns when upstream changes them. `ios/TestFlight/` and
+The `ci_scripts/` hooks and the helpers they call (`tools/sentry-*`,
+`scripts/ios-release-notes*.sh`) are maintained in this app and target its
+`openinstacine-*` Sentry projects. `ios/TestFlight/` and
 `ios/Config/Version.xcconfig` are OpenInstaCine owned too.
 
 Local dry run (a throwaway clone, so nothing local is overwritten):

@@ -1,12 +1,11 @@
 ---
 title: Architecture
-description: The shared OpenPocketCine monitor core and native shells, with a portable Luna protocol package and platform adapters.
+description: OpenCine shared monitor packages, native app composition and the portable Luna integration.
 ---
 
-OpenInstaCine is the OpenPocketCine monitor with a Luna backend. The monitor
-core and shells are shared; the camera link is a separate, Foundation-only Swift
-protocol package plus platform adapters that own Bluetooth, crypto, Wi-Fi and
-sockets.
+OpenInstaCine composes OpenCine's shared monitor and app shell with the Luna
+integration. The portable camera protocol and its platform adapters own
+Bluetooth, crypto, Wi-Fi and sockets.
 
 | Layer | Path | Role |
 | --- | --- | --- |
@@ -15,22 +14,19 @@ sockets.
 | Connection flow | OpenCine `OpenCineAppKit`, `Android/appkit/` | Cameras and pairing screens, discovery, connection progress, typed failures and saved-camera migration through `LunaIntegration`. |
 | Luna protocol | OpenCine `Sources/Insta360Protocol/` | Portable codec: UCD2 framing and checksum, bounded reassembly, protobuf, scheme-3 envelopes, status, settings, media and control messages. Foundation only: no Bluetooth, network or crypto implementation. |
 | Luna Apple adapter | OpenCine `Sources/Insta360Apple/` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, Network.framework TCP and session lifetime. |
-| iOS app | `ios/OpenInstaCine/` | The OpenPocketCine shell plus the Luna session (`CameraSession*.swift`, `LunaShellMapping.swift`). |
+| iOS app | `ios/OpenInstaCine/` | Shared shell composition, Luna presentation adapters and native app services. |
 | Watch companion | `ios/OpenInstaCineWatch/` | watchOS remote; the phone stays the radio. |
 | Android app | `Apps/Android/` | Compose monitor shell (`:monitor`) on OpenCine `monitor-ui` and `appkit`, with the Kotlin shell contract and Luna adapter from OpenCine (`insta360-shell`, `insta360-luna`). |
 | Android facade | `Sources/OpenPocketCineAndroidFacade/`, `Sources/CJNI/` | JNI exports for the shared decoder, LUT and assist code. |
 | Lab tools | `tools/` | Python BLE and TCP research clients, the Mac live-view lab, `tools/LunaProbe` (Swift CLI) and the DEBUG remote client. |
 | Tests | `Tests/`, `ios/OpenInstaCineTests/`, `Apps/Android/monitor/src/test/`, OpenCine `Tests/` | Core, protocol and app tests, including saved-camera upgrade and downgrade fixtures on both platforms. |
 
-The iOS presentation shell is re-synced from OpenPocketCine with `just sync-openpocketcine`,
-which leaves the Luna files, the Swift core and anything a shared OpenCine package owns alone. Boundary tests keep DUML and UCD2 wire APIs
-out of the shared monitor modules, and the monitor engine does not import Luna
-wire types. Adding a control means extending the neutral backend contract first,
-then the Luna mapping.
-
-The cameras and pair pages, their stores and their deleted presentation helpers
-are excluded from that sync. Both apps use the shared connection model and
-register their integration explicitly.
+Common behavior is maintained in OpenCine and adopted through the pinned
+package dependency. The former Pocket source-sync workflow is retired.
+Boundary tests keep DUML and UCD2 wire APIs out of shared monitor modules.
+Common controls use neutral descriptors and services supplied by the integration.
+Both apps use the shared connection model and register their integrations explicitly.
+Legacy app models and native adapters remain documented while their ownership migrates.
 
 ## Saved-camera compatibility
 

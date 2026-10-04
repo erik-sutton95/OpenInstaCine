@@ -1,10 +1,6 @@
 default:
     @just --list
 
-# Copy current OpenPocketCine packages + native shells. Does not touch Luna adapters.
-sync-openpocketcine:
-    bash scripts/sync-openpocketcine.sh
-
 # Requires Python 3.11+, nrfutil ble-sniffer, and Wireshark/tshark.
 ble-scan label="advertisements" seconds="20":
     python3 tools/ble_lab.py scan {{quote(label)}} --seconds {{quote(seconds)}}

@@ -340,19 +340,17 @@ the same NEEDED list. `LiveVulkanSession`, the present gate, crash guard and win
 Device check (Android, Luna): live picture through Vulkan with LUT, scopes, peaking and the glass
 backdrop; background return, rotation and surface recreation keep the picture.
 
-## RELEASE-01: sync scope
+## RELEASE-01: source sync retired
 
-`scripts/sync-openpocketcine.sh` now copies only the iOS presentation shell and three neutral
-tools. The Swift core (`Package.swift`, `Sources/`, `Tests/`), `Apps/Android`, the package graph
-(`ios/project.yml`) and everything a shared package owns are never copied, so the STATE-01 core
-edits are safe. Details, the first-sync base to use after publishing and the Atlas edge:
-`openpocketcine-foundation.md`, "Sync scope".
+The former Pocket presentation-shell sync, overlay script and sync-commit stamp have been
+retired. Shared composition now consumes OpenCine package products. Common changes belong
+in their owning OpenCine package and reach this app through a reviewed dependency adoption.
+See `openpocketcine-foundation.md` for the current ownership workflow.
 
 ## Risks before merging
 
-- First sync after publishing: set `openpocketcine-sync-commit.txt` to OpenPocketCine's
-  post-integration `main` commit. Frame.io's iOS client now comes from OpenCineFrameIO;
-  app-specific credential storage and browser presentation remain here.
+- Frame.io's iOS client comes from OpenCineFrameIO; app-specific credential storage
+  and browser presentation remain here.
 - The Kotlin `ScopeExposureCeiling` risk listed here before is closed: each feed owns its
   ceiling since 7bdb55c.
 

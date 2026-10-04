@@ -38,7 +38,7 @@ sharing support. Simulator rendering and automated checks do not qualify physica
 
 | Owner / location | Responsibility and current dependencies |
 | --- | --- |
-| `ios/OpenInstaCine` | iOS app: the OpenPocketCine shell (vendored by `scripts/sync-openpocketcine.sh`) plus the Luna-owned files listed there (`CameraSession*.swift`, `LunaShellMapping.swift`, `OpenInstaCineBrand.swift`, assets). `OpenInstaCineBrand.apply()` sets `MonitorTheme.accentRGB = 0xFFCF00` before any view is built. Links `OpenPocketViewCore`, `MonitorContracts`, `Insta360Protocol`, the `Insta360Apple` framework and OpenCineUI `MonitorUI` / `MonitorPresentation` |
+| `ios/OpenInstaCine` | iOS app: composition of shared OpenCine packages plus Luna presentation adapters (`CameraSession*.swift`, `LunaShellMapping.swift`, `OpenInstaCineBrand.swift`, assets). `OpenInstaCineBrand.apply()` sets `MonitorTheme.accentRGB = 0xFFCF00` before any view is built. Links `OpenPocketViewCore`, `MonitorContracts`, `Insta360Protocol`, the `Insta360Apple` framework and OpenCineUI `MonitorUI` / `MonitorPresentation` |
 | OpenCineUI `MonitorUI`, `MonitorPresentation` | Shared SwiftUI design system (theme, Sora, Lucide/assist icons, canvas, pages, controls) and Foundation-only presentation/layout policy. Part of the OpenCine platform repository, a sibling checkout at `../OpenCine` that `ios/project.yml` names as a path package (candidate until a versioned release). No camera, vendor or app dependency. Its tests run in OpenCine |
 | `ios/OpenInstaCineWatch` | watchOS remote over WatchConnectivity; depends on `OpenPocketViewCore` |
 | `Sources/MonitorContracts` | Foundation-only Apple backend seam: capabilities, discovery, phases, information, encoded frames, media descriptors and network handoff. Camera commands and reported camera state are not here: they go through the integration's OpenCineCore `CameraSession` |
@@ -161,9 +161,9 @@ until that is lifted and qualified on hardware.
    Android `monitor-ui`) is now one implementation in OpenCineUI, consumed by
    OpenPocketCine and OpenInstaCine candidate branches. Media, motion, relay,
    the Apple decode runtime and the Android Vulkan renderer come from OpenCineCore.
-   Only the iOS presentation shell is still synced from OpenPocketCine (scope in
-   `openpocketcine-foundation.md`); no Nikon adapter or other sibling target
-   migration is claimed here.
+   The former Pocket source-sync workflow has been retired (see
+   `openpocketcine-foundation.md`). Remaining legacy app owners migrate through
+   reviewed OpenCine contracts and actual app adapters.
 2. **Compatibility models:** `MonitorLUT`, `MediaFile`, status/control enums,
    saved-camera records and several rendering bridges still use inherited
    names/types. Native view facades translate where needed. Osmo wire bytes

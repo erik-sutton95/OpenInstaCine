@@ -95,12 +95,12 @@ added. `tools/LunaProbe` is a Swift command-line client over the same protocol
 package, used for the firmware 1.1.15 verification. Details:
 [`docs/mac-preview.md`](https://github.com/erik-sutton95/OpenInstaCine/blob/main/docs/mac-preview.md).
 
-## Shared shell with OpenPocketCine
+## Shared OpenCine shell
 
-The monitor UI is shared with [OpenPocketCine](https://openpocketcine.app/).
-`just sync-openpocketcine` re-copies the iOS shell from a sibling
-`../OpenPocketCine` checkout and leaves the Luna files alone. The contract
-between the two apps is
+The monitor UI is shared with [OpenPocketCine](https://openpocketcine.app/)
+through the OpenCine dependency at `../OpenCine`. Check out its pinned revision
+with `scripts/checkout-opencine.sh`; common changes are made in that repository.
+The contract between the two apps is
 [`docs/SHARED-MONITOR-ENGINE.md`](https://github.com/erik-sutton95/OpenInstaCine/blob/main/docs/SHARED-MONITOR-ENGINE.md).
 
 ## This handbook
