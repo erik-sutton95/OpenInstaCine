@@ -1,4 +1,5 @@
 import MonitorUI
+import OpenCineFrameIO
 import OpenPocketViewCore
 import SwiftUI
 
@@ -57,7 +58,8 @@ struct MediaDeliveryPopup: View {
     @State private var newProjectName = ""
     @State private var showFrameioHopConfirm = false
     @State private var isHoppingForFrameio = false
-    @State private var popupStartedHop = false
+    @State private var popupHopToken: FrameioInternetHop.Token?
+    @State private var popupHopTask: Task<Void, Never>?
     @State private var onCameraAP = false
 
     private enum DeliveryStep { case destination, options }
@@ -779,17 +781,23 @@ struct MediaDeliveryPopup: View {
 
     private func beginDelivery() {
         guard let destination else { return }
+        let internetHopToken: FrameioInternetHop.Token?
         if destination == .frameio {
             // The accepted upload owns restoration, including preflight failure.
-            popupStartedHop = false
+            internetHopToken = popupHopToken.map { model.transferInternetHop($0) ?? $0 }
+            popupHopToken = nil
+            popupHopTask?.cancel()
+            popupHopTask = nil
         } else {
+            internetHopToken = nil
             finishPopupHop()
         }
         let request = MediaDeliveryBeginRequest(
             files: files,
             destination: destination,
             configuration: configuration,
-            postExportAction: shareAction)
+            postExportAction: shareAction,
+            internetHopToken: internetHopToken)
         onClose()
         model.delivery.begin(request, model: model)
     }
@@ -800,20 +808,26 @@ struct MediaDeliveryPopup: View {
     }
 
     private func finishPopupHop() {
-        guard popupStartedHop else { return }
-        popupStartedHop = false
-        model.endInternetHop()
+        popupHopTask?.cancel()
+        popupHopTask = nil
+        guard let token = popupHopToken else { return }
+        popupHopToken = nil
+        model.endInternetHop(token)
     }
 
     private func startFrameioHop() {
         isHoppingForFrameio = true
-        popupStartedHop = true
-        model.beginInternetHop()
-        Task {
-            let online = await model.waitForInternetPath(timeoutSeconds: 30)
+        popupHopTask?.cancel()
+        let token = model.beginInternetHop()
+        popupHopToken = token
+        popupHopTask = Task {
+            let online = await model.waitForInternetPath(timeoutSeconds: 30, token: token)
+            guard !Task.isCancelled, popupHopToken == token, model.internetHop.owns(token) else {
+                return
+            }
             isHoppingForFrameio = false
             if online {
-                await loadFrameioProjects()
+                await loadFrameioProjects(hop: token)
             } else {
                 frameioProjectsError =
                     "Couldn't reach the internet after leaving the camera's Wi‑Fi. Check cellular or home Wi‑Fi."
@@ -821,13 +835,20 @@ struct MediaDeliveryPopup: View {
         }
     }
 
-    private func loadFrameioProjects() async {
+    private func loadFrameioProjects(hop: FrameioInternetHop.Token? = nil) async {
         guard !model.isOnCameraAccessPoint else { return }
         frameioProjectsLoading = true
         frameioProjectsError = nil
-        defer { frameioProjectsLoading = false }
+        defer {
+            if hop == nil || hop.map({ model.internetHop.owns($0) }) == true {
+                frameioProjectsLoading = false
+            }
+        }
         do {
             let listing = try await model.loadFrameioProjectListing()
+            guard !Task.isCancelled,
+                hop == nil || hop.map({ model.internetHop.owns($0) }) == true
+            else { return }
             frameioListing = listing
             if selectedFrameioProjectID == nil {
                 selectedFrameioProjectID =
@@ -837,6 +858,9 @@ struct MediaDeliveryPopup: View {
                 selectFrameioProject(project)
             }
         } catch {
+            guard !Task.isCancelled,
+                hop == nil || hop.map({ model.internetHop.owns($0) }) == true
+            else { return }
             frameioProjectsError = error.localizedDescription
         }
     }

@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import OpenCineApple
+import OpenCineFrameIO
 import OpenPocketViewCore
 import Photos
 import SwiftUI
@@ -162,6 +163,7 @@ struct MediaDeliveryBeginRequest: Sendable {
     let destination: MediaDeliveryDestination
     let configuration: MediaDeliveryConfiguration
     var postExportAction: MediaDeliveryPostExportAction = .systemShare
+    var internetHopToken: FrameioInternetHop.Token? = nil
 }
 
 enum MediaDeliveryRunOutcome: Sendable {

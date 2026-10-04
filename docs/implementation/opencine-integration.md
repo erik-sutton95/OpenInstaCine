@@ -112,7 +112,23 @@ retain identical outcomes, item order and progress, and two cancellation cases s
 current clip. This comparison uses typed export/upload substitutes; real cloud delivery,
 network handoff, native callback scheduling and physical behavior remain untested by it.
 The prior native exporter and preflight proofs keep their original source attribution.
-Internet-hop ownership and the popup/overlay composition are still subsequent increments.
+The token ownership below is separate from popup/overlay composition, which remains pending.
+
+### Owned internet handoff (SHELL-03 I5c, fourth increment)
+
+The app uses `OpenCineFrameIO.FrameioInternetHop` to transfer an approved popup handoff into the
+accepted delivery before closing the popup. Close, preflight failure, cancellation and normal
+completion release only their own token. A stale transferred request is rejected; a request
+without a token never adopts someone else's active handoff. Late route-ready/project-list
+results are ignored after token replacement. Native leave/rejoin stays in the app, with the
+original camera session captured for rejoin.
+
+Four shared ownership scenarios, the full shared Swift suite and strict concurrency checks
+pass. Both-architecture app build-for-testing and six actual app lifetime tests pass, covering
+transfer, stale completion, unrelated handoffs and preflight exits. The fixtures perform no
+network switch. Physical leave/rejoin, an already-running native rejoin, real Adobe delivery
+and popup interaction remain untested. Existing Android sources/manifests and saved credentials
+are unchanged; delivery UI composition and multi-camera route admission remain later slices.
 
 ## What changes for users
 

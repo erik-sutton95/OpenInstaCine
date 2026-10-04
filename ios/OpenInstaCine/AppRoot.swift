@@ -1,4 +1,5 @@
 import OpenCineMedia
+import OpenCineFrameIO
 import CoreVideo
 import Insta360Apple
 import MonitorPresentation
@@ -311,29 +312,39 @@ final class AppModel {
             mode: session.status.shootingMode, recording: session.control.isRecording,
             locked: session.isLocked, busy: session.controlBusy, phase: session.phase)
     }
-    var internetHopActive = false
-    @ObservationIgnored private var internetHopSSID: String?
+    var internetHop = FrameioInternetHop()
+    var internetHopActive: Bool { internetHop.token != nil }
+    @ObservationIgnored private var internetHopSession: CameraSession?
     @ObservationIgnored private var liveChromeArmTask: Task<Void, Never>?
 
     /// On the Luna's own network (192.168.42.x), from the integration (SHELL-02 D10).
     var isOnCameraAccessPoint: Bool { session.backend.isOnCameraNetwork }
 
-    func beginInternetHop() {
-        internetHopActive = true
-        internetHopSSID = session.joinedSSID ?? session.cachedSSID
-        if let ssid = internetHopSSID { WiFiJoiner.leave(ssid: ssid) }
+    @discardableResult func beginInternetHop() -> FrameioInternetHop.Token {
+        let token = internetHop.begin()
+        internetHopSession = session
+        if let ssid = session.joinedSSID ?? session.cachedSSID { WiFiJoiner.leave(ssid: ssid) }
+        return token
     }
 
-    func endInternetHop() {
-        internetHopActive = false
-        Task { await session.rejoinSoftAPAfterInternetHop() }
+    func transferInternetHop(_ token: FrameioInternetHop.Token) -> FrameioInternetHop.Token? {
+        internetHop.transfer(token)
     }
 
-    func waitForInternetPath(timeoutSeconds: Double) async -> Bool {
+    func endInternetHop(_ token: FrameioInternetHop.Token) {
+        guard internetHop.end(token) else { return }
+        let returningSession = internetHopSession
+        internetHopSession = nil
+        Task { await returningSession?.rejoinSoftAPAfterInternetHop() }
+    }
+
+    func waitForInternetPath(timeoutSeconds: Double, token: FrameioInternetHop.Token) async -> Bool {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
-            if Task.isCancelled { return false }
-            if !isOnCameraAccessPoint, await Self.canReachInternet() { return true }
+            if Task.isCancelled || !internetHop.owns(token) { return false }
+            if !isOnCameraAccessPoint, await Self.canReachInternet() {
+                return !Task.isCancelled && internetHop.owns(token)
+            }
             try? await Task.sleep(for: .milliseconds(400))
         }
         return false

@@ -187,9 +187,17 @@ enum MediaDeliveryRunner {
     ) async -> MediaDeliveryRunOutcome {
         // A popup may already have left camera Wi-Fi to choose an upload
         // project. Adopt that hop before caching so every exit restores it.
-        var ownsInternetHop = request.destination == .frameio && model.internetHopActive
+        var internetHopToken: FrameioInternetHop.Token?
+        if request.destination == .frameio {
+            if let transferred = request.internetHopToken {
+                guard model.internetHop.owns(transferred) else {
+                    return .failed(message: "Cancelled.")
+                }
+                internetHopToken = transferred
+            }
+        }
         defer {
-            if ownsInternetHop { model.endInternetHop() }
+            if let internetHopToken { model.endInternetHop(internetHopToken) }
         }
         let session = model.session
         let toCache = request.files.filter { !session.isDownloaded($0) }
@@ -288,11 +296,11 @@ enum MediaDeliveryRunner {
 
         case .frameio:
             if model.isOnCameraAccessPoint {
-                model.beginInternetHop()
-                ownsInternetHop = true
+                let token = model.beginInternetHop()
+                internetHopToken = token
                 overlay.isSwitchingNetworks = true
                 onProgress(overlay)
-                let online = await model.waitForInternetPath(timeoutSeconds: 30)
+                let online = await model.waitForInternetPath(timeoutSeconds: 30, token: token)
                 overlay.isSwitchingNetworks = false
                 onProgress(overlay)
                 if !online {
