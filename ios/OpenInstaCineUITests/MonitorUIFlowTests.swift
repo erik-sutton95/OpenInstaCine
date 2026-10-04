@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// These exercise rendered hit targets and navigation, not camera transport.
 /// Optional OPV_SIM_FEED_CLIP points at private local footage; no footage is
@@ -11,8 +12,8 @@ final class MonitorUIFlowTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
         app = XCUIApplication()
         app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "live"
-        if let clip = ProcessInfo.processInfo.environment["OPV_SIM_FEED_CLIP"] {
-            app.launchEnvironment["OPV_SIM_FEED_CLIP"] = clip
+        for key in ["OPV_SIM_FEED_CLIP", "OPV_SIM_FEED_CLIP_B", "OPV_SIM_FEED_MANIFEST", "OPV_UI_REVIEW_PLAYBACK_FACTS"] {
+            if let value = ProcessInfo.processInfo.environment[key] { app.launchEnvironment[key] = value }
         }
     }
 
@@ -582,6 +583,179 @@ final class MonitorUIFlowTests: XCTestCase {
         XCTAssertGreaterThan(key.frame.midX, original.midX + 30)
         XCTAssertLessThan(key.frame.midY, original.midY - 40)
         capture("false-color-reference-placed")
+    }
+
+    func testActualOwnedVideoPlaybackBorrowsOneGalleryThroughTransportCoversAndRotation() throws {
+        for key in ["OPV_SIM_FEED_CLIP", "OPV_SIM_FEED_CLIP_B", "OPV_SIM_FEED_MANIFEST", "OPV_UI_REVIEW_PLAYBACK_FACTS"] {
+            XCTAssertNotNil(app.launchEnvironment[key], "Actual decoded-video input is required: \(key)")
+        }
+        app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "media-owned-playback"
+        app.launch()
+        let factsElement = app.descendants(matching: .any)["monitor.review.playback.facts"].firstMatch
+        XCTAssertTrue(factsElement.waitForExistence(timeout: 10))
+        let factsURL = URL(fileURLWithPath: try XCTUnwrap(app.launchEnvironment["OPV_UI_REVIEW_PLAYBACK_FACTS"]))
+        var lastSequence = 0
+        func facts() -> [String: Any] {
+            guard let data = try? Data(contentsOf: factsURL),
+                let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let sequence = (value["sequence"] as? NSNumber)?.intValue, sequence >= lastSequence,
+                let stamp = (value["monotonic"] as? NSNumber)?.doubleValue,
+                stamp.isFinite, ProcessInfo.processInfo.systemUptime - stamp >= -0.1,
+                ProcessInfo.processInfo.systemUptime - stamp < 1, value["matched"] as? Bool == true else { return [:] }
+            if value["item"] as? String != nil,
+                (value["host"] as? String == nil || value["player"] as? String == nil || value["mounted"] as? Bool != true) { return [:] }
+            lastSequence = sequence
+            return value
+        }
+        @discardableResult func awaitFacts(_ message: String, _ condition: @escaping ([String: Any]) -> Bool) -> [String: Any] {
+            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in condition(facts()) }, object: nil)
+            XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed, "\(message): \(facts())")
+            return facts()
+        }
+        func number(_ value: [String: Any], _ key: String) -> Double { (value[key] as? NSNumber)?.doubleValue ?? .nan }
+        func displayedRaster(_ screenshot: XCUIScreenshot) -> (width: Int, height: Int)? {
+            guard let image = screenshot.image.cgImage else { return nil }
+            switch screenshot.image.imageOrientation {
+            case .up, .down, .upMirrored, .downMirrored:
+                return (image.width, image.height)
+            case .left, .right, .leftMirrored, .rightMirrored:
+                return (image.height, image.width)
+            @unknown default:
+                return nil
+            }
+        }
+        func assertPattern(_ name: String, requestedOrientation: UIDeviceOrientation = .portrait) throws {
+            var accepted: XCUIScreenshot?
+            var last: XCUIScreenshot?
+            var observation = "No native pixels observed"
+            let rendered = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                if accepted != nil { return true }
+                let screenshot = XCUIScreen.main.screenshot(); last = screenshot
+                let applicationFrame = self.app.frame
+                observation = "request=\(requestedOrientation.rawValue) AXframe=\(applicationFrame) raster=unknown"
+                guard let image = screenshot.image.cgImage else { return false }
+                let width = image.width, height = image.height
+                let imageOrientation = screenshot.image.imageOrientation.rawValue
+                observation = "request=\(requestedOrientation.rawValue) AXframe=\(applicationFrame) rawCG=\(width)x\(height) UIImageOrientation=\(imageOrientation) displayedRaster=unknown"
+                guard let raster = displayedRaster(screenshot) else { return false }
+                observation = "request=\(requestedOrientation.rawValue) AXframe=\(applicationFrame) rawCG=\(width)x\(height) UIImageOrientation=\(imageOrientation) displayedRaster=\(raster.width)x\(raster.height) pixels=unobserved"
+                guard (raster.width > raster.height) == requestedOrientation.isLandscape else { return false }
+                var pixels = [UInt8](repeating: 0, count: width * height * 4)
+                let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+                    guard let context = CGContext(data: buffer.baseAddress, width: width, height: height,
+                        bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                        bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+                    context.draw(image, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height))); return true
+                }
+                guard drawn else { return false }
+                var matched = 0
+                for y in stride(from: 0, to: height, by: 8) {
+                    for x in stride(from: 0, to: width, by: 8) {
+                        let offset = (y * width + x) * 4
+                        let r = pixels[offset], g = pixels[offset + 1], blue = pixels[offset + 2]
+                        if name == "A" ? (r < 60 && g > 90 && blue < 65) : (r < 60 && g < 70 && blue > 130) { matched += 1 }
+                    }
+                }
+                observation = "request=\(requestedOrientation.rawValue) AXframe=\(applicationFrame) rawCG=\(width)x\(height) UIImageOrientation=\(imageOrientation) displayedRaster=\(raster.width)x\(raster.height) pattern=\(name) matched=\(matched) minimum=\(width * height / 64 / 10)"
+                if matched > width * height / 64 / 10 { accepted = screenshot; return true }
+                return false
+            }, object: nil)
+            let result = XCTWaiter.wait(for: [rendered], timeout: 10)
+            if result != .completed, let last {
+                let failure = XCTAttachment(screenshot: last); failure.name = "UNACCEPTED-\(observation)"
+                failure.lifetime = .keepAlways; add(failure)
+            }
+            XCTAssertEqual(result, .completed, "Actual decoded picture: \(observation)")
+            let acceptedScreenshot = try XCTUnwrap(accepted)
+            let acceptedRaster = try XCTUnwrap(displayedRaster(acceptedScreenshot))
+            let attachment = XCTAttachment(screenshot: acceptedScreenshot)
+            attachment.name = "SIMULATED-actual-player-\(name)-\(acceptedRaster.width > acceptedRaster.height ? "landscape" : "portrait")"
+            attachment.lifetime = .keepAlways; add(attachment)
+            let native = XCTAttachment(string: String(data: try Data(contentsOf: factsURL), encoding: .utf8) ?? "Missing native facts")
+            native.lifetime = .keepAlways; add(native)
+        }
+        let first = "VID_20261003_140002_00_002.MP4"
+        let second = "VID_20261003_140001_00_001.MP4"
+        XCTAssertTrue(app.staticTexts[first].waitForExistence(timeout: 10))
+        let gallery = awaitFacts("Actual gallery opens once") { $0["browsing"] as? Bool == true && number($0, "opens") == 1 && $0["bound"] as? Bool == true }
+        XCTAssertEqual(gallery["galleryOrder"] as? [String], [first, second], "Actual displayed video order must put A before its Next B")
+        let library = try XCTUnwrap(gallery["library"] as? String), lifetime = try XCTUnwrap(gallery["lifetime"] as? String)
+        func assertBorrowed(_ value: [String: Any]) {
+            XCTAssertEqual(value["library"] as? String, library); XCTAssertEqual(value["lifetime"] as? String, lifetime)
+            XCTAssertEqual(number(value, "opens"), 1); XCTAssertEqual(number(value, "closes"), 0)
+            XCTAssertEqual(value["browsing"] as? Bool, true); XCTAssertEqual(value["cover"] as? String, "media")
+        }
+        app.staticTexts[first].tap()
+        let opened = awaitFacts("A reaches actual native display") {
+            $0["ready"] as? Bool == true && ($0["file"] as? String)?.contains("LRV_20261003_140002") == true &&
+                abs(number($0, "duration") - 12) < 0.1 && number($0, "width") == 640 && number($0, "height") == 360
+        }
+        let host = try XCTUnwrap(opened["host"] as? String), player = try XCTUnwrap(opened["player"] as? String)
+        let item = try XCTUnwrap(opened["item"] as? String)
+        assertBorrowed(opened); try assertPattern("A", requestedOrientation: .portrait)
+        app.buttons["Loop playback"].tap()
+        XCTAssertEqual(app.buttons["Loop playback"].value as? String, "On")
+        app.buttons["Pause"].tap()
+        awaitFacts("Native transport pauses") { number($0, "rate") == 0 }
+        let rail = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Playback position")).firstMatch
+        XCTAssertTrue(rail.waitForExistence(timeout: 5)); XCTAssertGreaterThan(rail.frame.width, 100)
+        func scrub(_ fraction: CGFloat) {
+            let start = rail.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
+            start.press(forDuration: 0.1, thenDragTo: rail.coordinate(withNormalizedOffset: CGVector(dx: fraction, dy: 0.5)))
+        }
+        scrub(0.25)
+        awaitFacts("Paused native seek reaches interior time") { abs(number($0, "time") - 3) < 0.5 && number($0, "rate") == 0 }
+        let pausedAdvance = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let observed = facts()
+            let time = number(observed, "time"), rate = number(observed, "rate")
+            return observed.isEmpty || observed["item"] as? String != item ||
+                observed["host"] as? String != host || observed["player"] as? String != player ||
+                !time.isFinite || !rate.isFinite || rate != 0 || abs(time - 3) > 0.5
+        }, object: nil)
+        pausedAdvance.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [pausedAdvance], timeout: 1), .completed)
+        app.buttons["Play"].tap()
+        awaitFacts("Native transport resumes") { number($0, "rate") > 0 && number($0, "time") > 3.5 }
+        scrub(0.5)
+        awaitFacts("Playing scrub resumes after final native seek") { number($0, "time") >= 5.5 && number($0, "time") < 8 && number($0, "rate") > 0 }
+        app.buttons["Clip information"].tap(); XCTAssertTrue(app.buttons["Close clip information"].waitForExistence(timeout: 5))
+        assertBorrowed(facts()); app.buttons["Close clip information"].tap()
+        app.buttons["Share clip"].tap(); XCTAssertTrue(app.staticTexts["Frame.io"].firstMatch.waitForExistence(timeout: 5))
+        awaitFacts("Actual Share pauses native playback") { number($0, "rate") == 0 }
+        app.buttons["Close"].firstMatch.tap()
+        let returned = awaitFacts("Share return retains paused item") { number($0, "rate") == 0 && $0["item"] as? String == item }
+        assertBorrowed(returned)
+        for orientation in [UIDeviceOrientation.landscapeLeft, .landscapeRight, .portrait] {
+            rotate(orientation)
+            let rotated = awaitFacts("Same native host survives actual rotation") { $0["ready"] as? Bool == true && $0["item"] as? String == item }
+            XCTAssertEqual(rotated["host"] as? String, host); XCTAssertEqual(rotated["player"] as? String, player)
+            assertBorrowed(rotated); try assertPattern("A", requestedOrientation: orientation)
+        }
+        app.buttons["Next clip"].tap()
+        let next = awaitFacts("B replaces the native item with actual original bytes") {
+            $0["ready"] as? Bool == true && ($0["file"] as? String)?.contains("VID_20261003_140001") == true
+        }
+        let nextItem = try XCTUnwrap(next["item"] as? String)
+        assertBorrowed(next); try assertPattern("B", requestedOrientation: .portrait)
+        if app.buttons["Loop playback"].value as? String != "On" { app.buttons["Loop playback"].tap() }
+        if app.buttons["Pause"].exists { app.buttons["Pause"].tap() }
+        awaitFacts("B pauses before end seek") { number($0, "rate") == 0 }
+        scrub(0.95)
+        awaitFacts("Real B seek reaches end region") { number($0, "time") > 10.8 && number($0, "rate") == 0 }
+        app.buttons["Play"].tap()
+        awaitFacts("Loop restarts same native B item") { number($0, "time") < 2 && number($0, "rate") > 0 && $0["item"] as? String == nextItem }
+        app.buttons["Back to media"].tap()
+        XCTAssertTrue(app.staticTexts[second].waitForExistence(timeout: 5))
+        let back = awaitFacts("Returning player retires native item while retaining browse") {
+            $0["item"] as? String == nil && ($0["retiredItems"] as? [String])?.contains(nextItem) == true
+        }
+        assertBorrowed(back)
+        app.buttons["Back"].firstMatch.tap()
+        let closed = awaitFacts("Outer native Back closes one browse") {
+            $0["browsing"] as? Bool == false && $0["bound"] as? Bool == false && number($0, "closes") == 1
+        }
+        XCTAssertEqual(number(closed, "opens"), 1); XCTAssertNil(closed["item"] as? String)
+        XCTAssertTrue(app.buttons["cameras.pair"].waitForExistence(timeout: 5))
     }
 
     func testActualMediaLibraryFavoritesSelectionAndPhotoCoverSurviveRotation() {

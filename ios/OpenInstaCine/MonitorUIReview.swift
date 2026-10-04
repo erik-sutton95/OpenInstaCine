@@ -195,6 +195,12 @@
             if screen == "pair" { model.shell.beginPairing() }
             if screen == "settings" { model.shell.open(.settings) }
             if screen == "media" { model.shell.open(.media) }
+            #if DEBUG
+                if MonitorMediaReview.usesProductionShell {
+                    model.session.configureMediaLibrary(service: MonitorMediaReview.playbackService)
+                    model.shell.open(.media)
+                }
+            #endif
             if screen == "sequence" { runSequence(model, status: status) }
         }
 

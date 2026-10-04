@@ -756,7 +756,7 @@ struct AppRoot: View {
         ZStack {
             ZCBackground()
             #if targetEnvironment(simulator)
-                if MonitorMediaReview.isActive {
+                if MonitorMediaReview.isActive && !MonitorMediaReview.usesProductionShell {
                     MonitorMediaReviewView()
                 } else {
                     primaryExperience
@@ -782,6 +782,11 @@ struct AppRoot: View {
             }
         }
         .environment(model)
+        #if DEBUG && targetEnvironment(simulator)
+        .overlay(alignment: .topLeading) {
+            if MonitorMediaReview.usesProductionShell { MonitorPlaybackReviewFacts(model: model) }
+        }
+        #endif
         .environment(\.font, LiveType.text(16))
         .environment(
             \.monitorHDRChromeGain,
