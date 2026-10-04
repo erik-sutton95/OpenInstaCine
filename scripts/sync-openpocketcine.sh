@@ -97,6 +97,15 @@ LUNA_OWNED=(
   # I5b-1: real player/item/load/scrub owners are shared; preserve native/source adapters.
   OpenInstaCine/LunaPlaybackComposition.swift
   OpenInstaCine/MediaPlayerLayerView.swift
+  # I5c: client/export/batch/route and delivery UI now consume OpenCine owners.
+  # Keep their app adapters and native regressions until I-6 removes this script.
+  OpenInstaCine/PlaybackEffects.swift
+  OpenInstaCine/MediaDelivery.swift
+  OpenInstaCine/MediaDeliveryOverlay.swift
+  OpenInstaCine/MediaDeliveryPopup.swift
+  OpenInstaCineTests/MediaLogExportTests.swift
+  OpenInstaCineTests/MediaDeliveryLifetimeTests.swift
+  OpenInstaCineTests/FrameioTokenCompatibilityTests.swift
   OpenInstaCine/LiveMonitorFx.swift
   OpenInstaCine/LiveMonitorLooks.swift
   OpenInstaCine/FeedWorkingRaster.swift
@@ -146,8 +155,8 @@ LUNA_OWNED=(
   project.yml
   Package.resolved
   ci_scripts
-  # Upstream's Frame.io client moved into OpenCine's OpenCineFrameIO (OPTIONAL-01); this
-  # copy stays until OpenInstaCine adopts that product.
+  # The client now comes from OpenCineFrameIO. These files supply this app's credential,
+  # destination and browser adapters; upstream cannot restore the former copied client.
   OpenInstaCine/Frameio
 )
 

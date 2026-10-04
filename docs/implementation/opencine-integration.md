@@ -150,6 +150,11 @@ use simulated source facts, with no upload or network switch. Android adopts the
 export heading and native segmented/material controls; actual Android input, physical delivery,
 Adobe sign-in/upload and camera leave/rejoin remain untested. The app pin has not moved.
 
+The temporary Pocket source-sync script excludes the adopted delivery/export adapters and
+their native regressions, alongside the existing Frame.io folder exclusion. Upstream changes
+to these owned paths are reported for review; they cannot overwrite this shared-owner adoption.
+The script's final retirement still belongs to I-6 after the remaining generic owners migrate.
+
 ## What changes for users
 
 Nothing is meant to look different. Underneath:
