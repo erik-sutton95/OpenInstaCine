@@ -78,8 +78,8 @@ omits its replacement and rejects invalid resource identifiers/file inputs befor
 Both-architecture simulator build-for-testing, the actual saved-token JSON compatibility test
 and the two existing delivery-hop lifetime tests pass. This is a local candidate; real Adobe
 sign-in, upload, camera network return and physical-device behavior remain untested. Frame.io
-remains an iOS-only feature in this app. Shared delivery batch composition is still a subsequent
-increment; adopting this client does not complete the full delivery migration.
+remains an iOS-only feature in this app. The batch adoption below is a separate increment;
+adopting this client does not complete the full delivery migration.
 
 ### Shared native exporter (SHELL-03 I5c, second increment)
 
@@ -94,8 +94,25 @@ The same five native export regression tests pass against both the original and 
 both-architecture products, including actual encoded pixels and embedded curve metadata.
 Shared copy/sidecar fixtures, the full shared Swift suite and strict concurrency checks pass.
 This is a local candidate, with the published/canonical app pin unchanged. Physical-device
-export and cloud delivery remain untested; batch, route and delivery UI ownership remain
-subsequent increments.
+export and cloud delivery remain untested; route and delivery UI ownership remain subsequent
+increments.
+
+### Shared Frame.io batch (SHELL-03 I5c, third increment)
+
+The actual upload path now uses `OpenCineFrameIO.FrameioDelivery` for item sequencing and
+partial results. The app supplies its existing export/upload callbacks and overlay progress
+mapping (export 0-45%, upload 45-100%). Conversion-ineligible clips remain skipped; single-clip
+errors and multi-clip summaries retain their original messages. History is absent and export
+cleanup remains the existing app policy. Cancellation now terminates the batch immediately,
+matching the cache stage, instead of counting a failed clip and continuing.
+
+Both-architecture build-for-testing passes. A scratch comparison executes the exact extracted
+old and new app loop bodies against the checked shared implementation: eight scripted cases
+retain identical outcomes, item order and progress, and two cancellation cases stop at the
+current clip. This comparison uses typed export/upload substitutes; real cloud delivery,
+network handoff, native callback scheduling and physical behavior remain untested by it.
+The prior native exporter and preflight proofs keep their original source attribution.
+Internet-hop ownership and the popup/overlay composition are still subsequent increments.
 
 ## What changes for users
 

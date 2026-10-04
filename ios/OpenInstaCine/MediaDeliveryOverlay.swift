@@ -1,4 +1,5 @@
 import MonitorUI
+import OpenCineFrameIO
 import OpenPocketViewCore
 import SwiftUI
 
@@ -225,7 +226,7 @@ enum MediaDeliveryRunner {
         guard !ready.isEmpty else {
             return .failed(
                 message: uncached > 0
-                    ? "Couldn't cache \(uncached) clip(s) from the camera — check the connection and try again."
+                    ? "Couldn't cache \(uncached) clip(s) from the camera. Check the connection and try again."
                     : MediaDeliveryError.emptySelection.localizedDescription)
         }
 
@@ -301,36 +302,45 @@ enum MediaDeliveryRunner {
                     )
                 }
             }
-            var uploaded = 0
-            var failed = 0
-            var skipped = 0
-            for (index, file) in ready.enumerated() {
-                overlay.clipIndex = index + 1
-                overlay.clipFraction = 0
-                onProgress(overlay)
-                do {
-                    let url = try await export(file: file, request: request, model: model) {
-                        overlay.clipFraction = $0 * 0.45
+            let report: FrameioDeliveryReport
+            do {
+                // No private upload history or export cleanup is enabled by this adoption.
+                report = try await FrameioDelivery.run(
+                    Array(ready.enumerated()),
+                    prepare: { item in
+                        let (index, file) = item
+                        overlay.clipIndex = index + 1
+                        overlay.clipFraction = 0
                         onProgress(overlay)
-                    }
-                    try await model.uploadFileToFrameio(
-                        sourceURL: url,
-                        filename: url.lastPathComponent
-                    ) { fraction in
-                        overlay.clipFraction = 0.45 + fraction * 0.55
-                        onProgress(overlay)
-                    }
-                    uploaded += 1
-                } catch {
-                    if isConvertLogSkip(error) {
-                        skipped += 1
-                        continue
-                    }
-                    failed += 1
-                    if ready.count == 1 {
-                        return .failed(message: error.localizedDescription)
-                    }
-                }
+                        do {
+                            return try await export(file: file, request: request, model: model) {
+                                overlay.clipFraction = $0 * 0.45
+                                onProgress(overlay)
+                            }
+                        } catch {
+                            if isConvertLogSkip(error) { return nil }
+                            throw error
+                        }
+                    },
+                    upload: { _, url in
+                        try await model.uploadFileToFrameio(
+                            sourceURL: url, filename: url.lastPathComponent
+                        ) { fraction in
+                            overlay.clipFraction = 0.45 + fraction * 0.55
+                            onProgress(overlay)
+                        }
+                        return .uploaded
+                    })
+            } catch is CancellationError {
+                return .failed(message: "Cancelled.")
+            } catch {
+                return .failed(message: error.localizedDescription)
+            }
+            let uploaded = report.uploaded
+            let failed = report.failed
+            let skipped = report.skipped
+            if ready.count == 1, let message = report.firstFailureMessage {
+                return .failed(message: message)
             }
             var parts: [String] = []
             if uploaded > 0 { parts.append("\(uploaded) uploaded") }
