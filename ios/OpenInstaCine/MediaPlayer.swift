@@ -39,55 +39,7 @@ struct MediaShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-/// Pinch/pan zoom that stays anchored under the fingers.
-struct AnchoredPinchZoom {
-    static let maxScale: CGFloat = 4
-
-    private(set) var scale: CGFloat = 1
-    private(set) var offset: CGSize = .zero
-    private var committedScale: CGFloat = 1
-    private var committedOffset: CGSize = .zero
-
-    var isZoomed: Bool { scale > 1.001 }
-
-    mutating func pinchChanged(magnification: CGFloat, startAnchor: UnitPoint, size: CGSize) {
-        let target = min(Self.maxScale, max(1, committedScale * magnification))
-        guard committedScale > 0 else { return }
-        let ratio = target / committedScale
-        let centroid = CGSize(
-            width: (startAnchor.x - 0.5) * size.width,
-            height: (startAnchor.y - 0.5) * size.height)
-        offset = CGSize(
-            width: centroid.width - (centroid.width - committedOffset.width) * ratio,
-            height: centroid.height - (centroid.height - committedOffset.height) * ratio)
-        scale = target
-    }
-
-    mutating func panChanged(translation: CGSize) {
-        guard isZoomed else { return }
-        offset = CGSize(
-            width: committedOffset.width + translation.width,
-            height: committedOffset.height + translation.height)
-    }
-
-    mutating func endGesture(size: CGSize) {
-        if scale < 1.05 {
-            reset()
-            return
-        }
-        let maxX = size.width * (scale - 1) / 2
-        let maxY = size.height * (scale - 1) / 2
-        offset = CGSize(
-            width: min(maxX, max(-maxX, offset.width)),
-            height: min(maxY, max(-maxY, offset.height)))
-        committedScale = scale
-        committedOffset = offset
-    }
-
-    mutating func reset() {
-        self = AnchoredPinchZoom()
-    }
-}
+typealias AnchoredPinchZoom = MonitorPlaybackZoom
 
 enum MediaTimeFormatting {
     static func label(_ seconds: Double) -> String {
@@ -328,7 +280,7 @@ struct MediaPhotoViewer: View {
             .onChanged { value in
                 zoom.pinchChanged(
                     magnification: value.magnification,
-                    startAnchor: value.startAnchor,
+                    startAnchorX: value.startAnchor.x, startAnchorY: value.startAnchor.y,
                     size: size)
             }
             .onEnded { _ in
@@ -388,22 +340,8 @@ struct MediaPlayerView: View {
 
     @State private var nativePlayback: MonitorApplePlaybackOwner
     @State private var playback: LunaPlaybackModel?
-    @State private var scrubToken: MonitorPlaybackScrubToken?
     @State private var playerVisible = false
-    @State private var playbackFlashIcon: OpcIcon?
-    @State private var playbackFlashVisible = false
-    @State private var playbackFlashTask: Task<Void, Never>?
-    @State private var isDeleteConfirmPresented = false
-    @State private var chromeVisible = true
-    @State private var assistMode = false
-    @State private var isInfoPresented = false
-    @State private var isConformPresented = false
-    @State private var zoom = AnchoredPinchZoom()
-    @State private var zoomContainerSize: CGSize = .zero
-    @State private var suppressNextPlaybackTap = false
-    @State private var isFrameScrubbing = false
-    @State private var frameScrubVideoWidth: CGFloat = 0
-    @State private var frameScrubPending = false
+    @State private var pictureGeometry: MonitorPlaybackPictureGeometry?
     @State private var toastMessage: String?
     @State private var deliveryPresentation: MediaDeliveryPresentation?
     @State private var playbackAssistToolbarFrame: CGRect = .zero
@@ -431,21 +369,10 @@ struct MediaPlayerView: View {
         get { playback?.conformTarget }
         nonmutating set { playback?.setConformTarget(newValue) }
     }
-    private var currentScrubOrigin: AnyHashable { AnyHashable(playback?.token) }
     private var playerLoadGeneration: Int { Int(truncatingIfNeeded: playback?.token.revision ?? 0) }
     private var videoDisplaySize: CGSize {
         if let width = playback?.metadata.width, let height = playback?.metadata.height { return CGSize(width: width, height: height) }
         return PlaybackVideoLayout.size(fromResolution: active.resolution) ?? CGSize(width: 16, height: 9)
-    }
-
-    private enum FrameScrub {
-        static let longPressDuration: Double = 0.35
-    }
-
-    private enum PlaybackFlash {
-        static let fadeIn: Double = 0.12
-        static let hold: Double = 0.55
-        static let fadeOut: Double = 0.22
     }
 
     init(files: [MediaFile], startingAt file: MediaFile) {
@@ -464,175 +391,26 @@ struct MediaPlayerView: View {
     private var canGoNext: Bool { playback?.canGoNext ?? false }
 
     private var playerContent: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            GeometryReader { geo in
-                let container = CGRect(origin: .zero, size: geo.size)
-                let videoRect = DesqueezeAssist.presentationRect(
-                    sourceSize: videoDisplaySize, in: container,
-                    effects: model.assist.playbackEffects)
-
-                ZStack {
-                    MediaPlayerLayerView(
-                        player: player,
-                        session: playbackFeed,
-                        effects: model.assist.playbackEffects,
-                        transfer: MonitorTransfer(model.assist.monitorColorMode ?? .normal),
-                        sampleBus: model.frameSamples
-                    )
-                    .scaleEffect(
-                        x: model.assist.playbackEffects.mirror ? -1 : 1,
-                        y: model.assist.playbackEffects.mirrorVertical ? -1 : 1,
-                        anchor: .center
-                    )
-                    .scaleEffect(zoom.scale)
-                    .offset(zoom.offset)
-                }
-                .frame(width: videoRect.width, height: videoRect.height)
-                .clipped()
-                .position(x: videoRect.midX, y: videoRect.midY)
-                .allowsHitTesting(false)
-
-                FeedAlignedAssists(
-                    grid: model.assist.isPlaybackVisible(.grid),
+        MonitorPlaybackScreen(value: playerPresentation, actions: playerActions,
+            coverPresented: deliveryPresentation != nil,
+            onGeometry: { geometry in
+                guard geometry.item == playback?.token else { return }
+                pictureGeometry = geometry
+            }, onBarFrame: { playbackBarFrame = $0 },
+            picture: {
+                MediaPlayerLayerView(player: player, session: playbackFeed,
+                    effects: model.assist.playbackEffects,
+                    transfer: MonitorTransfer(model.assist.monitorColorMode ?? .normal),
+                    sampleBus: model.frameSamples)
+            }, feedAssists: { rect in
+                FeedAlignedAssists(grid: model.assist.isPlaybackVisible(.grid),
                     crosshair: model.assist.isPlaybackVisible(.crosshair),
-                    guides: model.assist.isPlaybackVisible(.guides),
-                    guideAspect: model.assist.guideAspect,
-                    focusPoint: CGPoint(x: 0.5, y: 0.5),
-                    overlay: .focus,
-                    sceneFaces: [],
-                    showFocusChrome: false,
-                    showTapFocusBox: false,
-                    feed: videoRect
-                )
-                .frame(width: geo.size.width, height: geo.size.height)
-                .allowsHitTesting(false)
-
-                Color.clear
-                    .frame(width: videoRect.width, height: videoRect.height)
-                    .contentShape(Rectangle())
-                    .onAppear {
-                        frameScrubVideoWidth = videoRect.width
-                        zoomContainerSize = videoRect.size
-                    }
-                    .onChange(of: videoRect.size) { _, size in
-                        frameScrubVideoWidth = size.width
-                        zoomContainerSize = size
-                        zoom.endGesture(size: size)
-                    }
-                    .gesture(playbackVideoGesture)
-                    .simultaneousGesture(playbackFrameTapGesture)
-                    .simultaneousGesture(playbackFrameScrubGesture)
-                    .position(x: videoRect.midX, y: videoRect.midY)
-
-                playbackTransportFlashOverlay(in: videoRect)
-                playbackFrameScrubOverlay(in: videoRect)
-
-                if playlist.count > 1 {
-                    clipNavigationArrows(in: videoRect)
-                }
-
-                playbackScopeOverlays(in: geo.size, videoRect: videoRect)
-            }
-            .ignoresSafeArea()
-
-            if !isClipReady || loadError != nil {
-                loadingOverlay
-            }
-
-            GeometryReader { geometry in
-                let layout = MonitorPlaybackLayout(
-                    width: geometry.size.width, height: geometry.size.height,
-                    tablet: UIDevice.current.userInterfaceIdiom == .pad)
-                let portrait = layout.portrait
-                let safe = LiveMonitorLayout.resolvedSafeArea(
-                    geometry.safeAreaInsets, scene: windowGeometry.safeArea)
-                let sideInset = max(safe.leading, safe.trailing)
-                let corner = FieldMonitorLayout(
-                    width: geometry.size.width, height: geometry.size.height,
-                    safeArea: MonitorSafeArea(
-                        top: safe.top, leading: safe.leading,
-                        bottom: safe.bottom, trailing: safe.trailing),
-                    topControlInset: windowGeometry.topControlInset
-                ).lock
-                let backX = portrait ? safe.leading + 22 : CGFloat(corner.x)
-                let backY =
-                    portrait ? safe.top + windowGeometry.topControlInset + 20 : CGFloat(corner.y)
-                ZStack(alignment: .bottomLeading) {
-                    VStack(spacing: 0) {
-                        if chromeVisible {
-                            topBar(portrait: portrait)
-                                .padding(
-                                    .leading,
-                                    max(sideInset + 28, backX + CGFloat(corner.width) + 12)
-                                )
-                                .padding(.trailing, sideInset + 28)
-                                .padding(.top, backY)
-                                .padding(.bottom, 18)
-                                .background(
-                                    LinearGradient(
-                                        colors: [.black.opacity(0.7), .clear],
-                                        startPoint: .top, endPoint: .bottom))
-                        }
-                        Spacer(minLength: 0)
-                        if chromeVisible, let toastMessage { toastView(toastMessage) }
-                        if chromeVisible {
-                            bottomBar(portrait: portrait)
-                                .padding(.horizontal, sideInset)
-                                .padding(.bottom, safe.bottom)
-                        }
-                        if !chromeVisible {
-                            HStack {
-                                Spacer()
-                                restoreChromeButton
-                            }
-                            .padding(.trailing, sideInset + 12)
-                            .padding(.bottom, safe.bottom + 12)
-                        }
-                    }
-                    if chromeVisible {
-                        MonitorChromeButton(
-                            "Back to media",
-                            size: CGSize(width: corner.width, height: corner.height),
-                            action: dismissPlayback
-                        ) {
-                            MonitorIcon.chevronLeft.frame(
-                                width: corner.width * 29 / 54, height: corner.height * 29 / 54)
-                        }
-                        .position(
-                            x: backX + CGFloat(corner.width) / 2,
-                            y: backY + CGFloat(corner.height) / 2)
-                        if isConformPresented {
-                            conformPanel
-                                .frame(maxWidth: min(480, geometry.size.width - 24))
-                                .padding(.horizontal, 12).padding(.bottom, portrait ? 174 : 116)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        }
-                    }
-                    if isInfoPresented {
-                        MonitorClipInfoPanel(rows: clipInfoRows) { isInfoPresented = false }
-                            .frame(width: layout.inspectorWidth)
-                            .padding(.trailing, sideInset + 12)
-                            .padding(.top, safe.top + windowGeometry.topControlInset + 12)
-                            .padding(.bottom, safe.bottom + 12)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                            .transition(.move(edge: .trailing).combined(with: .opacity))
-                    }
-                }
-                .animation(.easeInOut(duration: 0.22), value: isInfoPresented)
-                .animation(.easeInOut(duration: 0.22), value: isConformPresented)
-                .animation(.easeInOut(duration: 0.22), value: chromeVisible)
-            }
-            .ignoresSafeArea()
-            .zIndex(2)
-            if chromeVisible {
-                playbackAssistOverlay
-                    .zIndex(3)
-            }
-        }
-        .animation(.easeInOut(duration: 0.28), value: active.id)
+                    guides: model.assist.isPlaybackVisible(.guides), guideAspect: model.assist.guideAspect,
+                    focusPoint: CGPoint(x: 0.5, y: 0.5), overlay: .focus, sceneFaces: [],
+                    showFocusChrome: false, showTapFocusBox: false, feed: rect)
+            }, canvasAssists: { size, rect in playbackScopeOverlays(in: size, videoRect: rect) },
+            tools: { context in playbackAssistPalette(presentation: context.presentation,
+                safeTop: context.safeTop, expanded: context.expanded) })
         .monitorVideoBackdrop(
             renderer: model.playbackBackdrop,
             configuration: [
@@ -641,7 +419,7 @@ struct MediaPlayerView: View {
                     effects: model.assist.playbackEffects,
                     geometry: [
                         videoDisplaySize.width, videoDisplaySize.height,
-                        zoom.scale, zoom.offset.width, zoom.offset.height,
+                        (pictureGeometry?.zoom.scale ?? 1), (pictureGeometry?.zoom.offset.width ?? 0), (pictureGeometry?.zoom.offset.height ?? 0),
                     ])
             ],
             enabled: playerVisible && isClipReady, surroundRGB: 0x000000
@@ -659,10 +437,59 @@ struct MediaPlayerView: View {
                     frame: MonitorVideoBackdropSource.displayedFrame(
                         sourceAspect: videoDisplaySize.width / max(1, videoDisplaySize.height),
                         effects: effects,
-                        in: rect, zoom: zoom.scale, offset: zoom.offset),
+                        in: rect, zoom: (pictureGeometry?.zoom.scale ?? 1), offset: (pictureGeometry?.zoom.offset ?? .zero)),
                     clip: rect)
             ]
         }
+    }
+
+    private var playerPresentation: MonitorPlaybackPresentation {
+        let effects = model.assist.playbackEffects
+        let rect = DesqueezeAssist.presentationRect(sourceSize: videoDisplaySize,
+            in: CGRect(x: 0, y: 0, width: 1000, height: 1000), effects: effects)
+        return .init(item: playback?.token, title: active.filename, subtitle: clipMetadata,
+            source: playbackSourceLabel, metadata: clipInfoRows,
+            aspect: Double(rect.width / max(1, rect.height)),
+            mirrorHorizontal: effects.mirror, mirrorVertical: effects.mirrorVertical,
+            ready: isClipReady, error: loadError, progress: session.mediaDownloadProgress[active.path],
+            position: isScrubbing ? scrubTime : currentTime, duration: duration, buffered: bufferedDuration,
+            positionLabel: conformedLabel(isScrubbing ? scrubTime : currentTime), durationLabel: conformedLabel(duration),
+            playing: isPlaying, reachedEnd: reachedEnd, scrubbing: isScrubbing, muted: isMuted,
+            looping: isLooping, previous: canGoPrevious, next: canGoNext, favorite: session.isFavorite(active),
+            conform: conformSource, conformTarget: conformTarget, haptics: model.hapticsEnabled, toast: toastMessage)
+    }
+
+    private func withCurrentItem(_ token: MonitorPlaybackItemToken, _ action: (LunaPlaybackModel) -> Void) {
+        guard let playback, playback.isActive, playback.token == token else { return }
+        action(playback)
+    }
+    private var playerActions: MonitorPlaybackActions {
+        .init(back: dismissPlayback,
+            play: { token, playing in withCurrentItem(token) { $0.setPlaying(playing) } },
+            restart: { token in withCurrentItem(token) { $0.restart() } },
+            seekBy: { token, delta in withCurrentItem(token) { $0.seek(by: delta) } },
+            mute: { token, muted in withCurrentItem(token) { $0.setMuted(muted) } },
+            loop: { token, looping in withCurrentItem(token) { $0.setLooping(looping) } },
+            conform: { token, target in withCurrentItem(token) { owner in
+                owner.setConformTarget(target)
+            } },
+            adjacent: { token, offset in withCurrentItem(token) { _ in goToAdjacent(offset: offset) } },
+            favorite: { token in withCurrentItem(token) { _ in session.toggleFavorite(active) } },
+            share: { token in withCurrentItem(token) { owner in
+                if isPlaying { owner.setPlaying(false) }
+                deliveryPresentation = MediaDeliveryPresentation(files: [active])
+            } },
+            delete: { token in withCurrentItem(token) { _ in
+                let dying = active
+                Task { await deleteActive(dying, admitted: token) }
+            } },
+            beginScrub: { token in
+                guard let playback, playback.isActive, playback.token == token else { return nil }
+                return playback.beginScrub()
+            }, updateScrub: { edit, time in playback?.updateScrub(seconds: time, admitted: edit) },
+            updateFrameScrub: { edit, delta, width in playback?.updateFrameScrub(delta: delta, width: width, admitted: edit) },
+            commitScrub: { edit in playback?.commitScrub(admitted: edit) },
+            cancelScrub: { edit, reason in playback?.cancelScrub(interrupted: reason == .interrupted, admitted: edit) })
     }
 
     private var playerLifecycle: some View {
@@ -676,20 +503,18 @@ struct MediaPlayerView: View {
         }
         .onDisappear {
             playerVisible = false
-            scrubToken = nil
             playback?.setPresentationActive(false)
             model.assist.gradesClip = false
             disappear()
         }
         .task(id: active.id) {
-            assistMode = false
             loadActiveClip()
         }
-        .onChange(of: isConformPresented) { _, shown in if shown { assistMode = false } }
-        .onChange(of: isInfoPresented) { _, shown in if shown { assistMode = false } }
-        .onChange(of: deliveryPresentation?.id) { _, shown in if shown != nil { assistMode = false }
+        .onChange(of: conformTarget) { _, _ in
+            guard playback?.isActive == true else { return }
+            playback?.setMuted(isMuted)
+            if isPlaying { startPlayback() }
         }
-        .onChange(of: chromeVisible) { _, shown in if !shown { assistMode = false } }
         .onChange(of: session.isDownloaded(active)) { _, downloaded in
             if downloaded, isClipReady { playback?.refreshTransfer() }
         }
@@ -793,55 +618,6 @@ struct MediaPlayerView: View {
         return hasher.finalize()
     }
 
-    private func topBar(portrait: Bool) -> some View {
-        let arrangement =
-            portrait
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
-        return arrangement {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(active.filename).font(MonitorTheme.font(13, weight: .semibold))
-                        .foregroundStyle(MonitorTheme.text).lineLimit(1)
-                    Text(clipMetadata).font(MonitorTheme.font(9.5)).foregroundStyle(
-                        MonitorTheme.muted
-                    )
-                    .lineLimit(portrait ? 2 : 1)
-                    Text(playbackSourceLabel).font(MonitorTheme.font(8, weight: .bold)).tracking(
-                        0.5
-                    )
-                    .foregroundStyle(MonitorTheme.secondary).lineLimit(1)
-                    .padding(.horizontal, 6).padding(.vertical, 4)
-                    .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 5))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            HStack(spacing: 8) {
-                Button {
-                    session.toggleFavorite(active)
-                } label: {
-                    MonitorPlaybackChip {
-                        OpcIcon.star.view(filled: session.isFavorite(active))
-                            .foregroundStyle(
-                                session.isFavorite(active)
-                                    ? LiveDesign.amber : MonitorTheme.secondary)
-                    }
-                }
-                .buttonStyle(.zcTapTarget).accessibilityLabel("Favorite clip")
-                Button {
-                    isInfoPresented.toggle()
-                } label: {
-                    MonitorPlaybackChip(active: isInfoPresented) { OpcIcon.info }
-                }
-                .buttonStyle(.zcTapTarget).accessibilityLabel("Clip information")
-                shareTransportButton(compact: portrait)
-                deleteButton
-            }
-            .frame(maxWidth: portrait ? .infinity : nil, alignment: .trailing)
-            .fixedSize(horizontal: !portrait, vertical: true)
-        }
-    }
-
     private var clipMetadata: String {
         [
             active.resolution, active.fps.map { "\($0)p" }, session.shotColor(for: active)?.label(in: session.profile),
@@ -882,29 +658,6 @@ struct MediaPlayerView: View {
         return rows
     }
 
-    private func bottomBar(portrait: Bool) -> some View {
-        playbackTransportBar(portrait: portrait)
-            .frame(maxWidth: UIDevice.current.userInterfaceIdiom == .pad ? 860 : 630)
-            .padding(.horizontal, 12).padding(.top, 14).padding(.bottom, 5)
-            .frame(maxWidth: .infinity)
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.78), location: 0),
-                        .init(color: .black.opacity(0.4), location: 0.62),
-                        .init(color: .clear, location: 1),
-                    ], startPoint: .bottom, endPoint: .top)
-            )
-            .background {
-                GeometryReader { proxy in
-                    Color.clear.onAppear { playbackBarFrame = proxy.frame(in: .global) }
-                        .onChange(of: proxy.frame(in: .global)) { _, frame in
-                            playbackBarFrame = frame
-                        }
-                }
-            }
-    }
-
     private var bufferedDuration: Double {
         player.currentItem?.loadedTimeRanges.map { value in
             let range = value.timeRangeValue
@@ -912,179 +665,7 @@ struct MediaPlayerView: View {
         }.filter(\.isFinite).max() ?? 0
     }
 
-    private func playbackTransportBar(portrait: Bool) -> some View {
-        VStack(spacing: 2) {
-            HStack {
-                Text(conformedLabel(isScrubbing ? scrubTime : currentTime))
-                    .font(MonitorTheme.font(11, weight: .bold)).foregroundStyle(MonitorTheme.text)
-                Spacer()
-                Text(conformedLabel(duration)).font(MonitorTheme.font(11)).foregroundStyle(
-                    MonitorTheme.secondary)
-            }
-            .monospacedDigit().shadow(color: .black, radius: 4)
-            MonitorPlaybackScrubber(
-                progress: isScrubbing ? scrubTime : currentTime,
-                duration: duration,
-                bufferedProgress: bufferedDuration,
-                interactionIdentity: { AnyHashable(currentScrubOrigin) },
-                onScrubbingChanged: { scrubbing in
-                    if scrubbing { scrubToken = playback?.beginScrub() }
-                },
-                onProgressChange: { time in
-                    if let scrubToken { playback?.updateScrub(seconds: time, admitted: scrubToken) }
-                },
-                onSeek: { time in
-                    if let token = scrubToken {
-                        playback?.updateScrub(seconds: time, admitted: token)
-                        playback?.commitScrub(admitted: token)
-                    }
-                    scrubToken = nil
-                },
-                onCancelled: { reason in
-                    let admitted = scrubToken; scrubToken = nil
-                    guard let admitted else { return }
-                    if case .interrupted = reason { playback?.cancelScrub(interrupted: true, admitted: admitted) }
-                    else { playback?.cancelScrub(interrupted: false, admitted: admitted) }
-                }
-            )
-            let arrangement =
-                portrait
-                ? AnyLayout(VStackLayout(spacing: 2))
-                : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
-            arrangement {
-                if !portrait { Color.clear.frame(maxWidth: .infinity, maxHeight: 1) }
-                HStack(spacing: 8) {
-                    transportButton(.skipBack) { seek(by: -15) }
-                        .accessibilityLabel("Back 15 seconds")
-                    transportButton(reachedEnd ? .rotateCw : isPlaying ? .pause : .play, size: 26) {
-                        if reachedEnd { restartPlayback() } else { togglePlay() }
-                    }
-                    .accessibilityLabel(reachedEnd ? "Restart clip" : isPlaying ? "Pause" : "Play")
-                    transportButton(.skipForward) { seek(by: 15) }
-                        .accessibilityLabel("Forward 15 seconds")
-                }
-                HStack(spacing: 8) {
-                    conformButton
-                    actionToggle(.volumeX, .volume2, on: isMuted) { toggleMute() }
-                        .accessibilityLabel(isMuted ? "Unmute" : "Mute")
-                    Button {
-                        isLooping.toggle()
-                    } label: {
-                        MonitorPlaybackChip(active: isLooping) { OpcIcon.repeat }
-                    }
-                    .buttonStyle(.zcTapTarget).accessibilityLabel("Loop playback")
-                    .accessibilityValue(isLooping ? "On" : "Off")
-                    cleanViewButton
-                }
-                .frame(maxWidth: .infinity, alignment: portrait ? .center : .trailing)
-            }
-        }
-    }
-
-    private var deleteButton: some View {
-        Button {
-            isDeleteConfirmPresented = true
-        } label: {
-            MonitorPlaybackChip(destructive: true) { OpcIcon.trash }
-        }
-        .buttonStyle(.zcTapTarget)
-        .accessibilityLabel("Delete clip from camera")
-        .confirmationDialog(
-            "Delete this clip from the camera?", isPresented: $isDeleteConfirmPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) { Task { await deleteActive() } }
-        }
-    }
-
-    @ViewBuilder
-    private func clipNavigationArrows(in videoRect: CGRect) -> some View {
-        if canGoPrevious {
-            Button {
-                goToAdjacent(offset: -1)
-            } label: {
-                OpcIcon.chevronLeft
-                    .frame(width: 13, height: 13)
-                    .foregroundStyle(LiveDesign.accent)
-                    .frame(width: 32, height: 32)
-                    .liquidGlass(in: Circle(), interactive: true)
-            }
-            .buttonStyle(.zcTapTarget)
-            .position(x: videoRect.minX + 22, y: videoRect.midY)
-            .accessibilityLabel("Previous clip")
-        }
-        if canGoNext {
-            Button {
-                goToAdjacent(offset: 1)
-            } label: {
-                OpcIcon.chevronRight
-                    .frame(width: 13, height: 13)
-                    .foregroundStyle(LiveDesign.accent)
-                    .frame(width: 32, height: 32)
-                    .liquidGlass(in: Circle(), interactive: true)
-            }
-            .buttonStyle(.zcTapTarget)
-            .position(x: videoRect.maxX - 22, y: videoRect.midY)
-            .accessibilityLabel("Next clip")
-        }
-    }
-
-    private var loadingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.72)
-            VStack(spacing: 12) {
-                if loadError == nil {
-                    if let progress = session.mediaDownloadProgress[active.path],
-                        progress > 0, progress < 1
-                    {
-                        ProgressView(value: progress)
-                            .tint(LiveDesign.accent)
-                            .frame(width: 120)
-                    } else {
-                        ProgressView().tint(LiveDesign.accent)
-                    }
-                }
-                Text(loadError ?? loadingCopy)
-                    .font(LiveType.ui(size: 14, weight: .medium))
-                    .foregroundStyle(LiveDesign.muted)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(24)
-            .liquidGlass(
-                in: RoundedRectangle(cornerRadius: LiveDesign.cornerRadius), interactive: false)
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-    }
-
-    private var loadingCopy: String {
-        if session.mediaDownloadProgress[active.path] != nil {
-            return "Buffering from camera…"
-        }
-        return "Preparing playback…"
-    }
-
-    private var playbackAssistOverlay: some View {
-        GeometryReader { proxy in
-            let safeArea = LiveMonitorLayout.resolvedSafeArea(
-                proxy.safeAreaInsets, scene: windowGeometry.safeArea)
-            let size = LiveMonitorLayout.canvasSize(
-                layoutSize: proxy.size, safeArea: safeArea,
-                screenSize: windowGeometry.validSize)
-            let presentation = FieldMonitorLayout(
-                width: size.width, height: size.height,
-                safeArea: MonitorSafeArea(
-                    top: safeArea.top, leading: safeArea.leading,
-                    bottom: safeArea.bottom, trailing: safeArea.trailing),
-                showsValues: true,
-                topControlInset: windowGeometry.topControlInset)
-            playbackAssistPalette(presentation: presentation, safeTop: safeArea.top)
-                .frame(width: size.width, height: size.height)
-        }
-        .ignoresSafeArea()
-    }
-
-    private func playbackAssistPalette(presentation: FieldMonitorLayout, safeTop: CGFloat)
+    private func playbackAssistPalette(presentation: FieldMonitorLayout, safeTop: CGFloat, expanded: Binding<Bool>)
         -> some View
     {
         @Bindable var model = model
@@ -1098,7 +679,7 @@ struct MediaPlayerView: View {
                     enabled: model.assist.isPlaybackVisible($0), hasOptions: $0.hasConfiguration)
             },
             layout: metrics, usageSeed: MonitorToolUsage.fieldMonitorSeed,
-            usage: $model.assistToolUsage, expanded: $assistMode,
+            usage: $model.assistToolUsage, expanded: expanded,
             onToggle: { id in
                 if let tool = LiveAssistTool(rawValue: id) { model.assist.togglePlayback(tool) }
             },
@@ -1212,277 +793,12 @@ struct MediaPlayerView: View {
             ConformPreview.conformedDuration(sourceSeconds: seconds, speed: conformSpeed))
     }
 
-    private var conformButton: some View {
-        let availability = ConformPreview.availability(for: conformSource)
-        return Button {
-            isConformPresented.toggle()
-        } label: {
-            MonitorPlaybackChip(active: conformTarget != nil || isConformPresented) {
-                OpcIcon.timer
-            }
-        }
-        .buttonStyle(.zcTapTarget).disabled(!availability.isAvailable)
-        .accessibilityLabel("Conform preview")
-        .onChange(of: conformTarget) { _, _ in
-            applyMute()
-            if isPlaying { startPlayback() }
-        }
-    }
-
-    private var conformPanel: some View {
-        let availability = ConformPreview.availability(for: conformSource)
-        let rate = conformSource.captureRate ?? 0
-        let labels =
-            ["Real time"]
-            + availability.targets.map {
-                ConformPreview.targetLabel(captureRate: rate, targetRate: $0)
-            }
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("CONFORM PREVIEW").font(MonitorTheme.font(9, weight: .bold)).tracking(1.8)
-                    Text(conformTarget == nil ? "As recorded" : "Conformed for slow motion")
-                        .font(MonitorTheme.font(9)).foregroundStyle(MonitorTheme.muted)
-                }
-                Spacer()
-                Button {
-                    isConformPresented = false
-                } label: {
-                    OpcIcon.x.frame(width: 12, height: 12).frame(width: 44, height: 44)
-                }.buttonStyle(.zcTapTarget).accessibilityLabel("Close conform preview")
-            }
-            MonitorValueDrum(
-                options: labels,
-                selection: Binding(
-                    get: {
-                        conformTarget.map {
-                            ConformPreview.targetLabel(captureRate: rate, targetRate: $0)
-                        } ?? "Real time"
-                    },
-                    set: { label in
-                        guard let index = labels.firstIndex(of: label) else { return }
-                        conformTarget = index == 0 ? nil : availability.targets[index - 1]
-                    }), isInteractive: availability.isAvailable, haptics: model.hapticsEnabled)
-            if conformTarget != nil {
-                Text(ConformPreview.audioLabel).font(MonitorTheme.font(9)).foregroundStyle(
-                    MonitorTheme.muted)
-            }
-        }
-        .padding(14).monitorGlass(in: RoundedRectangle(cornerRadius: 14), density: .expanded)
-    }
-
-    private var cleanViewButton: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.22)) { chromeVisible = false }
-        } label: {
-            MonitorPlaybackChip { OpcIcon.maximize }
-        }
-        .buttonStyle(.zcTapTarget).accessibilityLabel("Hide playback controls")
-        .accessibilityHint("A restore control stays in the corner")
-    }
-
-    private var restoreChromeButton: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.22)) { chromeVisible = true }
-        } label: {
-            MonitorPlaybackChip { OpcIcon.minimize }
-        }
-        .buttonStyle(.zcTapTarget).accessibilityLabel("Show playback controls")
-    }
-
-    private func shareTransportButton(compact: Bool) -> some View {
-        Button {
-            if isPlaying { playback?.setPlaying(false) }
-            deliveryPresentation = MediaDeliveryPresentation(files: [active])
-        } label: {
-            MonitorPlaybackChip(title: compact ? nil : "SHARE", active: true) { OpcIcon.share }
-        }
-        .buttonStyle(.zcTapTarget).accessibilityLabel("Share clip")
-    }
-
-    private func toastView(_ message: String) -> some View {
-        Text(message)
-            .font(LiveType.ui(size: 13, weight: .medium))
-            .foregroundStyle(LiveDesign.text)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 16).padding(.vertical, 10)
-            .liquidGlass(in: Capsule(), interactive: true)
-            .padding(.bottom, 8)
-            .transition(.opacity)
-    }
-
-    private func transportButton(
-        _ icon: OpcIcon, size: CGFloat = 18, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            icon.frame(width: size, height: size).foregroundStyle(MonitorTheme.text)
-                .frame(
-                    width: MonitorPlaybackLayout.transportSize,
-                    height: MonitorPlaybackLayout.transportSize
-                ).contentShape(Circle())
-                .shadow(color: .black.opacity(0.9), radius: 5)
-        }
-        .buttonStyle(.zcTapTarget)
-    }
-
-    private func actionToggle(
-        _ onIcon: OpcIcon, _ offIcon: OpcIcon, on: Bool, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            MonitorPlaybackChip(active: on) { on ? onIcon : offIcon }
-        }
-        .buttonStyle(.zcTapTarget)
-    }
-
-    private var playbackVideoGesture: some Gesture {
-        SimultaneousGesture(
-            SimultaneousGesture(playbackMagnificationGesture, playbackPanGesture),
-            chromeSwipeGesture
-        )
-    }
-
-    private var playbackFrameTapGesture: some Gesture {
-        TapGesture().onEnded { handleFrameTap() }
-    }
-
-    private var playbackFrameScrubGesture: some Gesture {
-        LongPressGesture(minimumDuration: FrameScrub.longPressDuration)
-            .sequenced(before: DragGesture(minimumDistance: 0))
-            .onChanged { value in
-                guard isClipReady else { return }
-                guard !zoom.isZoomed else { return }
-                switch value {
-                case .first(true):
-                    frameScrubPending = true
-                case .second(true, let drag?):
-                    if frameScrubPending {
-                        beginFrameScrub()
-                        frameScrubPending = false
-                    }
-                    guard isFrameScrubbing else { return }
-                    updateFrameScrub(horizontalDelta: drag.translation.width)
-                default:
-                    break
-                }
-            }
-            .onEnded { _ in
-                frameScrubPending = false
-                if isFrameScrubbing { endFrameScrub() }
-            }
-    }
-
-    private var chromeSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 28)
-            .onEnded { value in
-                guard !isFrameScrubbing else { return }
-                let dy = value.translation.height
-                guard abs(dy) > abs(value.translation.width) + 8, abs(dy) > 44 else { return }
-                if dy < 0 {
-                    withAnimation(.spring(duration: 0.32)) { chromeVisible = true }
-                } else {
-                    withAnimation(.spring(duration: 0.32)) { chromeVisible = false }
-                }
-            }
-    }
-
-    private var playbackMagnificationGesture: some Gesture {
-        MagnifyGesture()
-            .onChanged { value in
-                if abs(value.magnification - 1) > 0.02 {
-                    suppressNextPlaybackTap = true
-                    frameScrubPending = false
-                }
-                zoom.pinchChanged(
-                    magnification: value.magnification,
-                    startAnchor: value.startAnchor,
-                    size: zoomContainerSize)
-            }
-            .onEnded { _ in
-                withAnimation(.easeOut(duration: 0.2)) {
-                    zoom.endGesture(size: zoomContainerSize)
-                }
-            }
-    }
-
-    private var playbackPanGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                guard zoom.isZoomed else { return }
-                if hypot(value.translation.width, value.translation.height) > 8 {
-                    suppressNextPlaybackTap = true
-                    frameScrubPending = false
-                }
-                zoom.panChanged(translation: value.translation)
-            }
-            .onEnded { _ in
-                guard zoom.isZoomed else { return }
-                withAnimation(.easeOut(duration: 0.2)) {
-                    zoom.endGesture(size: zoomContainerSize)
-                }
-            }
-    }
-
-    @ViewBuilder
-    private func playbackTransportFlashOverlay(in videoRect: CGRect) -> some View {
-        if let playbackFlashIcon {
-            playbackFlashIcon
-                .frame(width: 48, height: 48)
-                .foregroundStyle(LiveDesign.text)
-                .shadow(color: .black.opacity(0.5), radius: 10, y: 3)
-                .overlay {
-                    playbackFlashIcon
-                        .frame(width: 48, height: 48)
-                        .foregroundStyle(LiveDesign.accent.opacity(0.28))
-                        .blendMode(.overlay)
-                }
-                .opacity(playbackFlashVisible ? 1 : 0)
-                .scaleEffect(playbackFlashVisible ? 1 : 0.86)
-                .animation(.easeOut(duration: PlaybackFlash.fadeIn), value: playbackFlashVisible)
-                .position(x: videoRect.midX, y: videoRect.midY)
-                .allowsHitTesting(false)
-        }
-    }
-
-    @ViewBuilder
-    private func playbackFrameScrubOverlay(in videoRect: CGRect) -> some View {
-        if isFrameScrubbing, duration > 0 {
-            let fraction = min(1, max(0, scrubTime / duration))
-            let barWidth = max(0, videoRect.width - 32)
-            VStack(spacing: 10) {
-                Text(MediaTimeFormatting.label(scrubTime))
-                    .font(MonitorTheme.font(16, weight: .semibold)).monospacedDigit()
-                    .foregroundStyle(LiveDesign.text)
-                    .shadow(color: .black.opacity(0.55), radius: 6, y: 2)
-                Text("/ \(MediaTimeFormatting.label(duration))")
-                    .font(MonitorTheme.font(11, weight: .medium)).monospacedDigit()
-                    .foregroundStyle(LiveDesign.muted)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .liquidGlass(in: Capsule(), interactive: false)
-            .position(x: videoRect.midX, y: videoRect.midY)
-            .allowsHitTesting(false)
-
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(LiveDesign.hairline)
-                    .frame(width: barWidth, height: 3)
-                Capsule()
-                    .fill(LiveDesign.accent)
-                    .frame(width: max(3, barWidth * fraction), height: 3)
-            }
-            .position(x: videoRect.midX, y: videoRect.maxY - 18)
-            .allowsHitTesting(false)
-        }
-    }
-
     private func appear() {
         MediaPlaybackAudioSession.activateForPlayback()
         syncPlaybackAudioMetering()
     }
 
     private func disappear() {
-        playbackFlashTask?.cancel()
         audioMeterController.stopPolling()
         audioMeterController.detach(from: player.currentItem)
         nativePlayback.onItemChanged = nil
@@ -1500,7 +816,6 @@ struct MediaPlayerView: View {
                 if let item { attachPlaybackAssists(to: item) }
             }
         }
-        scrubToken = nil; isFrameScrubbing = false; zoom.reset()
         if playback?.active?.asset.id != record.asset.id {
             playback?.load(record, playlist: playlist.compactMap { session.mediaPlaybackRecord(for: $0) })
         }
@@ -1508,47 +823,7 @@ struct MediaPlayerView: View {
         playback?.setPresentationActive(playerVisible)
     }
 
-    private func handleFrameTap() {
-        guard isClipReady else { return }
-        guard !isFrameScrubbing else { return }
-        if suppressNextPlaybackTap {
-            suppressNextPlaybackTap = false
-            return
-        }
-        switch PlaybackFrameTap.action(chromeVisible: chromeVisible, reachedEnd: reachedEnd) {
-        case .restartPlayback:
-            restartPlayback()
-            flash(.play)
-        case .toggleTransport:
-            let willPlay = !isPlaying
-            togglePlay()
-            flash(willPlay ? .play : .pause)
-        case .ignore:
-            break
-        }
-    }
-
-    private func flash(_ icon: OpcIcon) {
-        playbackFlashTask?.cancel()
-        playbackFlashIcon = icon
-        playbackFlashVisible = false
-        playbackFlashTask = Task {
-            await MainActor.run { playbackFlashVisible = true }
-            try? await Task.sleep(for: .seconds(PlaybackFlash.hold))
-            guard !Task.isCancelled else { return }
-            await MainActor.run { playbackFlashVisible = false }
-            try? await Task.sleep(for: .seconds(PlaybackFlash.fadeOut))
-            guard !Task.isCancelled else { return }
-            await MainActor.run { playbackFlashIcon = nil }
-        }
-    }
-
-    private func togglePlay() { playback?.togglePlaying() }
     private func startPlayback() { playback?.setPlaying(true); playbackFeed.noteItemReady() }
-    private func applyMute() { playback?.setMuted(isMuted) }
-    private func restartPlayback() { playback?.restart() }
-    private func seek(by delta: Double) { playback?.seek(by: delta) }
-    private func toggleMute() { playback?.setMuted(!isMuted) }
 
     private func goToAdjacent(offset: Int) {
         guard let playback else { return }
@@ -1559,34 +834,21 @@ struct MediaPlayerView: View {
         playback.setPresentationActive(false)
         playback.goToAdjacent(offset)
         guard let next = playback.active?.payload.file else { return }
-        zoom.reset()
         withAnimation(.easeInOut(duration: 0.28)) {
             active = next
         }
     }
 
-    private func beginFrameScrub() {
-        guard let token = playback?.beginScrub() else { return }
-        scrubToken = token; isFrameScrubbing = true
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    }
-    private func updateFrameScrub(horizontalDelta: CGFloat) {
-        if let scrubToken { playback?.updateFrameScrub(delta: Double(horizontalDelta),
-            width: Double(frameScrubVideoWidth), admitted: scrubToken) }
-    }
-    private func endFrameScrub() {
-        if let scrubToken { playback?.commitScrub(admitted: scrubToken) }
-        scrubToken = nil; isFrameScrubbing = false; suppressNextPlaybackTap = true
-    }
     private func dismissPlayback() {
-        playerVisible = false; scrubToken = nil
+        playerVisible = false
         playback?.setPresentationActive(false)
         dismiss()
     }
 
-    private func deleteActive() async {
-        let dying = active
+    private func deleteActive(_ dying: MediaFile, admitted token: MonitorPlaybackItemToken) async {
+        guard playback?.token == token else { return }
         await session.deleteMediaFiles([dying])
+        guard playback?.token == token else { return }
         if canGoNext {
             goToAdjacent(offset: 1)
         } else if canGoPrevious {

@@ -1,6 +1,5 @@
 package com.opencapture.openpocketcine.media
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,8 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,26 +19,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.ProgressBarRangeInfo
-import androidx.compose.ui.semantics.progressBarRangeInfo
-import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -57,7 +43,6 @@ import com.opencapture.openpocketcine.OpcIcon
 import com.opencapture.openpocketcine.chromeClickable
 import com.opencapture.openpocketcine.liveChromeGlass
 import com.opencapture.openpocketcine.panelGlass
-import kotlin.math.max
 
 val MediaCapsuleShape: RoundedCornerShape = RoundedCornerShape(percent = 50)
 
@@ -277,22 +262,7 @@ fun MediaGlassTrack(
     trackWidth: Dp? = null,
     trackHeight: Dp = 4.dp,
 ) {
-    val shape = MediaCapsuleShape
-    Box(
-        modifier
-            .then(if (trackWidth != null) Modifier.width(trackWidth) else Modifier.fillMaxWidth())
-            .height(trackHeight)
-            .clip(shape)
-            .background(LiveDesign.hairline.copy(alpha = 0.55f), shape),
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth(fraction.coerceIn(0.05f, 1f))
-                .fillMaxHeight()
-                .clip(shape)
-                .background(LiveDesign.accent, shape),
-        )
-    }
+    com.opencapture.monitorui.MonitorMediaProgressTrack(fraction, modifier, trackWidth, trackHeight)
 }
 
 @Composable
@@ -370,105 +340,6 @@ fun MediaConfirmPopup(
     }
 }
 
-@Composable
-fun MediaPlaybackScrubber(
-    progressSeconds: Float,
-    durationSeconds: Float,
-    onScrubbingChanged: (Boolean) -> Unit,
-    onProgressChange: (Float) -> Unit,
-    onSeek: (Float) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val duration = max(0.1f, durationSeconds)
-    val widthPx = remember { mutableFloatStateOf(1f) }
-    val dragProgress = remember { mutableFloatStateOf(-1f) }
-    val density = LocalDensity.current
-    val trackHeight = with(density) { 4.dp.toPx() }
-    val thumbSize = with(density) { 13.dp.toPx() }
-    val hairline = LiveDesign.hairline
-    val accent = LiveDesign.accent
-    val display = if (dragProgress.floatValue >= 0f) dragProgress.floatValue else progressSeconds
-    val fraction = (display / duration).coerceIn(0f, 1f)
-
-    fun progressAt(x: Float): Float {
-        val f = (x / max(1f, widthPx.floatValue)).coerceIn(0f, 1f)
-        return f * duration
-    }
-
-    Canvas(
-        modifier
-            .fillMaxWidth()
-            .height(22.dp)
-            .semantics {
-                contentDescription = "Playback position"
-                progressBarRangeInfo = ProgressBarRangeInfo(display.coerceIn(0f, duration), 0f..duration)
-                setProgress { requested ->
-                    val target = requested.coerceIn(0f, duration)
-                    onScrubbingChanged(true)
-                    onProgressChange(target)
-                    onSeek(target)
-                    onScrubbingChanged(false)
-                    dragProgress.floatValue = -1f
-                    true
-                }
-            }
-            .pointerInput(duration) {
-                detectTapGestures { offset ->
-                    val target = progressAt(offset.x)
-                    onScrubbingChanged(true)
-                    onProgressChange(target)
-                    onSeek(target)
-                    onScrubbingChanged(false)
-                    dragProgress.floatValue = -1f
-                }
-            }
-            .pointerInput(duration) {
-                detectHorizontalDragGestures(
-                    onDragStart = { offset ->
-                        onScrubbingChanged(true)
-                        val target = progressAt(offset.x)
-                        dragProgress.floatValue = target
-                        onProgressChange(target)
-                    },
-                    onDragEnd = {
-                        val target = dragProgress.floatValue.takeIf { it >= 0f } ?: progressSeconds
-                        onSeek(target.coerceIn(0f, duration))
-                        onScrubbingChanged(false)
-                        dragProgress.floatValue = -1f
-                    },
-                    onDragCancel = {
-                        onScrubbingChanged(false)
-                        dragProgress.floatValue = -1f
-                    },
-                    onHorizontalDrag = { change, _ ->
-                        change.consume()
-                        val target = progressAt(change.position.x)
-                        dragProgress.floatValue = target
-                        onProgressChange(target)
-                    },
-                )
-            },
-    ) {
-        widthPx.floatValue = size.width
-        val cy = size.height / 2f
-        val trackTop = cy - trackHeight / 2f
-        drawRoundRect(
-            color = hairline,
-            topLeft = Offset(0f, trackTop),
-            size = Size(size.width, trackHeight),
-            cornerRadius = CornerRadius(trackHeight / 2f, trackHeight / 2f),
-        )
-        drawRoundRect(
-            color = accent,
-            topLeft = Offset(0f, trackTop),
-            size = Size(max(trackHeight, size.width * fraction), trackHeight),
-            cornerRadius = CornerRadius(trackHeight / 2f, trackHeight / 2f),
-        )
-        val thumbX = (size.width * fraction).coerceIn(0f, size.width)
-        drawCircle(color = Color.White, radius = thumbSize / 2f, center = Offset(thumbX, cy))
-    }
-}
-
 internal object PlaybackChromeMetrics {
     val transportButtonWidth = 38.dp
     val transportButtonHeight = 36.dp
@@ -503,63 +374,6 @@ internal object PlaybackChromeMetrics {
         val buttons = 38f * transportCount + 32f * actionCount
         val gaps = transportRowSpacing * (transportCount + actionCount - 1)
         return buttons + gaps + barPaddingH * 2 + minimumSpacer
-    }
-}
-
-@Composable
-fun PlaybackActionChip(
-    icon: OpcIcon,
-    contentDescription: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    title: String? = null,
-    active: Boolean = false,
-    destructive: Boolean = false,
-    filled: Boolean = false,
-    enabled: Boolean = true,
-    tint: Color = if (!enabled) LiveDesign.faint else if (destructive) LiveDesign.rec else if (active) LiveDesign.accent else LiveDesign.text.copy(alpha = 0.86f),
-) {
-    val shape = RoundedCornerShape(PlaybackChromeMetrics.actionChipCorner.dp)
-    Row(
-        modifier
-            .height(PlaybackChromeMetrics.actionChipSize.dp)
-            .then(if (title == null) Modifier.width(PlaybackChromeMetrics.actionChipSize.dp) else Modifier)
-            .clip(shape)
-            .then(
-                when {
-                    destructive -> Modifier.background(LiveDesign.rec.copy(alpha = 0.12f), shape)
-                    active -> Modifier.background(LiveDesign.accent.copy(alpha = 0.22f), shape)
-                    else -> Modifier
-                },
-            )
-            .mediaGlass(shape)
-            .then(
-                when {
-                    destructive -> Modifier.border(1.dp, LiveDesign.rec.copy(alpha = 0.4f), shape)
-                    active -> Modifier.border(1.dp, LiveDesign.accent.copy(alpha = 0.5f), shape)
-                    else -> Modifier
-                },
-            )
-            .chromeClickable(enabled = enabled, onClick = onClick)
-            .semantics { this.contentDescription = contentDescription }
-            .padding(horizontal = if (title == null) 13.dp else 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        OpcIcon(
-            icon = icon,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(PlaybackChromeMetrics.actionChipIcon.dp),
-            filled = filled,
-        )
-        if (title != null) {
-            Text(
-                title,
-                color = tint,
-                style = LiveType.ui(12f, FontWeight.SemiBold),
-            )
-        }
     }
 }
 

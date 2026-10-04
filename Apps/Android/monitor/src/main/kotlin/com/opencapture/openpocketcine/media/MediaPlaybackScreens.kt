@@ -2,8 +2,14 @@
 
 package com.opencapture.openpocketcine.media
 
+import com.opencapture.monitorui.MonitorPlaybackScreen
+import com.opencapture.monitorui.MonitorPlaybackPresentation
+import com.opencapture.monitorui.MonitorPlaybackActions
+import com.opencapture.monitorui.MonitorEditingCancellation
+import com.opencapture.monitorui.detectMonitorPlaybackVideoGestures as detectPlaybackVideoGestures
+import com.opencapture.monitorui.monitorPlaybackUnitPoint as unitPoint
+
 import com.opencapture.opencine.media.MonitorConformPreview as ConformPreview
-import com.opencapture.opencine.media.MonitorPlaybackScrubToken
 import com.opencapture.opencine.media.MonitorPlaybackLookTiming
 import com.opencapture.opencine.appkit.MonitorMediaPlaybackModel
 
@@ -12,11 +18,8 @@ import com.opencapture.openpocketcine.feed.colorMode
 import com.opencapture.monitorui.LocalMonitorBackdrops
 import com.opencapture.monitorui.monitorBackdropSource
 import com.opencapture.openpocketcine.feed.rememberMonitorBackdropFeed
-import com.opencapture.monitorui.MonitorMaterial
-import com.opencapture.monitorui.monitorMaterial
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -30,20 +33,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,49 +47,33 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import com.opencapture.monitorui.MonitorLayoutPolicy
 import com.opencapture.monitorui.MonitorPlaybackLayout
 import com.opencapture.openpocketcine.AppModel
-import com.opencapture.openpocketcine.ChromeRect
 import com.opencapture.openpocketcine.GlassTier
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.liveModuleFrame
-import com.opencapture.openpocketcine.monitorBottomInsetDp
 import com.opencapture.openpocketcine.LiveType
 import com.opencapture.openpocketcine.LocalMonitorGlass
 import com.opencapture.openpocketcine.LocalOperatorHaptics
@@ -102,26 +81,18 @@ import com.opencapture.openpocketcine.MonitorGlass
 import com.opencapture.openpocketcine.OpcIcon
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.assists.AssistOptionsPopup
-import com.opencapture.openpocketcine.assists.AudioAssist
 import com.opencapture.openpocketcine.assists.AssistAudioOverlay
 import com.opencapture.openpocketcine.assists.AssistRect
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistLayer
 import com.opencapture.openpocketcine.assists.LiveAssistTool
 import com.opencapture.openpocketcine.assists.MirrorAssist
-import com.opencapture.openpocketcine.assists.PlaybackAssistBar
-import com.opencapture.openpocketcine.assists.scopePanelChrome
-import com.opencapture.openpocketcine.chromeClickable
 import com.opencapture.openpocketcine.feed.rememberLiveFeedEffectsPlan
 import com.opencapture.openpocketcine.lut.PlaybackLutColor
-import com.opencapture.openpocketcine.session.CameraStatus
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 @Composable
@@ -337,26 +308,12 @@ fun MediaPlayerScreen(
     val haptics = LocalOperatorHaptics.current
     var active by remember { mutableStateOf(startingAt) }
     val playlist = if (files.any { it.id == active.id }) files else listOf(active)
-    var confirmDelete by remember { mutableStateOf(false) }
-    var chromeVisible by remember { mutableStateOf(true) }
-    var assistMode by remember { mutableStateOf(false) }
-    var conformMenu by remember { mutableStateOf(false) }
-    var infoOpen by remember { mutableStateOf(false) }
-    var zoom by remember { mutableStateOf(AnchoredPinchZoom()) }
-    var frameScrubbing by remember { mutableStateOf(false) }
-    var flashSymbol by remember { mutableStateOf<OpcIcon?>(null) }
-    var flashVisible by remember { mutableStateOf(false) }
-    var flashJob by remember { mutableStateOf<Job?>(null) }
     var meterLeft by remember { mutableStateOf(AudioMeterChannel.Silent) }
     var meterRight by remember { mutableStateOf(AudioMeterChannel.Silent) }
     val libraryState by controller.library.state.collectAsState()
     val activeRecord = controller.record(active)
     val favorite = activeRecord?.favorite ?: active.isStarred
     val progress = activeRecord?.let { libraryState.progress[it.asset.id] }
-    val playbackWindow = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
-    val portraitPlayback = playbackWindow.height > playbackWindow.width
-    val density = LocalDensity.current
-    val anyPlaybackAssistOn = assist.playbackVisibleTools.isNotEmpty()
     val audioMetersOn = assist.isPlaybackVisible(LiveAssistTool.AUDIO)
     val meterBox = remember { AudioLevelTapBox() }
     val meterSink = remember { PlaybackPcmBufferSink(meterBox) }
@@ -375,7 +332,6 @@ fun MediaPlayerScreen(
     val playbackState by playback.state.collectAsState()
     val canPrev = playback.canGoPrevious
     val canNext = playback.canGoNext
-    var scrubToken by remember { mutableStateOf<MonitorPlaybackScrubToken?>(null) }
     val player = native.player
     val isPlaying = (playbackState.reportedPlaying ?: playbackState.playRequested) && !playbackState.scrubbing
     val isMuted = playbackState.muted
@@ -389,7 +345,6 @@ fun MediaPlayerScreen(
     val conformSource = playbackState.metadata.conform
     val conformTarget = playbackState.conformTarget
     val conformSpeed = playback.rate
-    val conformAvailability = ConformPreview.availability(conformSource)
     val listed = PlaybackVideoLayout.sizeFromResolution(active.resolution)
     val videoWidth = playbackState.metadata.width?.toFloat() ?: listed?.width ?: 16f
     val videoHeight = playbackState.metadata.height?.toFloat() ?: listed?.height ?: 9f
@@ -402,15 +357,6 @@ fun MediaPlayerScreen(
         null -> ""
     }
 
-    fun handlePlaybackBack() {
-        when {
-            confirmDelete -> confirmDelete = false
-            assist.configureTool != null -> assist.configureTool = null
-            infoOpen -> infoOpen = false
-            else -> onClose()
-        }
-    }
-    BackHandler { handlePlaybackBack() }
     val backdrop = rememberMonitorBackdropFeed(active.id, enabled = ready)
     val status by model.session.chromeStatus.collectAsState()
     val effectsPlan =
@@ -429,12 +375,12 @@ fun MediaPlayerScreen(
 
     DisposableEffect(playback) {
         onDispose {
-            assist.configureTool = null; flashJob?.cancel()
+            assist.configureTool = null
             playback.close(); meterSink.close(); meterBox.close()
         }
     }
     LaunchedEffect(active.id) {
-        assist.configureTool = null; zoom = AnchoredPinchZoom(); frameScrubbing = false; scrubToken = null
+        assist.configureTool = null
         meterBox.readAndReset()
         controller.record(active)?.let { record ->
             if (playback.state.value.active?.asset?.id != record.asset.id) playback.load(record, playlist.mapNotNull(controller::record))
@@ -480,540 +426,92 @@ fun MediaPlayerScreen(
         }
     }
 
-    fun seekBy(delta: Float) { playback.seekBy(delta.toDouble()) }
-
-    fun flashTransport(willPlay: Boolean) {
-        flashJob?.cancel()
-        flashJob =
-            scope.launch {
-                flashSymbol = if (willPlay) OpcIcon.PLAY else OpcIcon.PAUSE
-                flashVisible = true
-                delay(550)
-                flashVisible = false
-                delay(220)
-                flashSymbol = null
-            }
-    }
-
-    fun handleFrameTap() {
-        if (!ready || frameScrubbing) return
-        when (PlaybackFrameTap.action(chromeVisible, reachedEnd)) {
-            PlaybackFrameTap.RESTART_PLAYBACK -> { playback.restart(); flashTransport(true) }
-            PlaybackFrameTap.TOGGLE_TRANSPORT -> { val willPlay = !isPlaying; playback.setPlaying(willPlay); flashTransport(willPlay) }
-            PlaybackFrameTap.IGNORE -> Unit
-        }
+    fun withCurrentItem(token: com.opencapture.opencine.media.MonitorPlaybackItemToken, action: () -> Unit) {
+        if (playback.isActive && playback.state.value.token == token) action()
     }
     fun goToAdjacent(offset: Int) {
         if (if (offset < 0) !playback.canGoPrevious else !playback.canGoNext) return
         playback.setPresentationActive(false); playback.goToAdjacent(offset)
-        zoom = AnchoredPinchZoom(); active = playback.state.value.active?.payload?.file ?: return
+        active = playback.state.value.active?.payload?.file ?: return
         playback.setPresentationActive(true)
     }
+    val metadata = buildList {
+        fun row(label: String, value: String?) { if (!value.isNullOrBlank()) add(com.opencapture.monitorui.MonitorMetadataRow(label, value)) }
+        row("File", active.filename); row("Format", active.fileExtension); row("Resolution", active.resolution)
+        row("Frame rate", active.fps?.let { "${it} fps" }); row("Duration", conformedLabel(duration))
+        row("Playback source", playbackSource)
+        row("Size", active.sizeBytes.takeIf { it > 0 }?.let { android.text.format.Formatter.formatShortFileSize(context, it) })
+        row("Created", active.filenameTimestamp?.let { "${it.take(4)}-${it.substring(4,6)}-${it.substring(6,8)} ${it.substring(8,10)}:${it.substring(10,12)}:${it.substring(12,14)}" })
+        row("Favorite", if (favorite) "Yes" else "No")
+    }
+    val presentation = MonitorPlaybackPresentation(playbackState.token, active.filename,
+        listOfNotNull(active.resolution, active.fps?.let { "${it}p" }, active.fileExtension).joinToString(" · "),
+        playbackSource.takeIf(String::isNotBlank), metadata,
+        assist.presentedAspect(videoWidth / videoHeight, playback = true), ready, loadError,
+        progress?.toDouble(), currentTime, duration, conformedLabel(currentTime), conformedLabel(duration),
+        isPlaying, reachedEnd, scrubbing, isMuted, looping, canPrev, canNext, favorite, conformSource, conformTarget)
+    val actions = MonitorPlaybackActions(back = onClose,
+        play = { token, play -> withCurrentItem(token) { playback.setPlaying(play) } },
+        restart = { token -> withCurrentItem(token) { playback.restart() } },
+        seekBy = { token, delta -> withCurrentItem(token) { playback.seekBy(delta) } },
+        mute = { token, muted -> withCurrentItem(token) { playback.setMuted(muted) } },
+        loop = { token, loop -> withCurrentItem(token) { playback.setLooping(loop) } },
+        conform = { token, target -> withCurrentItem(token) { playback.setConformTarget(target) } },
+        adjacent = { token, offset -> withCurrentItem(token) { goToAdjacent(offset) } },
+        favorite = { token -> withCurrentItem(token) { controller.toggleFavorite(active) } },
+        share = { token -> withCurrentItem(token) { playback.setPlaying(false); onDeliver(active) } },
+        delete = if (controller.canDelete(active)) { token ->
+            val dying = active
+            scope.launch {
+                if (!playback.isActive || playback.state.value.token != token) return@launch
+                controller.delete(dying)
+                if (!playback.isActive || playback.state.value.token != token) return@launch
+                when { playback.canGoNext -> goToAdjacent(1); playback.canGoPrevious -> goToAdjacent(-1); else -> onClose() }
+            }
+        } else null,
+        beginScrub = { token -> if (playback.isActive && playback.state.value.token == token) playback.beginScrub() else null },
+        updateScrub = { edit, time -> playback.updateScrub(time, edit) },
+        updateFrameScrub = { edit, delta, width -> playback.updateFrameScrub(delta, width, edit) },
+        commitScrub = playback::commitScrub,
+        cancelScrub = { edit, reason -> playback.cancelScrub(reason == MonitorEditingCancellation.INTERRUPTED, edit) },
+        longPressFeedback = haptics::longPress, detentFeedback = haptics::confirm, selectionFeedback = haptics::selection,
+        dismissAssistInspector = {
+            if (assist.configureTool != null) { assist.configureTool = null; true } else false
+        })
 
     CompositionLocalProvider(LocalMonitorGlass provides glass, LocalMonitorBackdrops provides listOf(backdrop.source),
         com.opencapture.monitorui.LocalMonitorBackdropSurround provides LiveDesign.feedWell) {
-    Box(Modifier.fillMaxSize().background(LiveDesign.feedWell)) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val container =
-                PlaybackVideoLayout.Rect(0f, 0f, constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
-            val fitted =
-                PlaybackVideoLayout.aspectFitRect(
-                    PlaybackVideoLayout.Size(assist.presentedAspect(videoWidth / videoHeight, playback = true), 1f),
-                    container,
-                )
-            LaunchedEffect(fitted.width, fitted.height) {
-                zoom = zoom.endGesture(fitted.width, fitted.height)
-            }
-            val mirrorOn = assist.isPlaybackVisible(LiveAssistTool.MIRROR)
-            val mirror = MirrorAssist.feedScaleX(mirrorOn && assist.mirrorHorizontal)
-            val overlayWidthPx = constraints.maxWidth
-            val overlayHeightPx = constraints.maxHeight
-            val viewportWidth = maxWidth.value
-            val viewportHeight = maxHeight.value
-            val layoutDir = LocalLayoutDirection.current
-            val safeTop = with(density) {
-                maxOf(
-                    WindowInsets.displayCutout.getTop(this),
-                    WindowInsets.statusBars.getTop(this),
-                ).toDp().value
-            }
-            val safeLeading = with(density) {
-                maxOf(
-                    WindowInsets.displayCutout.getLeft(this, layoutDir),
-                    WindowInsets.systemBars.getLeft(this, layoutDir),
-                ).toDp().value
-            }
-            val safeTrailing = with(density) {
-                maxOf(
-                    WindowInsets.displayCutout.getRight(this, layoutDir),
-                    WindowInsets.systemBars.getRight(this, layoutDir),
-                ).toDp().value
-            }
-            val sideInset = max(safeLeading, safeTrailing)
-            val safeBottom = monitorBottomInsetDp(
-                rawInsetDp = with(density) {
-                    maxOf(
-                        WindowInsets.displayCutout.getBottom(this),
-                        WindowInsets.navigationBars.getBottom(this),
-                    ).toDp().value
-                },
-                isPortrait = portraitPlayback,
-            )
-            val fieldLayout = MonitorLayoutPolicy.fieldMonitor(
-                viewportWidth, viewportHeight, safeTop, safeLeading, safeBottom, safeTrailing,
-                hasDisplayCutout = max(safeLeading, safeTrailing) > 0f,
-            )
-            val headerTop = MonitorPlaybackLayout.headerTop(portraitPlayback, safeTop, fieldLayout.lock.y)
-            val backX = if (portraitPlayback) safeLeading + 22f else fieldLayout.lock.x
-            val navLeading = with(density) { WindowInsets.navigationBars.getLeft(this, layoutDir).toDp().value }
-            val navTrailing = with(density) { WindowInsets.navigationBars.getRight(this, layoutDir).toDp().value }
-            val assistFrame = MonitorLayoutPolicy.fieldMonitorAssists(
-                viewportWidth - navLeading - navTrailing, viewportHeight, safeTop, safeBottom,
-            )
-            val assistRect = ChromeRect(assistFrame.x + navLeading, assistFrame.y, assistFrame.width, assistFrame.height)
-            Box(
-                Modifier
-                    .offset { IntOffset(fitted.x.roundToInt(), fitted.y.roundToInt()) }
-                    .size(
-                        with(density) { fitted.width.toDp() },
-                        with(density) { fitted.height.toDp() },
-                    )
-                    .clipToBounds(),
-            ) {
-                PlaybackFeedView(
-                    native = native,
-                    scopeBus = model.scopeBus,
-                    preview = model.inspectorPreview,
-                    backdrop = backdrop,
-                    plan = effectsPlan,
-                    mirrored = mirror < 0f,
+        MonitorPlaybackScreen(presentation, actions, backHandler = { handleBack -> BackHandler(onBack = handleBack) },
+            picture = { geometry ->
+                val mirrorOn = assist.isPlaybackVisible(LiveAssistTool.MIRROR)
+                PlaybackFeedView(native = native, scopeBus = model.scopeBus, preview = model.inspectorPreview,
+                    backdrop = backdrop, plan = effectsPlan,
+                    mirrored = MirrorAssist.feedScaleX(mirrorOn && assist.mirrorHorizontal) < 0f,
                     flippedVertically = mirrorOn && assist.mirrorVertical,
-                    zoom = zoom,
-                    sourceWidth = decodeWidth,
-                    sourceHeight = decodeHeight,
-                    sourceIdentity = playbackState.token,
-                    sourceReady = ready,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-            Popup(
-                alignment = Alignment.TopStart,
-                onDismissRequest = { handlePlaybackBack() },
-                properties =
-                    PopupProperties(
-                        // This native window owns the playback controls and
-                        // adjustable scrubber; expose it to accessibility too.
-                        focusable = true,
-                        clippingEnabled = false,
-                    ),
-            ) {
-            Box(
-                Modifier.size(
-                    with(density) { overlayWidthPx.toDp() },
-                    with(density) { overlayHeightPx.toDp() },
-                ),
-            ) {
-            Box(
-                Modifier
-                    .offset { IntOffset(fitted.x.roundToInt(), fitted.y.roundToInt()) }
-                    .size(
-                        with(density) { fitted.width.toDp() },
-                        with(density) { fitted.height.toDp() },
-                    ),
-            ) {
-                val latestReady by rememberUpdatedState(ready)
-                val latestZoomed by rememberUpdatedState(zoom.isZoomed)
-                val latestOnTap by rememberUpdatedState({ handleFrameTap() })
-                val latestOnSwipe by rememberUpdatedState<(PlaybackChromeSwipe) -> Unit>({ swipe ->
-                    chromeVisible = swipe == PlaybackChromeSwipe.SHOW
-                })
-                val latestOnScrubStart by rememberUpdatedState({
-                    scrubToken = playback.beginScrub(); frameScrubbing = scrubToken != null
-                    if (frameScrubbing) haptics.longPress()
-                })
-                val latestOnScrubDelta by rememberUpdatedState<(Float) -> Unit>({ dx ->
-                    scrubToken?.let { playback.updateFrameScrub(dx.toDouble(), fitted.width.toDouble(), it) }
-                })
-                val latestOnScrubEnd by rememberUpdatedState({
-                    scrubToken?.let(playback::commitScrub); scrubToken = null; frameScrubbing = false
-                })
-                val latestOnPinch by rememberUpdatedState<(Float, Offset) -> Unit>({ magnification, centroid ->
-                    val anchor = unitPoint(centroid, fitted.width, fitted.height)
-                    zoom =
-                        zoom.pinchChanged(
-                            magnification,
-                            anchor.first,
-                            anchor.second,
-                            fitted.width,
-                            fitted.height,
-                        )
-                })
-                val latestOnPinchEnd by rememberUpdatedState({
-                    zoom = zoom.endGesture(fitted.width, fitted.height)
-                })
-                val latestOnPan by rememberUpdatedState<(Offset) -> Unit>({ translation ->
-                    zoom = zoom.panChanged(translation.x, translation.y)
-                })
-                val latestOnPanEnd by rememberUpdatedState({
-                    zoom = zoom.endGesture(fitted.width, fitted.height)
-                })
-                // Gesture well matches iOS: hits the unzoomed letterbox, not the scaled raster.
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .pointerInput(active.id) {
-                            detectPlaybackVideoGestures(
-                                isReady = { latestReady },
-                                isZoomed = { latestZoomed },
-                                onTap = { latestOnTap() },
-                                onChromeSwipe = { latestOnSwipe(it) },
-                                onScrubStart = { latestOnScrubStart() },
-                                onScrubDelta = { latestOnScrubDelta(it) },
-                                onScrubEnd = { latestOnScrubEnd() },
-                                onPinch = { mag, centroid -> latestOnPinch(mag, centroid) },
-                                onPinchEnd = { latestOnPinchEnd() },
-                                onPan = { latestOnPan(it) },
-                                onPanEnd = { latestOnPanEnd() },
-                            )
-                        },
-                )
-                LiveAssistLayer(
-                    state = assist,
-                    scopeBus = model.scopeBus,
-                    status = status,
-                    focus = null,
-                    playback = true,
-                    colorMode = effectsPlan.scopeTap.transfer.colorMode,
-                    modifier = Modifier.fillMaxSize(),
-                    onOpenOptions = { tool, frame ->
-                        assist.longPressAnchor = frame
-                        assist.configureTool = tool
-                    },
-                )
-                if (playlist.size > 1) {
-                    if (canPrev) {
-                        ClipNavButton(
-                            icon = OpcIcon.CHEVRON_LEFT,
-                            label = "Previous clip",
-                            modifier = Modifier.align(Alignment.CenterStart)
-                                .padding(start = MonitorPlaybackLayout.clipNavEdgePadding().dp),
-                        ) { goToAdjacent(-1) }
-                    }
-                    if (canNext) {
-                        ClipNavButton(
-                            icon = OpcIcon.CHEVRON_RIGHT,
-                            label = "Next clip",
-                            modifier = Modifier.align(Alignment.CenterEnd)
-                                .padding(end = MonitorPlaybackLayout.clipNavEdgePadding().dp),
-                        ) { goToAdjacent(1) }
-                    }
-                }
-                PlaybackTransportFlash(
-                    symbol = flashSymbol,
-                    visible = flashVisible,
-                    modifier = Modifier.align(Alignment.Center),
-                )
-                if (frameScrubbing && duration > 0f) {
-                    PlaybackFrameScrubOverlay(
-                        scrubSeconds = currentTime,
-                        durationSeconds = duration,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                    zoom = geometry.zoom, sourceWidth = decodeWidth, sourceHeight = decodeHeight,
+                    sourceIdentity = playbackState.token, sourceReady = ready, modifier = Modifier.fillMaxSize())
+            }, feedAssists = {
+                LiveAssistLayer(state = assist, scopeBus = model.scopeBus, status = status, focus = null,
+                    playback = true, colorMode = effectsPlan.scopeTap.transfer.colorMode, modifier = Modifier.fillMaxSize(),
+                    onOpenOptions = { tool, frame -> assist.longPressAnchor = frame; assist.configureTool = tool })
+            }, canvasAssists = { geometry ->
                 if (audioMetersOn) {
-                    val local =
-                        PlaybackVideoLayout.Rect(0f, 0f, fitted.width, fitted.height)
-                    PlaybackAudioMetersOverlay(
-                        video = local,
-                        canvas = local,
-                        left = meterLeft,
-                        right = meterRight,
-                        state = assist,
-                    )
+                    val local = PlaybackVideoLayout.Rect(0f, 0f, geometry.feed.width, geometry.feed.height)
+                    PlaybackAudioMetersOverlay(video = local, canvas = local, left = meterLeft, right = meterRight, state = assist)
                 }
-            }
-            if (!ready || loadError != null) {
-                Box(
-                    Modifier.fillMaxSize().background(LiveDesign.feedWell.copy(alpha = 0.72f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(
-                        Modifier
-                            .clip(MediaCornerShape)
-                            .mediaGlass(MediaCornerShape)
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        if (loadError == null) {
-                            if (progress != null && progress > 0 && progress < 1) {
-                                MediaGlassTrack(fraction = progress.toFloat(), trackWidth = 120.dp)
-                            } else {
-                                CircularProgressIndicator(color = LiveDesign.accent)
-                            }
-                        }
-                        Text(
-                            loadError
-                                ?: if (progress != null) "Buffering from camera…" else "Preparing playback…",
-                            color = LiveDesign.muted,
-                            style = LiveType.ui(14f, FontWeight.Medium),
-                            modifier = Modifier.padding(top = 12.dp),
-                        )
-                    }
+            }, tools = { chrome ->
+                com.opencapture.openpocketcine.assists.MonitorAssistCluster(portrait = chrome.portrait,
+                    locked = false, playback = true, isOn = assist::isPlaybackVisible, onToggle = { assist.togglePlayback(it) },
+                    onLongPress = { assist.configureTool = it }, requestExpand = chrome.expanded,
+                    onExpansionHandled = chrome.onExpansionHandled, modifier = Modifier.liveModuleFrame(chrome.frame))
+            }, assistInspector = { chrome ->
+                assist.configureTool?.let { configure ->
+                    com.opencapture.openpocketcine.assists.MonitorAssistInspector(configure, assist, model,
+                        PlaybackLutColor.resolve(clip = clipColorMode, live = status.colorMode, last = OperatorPrefs.lastMonitorColorMode(context)),
+                        chrome.width, chrome.height, chrome.leading, chrome.top, chrome.bottom, chrome.toolbarFloor,
+                        onDismiss = { assist.configureTool = null }, playback = true, safeTrailing = chrome.trailing)
                 }
-            }
-            if (chromeVisible) {
-                com.opencapture.monitorui.MonitorPlaybackHeader(
-                    title = active.filename,
-                    subtitle = listOfNotNull(active.resolution, active.fps?.let { "${it}p" }, active.fileExtension).joinToString(" · "),
-                    source = playbackSource, portrait = portraitPlayback,
-                    modifier = Modifier.align(Alignment.TopCenter)
-                        .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
-                        .padding(
-                        start = max(MonitorPlaybackLayout.headerGutter(sideInset), backX + fieldLayout.lock.width + 12f).dp,
-                        end = MonitorPlaybackLayout.headerGutter(sideInset).dp,
-                        top = headerTop.dp,
-                        bottom = MonitorPlaybackLayout.HEADER_BOTTOM.dp,
-                    ),
-                    actions = {
-                        PlaybackActionChip(
-                            OpcIcon.STAR, "Favorite clip", { controller.toggleFavorite(active) },
-                            filled = favorite, tint = if (favorite) LiveDesign.amber else LiveDesign.text.copy(alpha = 0.86f),
-                        )
-                        PlaybackActionChip(OpcIcon.INFO, "Clip info", { infoOpen = !infoOpen }, active = infoOpen)
-                        PlaybackActionChip(
-                            OpcIcon.SHARE, "Share clip", { playback.setPlaying(false); onDeliver(active) },
-                            title = if (portraitPlayback) null else "SHARE", active = true,
-                        )
-                        if (controller.canDelete(active)) {
-                            PlaybackActionChip(OpcIcon.TRASH, "Delete clip", { confirmDelete = true }, destructive = true)
-                        }
-                    },
-                )
-                com.opencapture.openpocketcine.AuxCircleButton(
-                    modifier = Modifier.align(Alignment.TopStart)
-                        .offset(x = backX.dp, y = headerTop.dp)
-                        .size(fieldLayout.lock.width.dp, fieldLayout.lock.height.dp)
-                        .semantics { contentDescription = "Back to media" },
-                    onClick = onClose,
-                ) { tint ->
-                    OpcIcon(OpcIcon.CHEVRON_LEFT, contentDescription = null, tint = tint,
-                        modifier = Modifier.size(29.dp))
-                }
-                com.opencapture.monitorui.MonitorPlaybackFooter(
-                    position = conformedLabel(currentTime), duration = conformedLabel(duration), portrait = portraitPlayback,
-                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
-                        .background(Brush.verticalGradient(
-                            0f to Color.Transparent, 0.38f to Color.Black.copy(alpha = 0.4f),
-                            1f to Color.Black.copy(alpha = 0.78f),
-                        ))
-                        .padding(horizontal = (if (portraitPlayback) sideInset
-                            else max(sideInset, assistFrame.x + assistFrame.width + 8f)).dp)
-                        .padding(
-                            start = MonitorPlaybackLayout.FOOTER_INNER_HORIZONTAL.dp,
-                            end = MonitorPlaybackLayout.FOOTER_INNER_HORIZONTAL.dp,
-                            top = MonitorPlaybackLayout.FOOTER_INNER_TOP.dp,
-                            bottom = MonitorPlaybackLayout.FOOTER_INNER_BOTTOM.dp,
-                        ),
-                    scrubber = {
-                        MediaPlaybackScrubber(
-                            progressSeconds = if (duration > 0f) currentTime.coerceIn(0f, duration) else 0f,
-                            durationSeconds = duration,
-                            onScrubbingChanged = { dragging ->
-                                if (dragging) scrubToken = playback.beginScrub()
-                            },
-                            onProgressChange = { time -> scrubToken?.let { playback.updateScrub(time.toDouble(), it) } },
-                            onSeek = { time ->
-                                scrubToken?.let { token -> playback.updateScrub(time.toDouble(), token); playback.commitScrub(token) }
-                                scrubToken = null
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    },
-                    transport = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(MonitorPlaybackLayout.TRANSPORT_SPACING.dp),
-                        ) {
-                            PlaybackTransportButton(OpcIcon.SKIP_BACK, "Back 15 seconds") { seekBy(-15f) }
-                            PlaybackTransportButton(
-                                if (reachedEnd) OpcIcon.ROTATE_CW else if (isPlaying) OpcIcon.PAUSE else OpcIcon.PLAY,
-                                if (reachedEnd) "Restart clip" else if (isPlaying) "Pause" else "Play",
-                                iconSize = MonitorPlaybackLayout.PLAY_ICON_SIZE.dp,
-                            ) {
-                                if (reachedEnd) playback.restart() else playback.setPlaying(!isPlaying)
-                            }
-                            PlaybackTransportButton(OpcIcon.SKIP_FORWARD, "Forward 15 seconds") { seekBy(15f) }
-                        }
-                    },
-                    options = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(MonitorPlaybackLayout.ACTION_SPACING.dp),
-                        ) {
-                            PlaybackConformButton(conformAvailability, conformSource.captureRate ?: 0.0, conformTarget,
-                                conformMenu, { conformMenu = it }, { playback.setConformTarget(it) })
-                            PlaybackActionChip(
-                                if (isMuted) OpcIcon.VOLUME_X else OpcIcon.VOLUME_2,
-                                if (isMuted) "Unmute" else "Mute", { playback.setMuted(!isMuted) }, active = isMuted,
-                            )
-                            PlaybackActionChip(OpcIcon.REPEAT, "Loop clip", { playback.setLooping(!looping) }, active = looping)
-                            PlaybackActionChip(PlaybackChromeMetrics.hideChromeIcon, "Hide playback controls", { chromeVisible = false })
-                        }
-                    },
-                )
-                com.opencapture.openpocketcine.assists.MonitorAssistCluster(
-                    portrait = portraitPlayback, locked = false,
-                    playback = true,
-                    isOn = assist::isPlaybackVisible, onToggle = { assist.togglePlayback(it) },
-                    onLongPress = { assist.configureTool = it },
-                    requestExpand = assistMode, onExpansionHandled = { assistMode = false },
-                    modifier = Modifier.liveModuleFrame(assistRect),
-                )
-            } else {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = (sideInset + 12f).dp)
-                        .navigationBarsPadding()
-                        .padding(12.dp),
-                ) {
-                    PlaybackActionChip(
-                        PlaybackChromeMetrics.showChromeIcon,
-                        "Show playback controls",
-                        { chromeVisible = true },
-                    )
-                }
-            }
-            if (infoOpen) {
-                Box(Modifier.fillMaxSize().chromeClickable { infoOpen = false }) {
-                    val rows = buildList {
-                        fun row(label: String, value: String?) { if (!value.isNullOrBlank()) add(com.opencapture.monitorui.MonitorMetadataRow(label, value)) }
-                        row("File", active.filename)
-                        row("Format", active.fileExtension)
-                        row("Resolution", active.resolution)
-                        row("Frame rate", active.fps?.let { "${it} fps" })
-                        row("Duration", conformedLabel(duration))
-                        row("Playback source", playbackSource)
-                        row("Size", active.sizeBytes.takeIf { it > 0 }?.let { android.text.format.Formatter.formatShortFileSize(context, it) })
-                        row("Created", active.filenameTimestamp?.let { "${it.take(4)}-${it.substring(4,6)}-${it.substring(6,8)} ${it.substring(8,10)}:${it.substring(10,12)}:${it.substring(12,14)}" })
-                        row("Favorite", if (favorite) "Yes" else "No")
-                    }
-                    com.opencapture.monitorui.MonitorMetadataDrawer(rows,
-                        modifier = Modifier.align(Alignment.CenterEnd)
-                            .padding(
-                                end = (sideInset + 12f).dp,
-                                top = (safeTop + 12f).dp,
-                                bottom = (safeBottom + 12f).dp,
-                            )
-                            .chromeClickable { },
-                        close = { MediaCircleIconButton(OpcIcon.X, "Close clip information", { infoOpen = false }) })
-                }
-            }
-
-            val configure = assist.configureTool
-            if (configure != null) {
-                com.opencapture.openpocketcine.assists.MonitorAssistInspector(
-                    configure, assist, model,
-                    PlaybackLutColor.resolve(clip = clipColorMode, live = status.colorMode,
-                        last = OperatorPrefs.lastMonitorColorMode(context)),
-                    viewportWidth, viewportHeight,
-                    safeLeading, safeTop, safeBottom, viewportHeight - 120f,
-                    onDismiss = { assist.configureTool = null }, playback = true,
-                    safeTrailing = safeTrailing,
-                )
-            }
-
-            // Inside the overlay window: in the host window it sits under the gesture well.
-            if (confirmDelete) {
-                MediaConfirmPopup(
-                    title = "Delete this clip from the camera?",
-                    confirmTitle = "Delete",
-                    onDismiss = { confirmDelete = false },
-                    onConfirm = {
-                        confirmDelete = false
-                        scope.launch {
-                            val dying = active
-                            controller.delete(dying)
-                            when {
-                                canNext -> goToAdjacent(1)
-                                canPrev -> goToAdjacent(-1)
-                                else -> onClose()
-                            }
-                        }
-                    },
-                )
-            }
-
-            }
-            }
-        }
-    }
-    }
-}
-
-@Composable
-private fun PlaybackTransportFlash(
-    symbol: OpcIcon?,
-    visible: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    if (symbol == null) return
-    OpcIcon(
-        icon = symbol,
-        contentDescription = null,
-        tint = LiveDesign.text.copy(alpha = if (visible) 1f else 0f),
-        modifier = modifier.size(48.dp),
-    )
-}
-
-@Composable
-private fun PlaybackFrameScrubOverlay(
-    scrubSeconds: Float,
-    durationSeconds: Float,
-    modifier: Modifier = Modifier,
-) {
-    val fraction = if (durationSeconds > 0f) (scrubSeconds / durationSeconds).coerceIn(0f, 1f) else 0f
-    Box(modifier, contentAlignment = Alignment.Center) {
-        Column(
-            Modifier
-                .clip(RoundedCornerShape(percent = 50))
-                .mediaGlass(RoundedCornerShape(percent = 50))
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                MediaClipFormatting.durationLabel(scrubSeconds.toDouble()),
-                color = LiveDesign.text,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-            )
-            Text(
-                "/ ${MediaClipFormatting.durationLabel(durationSeconds.toDouble())}",
-                color = LiveDesign.muted,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-            )
-        }
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 16.dp, vertical = 18.dp)
-                .fillMaxWidth()
-                .height(3.dp)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(LiveDesign.hairline),
-        ) {
-            Box(
-                Modifier
-                    .fillMaxWidth(fraction.coerceAtLeast(0.01f))
-                    .height(3.dp)
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(LiveDesign.accent),
-            )
-        }
+            })
     }
 }
 
@@ -1032,106 +530,4 @@ private fun PlaybackAudioMetersOverlay(
         (canvas.height - 2 * edge).coerceAtLeast(1f))
     AssistAudioOverlay(state, left.asReading(), right.asReading(), bounds, placement,
         onOpenOptions = { state.configureTool = LiveAssistTool.AUDIO })
-}
-
-@Composable
-private fun PlaybackTransportButton(
-    icon: OpcIcon,
-    label: String,
-    iconSize: Dp = MonitorPlaybackLayout.TRANSPORT_ICON_SIZE.dp,
-    onClick: () -> Unit,
-) {
-    Box(
-        Modifier
-            .size(MonitorPlaybackLayout.TRANSPORT_SIZE.dp)
-            .chromeClickable(onClick = onClick)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) {
-        OpcIcon(
-            icon = icon,
-            contentDescription = null,
-            tint = LiveDesign.text,
-            modifier = Modifier.size(iconSize).shadow(5.dp, CircleShape),
-        )
-    }
-}
-
-@Composable
-private fun ClipNavButton(
-    icon: OpcIcon,
-    label: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier
-            .size(MonitorPlaybackLayout.CLIP_NAV_SIZE.dp)
-            .clip(CircleShape)
-            .mediaGlass(CircleShape)
-            .chromeClickable(onClick = onClick)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) {
-        OpcIcon(icon = icon, contentDescription = null, tint = LiveDesign.accent, modifier = Modifier.size(13.dp))
-    }
-}
-
-@Composable
-private fun PlaybackConformButton(
-    availability: ConformPreview.Availability,
-    captureRate: Double,
-    selected: Double?,
-    menuOpen: Boolean,
-    onMenuOpenChange: (Boolean) -> Unit,
-    onSelect: (Double?) -> Unit,
-) {
-    Box {
-        PlaybackActionChip(
-            OpcIcon.TIMER,
-            "Conform preview",
-            { onMenuOpenChange(true) },
-            active = selected != null,
-            enabled = availability.isAvailable,
-        )
-        if (menuOpen) {
-            val config = LocalConfiguration.current
-            val width = minOf(620, config.screenWidthDp - 28).dp
-            val provider = remember {
-                object : androidx.compose.ui.window.PopupPositionProvider {
-                    override fun calculatePosition(anchorBounds: androidx.compose.ui.unit.IntRect,
-                        windowSize: androidx.compose.ui.unit.IntSize, layoutDirection: androidx.compose.ui.unit.LayoutDirection,
-                        popupContentSize: androidx.compose.ui.unit.IntSize): IntOffset =
-                        IntOffset((windowSize.width - popupContentSize.width) / 2, windowSize.height - popupContentSize.height)
-                }
-            }
-            Popup(popupPositionProvider = provider, onDismissRequest = { onMenuOpenChange(false) },
-                properties = PopupProperties(focusable = true)) {
-                Column(Modifier.width(width).clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                    .monitorMaterial(MonitorMaterial.Expanded).navigationBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 11.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("CONFORM", style = LiveType.ui(9f, FontWeight.SemiBold))
-                            Text(ConformPreview.menuHeader(captureRate), color = LiveDesign.muted, style = LiveType.ui(8.5f))
-                        }
-                        MediaCircleIconButton(OpcIcon.X, "Close conform preview", { onMenuOpenChange(false) }, size = 34.dp)
-                    }
-                    val choices = listOf<Double?>(null) + availability.targets
-                    val labels = choices.map { if (it == null) "Real time" else ConformPreview.targetLabel(captureRate, it) }
-                    val haptics = LocalOperatorHaptics.current
-                    com.opencapture.monitorui.MonitorValueDrum(
-                        labels,
-                        if (selected == null) "Real time" else ConformPreview.targetLabel(captureRate, selected),
-                        onDetent = { haptics.confirm() },
-                    ) { label ->
-                        val index = labels.indexOf(label)
-                        if (index >= 0) onSelect(choices[index])
-                    }
-                    availability.unavailableReason?.let { Text(it, color = LiveDesign.muted, style = LiveType.ui(10f)) }
-                    if (selected != null) Text(ConformPreview.audioLabel, color = LiveDesign.muted, style = LiveType.ui(10f))
-                }
-            }
-        }
-    }
 }
