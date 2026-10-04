@@ -561,10 +561,11 @@ struct MediaPlayerView: View {
                 .zIndex(50)
             }
         }
-        .sheet(item: Bindable(model.delivery).sharePayload) { payload in
+        .sheet(item: model.delivery.sharePresentation) { payload in
             MediaShareSheet(urls: payload.urls) {
-                model.delivery.clearSharePresentation()
-                if isPlaying { startPlayback() }
+                if model.delivery.completeSharePresentation(id: payload.id), isPlaying {
+                    startPlayback()
+                }
             }
         }
         .onChange(of: model.delivery.isActive) { _, active in

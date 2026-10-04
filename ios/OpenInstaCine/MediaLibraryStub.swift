@@ -367,9 +367,9 @@ struct MediaLibraryView: View {
                 }
             }
         }
-        .sheet(item: Bindable(model.delivery).sharePayload) { payload in
+        .sheet(item: model.delivery.sharePresentation) { payload in
             MediaShareSheet(urls: payload.urls) {
-                model.delivery.clearSharePresentation()
+                model.delivery.completeSharePresentation(id: payload.id)
             }
         }
         .sheet(item: $pickingDate) { bound in
