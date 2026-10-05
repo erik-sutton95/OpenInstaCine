@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.diagnostics
 
+import com.opencapture.opencine.media.FeedIncidentRecorder
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -14,7 +15,7 @@ internal object FeedIncidentRuntime {
         Executors.newSingleThreadExecutor { thread ->
             Thread(thread, "opc.feed-incident").apply { isDaemon = true }
         }
-    private val recorder = FeedIncidentRecorder()
+    private val recorder = FeedIncidentRecorder(redact = PrivacyRedactor::redact)
     private var store: FeedIncidentStore? = null
     @Volatile private var latestSnapshot: FeedIncidentSnapshot? = null
     private val snapshotScheduled = AtomicBoolean(false)

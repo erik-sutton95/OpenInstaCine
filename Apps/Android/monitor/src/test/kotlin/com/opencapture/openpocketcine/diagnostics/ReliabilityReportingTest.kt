@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.diagnostics
 
+import com.opencapture.opencine.media.FeedIncidentRecorder
 import io.sentry.Breadcrumb
 import io.sentry.SentryEvent
 import io.sentry.SentryLevel
@@ -700,7 +701,7 @@ class ReliabilityReportingTest {
         id: String,
         outcome: FeedIncidentOutcome = FeedIncidentOutcome.RECOVERED,
     ): FeedIncidentBundle {
-        val recorder = FeedIncidentRecorder { id }
+        val recorder = FeedIncidentRecorder(PrivacyRedactor::redact) { id }
         recorder.beginSession(
             FeedIncidentSessionContext(
                 sessionId = "session-1",
