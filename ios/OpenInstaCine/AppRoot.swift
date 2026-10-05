@@ -881,10 +881,7 @@ struct AppRoot: View {
             Button("Grant") { model.relayHost.grantControl() }
             Button("Deny", role: .cancel) { model.relayHost.denyControl() }
         }
-        .onAppear {
-            model.shell.setSceneActive(scenePhase == .active)
-            model.assist.inspectorSceneActive = model.shell.sceneActive
-        }
+        .onAppear { model.assist.inspectorSceneActive = scenePhase == .active }
         // The shell reports each change once (`AppModel.shell.onSceneActivity`).
         .onChange(of: scenePhase) { _, phase in
             ProblemReporting.shared.tick()
