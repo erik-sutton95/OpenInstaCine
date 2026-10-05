@@ -60,3 +60,18 @@ extension GimbalMoveEngine {
             maxRateDegPerSec: nil, feedbackMaxAge: .milliseconds(300), arrivalToleranceDeg: 0.15))
     }
 }
+
+extension GimbalWaypointOverlay {
+    /// The field of view the app's overlay has always used (Pocket 3, 2·atan(18/20) = 84°).
+    public static let wideHFovDeg = 84.0
+
+    public static func project(
+        waypoint: GimbalWaypoint, slot: GimbalWaypointSlot, live: GimbalWaypoint, aspect: Double
+    ) -> Mark {
+        project(waypoint: waypoint, slot: slot, live: live, aspect: aspect, wideHFovDeg: wideHFovDeg)
+    }
+
+    public static func marks(program: GimbalProgram, live: GimbalWaypoint, aspect: Double) -> [Mark] {
+        marks(program: program, live: live, aspect: aspect, wideHFovDeg: wideHFovDeg)
+    }
+}
