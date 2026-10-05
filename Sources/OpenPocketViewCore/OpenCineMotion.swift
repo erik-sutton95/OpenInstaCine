@@ -51,3 +51,12 @@ extension GimbalWaypoint {
 extension HeadTrackNative {
     public init() { self.init(bounds: HeadTrack.Reach.bounds) }
 }
+
+extension GimbalMoveEngine {
+    /// The shell reach, arriving within 0.15 degrees as the app's engine did before the move.
+    public init() {
+        self.init(capabilities: MotionCapabilities(
+            axes: [.pan, .tilt, .zoom], frame: .handle, bounds: HeadTrack.Reach.bounds,
+            maxRateDegPerSec: nil, feedbackMaxAge: .milliseconds(300), arrivalToleranceDeg: 0.15))
+    }
+}
