@@ -3,6 +3,7 @@ import CoreGraphics
 import Foundation
 import Insta360Apple
 import Insta360Protocol
+import MonitorUI
 import Observation
 import OpenCineAppKit
 import struct OpenCineCore.CameraSessionID

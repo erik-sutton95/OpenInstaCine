@@ -421,7 +421,7 @@ private struct LiveGimbalMoveEditor: View {
 
             if let reason = model.session.programmedZoomUnavailableReason {
                 Text(reason)
-                    .font(LiveType.ui(size: 11, weight: .regular))
+                    .font(MonitorTheme.font(11, weight: .regular))
                     .foregroundStyle(LiveDesign.muted)
                     .padding(.horizontal, 14)
                     .padding(.top, 6)
@@ -503,7 +503,7 @@ private struct LiveGimbalMoveEditor: View {
                     .tint(LiveDesign.accent)
                     .accessibilityLabel("Path smoothness")
                 }
-                .font(LiveType.ui(size: 12, weight: .regular))
+                .font(MonitorTheme.font(12, weight: .regular))
                 .foregroundStyle(LiveDesign.text)
             }
 
@@ -572,7 +572,7 @@ private struct LiveGimbalMoveEditor: View {
             .disabled(!runEnabled && !model.session.gimbalMoveRunning)
             .opacity(runEnabled || model.session.gimbalMoveRunning ? 1 : 0.45)
         }
-        .font(LiveType.ui(size: 14, weight: .semibold))
+        .font(MonitorTheme.font(14, weight: .semibold))
     }
 
     private var runEnabled: Bool {
@@ -710,7 +710,7 @@ private struct LiveGimbalRunPill: View {
                     guard canInteract() else { return }
                     model.session.pauseOrResumeProgrammedMove()
                 }
-                .font(LiveType.ui(size: 13, weight: .bold))
+                .font(MonitorTheme.font(13, weight: .bold))
                 .foregroundStyle(LiveDesign.text)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
@@ -726,7 +726,7 @@ private struct LiveGimbalRunPill: View {
                         ? (model.session.gimbalStartCountdown.map { "Stop · \($0)" }
                             ?? LiveGimbalCopy.stopMove) : LiveGimbalCopy.runMove
                 )
-                .font(LiveType.ui(size: 13, weight: .bold))
+                .font(MonitorTheme.font(13, weight: .bold))
                 .textCase(.uppercase)
                 .kerning(0.6)
                 .foregroundStyle(LiveDesign.text)
@@ -806,7 +806,7 @@ struct LiveGimbalWaypointMarks: View {
                         id: \.slot
                     ) { mark in
                         Text(mark.slot.letter)
-                            .font(LiveType.ui(size: 13, weight: .bold, design: .rounded))
+                            .font(MonitorTheme.font(13, weight: .bold))
                             .foregroundStyle(LiveDesign.onAccent)
                             .frame(width: 26, height: 26)
                             .background(
