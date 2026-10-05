@@ -5,23 +5,13 @@ import Insta360Protocol
 import OpenCineCore
 import OpenPocketViewCore
 
-/// Held gimbal stick streamed as Luna `GIMBAL_CONTROL` MOVE (cmd 226) at a fixed rate.
+/// The operator's held gimbal stick; `LunaMotionService` streams its MOVEs.
 struct LunaStickStream {
-    /// Official app range: sint32 ±99 on each VirtualRC axis.
-    static let fullScale = 99.0
-    static let interval: Duration = .milliseconds(50)
-    var pan: Int32 = 0
-    var tilt: Int32 = 0
     var lastPan = 0.0
     var lastTilt = 0.0
     var isHeld = false
-    var task: Task<Void, Never>?
 
     mutating func reset() {
-        task?.cancel()
-        task = nil
-        pan = 0
-        tilt = 0
         lastPan = 0
         lastTilt = 0
         isHeld = false
@@ -46,14 +36,17 @@ extension CameraSession {
     /// DJI camcap hop to the log curve's native ISO on a color change; the ISO sheet hides its toggle.
     var supportsNativeIsoHop: Bool { false }
     /// Luna media browse runs over HTTP next to the live socket.
-    var hasControlLink: Bool { backend.isControlReady }
+    /// The connection's Luna session: every request goes through it, and its admission is this
+    /// facade's control link (it flips with the backend's handshake). Tests set the override.
+    var lunaSession: LunaCameraSession? { lunaSessionOverride ?? backend.session }
+    var hasControlLink: Bool { lunaSession?.admitsControl == true }
     var bodyFamily: CameraBodyFamily { .other }
     var colorModes: [ColorMode] { LunaShellMapping.colorModes }
 
     var currentShootingMode: ShootingMode? { ShootingMode.fromStatus(status.shootingMode) }
 
     var canSendControl: Bool {
-        guard case .live = phase, backend.isControlReady else {
+        guard case .live = phase, hasControlLink else {
             controlNote = "Connect the camera to use its controls."
             return false
         }
@@ -67,7 +60,7 @@ extension CameraSession {
     /// Every camera request goes through the connection's Luna session, which sends only while it
     /// is ready and owned (the Insta360 rule: commands only through `LunaCameraSession`).
     func sendLuna(_ request: LunaRequest, timeout: Duration? = nil) async throws -> Data {
-        guard let session = backend.session else { throw CancellationError() }
+        guard let session = lunaSession else { throw CancellationError() }
         return try await session.control(request, timeout: timeout)
     }
 
@@ -432,7 +425,7 @@ extension CameraSession {
 
     /// Latest-wins at ~12 Hz: the camera lens cannot follow a 60 Hz pinch.
     private func queueZoomWrite(_ factor: Double) {
-        guard case .live = phase, backend.isControlReady else { return }
+        guard case .live = phase, hasControlLink else { return }
         pendingZoomWrite = factor
         guard zoomWriteTask == nil else { return }
         zoomWriteTask = Task { @MainActor [weak self] in
@@ -469,7 +462,7 @@ extension CameraSession {
 
     var canSetGimbalConfiguration: Bool {
         hasGimbal && !isLocked && phase == .live && gimbalControlSceneActive && !holdsMonitor
-            && !sessionRecovery.isRecovering && backend.isControlReady
+            && !sessionRecovery.isRecovering && hasControlLink
     }
 
     /// Stream MOVE while the on-screen stick is held. `x`/`y` are −1…1 (right / up).
@@ -494,42 +487,23 @@ extension CameraSession {
         let tiltValue = magnitude < dead ? 0 : y
         if assistMirror { panValue = -panValue }
         // Ease-in curve: fine control near centre, full speed at the rim.
-        func shaped(_ v: Double) -> Int32 {
-            let curved = linear ? v : v * abs(v)
-            return Int32((curved * scale * LunaStickStream.fullScale).rounded())
-        }
-        gimbalStick.pan = shaped(panValue)
-        gimbalStick.tilt = shaped(tiltValue)
+        func shaped(_ v: Double) -> Double { (linear ? v : v * abs(v)) * scale }
         gimbalStick.lastPan = panValue
         gimbalStick.lastTilt = tiltValue
         if !gimbalStick.isHeld {
             gimbalStick.isHeld = true
             ControlLiveLog.line("control: gimbal stick stream")
-            startStickStream()
         }
-    }
-
-    private func startStickStream() {
-        gimbalStick.task?.cancel()
-        gimbalStick.task = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                guard let self, self.gimbalStick.isHeld else { return }
-                let pan = self.gimbalStick.pan
-                let tilt = self.gimbalStick.tilt
-                if let request = try? LunaProtocol.gimbalMove(upDown: tilt, leftRight: pan) {
-                    _ = try? await self.sendLuna(request, timeout: .seconds(2))
-                }
-                try? await Task.sleep(for: LunaStickStream.interval)
-            }
-        }
+        motion.hold(pan: shaped(panValue), tilt: shaped(tiltValue))
     }
 
     func endGimbalStick(cancelMove: Bool = false) {
         guard gimbalStick.isHeld else { return }
         gimbalStick.reset()
+        motion.endHold()
         ControlLiveLog.line("control: gimbal stick rest")
-        guard backend.isControlReady else { return }
-        Task { [weak self] in _ = try? await self?.sendLuna(LunaProtocol.gimbalReleaseRequest()) }
+        guard hasControlLink else { return }
+        Task { [weak self] in await self?.motion.release() }
     }
 
     func performGimbalDoubleTap() {
@@ -603,7 +577,7 @@ extension CameraSession {
             while !Task.isCancelled {
                 guard let self else { return }
                 // Head tracking reads GET_ANGLE itself on every tick.
-                if case .live = self.phase, self.backend.isControlReady, !self.isSteeringHead {
+                if case .live = self.phase, self.hasControlLink, !self.isSteeringHead {
                     await self.readGimbalAngle()
                 }
                 try? await Task.sleep(for: Self.gimbalAnglePollInterval)
@@ -613,21 +587,14 @@ extension CameraSession {
 
     @discardableResult
     func readGimbalAngle(timeout: Duration = .seconds(1)) async -> LunaGimbalAngle? {
-        guard let request = try? LunaProtocol.gimbalGetAngleRequest(),
-            let reply = try? await sendLuna(request, timeout: timeout),
-            let angle = try? LunaGimbalAngle(response: reply)
-        else { return nil }
+        guard let angle = await motion.readAngle(timeout: timeout) else { return nil }
         gimbalAngle = (angle, ProcessInfo.processInfo.systemUptime)
         return angle
     }
 
     /// Fire and forget: the camera re-targets on every SET_ANGLE (latest wins).
     func sendGimbalAngle(_ target: GimbalWaypoint) {
-        let yaw = remainder(target.yawDeg, 360)  // unwrapped shell yaw back to ±180
-        let pitch = min(max(target.pitchDeg, Self.gimbalPitchRange.lowerBound), Self.gimbalPitchRange.upperBound)
-        guard let request = try? LunaProtocol.gimbalSetAngle(pitch: Float(pitch), yaw: Float(yaw))
-        else { return }
-        Task { [weak self] in _ = try? await self?.sendLuna(request, timeout: .seconds(2)) }
+        Task { [weak self] in await self?.motion.aim(at: target) }
     }
 
     #if DEBUG
@@ -737,9 +704,7 @@ extension CameraSession {
                     if headTrackLog.count > 1500 { headTrackLog.removeFirst(300) }
                 #endif
             }
-            if let request = try? LunaProtocol.gimbalMove(upDown: tilt, leftRight: pan) {
-                Task { [weak self] in _ = try? await self?.sendLuna(request, timeout: .seconds(2)) }
-            }
+            Task { [weak self, pan, tilt] in await self?.motion.steer(pan: pan, tilt: tilt) }
             let k = 1 - exp(-(now - last) / Self.stickLagSeconds)
             last = now
             rate.yaw += (Double(pan) * Self.stickPanDegPerSec - rate.yaw) * k
@@ -748,12 +713,12 @@ extension CameraSession {
         }
         // A fresh task: this one is usually cancelled here, and a cancelled send never goes
         // out, which left the head coasting on the last stick value.
-        guard backend.isControlReady, gimbalAim?.token == token || gimbalAim == nil, !gimbalStick.isHeld else { return }
+        guard hasControlLink, gimbalAim?.token == token || gimbalAim == nil, !gimbalStick.isHeld else { return }
         // Again shortly after, in case a last MOVE still in flight lands behind the first.
         Task { @MainActor [weak self] in
             for attempt in 0..<2 {
                 guard let self, attempt == 0 || (self.gimbalAim == nil && !self.gimbalStick.isHeld) else { return }
-                _ = try? await self.sendLuna(LunaProtocol.gimbalReleaseRequest())
+                await self.motion.release()
                 try? await Task.sleep(for: .milliseconds(150))
             }
         }
