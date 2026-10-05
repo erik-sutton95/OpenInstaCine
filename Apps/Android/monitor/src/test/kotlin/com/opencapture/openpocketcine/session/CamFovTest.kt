@@ -1,5 +1,8 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.vocabulary.CamFov
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -118,21 +121,6 @@ class CamFovTest {
         assertTrue(
             !CamFov.zoomNeedsColorHopWhileRecording(3.0, CameraCommands.COLOR_NORMAL, true),
         )
-    }
-
-    @Test
-    fun zoomPayloadsMatchIosBytes() {
-        assertTrue(CameraCommands.zoomLens(217).contentEquals(byteArrayOf(0x0A, 0x4E, 0xD9.toByte(), 0x00)))
-        assertTrue(CameraCommands.zoomLens(651).contentEquals(byteArrayOf(0x0A, 0x4E, 0x8B.toByte(), 0x02)))
-        assertTrue(CameraCommands.zoomLens(1_302).contentEquals(byteArrayOf(0x0A, 0x4E, 0x16, 0x05)))
-        assertTrue(CameraCommands.zoomLens(2_604).contentEquals(byteArrayOf(0x0A, 0x4E, 0x2C, 0x0A)))
-        assertTrue(CameraCommands.zoomSlew(100).contentEquals(byteArrayOf(0x03, 0x00, 0x64, 0x00)))
-        assertTrue(CameraCommands.zoomSlew(300).contentEquals(byteArrayOf(0x03, 0x00, 0x2C, 0x01)))
-        assertTrue(CameraCommands.zoomStop().contentEquals(byteArrayOf(0xFF.toByte(), 0x00, 0x00, 0x00)))
-        val pinch22 = CameraCommands.zoomLens(CamFov.lensPosition(2.2))
-        assertTrue(pinch22.contentEquals(byteArrayOf(0x0A, 0x4E, 0xDD.toByte(), 0x01)))
-        val pinch67 = CameraCommands.zoomLens(CamFov.lensPosition(6.7))
-        assertTrue(pinch67.contentEquals(byteArrayOf(0x0A, 0x4E, 0xAE.toByte(), 0x05)))
     }
 
 }

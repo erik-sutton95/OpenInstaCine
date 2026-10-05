@@ -5,9 +5,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.opencapture.opencine.insta360.shell.CameraNotice
 import com.opencapture.opencine.insta360.shell.CameraTrackFrame
 import com.opencapture.opencine.insta360.shell.CameraTrackState
-import com.opencapture.openpocketcine.session.FocusOverlay
+import com.opencapture.opencine.vocabulary.FocusOverlay
+import com.opencapture.opencine.vocabulary.TrackingBox
 import com.opencapture.openpocketcine.session.PocketCameraSession
-import com.opencapture.openpocketcine.session.TrackingBox
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue

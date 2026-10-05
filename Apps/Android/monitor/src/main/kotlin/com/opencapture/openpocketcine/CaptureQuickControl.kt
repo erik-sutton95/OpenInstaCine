@@ -19,13 +19,15 @@ import com.opencapture.opencine.appkit.captureField
 import com.opencapture.opencine.appkit.commit
 import com.opencapture.opencine.appkit.quickControl
 import com.opencapture.opencine.core.SettingKey
+import com.opencapture.opencine.vocabulary.ApertureStrategy
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraModel
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.EvComp
 import com.opencapture.opencine.vocabulary.GamepadShutterSync
-import com.opencapture.openpocketcine.session.ApertureStrategy
-import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.session.CameraModel
+import com.opencapture.opencine.vocabulary.ShutterAngle
+import com.opencapture.opencine.vocabulary.VideoFormat
 import com.opencapture.openpocketcine.session.CameraProfile
-import com.opencapture.openpocketcine.session.CameraStatus
-import com.opencapture.openpocketcine.session.VideoFormat
 
 /** Reuses the persistent picker's production choices and typed action methods. */
 internal fun captureQuickControl(sheet: LiveSheet, status: CameraStatus, model: AppModel,
@@ -63,7 +65,7 @@ internal fun captureQuickControl(sheet: LiveSheet, status: CameraStatus, model: 
                     CaptureLists.wbModeRowSelected(status, awbLocked),
                     context = "${status.wbMode}:${CaptureLists.currentKelvin(status)}:${CaptureLists.currentTint(status)}"))
         }
-        LiveSheet.FOCUS -> chrome(captureQuickFocusControl(status, model.session.profile.focusLabels))
+        LiveSheet.FOCUS -> chrome(captureQuickFocusControl(status, model.session.profile.labels.focusLabels))
         LiveSheet.APERTURE -> chrome(MonitorQuickControl(CaptureLists.apertureLabels(status),
             ApertureStrategy.label(status.apertureStrategy).orEmpty()))
         LiveSheet.EXPO -> {
@@ -144,7 +146,7 @@ internal fun recordingCategoryQuickControl(
                 val options = CaptureLists.colorWheelLabels(status, family, bodyName, profile)
                 if (options.isEmpty()) null
                 else {
-                    val live = CameraCommands.colorLabel(status.colorMode, family, profile)
+                    val live = CameraCommands.colorLabel(status.colorMode, family, profile.labels)
                     MonitorQuickControl(
                         options, if (live in options) live else "",
                         context = "$family:${options.joinToString()}:${status.isRecording}",
@@ -154,7 +156,7 @@ internal fun recordingCategoryQuickControl(
         }
         LiveSheet.MODE -> {
             val options = CaptureLists.shootingModeLabels(bodyName, status.shootingMode, profile)
-            val live = CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile).orEmpty()
+            val live = CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile.labels).orEmpty()
             MonitorQuickControl(options, if (live in options) live else "", enabled = !status.isRecording,
                 context = "${status.shootingMode}:$bodyName:${status.isRecording}")
         }
@@ -224,7 +226,7 @@ internal fun applyCaptureShootingMode(value: String, status: CameraStatus, bodyN
     CaptureLists.shootingModeRaw(value, bodyName, profile)?.let(send)
 }
 
-internal fun captureQuickFocusControl(status: CameraStatus, labels: List<String> = CameraProfile.DJI.focusLabels) =
+internal fun captureQuickFocusControl(status: CameraStatus, labels: List<String> = CameraProfile.DJI.labels.focusLabels) =
     MonitorQuickControl(
     labels,
     CaptureFocusChoices.selection(status, labels),
@@ -250,7 +252,7 @@ internal object CaptureFocusChoices {
 }
 
 internal fun applyCaptureFocusChoice(label: String, status: CameraStatus, model: AppModel) {
-    applyCaptureFocusChoice(label, status, model.session.profile.focusLabels, model::setFocusMode, model::setFocusTrack)
+    applyCaptureFocusChoice(label, status, model.session.profile.labels.focusLabels, model::setFocusMode, model::setFocusTrack)
 }
 
 internal fun applyCaptureFocusChoice(label: String, status: CameraStatus, labels: List<String>,

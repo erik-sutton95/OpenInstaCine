@@ -6,6 +6,7 @@ import com.opencapture.opencine.appkit.diagnostics.ManualProblemReportEnvelope
 import android.content.ClipData
 import android.content.ClipboardManager
 import com.opencapture.opencine.platform.LocalVPNProbe
+import com.opencapture.opencine.vocabulary.PrivacyRedactor
 import com.opencapture.openpocketcine.MonitorConfiguration
 import android.content.Context
 import android.content.Intent

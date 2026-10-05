@@ -43,11 +43,11 @@ import androidx.compose.ui.unit.dp
 import com.opencapture.monitorui.MonitorPalette
 import com.opencapture.monitorui.MonitorZoomCaption
 import com.opencapture.monitorui.monitorReadoutShadow
-import com.opencapture.openpocketcine.session.CamFov
-import com.opencapture.openpocketcine.session.CameraStatus
-import com.opencapture.openpocketcine.session.LiveFeedFocusGesture
+import com.opencapture.opencine.vocabulary.CamFov
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.LiveFeedFocusGesture
+import com.opencapture.opencine.vocabulary.TrackingBox
 import com.opencapture.openpocketcine.session.PocketCameraSession
-import com.opencapture.openpocketcine.session.TrackingBox
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlinx.coroutines.Job

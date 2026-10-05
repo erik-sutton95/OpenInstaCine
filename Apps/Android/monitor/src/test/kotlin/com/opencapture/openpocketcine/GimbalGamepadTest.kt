@@ -1,9 +1,9 @@
 package com.opencapture.openpocketcine
 
 import android.view.KeyEvent
+import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.GamepadDpad
 import com.opencapture.opencine.vocabulary.GamepadOperatorAction
-import com.opencapture.openpocketcine.session.CameraCommands
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

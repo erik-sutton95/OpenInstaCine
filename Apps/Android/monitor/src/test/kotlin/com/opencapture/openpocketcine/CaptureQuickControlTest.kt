@@ -1,12 +1,13 @@
 package com.opencapture.openpocketcine
 
 import com.opencapture.monitorui.MonitorQuickControl
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.EvComp
 import com.opencapture.opencine.vocabulary.GamepadShutterSync
-import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.session.CameraStatus
-import com.opencapture.openpocketcine.session.VideoFormat
-import com.opencapture.openpocketcine.session.VideoFrameRate
-import com.opencapture.openpocketcine.session.VideoResolution
+import com.opencapture.opencine.vocabulary.VideoFormat
+import com.opencapture.opencine.vocabulary.VideoFrameRate
+import com.opencapture.opencine.vocabulary.VideoResolution
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -76,7 +77,7 @@ class CaptureQuickControlTest {
     }
 
     @Test fun focusTapAndHoldOfferFiveNativeChoicesWithUnknownUnselected() {
-        val labels = com.opencapture.openpocketcine.session.CameraProfile.DJI.focusLabels
+        val labels = com.opencapture.openpocketcine.session.CameraProfile.DJI.labels.focusLabels
         assertEquals(listOf("AF-S", "AF-C", "Showcase", "Lock", "Priority"), labels)
         val statuses = listOf(CameraStatus(focusMode = CameraCommands.FOCUS_SINGLE)) +
             (0..3).map { CameraStatus(focusMode = CameraCommands.FOCUS_CONTINUOUS, focusTrack = it) }
@@ -97,7 +98,7 @@ class CaptureQuickControlTest {
         val single = CameraStatus(focusMode = CameraCommands.FOCUS_SINGLE, focusTrack = 0)
         val calls = mutableListOf<String>()
         fun apply(label: String, status: CameraStatus) = applyCaptureFocusChoice(label, status,
-            com.opencapture.openpocketcine.session.CameraProfile.DJI.focusLabels, { calls += "mode:$it" }, { calls += "track:$it" })
+            com.opencapture.openpocketcine.session.CameraProfile.DJI.labels.focusLabels, { calls += "mode:$it" }, { calls += "track:$it" })
         apply("Lock", single)
         assertEquals(listOf("mode:true", "track:2"), calls)
         calls.clear()

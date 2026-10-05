@@ -3,9 +3,9 @@ package com.opencapture.openpocketcine.assists
 import com.opencapture.monitorui.MonitorVectorscopeGraticule
 import com.opencapture.monitorui.MonitorTrafficLightsGeometry as TrafficLightsAssist
 
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.openpocketcine.feed.MonitorTransfer
-import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.session.CameraStatus
 import com.opencapture.monitorui.MonitorScopeTraceRaster as ScopeTraceRaster
 import kotlin.test.Test
 import kotlin.test.assertEquals

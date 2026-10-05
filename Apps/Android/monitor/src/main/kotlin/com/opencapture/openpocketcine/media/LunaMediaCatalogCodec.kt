@@ -4,7 +4,7 @@ import com.opencapture.opencine.appkit.*
 import com.opencapture.opencine.insta360.luna.LunaMediaCatalogRecordSource
 import com.opencapture.opencine.insta360.shell.CameraMediaItem
 import com.opencapture.opencine.media.*
-import com.opencapture.openpocketcine.session.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraCommands
 import org.json.JSONObject
 import org.json.JSONArray
 import java.util.Base64

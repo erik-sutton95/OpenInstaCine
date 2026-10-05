@@ -17,9 +17,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.opencapture.monitorui.monitorReadoutShadow
 import android.os.SystemClock
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.EvComp
 import com.opencapture.openpocketcine.assists.LiveAssistState
-import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.session.CameraStatus
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import kotlin.math.cos
 import kotlin.math.sin

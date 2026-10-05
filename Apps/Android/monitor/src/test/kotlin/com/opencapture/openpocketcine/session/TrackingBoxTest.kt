@@ -1,5 +1,17 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.FaceAFPolicy
+import com.opencapture.opencine.vocabulary.FaceStructurePolicy
+import com.opencapture.opencine.vocabulary.FaceTrackHold
+import com.opencapture.opencine.vocabulary.FaceTrackTap
+import com.opencapture.opencine.vocabulary.FocusOverlay
+import com.opencapture.opencine.vocabulary.FocusOverlayPolicy
+import com.opencapture.opencine.vocabulary.FocusResetPolicy
+import com.opencapture.opencine.vocabulary.LiveFeedFocusGesture
+import com.opencapture.opencine.vocabulary.LiveTrackingChrome
+import com.opencapture.opencine.vocabulary.TrackingBox
+import com.opencapture.opencine.vocabulary.TrackingStartPolicy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -7,42 +19,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TrackingBoxTest {
-    @Test
-    fun trackingPayloadMatchesMimoLayout() {
-        val payload = CameraCommands.trackingBox(0x2726, 0.418f, 0.525f, 0.484f, 0.461f)
-        assertEquals(21, payload.size)
-        assertEquals(0x01, payload[0].toInt() and 0xFF)
-        assertEquals(0x00, payload[1].toInt() and 0xFF)
-        assertEquals(0x00, payload[2].toInt() and 0xFF)
-        assertEquals(0x26, payload[3].toInt() and 0xFF)
-        assertEquals(0x27, payload[4].toInt() and 0xFF)
-        assertTrue(CameraCommands.pollTracking().contentEquals(byteArrayOf(0x00)))
-    }
-
-    @Test
-    fun livePushParsesMimoSubjectBox() {
-        val payload =
-            byteArrayOf(
-                0x00, 0x00, 0x00, 0x00, 0x00, 0xA0.toByte(), 0x41,
-                0x85.toByte(), 0x10, 0x05, 0x3F,
-                0xC5.toByte(), 0x4C, 0xC5.toByte(), 0x3E,
-                0xC0.toByte(), 0x88.toByte(), 0x3F, 0x3E,
-                0xCA.toByte(), 0x30, 0xCA.toByte(), 0x3E,
-            )
-        val box = TrackingBox.parseLivePush(payload)!!
-        assertEquals(0.187, box.width, 0.001)
-        assertEquals(0.395, box.height, 0.001)
-        assertEquals(0.520, box.centerX, 0.001)
-        assertEquals(0.385, box.centerY, 0.001)
-    }
-
-    @Test
-    fun livePushRejectsShortOrBadPrefix() {
-        assertNull(TrackingBox.parseLivePush(byteArrayOf(0x00, 0x01, 0x00, 0x00)))
-        val bad = ByteArray(23)
-        bad[0] = 0x01
-        assertNull(TrackingBox.parseLivePush(bad))
-    }
 
     @Test
     fun overlayAndTapPoliciesMatchIos() {

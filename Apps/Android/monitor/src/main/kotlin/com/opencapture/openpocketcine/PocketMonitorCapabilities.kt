@@ -1,7 +1,8 @@
 package com.opencapture.openpocketcine
 
 import com.opencapture.opencine.core.MonitorLayoutCapabilities
-import com.opencapture.openpocketcine.session.CameraStatus
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.CaptureShutterPolicy
 
 /**
  * The app's part of the layout: clip delete, clip star and the internet hop, until media and

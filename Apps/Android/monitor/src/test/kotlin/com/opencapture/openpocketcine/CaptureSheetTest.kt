@@ -1,13 +1,15 @@
 package com.opencapture.openpocketcine
 
-import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.session.CameraModel
-import com.opencapture.openpocketcine.session.CameraStatus
-import com.opencapture.openpocketcine.session.FocusOption
-import com.opencapture.openpocketcine.session.FocusTrackMode
-import com.opencapture.openpocketcine.session.VideoFormat
-import com.opencapture.openpocketcine.session.VideoFrameRate
-import com.opencapture.openpocketcine.session.VideoResolution
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraModel
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.EvComp
+import com.opencapture.opencine.vocabulary.FocusOption
+import com.opencapture.opencine.vocabulary.FocusTrackMode
+import com.opencapture.opencine.vocabulary.ShutterAngle
+import com.opencapture.opencine.vocabulary.VideoFormat
+import com.opencapture.opencine.vocabulary.VideoFrameRate
+import com.opencapture.opencine.vocabulary.VideoResolution
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -25,70 +27,6 @@ class CaptureSheetTest {
             CaptureLists.nextVideoFormat(status, tab = 0, drum = "30p", fromDrum = true),
             "empty camcap is read-only; fps change must not invent a SET",
         )
-    }
-
-    @Test
-    fun shutterWheelUsesCameraListNotHardcoded24pTable() {
-        val status =
-            CameraStatus(
-                fps = 60,
-                shutterDenom = 50,
-                availableShutterDenoms = CameraCommands.parseShutterDenoms(hex(SHUTTER_60P)),
-            )
-        val denoms = CaptureLists.shutterDenoms(status)
-        assertTrue(denoms.contains(50), "4K 60p payload includes 1/50")
-        assertTrue(!denoms.contains(25), "60p payload does not offer 1/25")
-        assertEquals(status.availableShutterDenoms, denoms)
-        assertTrue(!denoms.contains(13), "wheel cannot invent a 24p-only stop")
-    }
-
-    @Test
-    fun shutterWheelOmitsSpeedsMissingFromPayload() {
-        val status =
-            CameraStatus(
-                fps = 25,
-                shutterDenom = 50,
-                availableShutterDenoms = CameraCommands.parseShutterDenoms(hex(SHUTTER_25P)),
-            )
-        val denoms = CaptureLists.shutterDenoms(status)
-        val other = CameraCommands.parseShutterDenoms(hex(SHUTTER_60P))
-        assertTrue(denoms != other)
-        assertTrue(denoms.contains(25))
-        assertTrue(denoms.contains(50))
-        for (extra in listOf(13, 15, 20, 125, 250, 10_000, 13_000)) {
-            assertTrue(!denoms.contains(extra), "do not offer 1/$extra — not in payload")
-        }
-    }
-
-    @Test
-    fun isoWheelUsesCamcapAndStarsBaseForTransfer() {
-        val dlog2 =
-            CameraStatus(
-                colorMode = CameraCommands.COLOR_DLOG2,
-                availableIsoIndices = CameraCommands.parseIsoIndices(hex("0108000006030405060708")),
-            )
-        assertEquals(listOf("100", "200", "400", "800", "1600", "3200"), CaptureLists.isoDrumLabels(dlog2))
-        assertEquals(setOf("1600"), CaptureLists.isoMarkedLabels(dlog2))
-
-        val dlog =
-            CameraStatus(
-                colorMode = CameraCommands.COLOR_DLOG,
-                availableIsoIndices = CameraCommands.parseIsoIndices(hex("0108000006000506070809")),
-            )
-        assertEquals(
-            dlog.availableIsoIndices.filter { it != 0 }.map { CameraCommands.isoLabel(it) },
-            CaptureLists.isoDrumLabels(dlog),
-        )
-        assertEquals(setOf("400"), CaptureLists.isoMarkedLabels(dlog))
-        assertTrue(!CaptureLists.isoMarkedLabels(dlog).contains("1600"))
-
-        val rec709 =
-            CameraStatus(
-                colorMode = CameraCommands.COLOR_NORMAL,
-                availableIsoIndices = dlog2.availableIsoIndices,
-            )
-        assertTrue(CaptureLists.isoMarkedLabels(rec709).isEmpty())
-        assertEquals(CaptureLists.isoDrumLabels(dlog2), CaptureLists.isoDrumLabels(rec709))
     }
 
     @Test
@@ -289,28 +227,6 @@ class CaptureSheetTest {
         assertTrue(CaptureLists.shouldReseatShutter(CaptureLists.ShutterReseatKey.EV_COMP, true))
         assertTrue(!CaptureLists.shouldReseatShutter(CaptureLists.ShutterReseatKey.EV_COMP, false))
         assertTrue(CaptureLists.shouldReseatShutter(CaptureLists.ShutterReseatKey.FACE_PRIORITY, true))
-    }
-
-    @Test
-    fun applyDrumSpeedUsesCamcapNeverInvented24pStops() {
-        val status =
-            CameraStatus(
-                fps = 60,
-                shutterDenom = 50,
-                availableShutterDenoms = CameraCommands.parseShutterDenoms(hex(SHUTTER_60P)),
-            )
-        assertEquals(
-            CaptureLists.ShutterDrumCommand.SetShutter(50),
-            CaptureLists.applyShutterDrum("1/50", false, false, false, status),
-        )
-        assertEquals(
-            CaptureLists.ShutterDrumCommand.Ignored,
-            CaptureLists.applyShutterDrum("1/13", false, false, false, status),
-        )
-        assertEquals(
-            CaptureLists.ShutterDrumCommand.Ignored,
-            CaptureLists.applyShutterDrum("1/25", false, false, false, status),
-        )
     }
 
     @Test

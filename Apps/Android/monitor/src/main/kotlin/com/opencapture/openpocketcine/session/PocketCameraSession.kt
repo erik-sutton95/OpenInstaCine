@@ -9,11 +9,40 @@ import com.opencapture.opencine.motion.GimbalWaypoint
 import com.opencapture.opencine.motion.GimbalWaypointSlot
 import com.opencapture.opencine.motion.LevelReading
 import com.opencapture.opencine.motion.WorldLevelSnap
+import com.opencapture.opencine.vocabulary.AutoExposureLock
+import com.opencapture.opencine.vocabulary.CamFov
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraModel
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.ControlHud
+import com.opencapture.opencine.vocabulary.EvComp
+import com.opencapture.opencine.vocabulary.FaceAFPolicy
+import com.opencapture.opencine.vocabulary.FaceTrackHold
+import com.opencapture.opencine.vocabulary.FaceTrackTap
+import com.opencapture.opencine.vocabulary.FocusOption
+import com.opencapture.opencine.vocabulary.FocusOverlay
+import com.opencapture.opencine.vocabulary.FocusOverlayPolicy
+import com.opencapture.opencine.vocabulary.FocusResetPolicy
+import com.opencapture.opencine.vocabulary.FoundCamera
 import com.opencapture.opencine.vocabulary.GamepadOperatorAction
 import com.opencapture.opencine.vocabulary.GamepadShutterSync
+import com.opencapture.opencine.vocabulary.GimbalDoubleTap
+import com.opencapture.opencine.vocabulary.GimbalHudCopy
+import com.opencapture.opencine.vocabulary.GimbalLimitContact
+import com.opencapture.opencine.vocabulary.GimbalMode
+import com.opencapture.opencine.vocabulary.GimbalRamp
+import com.opencapture.opencine.vocabulary.GimbalSpeed
+import com.opencapture.opencine.vocabulary.SceneFacePolicy
+import com.opencapture.opencine.vocabulary.SessionDropStormGuard
+import com.opencapture.opencine.vocabulary.SessionRecoveryDecision
+import com.opencapture.opencine.vocabulary.SessionRecoveryPolicy
+import com.opencapture.opencine.vocabulary.SessionRecoveryUi
+import com.opencapture.opencine.vocabulary.ShutterAngle
+import com.opencapture.opencine.vocabulary.TrackingBox
+import com.opencapture.opencine.vocabulary.TrackingHud
+import com.opencapture.opencine.vocabulary.TrackingStartPolicy
+import com.opencapture.opencine.vocabulary.VideoFormat
 import com.opencapture.openpocketcine.CaptureLists
-import com.opencapture.openpocketcine.CaptureShutterPolicy
-import com.opencapture.openpocketcine.EvComp
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.opencine.appkit.MonitorControlModel
@@ -54,7 +83,6 @@ import com.opencapture.opencine.media.RecoveryReason
 import com.opencapture.openpocketcine.BuildConfig
 import android.os.Build
 import java.util.UUID
-import com.opencapture.openpocketcine.ShutterAngle
 import com.opencapture.opencine.insta360.shell.CameraTrackFrame
 import com.opencapture.opencine.insta360.shell.CameraTrackState
 import kotlinx.coroutines.CoroutineStart
@@ -581,7 +609,7 @@ class PocketCameraSession(
         pins.format = null
         _status.value = if (previous.shootingMode != raw) previous.clearedModeDependentCapabilities().copy(shootingMode = raw) else previous
         sendControl(
-            CameraCommands.shootingModeLabel(raw, profile = profile).orEmpty(), refresh = false,
+            CameraCommands.shootingModeLabel(raw, profile = profile.labels).orEmpty(), refresh = false,
             onFail = { pins.shootingMode = null; _status.value = _status.value.copy(shootingMode = previous.shootingMode) },
         ) { setShootingMode(mode) }
     }
@@ -776,7 +804,7 @@ class PocketCameraSession(
         val previous = _gimbalMode.value
         pins.gimbalMode = pin(mode, SystemClock.elapsedRealtime(), 3_000)
         _gimbalMode.value = mode
-        sendControl("Gimbal ${mode.label(profile)}", onFail = { pins.gimbalMode = null; _gimbalMode.value = previous }) {
+        sendControl("Gimbal ${mode.label(profile.labels)}", onFail = { pins.gimbalMode = null; _gimbalMode.value = previous }) {
             setGimbalMode(LunaShellMapping.cameraGimbalMode(mode))
         }
     }
@@ -1107,7 +1135,7 @@ class PocketCameraSession(
         if (mode !in LunaShellMapping.colorModes) return
         pins.color = pin(mode, SystemClock.elapsedRealtime(), 3_000)
         _status.value = _status.value.copy(colorMode = mode)
-        sendControl(CameraCommands.colorLabel(mode, profile = profile), onFail = { pins.color = null; _status.value = _status.value.copy(colorMode = previous) }) {
+        sendControl(CameraCommands.colorLabel(mode, profile = profile.labels), onFail = { pins.color = null; _status.value = _status.value.copy(colorMode = previous) }) {
             setColorProfile(LunaShellMapping.colorProfile(mode))
         }
     }

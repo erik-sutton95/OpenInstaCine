@@ -2,6 +2,11 @@ package com.opencapture.openpocketcine.session
 
 import com.opencapture.opencine.decoder.HevcDecoder
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
+import com.opencapture.opencine.vocabulary.SessionDropStormGuard
+import com.opencapture.opencine.vocabulary.SessionRecoveryCopy
+import com.opencapture.opencine.vocabulary.SessionRecoveryDecision
+import com.opencapture.opencine.vocabulary.SessionRecoveryPolicy
+import com.opencapture.opencine.vocabulary.SessionRecoveryUi
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -100,17 +105,4 @@ class LiveViewEnablePolicyTest {
         assertEquals(LiveVideoCodec.AVC, LiveAccessUnit.detectCodec(byteArrayOf(0, 0, 0, 1, 0x68, 0xCE.toByte()), "8"))
     }
 
-    @Test
-    fun zoomChipLensesMatchCamFovStops() {
-        assertEquals(217, CameraCommands.lensForZoomFactor(1.0))
-        assertEquals(CamFov.lensPosition(2.0), CameraCommands.lensForZoomFactor(2.0))
-        assertEquals(651, CameraCommands.lensForZoomFactor(3.0))
-        assertEquals(CamFov.lensPosition(4.0), CameraCommands.lensForZoomFactor(4.0))
-        assertEquals(1302, CameraCommands.lensForZoomFactor(6.0))
-        assertEquals(2604, CameraCommands.lensForZoomFactor(12.0))
-        val payload = CameraCommands.zoomLens(217)
-        assertEquals(0x0A, payload[0].toInt() and 0xFF)
-        assertEquals(0x4E, payload[1].toInt() and 0xFF)
-        assertEquals(217, (payload[2].toInt() and 0xFF) or ((payload[3].toInt() and 0xFF) shl 8))
-    }
 }

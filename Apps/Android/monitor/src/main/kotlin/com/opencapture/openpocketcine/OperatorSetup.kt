@@ -1,10 +1,10 @@
 package com.opencapture.openpocketcine
 
 import com.opencapture.opencine.appkit.diagnostics.ManualProblemReportDelivery
+import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.GamepadGimbalStick
 import com.opencapture.openpocketcine.diagnostics.AppDiagnostics
 import com.opencapture.openpocketcine.feed.fromColorMode
-
 import com.opencapture.monitorui.MonitorTab
 import com.opencapture.monitorui.monitorScrollFade
 import com.opencapture.monitorui.monitorTabStrip
@@ -42,7 +42,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -92,7 +91,6 @@ import com.opencapture.openpocketcine.assists.LiveAssistTool
 import com.opencapture.openpocketcine.assists.LiveZebra
 import com.opencapture.openpocketcine.assists.ParadeMode
 import com.opencapture.openpocketcine.assists.PeakingColor
-import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.assists.PeakingSense
 import com.opencapture.openpocketcine.assists.ScopeGuides
 import com.opencapture.openpocketcine.assists.VectorscopeZoom
