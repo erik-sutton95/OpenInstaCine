@@ -6,6 +6,7 @@ import com.opencapture.monitorui.MonitorTrafficLightsGeometry as TrafficLightsAs
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraStatus
+import com.opencapture.monitorui.MonitorScopeTraceRaster as ScopeTraceRaster
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
