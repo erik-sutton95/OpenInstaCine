@@ -11,6 +11,8 @@ import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import com.opencapture.opencine.media.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import java.util.UUID
 import kotlin.time.Duration
 
@@ -25,19 +27,21 @@ class Media3PlaybackPort(val player: ExoPlayer, scope: CoroutineScope) : Monitor
     private var tick: Job? = null
     private var closed = false
     private var pictureOwner: UUID? = null
+    /** A claimed picture whose decoder surface has not arrived yet. */
+    private val picturePending = MutableStateFlow(false)
 
     fun claimPicture(): UUID {
         check(!closed)
-        val owner = UUID.randomUUID(); pictureOwner = owner
+        val owner = UUID.randomUUID(); pictureOwner = owner; picturePending.value = true
         player.clearVideoSurface()
         return owner
     }
     fun attachPicture(surface: Surface, owner: UUID) {
-        if (!closed && pictureOwner == owner) player.setVideoSurface(surface)
+        if (!closed && pictureOwner == owner) { player.setVideoSurface(surface); picturePending.value = false }
     }
     fun releasePicture(owner: UUID) {
         if (closed || pictureOwner != owner) return
-        pictureOwner = null; player.clearVideoSurface()
+        pictureOwner = null; picturePending.value = false; player.clearVideoSurface()
     }
     private fun current(token: MonitorPlaybackItemToken, request: String): Boolean =
         !closed && this.token == token && preparation == request && player.currentMediaItem?.mediaId == request
@@ -80,6 +84,11 @@ class Media3PlaybackPort(val player: ExoPlayer, scope: CoroutineScope) : Monitor
         player.repeatMode = Player.REPEAT_MODE_OFF
         if (closed || this.token != token || preparation != request) throw MonitorPlaybackException(MonitorPlaybackFailure.RETIRED)
         player.setMediaItem(MediaItem.Builder().setUri(Uri.parse(item.url.toString())).setMimeType(item.mimeType).setMediaId(request).build())
+        if (!current(token, request)) throw MonitorPlaybackException(MonitorPlaybackFailure.RETIRED)
+        // Prepared before its surface, Media3 configures the decoder on a PlaceholderSurface and
+        // switches it later; the Codec2/gfxstream emulator path then decodes into buffers without
+        // a host color buffer and every frame is black. Prepare onto the claimed picture instead.
+        picturePending.first { !it }
         if (!current(token, request)) throw MonitorPlaybackException(MonitorPlaybackFailure.RETIRED)
         player.prepare()
         if (!current(token, request)) throw MonitorPlaybackException(MonitorPlaybackFailure.RETIRED)
@@ -130,6 +139,6 @@ class Media3PlaybackPort(val player: ExoPlayer, scope: CoroutineScope) : Monitor
     }
     override fun close(token: MonitorPlaybackItemToken) {
         if (closed || this.token?.owner != token.owner) return
-        closed = true; pictureOwner = null; this.token = null; onEvent = null; retireObservers(); owner.cancel(); player.release()
+        closed = true; pictureOwner = null; picturePending.value = false; this.token = null; onEvent = null; retireObservers(); owner.cancel(); player.release()
     }
 }
