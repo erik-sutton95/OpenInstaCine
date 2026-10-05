@@ -63,8 +63,8 @@
             if ProcessInfo.processInfo.environment["OPV_CONSENT_REVIEW_ID"] == nil,
                 let defaults = UserDefaults(suiteName: "opc.monitor.presentation.review")
             {
-                ReliabilityReportingConsent.defaults = defaults
-                ReliabilityReportingConsent.setOptedIn(false)
+                AppDiagnostics.consent.defaults = defaults
+                AppDiagnostics.consent.setOptedIn(false)
             }
             model.showsLaunchSplash = false
             // `OPV_UI_REVIEW_ORIENTATION=landscapeLeft|landscapeRight|portrait` turns the scene.
@@ -214,6 +214,9 @@
             let session: LunaCameraSession
             if isActive {
                 session = simulatedSession(status: model.session.status)
+                // The lens range `CameraSession.openSession` gives a connected camera, so the
+                // review lays out the zoom chip as main's did.
+                session.configureLens(zoomDomain: 1...model.session.zoomCeiling)
             } else {
                 session = model.session.backend.openSession()
             }

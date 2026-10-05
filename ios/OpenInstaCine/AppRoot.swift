@@ -7,6 +7,7 @@ import Observation
 import OpenCineAppKit
 import OpenCineCore
 import OpenCineRelayApple
+import OpenCineWatch
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -806,13 +807,13 @@ struct AppRoot: View {
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showReliabilityPrompt) {
             ReliabilityConsentPrompt { enabled in
-                ReliabilityReporting.setConsent(enabled)
+                AppDiagnostics.reporting.setConsent(enabled)
                 showReliabilityPrompt = false
             }.environment(model)
         }
         .task {
             while !Task.isCancelled {
-                ProblemReporting.shared.tick()
+                AppDiagnostics.problemReporting.tick()
                 try? await Task.sleep(for: .seconds(2))
             }
         }
@@ -823,7 +824,7 @@ struct AppRoot: View {
                 if let reviewID = ProcessInfo.processInfo.environment["OPV_CONSENT_REVIEW_ID"],
                     UUID(uuidString: reviewID) != nil
                 {
-                    ReliabilityReportingConsent.defaults = UserDefaults(
+                    AppDiagnostics.consent.defaults = UserDefaults(
                         suiteName: "opc.consent.review.\(reviewID)")!
                 }
             #endif
@@ -849,7 +850,7 @@ struct AppRoot: View {
             withAnimation(.easeOut(duration: LaunchSplashTiming.fadeOutDuration)) {
                 model.showsLaunchSplash = false
             }
-            if ReliabilityReporting.isAvailable && !ReliabilityReportingConsent.hasDecision {
+            if AppDiagnostics.reporting.isAvailable && !AppDiagnostics.consent.hasDecision {
                 showReliabilityPrompt = true
             }
         }
@@ -880,13 +881,10 @@ struct AppRoot: View {
             Button("Grant") { model.relayHost.grantControl() }
             Button("Deny", role: .cancel) { model.relayHost.denyControl() }
         }
-        .onAppear {
-            model.shell.setSceneActive(scenePhase == .active)
-            model.assist.inspectorSceneActive = model.shell.sceneActive
-        }
+        .onAppear { model.assist.inspectorSceneActive = scenePhase == .active }
         // The shell reports each change once (`AppModel.shell.onSceneActivity`).
         .onChange(of: scenePhase) { _, phase in
-            ProblemReporting.shared.tick()
+            AppDiagnostics.problemReporting.tick()
             model.shell.setSceneActive(phase == .active)
         }
         // scenePhase can miss a Control Center / app-switcher bounce.

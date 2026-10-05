@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.core.CameraValuePin
 import com.opencapture.openpocketcine.EvComp
 import com.opencapture.opencine.core.CameraTimecode
 import com.opencapture.opencine.insta360.luna.LunaFrameTimecode

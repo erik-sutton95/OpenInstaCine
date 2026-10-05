@@ -4,6 +4,11 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
+import com.opencapture.opencine.motion.GimbalProgram
+import com.opencapture.opencine.motion.GimbalWaypoint
+import com.opencapture.opencine.motion.GimbalWaypointSlot
+import com.opencapture.opencine.motion.LevelReading
+import com.opencapture.opencine.motion.WorldLevelSnap
 import com.opencapture.openpocketcine.CaptureLists
 import com.opencapture.openpocketcine.CaptureShutterPolicy
 import com.opencapture.openpocketcine.GamepadOperatorAction
@@ -714,7 +719,7 @@ class PocketCameraSession(
         anglePollJob?.cancel(); anglePollJob = null; gimbalAngle = null
     }
     private fun sendGimbalAngle(target: GimbalWaypoint) {
-        scope.launch { motion.aim(LunaGimbalAim.motionPose(target)) }
+        scope.launch { motion.aim(target) }
     }
     /** iOS `aimGimbal`: one SET_ANGLE; the aim ends once GET_ANGLE reads within 0.5 deg, or after 8 s. */
     private fun aimGimbal(target: GimbalWaypoint) {
@@ -728,7 +733,7 @@ class PocketCameraSession(
                 if (elapsed > 8_000) break
                 val reading = gimbalAngle
                 if (elapsed > 300 && reading != null && reading.second > started + 200 &&
-                    LunaGimbalAim.reached(reading.first, target)
+                    LunaMotionService.hasReached(reading.first, target)
                 ) break
                 delay(33)
             }
@@ -846,7 +851,7 @@ class PocketCameraSession(
             for (remaining in 3 downTo 1) { _gimbalMoveCountdown.value = remaining; delay(1_000) }
             _gimbalMoveCountdown.value = null
             moveCanPause = true
-            val duration = LunaGimbalAim.programDuration(take)
+            val duration = take.duration
             Log.i("OpenInstaCine", "gimbal-move: start ${take.summary} duration=$duration")
             var clock = 0.0
             var last = SystemClock.elapsedRealtime()
@@ -862,11 +867,11 @@ class PocketCameraSession(
                     reverse = !reverse
                 }
                 if (!_gimbalMovePaused.value) {
-                    LunaGimbalAim.programPose(take, if (reverse) duration - clock else clock)?.let(::sendGimbalAngle)
+                    take.pose(if (reverse) duration - clock else clock)?.let(::sendGimbalAngle)
                 }
                 delay(33)
             }
-            LunaGimbalAim.programPose(take, if (reverse) 0.0 else duration)?.let(::sendGimbalAngle)
+            take.pose(if (reverse) 0.0 else duration)?.let(::sendGimbalAngle)
             Log.i("OpenInstaCine", "gimbal-move: done")
             finishProgrammedMove()
         }

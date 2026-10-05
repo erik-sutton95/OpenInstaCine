@@ -4,6 +4,7 @@ import com.opencapture.opencine.appkit.diagnostics.ManualProblemReport
 import com.opencapture.opencine.appkit.diagnostics.ManualProblemReportEnvelope
 import android.content.ClipData
 import android.content.ClipboardManager
+import com.opencapture.opencine.platform.LocalVPNProbe
 import com.opencapture.openpocketcine.MonitorConfiguration
 import android.content.Context
 import android.content.Intent
@@ -18,7 +19,6 @@ import com.opencapture.opencine.media.DecoderErrorRecord
 import com.opencapture.openpocketcine.BuildConfig
 import com.opencapture.openpocketcine.media.MediaShare
 import com.opencapture.openpocketcine.pairing.DiscoveryPermissions
-import com.opencapture.openpocketcine.session.LocalVPNFilter
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import java.io.File
 import java.text.SimpleDateFormat
@@ -263,7 +263,7 @@ object DiagnosticCenter {
         val family = session.connectedCamera?.model?.family ?: "none"
         val model = session.connectedCamera?.model?.name ?: "none"
         val phase = session.phase.name.lowercase()
-        val vpn = appContext?.let { LocalVPNFilter.isActive(it) } ?: false
+        val vpn = appContext?.let { LocalVPNProbe.isActive(it) } ?: false
         return Env(
             appVersion = BuildConfig.VERSION_NAME,
             appBuild = BuildConfig.VERSION_CODE.toString(),

@@ -1,8 +1,8 @@
 package com.opencapture.openpocketcine.session
 
 import com.opencapture.opencine.insta360.shell.CameraGimbalAngle
+import com.opencapture.opencine.motion.GimbalWaypoint
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LunaGimbalAimTest {
@@ -11,20 +11,8 @@ class LunaGimbalAimTest {
         val target = LunaGimbalAim.levelTarget(CameraGimbalAngle(pitch = 12.0, yaw = -170.0), 5.0, 2.0)
         assertEquals(7.0, target.pitchDeg, 1e-9)
         assertEquals(190.0, target.yawDeg, 1e-9) // unwrapped past the -92 gap
-        // SET_ANGLE's wrap and reach moved to OpenCine `LunaMotionServiceTest.aimWrapsYawAndKeepsPitchInsideTheDeclaredReach`.
-        assertEquals(com.opencapture.opencine.motion.GimbalWaypoint(190.0, 7.0, 2.0, -7.0), LunaGimbalAim.motionPose(target))
-        assertTrue(LunaGimbalAim.reached(CameraGimbalAngle(7.3, -170.4), target))
-    }
-
-    @Test fun programPoseFollowsStraightLegs() {
-        val a = GimbalWaypoint(0.0, 0.0, 1.0)
-        val b = GimbalWaypoint(20.0, 10.0, 1.0)
-        val c = GimbalWaypoint(20.0, -10.0, 1.0)
-        val take = GimbalProgram(a, b, c, durationAB = 4.0, durationBC = 2.0)
-        assertEquals(6.0, LunaGimbalAim.programDuration(take), 1e-9)
-        assertEquals(a, LunaGimbalAim.programPose(take, 0.0))
-        assertEquals(10.0, LunaGimbalAim.programPose(take, 2.0)!!.yawDeg, 1e-9)
-        assertEquals(0.0, LunaGimbalAim.programPose(take, 5.0)!!.pitchDeg, 1e-9)
-        assertEquals(c.pitchDeg, LunaGimbalAim.programPose(take, 6.0)!!.pitchDeg, 1e-9)
+        assertEquals(GimbalWaypoint(190.0, 7.0, 2.0, -7.0), target)
+        // SET_ANGLE's wrap and reach moved to OpenCine `LunaMotionServiceTest.aimWrapsYawAndKeepsPitchInsideTheDeclaredReach`,
+        // arrival to `LunaMotionServiceTest.arrivalIsWithinHalfADegreeOnEachAxisAcrossTheWrap`.
     }
 }

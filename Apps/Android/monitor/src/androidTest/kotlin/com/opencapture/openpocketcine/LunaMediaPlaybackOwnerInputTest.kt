@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
 import android.media.MediaMetadataRetriever
+import android.os.Build
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -223,6 +224,12 @@ class LunaMediaPlaybackOwnerInputTest {
                 val viewIdentity = first.view; val surfaceIdentity = first.surface
                 first.bitmap.recycle()
                 borrowed(); capture(scenario, "A-portrait", "A", false, source)
+                // A pause that lands near 3 s already shows a frame the interior check accepts, and the
+                // scrub's own seek frame then lands inside the hold: park the paused picture at 9 s first.
+                scrub(0.75f)
+                await("Paused native scrub parks away from the interior") {
+                    kotlin.math.abs(progress() - 9f) < 0.5f && node("Play") != null && pictureAt(scenario, "A", 9f)
+                }
                 scrub(0.25f)
                 await("Paused native scrub reaches interior") {
                     kotlin.math.abs(progress() - 3f) < 0.5f && node("Play") != null && pictureAt(scenario, "A", 3f)
@@ -269,7 +276,8 @@ class LunaMediaPlaybackOwnerInputTest {
                 scrub(0.95f)
                 await("B native seek reaches end region") { progress() > 10.8f && node("Play") != null }
                 tap("Play")
-                await("Loop restarts actual same B picture") { progress() < 2f && node("Pause") != null && pictureMatches(scenario, "B") }
+                // The restart's first 2 s come round once per 12 s pass; a slow poll can step over one.
+                await("Loop restarts actual same B picture", 30000) { progress() < 2f && node("Pause") != null && pictureMatches(scenario, "B") }
                 tap("Back to media")
                 await("Player Back returns gallery and detaches native picture") { node(files[0].filename) != null && !hasPicture(scenario) }
                 borrowed()
@@ -377,8 +385,8 @@ class LunaMediaPlaybackOwnerInputTest {
         } finally { picture.bitmap.recycle() }
     }
     private fun settle() { instrumentation.waitForIdleSync(); SystemClock.sleep(60) }
-    private fun await(message: String, condition: () -> Boolean) {
-        val deadline = SystemClock.uptimeMillis() + 10000
+    private fun await(message: String, timeoutMs: Long = 10000, condition: () -> Boolean) {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
         while (!condition() && SystemClock.uptimeMillis() < deadline) settle()
         val accepted = condition()
         if (!accepted) {
@@ -395,23 +403,32 @@ class LunaMediaPlaybackOwnerInputTest {
         assertTrue(accepted, message)
     }
     private fun node(label: String): AccessibilityNodeInfo? {
+        fun matches(value: AccessibilityNodeInfo) =
+            value.isVisibleToUser && (value.contentDescription?.toString() == label || value.text?.toString() == label)
         fun find(value: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
             if (value == null) return null
-            if (value.isVisibleToUser && (value.contentDescription?.toString() == label || value.text?.toString() == label)) return value
+            if (matches(value)) return value
             for (index in 0 until value.childCount) find(value.getChild(index))?.let { return it }
             return null
         }
         val automation = instrumentation.uiAutomation
-        for (window in automation.windows.sortedByDescending { it.layer }) find(window.root)?.let { return it }
-        return find(automation.rootInActiveWindow)
+        fun search(): AccessibilityNodeInfo? {
+            for (window in automation.windows.sortedByDescending { it.layer }) find(window.root)?.let { return it }
+            return find(automation.rootInActiveWindow)
+        }
+        // Compose posts semantics changes only to enabled accessibility services, never to this
+        // UiAutomation client, so its cached nodes go stale (Play and Pause are one button): confirm
+        // a cached hit, and on a miss read a fresh tree once.
+        search()?.let { if (it.refresh() && matches(it)) return it }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return null
+        automation.clearCache()
+        return search()
     }
     private fun bounds(label: String): Rect {
         await("Actual native target is visible: $label") { node(label) != null }
         return Rect().also { checkNotNull(node(label)).getBoundsInScreen(it); assertFalse(it.isEmpty) }
     }
-    // Compose posts semantics changes only to enabled accessibility services, never to this
-    // UiAutomation client, so a cached position goes stale after a paused seek: refresh it.
-    private fun progress(): Float = node("Playback position")?.apply { refresh() }?.rangeInfo?.current ?: Float.NaN
+    private fun progress(): Float = node("Playback position")?.rangeInfo?.current ?: Float.NaN
     private fun tap(label: String) {
         val rect = bounds(label); val down = SystemClock.uptimeMillis()
         pointer(MotionEvent.ACTION_DOWN, rect.exactCenterX(), rect.exactCenterY(), down)
