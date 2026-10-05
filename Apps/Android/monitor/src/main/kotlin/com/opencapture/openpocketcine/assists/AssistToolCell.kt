@@ -79,21 +79,6 @@ internal fun AssistToolCell(
     }
 }
 
-/** Cyan edge chevron hinting at off-screen tools (OpenZCine `ScrollChevron`). */
-@Composable
-internal fun AssistScrollChevron(leading: Boolean, visible: Boolean, modifier: Modifier = Modifier) {
-    OpcIcon(
-        icon = if (leading) OpcIcon.CHEVRON_LEFT else OpcIcon.CHEVRON_RIGHT,
-        contentDescription = null,
-        tint = LiveDesign.accent,
-        modifier =
-            modifier
-                .padding(horizontal = 5.dp)
-                .size(12.dp)
-                .alpha(if (visible) 1f else 0f),
-    )
-}
-
 /** The supplied design owns assist glyphs; EV uses its readable abbreviation. */
 @Composable
 internal fun AssistToolGlyph(tool: LiveAssistTool, tint: Color, modifier: Modifier = Modifier,

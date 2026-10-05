@@ -169,14 +169,6 @@ import Testing
         #expect(WorldLevelSnap.plan(tiltDeg: 3, pose: gap, now: 0) == nil)
     }
 
-    @Test func snapJudgesArrivalTimeoutAndStaleReadings() throws {
-        let pose = GimbalWaypoint(yawDeg: 0, pitchDeg: -80, zoom: 1, nativePitchDeg: -100)
-        let snap = try #require(WorldLevelSnap.plan(tiltDeg: -80, pose: pose, now: 0)).snap
-        #expect(snap.evaluate(tiltDeg: -85, now: 0.5) == .pending)
-        #expect(snap.evaluate(tiltDeg: -89.6, now: 0.6) == .arrived)
-        #expect(snap.evaluate(tiltDeg: -87.7, now: snap.deadline) == .failed(errorDeg: 2.3))
-        #expect(snap.evaluate(tiltDeg: nil, now: 0.7) == .failed(errorDeg: nil))
-    }
 
     @Test func doubleTapDefaultsToRecenter() {
         #expect(GimbalDoubleTap.pickerOrder == [.recenter, .level])
@@ -209,14 +201,5 @@ import Testing
         let expected = try #require(
             Commands.gimbalTimedTarget(yawDeg: 0, nativePitchDeg: -90, duration: 0.5))
         #expect(frame.payload == expected.payload)
-        #expect(snap.evaluate(tiltDeg: -90.3, now: 0.2) == .arrived)
-    }
-
-    @Test func snapExpiresInsteadOfJudgingLongAfterItsDeadline() throws {
-        let pose = GimbalWaypoint(yawDeg: 0, pitchDeg: -80, zoom: 1, nativePitchDeg: -100)
-        let snap = try #require(WorldLevelSnap.plan(tiltDeg: -80, pose: pose, now: 0)).snap
-        #expect(snap.evaluate(tiltDeg: -85, now: snap.deadline + 0.5) == .failed(errorDeg: 5))
-        #expect(snap.evaluate(tiltDeg: -85, now: snap.deadline + 1.01) == .expired)
-        #expect(snap.evaluate(tiltDeg: -90, now: snap.deadline + 60) == .expired)
     }
 }

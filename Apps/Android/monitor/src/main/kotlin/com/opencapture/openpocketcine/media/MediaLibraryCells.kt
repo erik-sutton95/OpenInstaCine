@@ -94,44 +94,6 @@ private fun MediaCatalogClip(file: MediaFile, controller: LunaMediaPlaybackAdapt
     }
 }
 
-@Composable
-fun FavoriteStar(
-    favorite: Boolean,
-    iconSize: androidx.compose.ui.unit.Dp = 13.dp,
-    onClick: () -> Unit,
-) {
-    Box(
-        Modifier
-            .size(44.dp)
-            .chromeClickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        OpcIcon(
-            icon = OpcIcon.STAR,
-            contentDescription = if (favorite) "Remove from favorites" else "Add to favorites",
-            tint = if (favorite) Color(0xFFE9C35A) else LiveDesign.faint,
-            modifier = Modifier.size(iconSize),
-            filled = favorite,
-        )
-    }
-}
-
-@Composable
-fun SelectionMarker(selected: Boolean, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .size(22.dp)
-            .background(
-                if (selected) LiveDesign.accent else Color.Black.copy(alpha = 0.56f),
-                CircleShape,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        OpcIcon(if (selected) OpcIcon.CHECK else OpcIcon.CIRCLE, null, Modifier.size(12.dp),
-            if (selected) LiveDesign.background else LiveDesign.text)
-    }
-}
-
 object MediaThumbs {
     suspend fun load(file: MediaFile, controller: LunaMediaPlaybackAdapter, maxPx: Int): Bitmap? =
         withContext(Dispatchers.IO) {

@@ -13,40 +13,6 @@ class GimbalProgramTest {
     private val b = GimbalWaypoint(30.0, 10.0, 3.0)
 
     @Test
-    fun directionLockUsesVerifiedCommandAndSurvivesTiltReplies() {
-        assertTrue(CameraCommands.gimbalDirectionLock().contentEquals(byteArrayOf(0x00, 0x08)))
-        var mode = GimbalControl.modeFromFamily(0, GimbalMode.FOLLOW)
-        assertEquals(GimbalMode.DIRECTION_LOCK, mode)
-        mode = GimbalControl.modeFromGet(true, mode)
-        assertEquals(GimbalMode.DIRECTION_LOCK, mode)
-        mode = GimbalControl.modeFromFamily(2, mode)
-        assertEquals(GimbalMode.FOLLOW, mode)
-        assertEquals(GimbalMode.TILT_LOCKED, GimbalControl.modeFromFamily(2, GimbalMode.TILT_LOCKED))
-        assertEquals(GimbalMode.FPV, GimbalControl.modeFromFamily(1, mode))
-        assertEquals(mode, GimbalControl.modeFromFamily(3, mode))
-        assertFalse(StatusExtras.isGimbalParamsReply(byteArrayOf(0, 0)))
-        assertTrue(StatusExtras.isGimbalParamsReply(byteArrayOf(0, 1, 4, 1, 1, 5, 1, 0)))
-    }
-
-    @Test
-    fun periodicReadbackCorrectsLateModeReportsAndPhysicalTiltChanges() {
-        var poll = GimbalParamPoll()
-        assertTrue(poll.shouldRequest(0))
-        var mode = GimbalControl.modeFromFamily(0, GimbalMode.TILT_LOCKED)
-        mode = GimbalControl.modeFromFamily(2, mode)
-        for (tick in 1..9) assertFalse(poll.shouldRequest(tick * 100L))
-        assertTrue(poll.shouldRequest(1_000))
-        mode = GimbalControl.modeFromGet(true, mode)
-        assertEquals(GimbalMode.TILT_LOCKED, mode)
-        mode = GimbalControl.modeFromFamily(2, mode)
-        assertTrue(poll.shouldRequest(2_000))
-        mode = GimbalControl.modeFromGet(false, mode)
-        assertEquals(GimbalMode.FOLLOW, mode)
-        poll = GimbalParamPoll()
-        assertTrue(poll.shouldRequest(2_100))
-    }
-
-    @Test
     fun unwrapYawCrossesTheGapButDoesNotClampMeasuredYaw() {
         val cases = listOf(
             -48.0 to -48.0, -135.0 to 225.0, -180.0 to 180.0, 180.0 to 180.0,
@@ -326,34 +292,6 @@ class GimbalProgramTest {
         }
     }
 
-    @Test
-    fun overlayExtrapolatesMeasuredMotionOnlyWithinItsShortHorizon() {
-        val motion = GimbalOverlayMotion()
-        val first = GimbalWaypoint(10.0, 0.0, 2.0, -170.0)
-        motion.observe(first, 1.0)
-        motion.observe(first.copy(yawDeg = 12.0, pitchDeg = 1.0), 1.1)
-        val halfway = motion.pose(1.15)!!
-        assertEquals(13.0, halfway.yawDeg, 1e-9)
-        assertEquals(1.5, halfway.pitchDeg, 1e-9)
-        assertEquals(null, halfway.nativePitchDeg)
-        assertEquals(14.0, motion.pose(1.3)!!.yawDeg, 1e-9)
-        assertEquals(null, motion.pose(1.401))
-        motion.reset()
-        assertEquals(null, motion.pose(1.2))
-    }
-
-    @Test
-    fun overlayUsesWrappedMeasuredYawAndIgnoresInvalidOrReorderedSamples() {
-        val motion = GimbalOverlayMotion()
-        motion.observe(GimbalWaypoint(179.0, 0.0, 1.0), 1.0)
-        motion.observe(GimbalWaypoint(-179.0, 0.0, 1.0), 1.1)
-        motion.observe(GimbalWaypoint(0.0, 0.0, 1.0), 1.05)
-        motion.observe(GimbalWaypoint(Double.NaN, 0.0, 1.0), 1.2)
-        assertEquals(-178.0, motion.pose(1.15)!!.yawDeg, 1e-9)
-        assertEquals(null, motion.pose(1.05))
-        assertEquals(null, motion.pose(Double.NaN))
-    }
-
     private fun curveProgram(smoothness: Double) = GimbalProgram(
         a = GimbalWaypoint(0.0, 0.0, 1.0, 175.0),
         b = GimbalWaypoint(30.0, 0.0, 1.0, 175.0),
@@ -504,30 +442,4 @@ class GimbalProgramTest {
         assertEquals(142.0, out?.target?.nativePitchDeg)
     }
 
-    /** Field report: after one Motion Control run the stick stayed on Fast for the session. */
-    @Test
-    fun prepRestoresOperatorSpeedAndTiltLockAfterIdle() {
-        fun List<ByteArray>.wire() = map { it.toList() }
-        val prep = GimbalPrepRestore()
-        val fast = listOf(CameraCommands.setGimbalTiltLock(false), CameraCommands.setGimbalSpeed(GimbalSpeed.FAST.wire)).wire()
-        assertEquals(fast, prep.prep(GimbalSpeed.SLOW, GimbalMode.TILT_LOCKED).wire())
-        assertEquals(fast, prep.prep(GimbalSpeed.FAST, GimbalMode.FOLLOW).wire())
-        assertEquals(null, prep.restore(true, 10.0))
-        assertEquals(null, prep.restore(false, 11.0))
-        assertEquals(null, prep.restore(true, 11.5))
-        assertEquals(null, prep.restore(false, 12.0))
-        val restore = prep.restore(false, 13.0)
-        assertEquals(GimbalPrepRestore.Restore(GimbalSpeed.SLOW, GimbalMode.TILT_LOCKED), restore)
-        assertEquals(
-            listOf(CameraCommands.setGimbalSpeed(GimbalSpeed.SLOW.wire), CameraCommands.setGimbalTiltLock(true)).wire(),
-            restore?.payloads?.wire(),
-        )
-        assertFalse(prep.isHolding)
-        prep.prep(GimbalSpeed.SLOW, GimbalMode.TILT_LOCKED)
-        prep.speed = null
-        assertEquals(listOf(CameraCommands.setGimbalTiltLock(true)).wire(), prep.restoreNow()?.payloads?.wire())
-        prep.prep(GimbalSpeed.FAST, GimbalMode.FOLLOW)
-        assertEquals(emptyList(), prep.restoreNow()?.payloads?.wire())
-        assertEquals(null, prep.restoreNow())
-    }
 }

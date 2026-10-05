@@ -78,29 +78,6 @@ public struct GimbalCluster: Equatable, Sendable {
         return cluster
     }
 
-    /// Portrait 16:9 fit: zoom stays under the strip, stick sits on `floorY`.
-    public static func belowWell(
-        well: MonitorLayoutRegion,
-        floorY: Double,
-        stickSize: Double = stickSize,
-        zoomSize: Double = zoomSize,
-        gap: Double = gap,
-        inset: Double = inset,
-        showGimbalButton: Bool = false
-    ) -> GimbalCluster {
-        let stickSize = max(0, stickSize)
-        let zoomSize = max(0, zoomSize)
-        let gap = max(0, gap)
-        let inset = max(0, inset)
-        let ceiling = well.maxY + gap
-        let stickY = max(ceiling + zoomSize + gap, floorY - inset - stickSize)
-        let stickX = max(well.x, well.maxX - inset - stickSize)
-        return stacked(
-            stickX: stickX, stickY: stickY, well: well,
-            stickSize: stickSize, zoomSize: zoomSize, gap: gap,
-            showGimbalButton: showGimbalButton, zoomFloor: ceiling)
-    }
-
     private static func stacked(
         stickX: Double,
         stickY: Double,

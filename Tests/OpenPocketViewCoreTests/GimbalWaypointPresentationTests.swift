@@ -44,40 +44,6 @@ struct GimbalWaypointPresentationTests {
         #expect(displayedX(mark.nx, mapping: GimbalStickMapping(), mirror: true) > 0.5)
     }
 
-    @Test func appRotateChangesOverlayOnlyWhenExistingTT180MappingSettles() {
-        var mapping = GimbalStickMapping(yawTenthDeg: 0, poseSeeded: true)
-        mapping.noteRotate180()
-        mapping.applyAttitude(attitude(901))
-        #expect(displayedX(0.2, mapping: mapping) == 0.2)
-        mapping.applyAttitude(attitude(1650))
-        #expect(displayedX(0.2, mapping: mapping) == 0.8)
-        mapping.noteRotate180()
-        mapping.applyAttitude(attitude(899))
-        #expect(displayedX(0.2, mapping: mapping) == 0.8)
-        mapping.applyAttitude(attitude(100))
-        #expect(displayedX(0.2, mapping: mapping) == 0.2)
-    }
-
-    @Test func manualPanTo180DoesNotBecomeTT180() {
-        var mapping = GimbalStickMapping(yawTenthDeg: 0, poseSeeded: true)
-        mapping.applyAttitude(attitude(1800))
-        #expect(mapping.rotated180)
-        #expect(displayedX(0.2, mapping: mapping) == 0.2)
-    }
-
-    @Test func bodyFlipAndReconnectUseExistingTT180State() {
-        var body = GimbalStickMapping(yawTenthDeg: 0, poseSeeded: true)
-        body.noteBodyFace(.front)
-        body.noteBodyFace(.selfie)
-        #expect(displayedX(0.2, mapping: body) == 0.8)
-
-        var reconnect = GimbalStickMapping()
-        reconnect.applyAttitude(attitude(0))
-        #expect(displayedX(0.2, mapping: reconnect) == 0.2)
-        reconnect.applyAttitude(attitude(-1800))
-        #expect(displayedX(0.2, mapping: reconnect) == 0.8)
-    }
-
     @Test func curveSamplesAndClampedEdgesUseTheSameHorizontalTransform() throws {
         let a = GimbalWaypoint(yawDeg: 165, pitchDeg: 0, zoom: 1)
         let b = GimbalWaypoint(yawDeg: 180, pitchDeg: 10, zoom: 1)

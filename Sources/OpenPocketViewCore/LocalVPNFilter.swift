@@ -17,10 +17,6 @@ public enum LocalVPNFilter: Sendable {
     public static let liveHint =
         "A VPN or ad blocker may be blocking the live feed. Pause it, or exclude this app, then try again."
 
-    /// Join-Wi-Fi phone instruction. Same voice as the other wizard bullets.
-    public static let joinWifiPhoneStep =
-        "Pause VPNs and ad blockers, or exclude this app"
-
     public static func shouldHintOnLiveWait(
         vpnActive: Bool,
         hadVideo: Bool,

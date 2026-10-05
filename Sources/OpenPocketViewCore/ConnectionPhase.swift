@@ -28,6 +28,4 @@ public enum ConnectionPhase: Equatable, Sendable {
         case .failed(let why): "Failed: \(why)"
         }
     }
-
-    public var isTerminalFailure: Bool { if case .failed = self { true } else { false } }
 }

@@ -70,17 +70,6 @@ enum class GimbalMode(private val defaultLabel: String) {
     }
 }
 
-/** Refresh tilt/speed from attitude receipts, capped at one GET per second. */
-class GimbalParamPoll {
-    private var lastRequestAt: Long? = null
-
-    fun shouldRequest(nowMs: Long): Boolean {
-        if (lastRequestAt?.let { nowMs - it < 1_000L } == true) return false
-        lastRequestAt = nowMs
-        return true
-    }
-}
-
 enum class GimbalSpeed(val wire: Int, val label: String) {
     FAST(0, "Fast"),
     DEFAULT(1, "Default"),
@@ -91,62 +80,6 @@ enum class GimbalSpeed(val wire: Int, val label: String) {
         val pickerOrder = listOf(SLOW, DEFAULT, FAST)
 
         fun fromWire(value: Int): GimbalSpeed? = entries.firstOrNull { it.wire == value }
-    }
-}
-
-/**
- * Mirrors core `GimbalPrepRestore`. Motion Control drives on Fast with tilt unlocked;
- * the operator's speed and mode from before the first prep come back once nothing
- * has driven the gimbal for [IDLE_DELAY] seconds, so the stick does not stay Fast.
- */
-class GimbalPrepRestore {
-    /** Operator values to put back; cleared when the operator picks a new one mid-hold. */
-    var speed: GimbalSpeed? = null
-    var mode: GimbalMode? = null
-    private var idleSince: Double? = null
-
-    val isHolding: Boolean get() = speed != null || mode != null
-
-    data class Restore(val speed: GimbalSpeed?, val mode: GimbalMode?) {
-        /** `0x04/0x50` SET payloads. Fast and Follow need no write. */
-        val payloads: List<ByteArray>
-            get() = buildList {
-                if (speed != null && speed != GimbalSpeed.FAST) add(CameraCommands.setGimbalSpeed(speed.wire))
-                if (mode == GimbalMode.TILT_LOCKED) add(CameraCommands.setGimbalTiltLock(true))
-            }
-    }
-
-    /** Fast + tilt unlocked. Held values are kept: later readbacks report our Fast. */
-    fun prep(speed: GimbalSpeed, mode: GimbalMode): List<ByteArray> {
-        if (this.speed == null) this.speed = speed
-        if (this.mode == null) this.mode = mode
-        idleSince = null
-        return listOf(CameraCommands.setGimbalTiltLock(false), CameraCommands.setGimbalSpeed(GimbalSpeed.FAST.wire))
-    }
-
-    /** Call on each attitude report; [busy] is a Motion Control run. */
-    fun restore(busy: Boolean, now: Double): Restore? {
-        if (!isHolding || busy || !now.isFinite()) {
-            idleSince = null
-            return null
-        }
-        val since = idleSince ?: now
-        idleSince = since
-        return if (now - since >= IDLE_DELAY) restoreNow() else null
-    }
-
-    /** Immediate restore, for a disconnect while the link can still send. */
-    fun restoreNow(): Restore? {
-        if (!isHolding) return null
-        val restore = Restore(speed, mode)
-        speed = null
-        mode = null
-        idleSince = null
-        return restore
-    }
-
-    companion object {
-        const val IDLE_DELAY = 1.0
     }
 }
 
@@ -256,46 +189,6 @@ data class GimbalProgram(
                 String.format(java.util.Locale.US, "%.1fs", snap)
             }
         }
-    }
-}
-
-object GimbalControl {
-    fun modeFromGet(tiltLocked: Boolean, commanded: GimbalMode): GimbalMode =
-        when (commanded) {
-            GimbalMode.FPV, GimbalMode.DIRECTION_LOCK -> commanded
-            GimbalMode.FOLLOW, GimbalMode.TILT_LOCKED ->
-                if (tiltLocked) GimbalMode.TILT_LOCKED else GimbalMode.FOLLOW
-        }
-
-    fun modeFromFamily(family: Int, current: GimbalMode): GimbalMode =
-        when (family) {
-            0 -> GimbalMode.DIRECTION_LOCK
-            1 -> GimbalMode.FPV
-            2 -> if (current == GimbalMode.TILT_LOCKED) current else GimbalMode.FOLLOW
-            else -> current
-        }
-}
-
-class GimbalRampFilter {
-    var x = 0.0
-    var y = 0.0
-
-    fun reset() {
-        x = 0.0
-        y = 0.0
-    }
-
-    fun tick(targetX: Double, targetY: Double, ramp: GimbalRamp, dt: Double): Pair<Double, Double> {
-        val tau = ramp.tau
-        if (tau <= 0.0 || dt <= 0.0) {
-            x = targetX
-            y = targetY
-            return x to y
-        }
-        val alpha = 1 - exp(-dt / tau)
-        x += (targetX - x) * alpha
-        y += (targetY - y) * alpha
-        return x to y
     }
 }
 
@@ -990,43 +883,6 @@ class GimbalMoveEngine {
             val onScreen = nx in 0.0..1.0 && ny in 0.0..1.0
             return Triple(nx.coerceIn(0.0, 1.0), ny.coerceIn(0.0, 1.0), onScreen)
         }
-    }
-}
-
-/** Display-only measured-velocity interpolation; never a motor or capture input. */
-class GimbalOverlayMotion {
-    private data class Sample(val pose: GimbalWaypoint, val time: Double)
-    private var previous: Sample? = null
-    private var latest: Sample? = null
-
-    fun reset() {
-        previous = null
-        latest = null
-    }
-
-    fun observe(pose: GimbalWaypoint, time: Double) {
-        if (!time.isFinite() || !pose.yawDeg.isFinite() || !pose.pitchDeg.isFinite() || !pose.zoom.isFinite() ||
-            time <= (latest?.time ?: Double.NEGATIVE_INFINITY)) return
-        previous = latest
-        latest = Sample(pose, time)
-    }
-
-    fun pose(time: Double): GimbalWaypoint? {
-        val last = latest ?: return null
-        if (!time.isFinite() || time < last.time || time - last.time > STALE_AFTER) return null
-        val result = last.pose.copy(nativePitchDeg = null)
-        val before = previous ?: return result
-        val interval = last.time - before.time
-        if (interval < 0.02 || interval > STALE_AFTER) return result
-        val ahead = min(time - last.time, PREDICTION_HORIZON)
-        val yawDelta = GimbalMoveEngine.wrapAngle(last.pose.yawDeg - before.pose.yawDeg)
-        return result.copy(yawDeg = result.yawDeg + yawDelta * ahead / interval,
-            pitchDeg = result.pitchDeg + (last.pose.pitchDeg - before.pose.pitchDeg) * ahead / interval)
-    }
-
-    companion object {
-        const val PREDICTION_HORIZON = 0.1
-        const val STALE_AFTER = 0.3
     }
 }
 

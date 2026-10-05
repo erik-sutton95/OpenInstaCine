@@ -32,18 +32,6 @@ public enum ClipColorProfile: Sendable {
         return colorMode(fromMP4: data)
     }
 
-    /// HTTP Range for the `moov` tail. Camera `/v2` already answers Range.
-    public static func httpRange(fileSize: UInt64) -> String {
-        let window = UInt64(fileTailBytes)
-        if fileSize > window {
-            return "bytes=\(fileSize - window)-\(fileSize - 1)"
-        }
-        if fileSize > 0 {
-            return "bytes=0-\(fileSize - 1)"
-        }
-        return "bytes=-\(fileTailBytes)"
-    }
-
     public static func gamma(fromMP4 data: Data) -> String? {
         keys(fromMP4: data)[gammaKey]
     }

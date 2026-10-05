@@ -12,46 +12,6 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.util.fastFirstOrNull
 
-/**
- * Port of Kyant catalog `inspectDragGestures` — low-level drag inspection used
- * by [DampedDragAnimation] for the liquid glass slider thumb.
- *
- * Source: https://github.com/Kyant0/AndroidLiquidGlass
- * (`app/.../catalog/utils/DragGestureInspector.kt`, Apache-2.0).
- */
-internal suspend fun PointerInputScope.inspectDragGestures(
-    onDragStart: (down: PointerInputChange) -> Unit = {},
-    onDragEnd: (change: PointerInputChange) -> Unit = {},
-    onDragCancel: () -> Unit = {},
-    onDrag: (change: PointerInputChange, dragAmount: Offset) -> Unit,
-) {
-    awaitEachGesture {
-        val initialDown = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        val down = awaitFirstDown(requireUnconsumed = false)
-        // Claim the pointer so a parent verticalScroll cannot steal the pill drag.
-        initialDown.consume()
-        down.consume()
-        val drag = initialDown
-
-        onDragStart(down)
-        onDrag(drag, Offset.Zero)
-        val upEvent =
-            drag(
-                pointerId = drag.id,
-                onDrag = { change ->
-                    val amount = change.positionChange()
-                    change.consume()
-                    onDrag(change, amount)
-                },
-            )
-        if (upEvent == null) {
-            onDragCancel()
-        } else {
-            onDragEnd(upEvent)
-        }
-    }
-}
-
 private suspend inline fun AwaitPointerEventScope.drag(
     pointerId: PointerId,
     onDrag: (PointerInputChange) -> Unit,

@@ -12,49 +12,10 @@ public enum Duml {
 
     /// Receivers, packed as (id<<5)|type. See Osmosis OsmoCommands / DumlTransport.
     public static let rxCamera: UInt8 = 0x01  // id 0, type 1
-    public static let rxWifi: UInt8 = 0x07  // id 0, type 7
-    public static let rxSession: UInt8 = 0xF0  // id 7, type 0x10 — session/heartbeat (0x00/0x2b)
-    public static let rx1C: UInt8 = 0x1C  // id 0, type 0x1C — wake (0x53/0x10)
 
     /// Command flags (byte 8): request / response / unsolicited notify.
     public static let flagRequest: UInt8 = 0x40
-    public static let flagResponse: UInt8 = 0xC0
     public static let flagNotify: UInt8 = 0x00
-    /// Gimbal / cmdType-4 ACK (not the usual 0x02/* `0xC0`).
-    public static let flagAck80: UInt8 = 0x80
-
-    /// Opcode waiter key: `cmdSet << 8 | cmdId`. Not a human label.
-    public static func opcodeKey(set: UInt8, cmd: UInt8) -> UInt16 {
-        UInt16(set) << 8 | UInt16(cmd)
-    }
-
-    /// Camera/gimbal command ACK. `0xC0` is the 0x02/* reply; `0x80` is gimbal / cmdType 4.
-    /// Do not require an exact payload — `CameraReply.parse` decides success after the match.
-    public static func isCommandReply(_ flags: UInt8) -> Bool {
-        flags == flagResponse || flags == flagAck80
-    }
-
-    /// In-session `0x02/*` writes that wait for an ACK (includes zoom `0xB8`).
-    public static func isLiveCameraControl(set: UInt8, cmd: UInt8) -> Bool {
-        guard set == 0x02 else { return false }
-        switch cmd {
-        case 0x01, 0x02, 0x0C, 0x1E, 0x18, 0x22, 0x24, 0x28, 0x2A, 0x2C, 0x2E,
-            0x30, 0x32, 0x42, 0x68, 0x8E, 0x9F, 0xA0, 0xA5, 0xA6, 0xB8, 0xBF, 0xE1:
-            return true
-        default:
-            return false
-        }
-    }
-
-    /// Pairing / Wi-Fi / live-control replies that can land before the waiter.
-    public static func shouldHoldReply(set: UInt8, cmd: UInt8) -> Bool {
-        switch (set, cmd) {
-        case (0x07, 0x45), (0x07, 0x46), (0x07, 0x07), (0x07, 0x0E), (0x53, 0x10):
-            return true
-        default:
-            return isLiveCameraControl(set: set, cmd: cmd)
-        }
-    }
 
     public static func hex(_ bytes: [UInt8], limit: Int = 24) -> String {
         if bytes.isEmpty { return "-" }
@@ -105,19 +66,6 @@ public enum Duml {
         b.append(UInt8(c & 0xFF))
         b.append(UInt8((c >> 8) & 0xFF))
         return b
-    }
-
-    /// `[len:u8][utf8]` — how the WiFi subsystem packs strings (SSID, pass, PIN).
-    public static func packString(_ s: String) -> [UInt8] {
-        let bytes = Array(s.utf8)
-        return [UInt8(bytes.count)] + bytes
-    }
-
-    /// A WiFi-subsystem reply is `[status:1][len:1][utf8…]`. Empty if truncated.
-    public static func unpackStatusString(_ p: [UInt8]) -> String {
-        guard p.count >= 2 else { return "" }
-        let end = min(2 + Int(p[1]), p.count)
-        return String(decoding: p[2..<end], as: UTF8.self)
     }
 
     // Reflected CRC-8, init 0x77, poly 0x8C, over the 3 header bytes -> byte 3.

@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.assists
 
+import com.opencapture.monitorui.MonitorVectorscopeGraticule
 import com.opencapture.monitorui.MonitorTrafficLightsGeometry as TrafficLightsAssist
 
 import com.opencapture.openpocketcine.feed.MonitorTransfer
@@ -66,7 +67,6 @@ class ScopeGeometryTest {
         assertEquals(0.5, WaveformAssist.intensity(200), 1e-9)
         assertEquals(1.0, ParadeAssist.intensity(100), 1e-9)
         assertEquals(2.0, ParadeAssist.intensity(200), 1e-9)
-        assertEquals(1.0, VectorscopeAssist.intensity(100), 1e-9)
         assertEquals(30.50, WaveformAxis.middleGrayIRE(CameraCommands.COLOR_DLOG2), 0.01)
         assertEquals(39.88, WaveformAxis.middleGrayIRE(CameraCommands.COLOR_DLOG), 0.01)
         assertEquals(40.9, WaveformAxis.middleGrayIRE(CameraCommands.COLOR_NORMAL), 0.05)
@@ -254,13 +254,13 @@ class ScopeGeometryTest {
 
     @Test
     fun vectorscopeGraticuleSkinAndTargets() {
-        val square = VectorscopeGraticule.plotSquare(190f, 190f)
+        val square = MonitorVectorscopeGraticule.plotSquare(190f, 190f)
         assertEquals(square.width, square.height, 0.01f)
-        val skin = VectorscopeGraticule.skinEnd(square)
+        val skin = MonitorVectorscopeGraticule.skinEnd(square)
         // 123° from +B-Y (right) is the NTSC I/skin axis in Q2 (left, up).
         assertTrue(skin.x < square.midX)
         assertTrue(skin.y < square.midY)
-        val r = VectorscopeGraticule.targetCenter(191, 0, 0, square)
+        val r = MonitorVectorscopeGraticule.targetCenter(191, 0, 0, square)
         // Rec.709 red: B−Y negative (left), R−Y positive (up).
         assertTrue(r.x < square.midX)
         assertTrue(r.y < square.midY)

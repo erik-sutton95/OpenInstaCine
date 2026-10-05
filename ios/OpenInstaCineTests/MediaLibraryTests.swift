@@ -58,17 +58,6 @@ final class MediaLibraryTests: XCTestCase {
         XCTAssertFalse(MediaCacheGrade.original.isProxyOnly)
     }
 
-    func testOfflineLibraryHidesThumbOnlyClips() {
-        let cached = MediaFile(
-            path: "DCIM/DJI_001/CACHED.MP4",
-            thumbPath: "MISC/THM/CACHED.scr")
-        let thumbOnly = MediaFile(
-            path: "DCIM/DJI_001/THUMB_ONLY.MP4",
-            thumbPath: "MISC/THM/THUMB_ONLY.scr")
-        let shown = MediaLibraryQuery.cachedOnly(
-            [cached, thumbOnly], cachedPaths: [cached.path])
-        XCTAssertEqual(shown.map(\.filename), ["CACHED.MP4"])
-    }
 
     func testPlaybackCompositionScalesWorkingSizeBackToTheRaster() {
         let working = CGRect(x: 0, y: 0, width: 1440, height: 810)

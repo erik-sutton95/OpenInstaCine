@@ -20,14 +20,6 @@ extension HeadTrack {
         public static let bounds = MotionBounds(
             pan: panMinDeg...panMaxDeg, tilt: tiltMinDeg...tiltMaxDeg)
 
-        /// Middle of the unreachable arc in raw yaw. Raw yaw below it is the long side,
-        /// reached by panning positive past selfie.
-        public static var gapMidDeg: Double { bounds.gapMidDeg }
-
-        public static func clampPan(_ deg: Double) -> Double { bounds.clampPan(deg) }
-
-        public static func clampTilt(_ deg: Double) -> Double { bounds.clampTilt(deg) }
-
         /// Unbounded SET-relative look → nearest reachable yaw/pitch.
         public static func project(
             lookRight: Double, lookUp: Double, yaw0: Double, pitch0: Double

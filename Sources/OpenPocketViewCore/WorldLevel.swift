@@ -126,36 +126,14 @@ public enum WorldLevelTarget: Sendable, Equatable {
         if abs(tiltDeg) < 45 { return .horizon }
         return tiltDeg < 0 ? .plumbDown : .plumbUp
     }
-
-    public var successNote: String {
-        switch self {
-        case .horizon: "Leveled to world"
-        case .plumbDown: "Leveled top-down"
-        case .plumbUp: "Leveled straight up"
-        }
-    }
 }
 
 /// One-shot `0x04/0x14` move to the nearest world target, judged on the
 /// smoothed world tilt. Roll is not commanded (mode `05` ignores it).
 public struct WorldLevelSnap: Sendable, Equatable {
-    public enum Outcome: Sendable, Equatable {
-        case pending
-        case arrived
-        /// Judged more than `LevelReading.staleAfter` past the deadline (attitude
-        /// stopped mid-move): drop silently, never a late toast or stop.
-        case expired
-        /// Remaining error to 0.1°, or `nil` when the reading went stale.
-        case failed(errorDeg: Double?)
-    }
-
-    public static let toleranceDeg = 0.5
     public static let settleGrace: TimeInterval = 1.5
     public static let noLevelData = "No level data"
     public static let fpvRollNote = " · roll follows the handle in FPV"
-    /// No live native pitch, or yaw in the unreachable pan gap.
-    public static let unreachableNote = "Couldn't level from this pose"
-
     public let target: WorldLevelTarget
     public let deadline: TimeInterval
 
@@ -182,19 +160,5 @@ public struct WorldLevelSnap: Sendable, Equatable {
                 duration: duration)
         else { return nil }
         return (WorldLevelSnap(target: target, deadline: now + duration + settleGrace), frame)
-    }
-
-    /// `tiltDeg` is the unfolded `LevelReading.pitchDeg`.
-    public func evaluate(tiltDeg: Double?, now: TimeInterval) -> Outcome {
-        if now - deadline > LevelReading.staleAfter { return .expired }
-        guard let tiltDeg else { return .failed(errorDeg: nil) }
-        let error = abs(tiltDeg - target.tiltDeg)
-        if error <= Self.toleranceDeg { return .arrived }
-        return now >= deadline ? .failed(errorDeg: (error * 10).rounded() / 10) : .pending
-    }
-
-    public static func failureNote(errorDeg: Double?) -> String {
-        guard let errorDeg else { return noLevelData }
-        return String(format: "Couldn't level: %.1f° off", errorDeg)
     }
 }

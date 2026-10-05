@@ -4,7 +4,6 @@ import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.GimbalMoveEngine
 import com.opencapture.openpocketcine.session.GimbalProgram
 import com.opencapture.openpocketcine.session.GimbalProgramCurve
-import com.opencapture.openpocketcine.session.GimbalStickMapping
 import com.opencapture.openpocketcine.session.GimbalWaypoint
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -103,23 +102,11 @@ class MotionControlInteractionTest {
     }
 
     @Test
-    fun rulerUsesHalfSecondStepsAndStopsAtBothBounds() {
-        assertEquals(5.5, motionDurationAfterDrag(5.0, -12f, 0.5))
-        assertEquals(4.5, motionDurationAfterDrag(5.0, 12f, 0.5))
-        assertEquals(0.5, motionDurationAfterDrag(5.0, 1000f, 0.5))
-        assertEquals(120.0, motionDurationAfterDrag(5.0, -4000f, 0.5))
-    }
-
-    @Test
-    fun selfieRotationAndMirrorReflectBothMarkersAndPreviewCoordinates() {
-        for (selfieFlip in listOf(false, true)) {
-            for (selfie in listOf(false, true)) {
-                val mapping = GimbalStickMapping(commanded180 = selfie, selfieFlip = selfieFlip)
-                for (mirror in listOf(false, true)) {
-                    assertEquals(if (selfie != mirror) 0.8 else 0.2,
-                        motionOverlayX(0.2, mapping.invertPan, mirror), 1e-9)
-                    assertEquals(0.5, motionOverlayX(0.5, mapping.invertPan, mirror), 1e-9)
-                }
+    fun panInversionAndMirrorReflectBothMarkersAndPreviewCoordinates() {
+        for (invertPan in listOf(false, true)) {
+            for (mirror in listOf(false, true)) {
+                assertEquals(if (invertPan != mirror) 0.8 else 0.2, motionOverlayX(0.2, invertPan, mirror), 1e-9)
+                assertEquals(0.5, motionOverlayX(0.5, invertPan, mirror), 1e-9)
             }
         }
     }
@@ -147,24 +134,4 @@ class MotionControlInteractionTest {
         assertContentEquals(savedCommand, CameraCommands.gimbalTimedTarget(program.b!!, 3.0)!!)
     }
 
-    @Test
-    fun markerInversionUsesSettledRotationOrReconnectSeedRatherThanManualPanAngle() {
-        fun attitude(yaw: Int) = byteArrayOf(0, 0, 0, 0, yaw.toByte(), (yaw shr 8).toByte()) + ByteArray(44)
-        val front = GimbalStickMapping().applyAttitude(attitude(0))
-            .applyAttitude(attitude(0)).applyAttitude(attitude(0))
-        val manual = front.applyAttitude(attitude(1800))
-        val rotating = front.noteRotate180().applyAttitude(attitude(1000))
-        val settled = rotating.applyAttitude(attitude(1800))
-        val reconnect = GimbalStickMapping().applyAttitude(attitude(1800))
-        val stickFirst = GimbalStickMapping().applyAttitude(attitude(300)).noteAppMotion()
-            .applyAttitude(attitude(944))
-        for (mapping in listOf(front, manual, rotating, stickFirst)) {
-            assertFalse(mapping.invertPan)
-            assertEquals(0.2, motionOverlayX(0.2, mapping.invertPan, false), 1e-9)
-        }
-        for (mapping in listOf(settled, reconnect)) {
-            assertTrue(mapping.invertPan)
-            assertEquals(0.8, motionOverlayX(0.2, mapping.invertPan, false), 1e-9)
-        }
-    }
 }

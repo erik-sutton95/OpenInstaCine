@@ -269,14 +269,4 @@ import Testing
         #expect(engine.readout(live: live).map { abs($0.remainingDeg - hypot(21.1, 38)) < 1e-9 } == true)
     }
 
-    @Test func nativePacketUsesCapturedAbsolutePitchAndTenthsSeconds() {
-        let frame = Commands.gimbalTimedTarget(yawDeg: 25.3, nativePitchDeg: -151, duration: 5)
-        #expect(frame?.cmdSet == 4 && frame?.cmdId == 0x14)
-        #expect(frame?.flags == Duml.flagNotify)
-        #expect(frame?.payload == [253, 0, 0, 0, 26, 250, 5, 50])
-        #expect(Commands.gimbalTimedStop().payload == [0, 0, 0, 0, 0, 0, 4, 1])
-        #expect(Commands.gimbalTimedTarget(yawDeg: 999, nativePitchDeg: 0, duration: 1) == nil)
-        #expect(Commands.gimbalTimedTarget(yawDeg: 0, nativePitchDeg: 0, duration: .nan) == nil)
-        #expect(Commands.gimbalTimedTarget(yawDeg: 0, nativePitchDeg: 0, duration: 1.01) == nil)
-    }
 }

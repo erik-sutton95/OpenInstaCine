@@ -737,43 +737,6 @@ private fun section(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun <T> chipRow(
-    items: List<T>,
-    selected: T,
-    title: (T) -> String,
-    onSelect: (T) -> Unit,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-        for (item in items) {
-            Chip(title(item), selected = item == selected, modifier = Modifier.weight(1f)) {
-                onSelect(item)
-            }
-        }
-    }
-}
-
-@Composable
-private fun <T> chipGrid(
-    items: List<T>,
-    selected: T,
-    title: (T) -> String,
-    onSelect: (T) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        items.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                for (item in row) {
-                    Chip(title(item), selected = item == selected, modifier = Modifier.weight(1f)) {
-                        onSelect(item)
-                    }
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
 private fun Chip(
     title: String,
     selected: Boolean,
@@ -798,17 +761,6 @@ private fun Chip(
             style = LiveType.ui(if (compact) 12f else 13f, FontWeight.SemiBold),
         )
     }
-}
-
-private fun floorBar(layout: LiveMonitorLayout, cluster: GimbalCluster): ChromeRect {
-    if (layout.capture.width > 1f) return layout.capture
-    if (layout.assist.width > 1f) return layout.assist
-    val tops =
-        listOf(cluster.zoom, cluster.controls, cluster.stick)
-            .filter { it.height > 1f }
-            .map { it.minY }
-    val top = tops.minOrNull() ?: max(8f, layout.viewportHeight - 80f)
-    return ChromeRect(0f, top, layout.viewportWidth, 1f)
 }
 
 private fun clampCenter(point: Offset, width: Float, height: Float, bounds: ChromeRect): Offset {

@@ -34,39 +34,6 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LiveChromeSemanticsTest {
 
-    /**
-     * Each readout speaks one sentence, not its fragments ("REC" and "02:14").
-     * The last case is the shared readout shape the chips all reuse.
-     */
-    @Test fun readoutChipsSpeakOneNamedSentence() {
-        val cases: List<Pair<String, @Composable () -> Unit>> = listOf(
-            "Recording, 2 minutes 14 seconds" to @Composable { RecChip(recording = true, elapsedSeconds = 134) },
-            "Standby" to @Composable { RecChip(recording = false, elapsedSeconds = 0) },
-            "Camera battery 87 percent" to @Composable { CameraBatteryReadout(percent = 87) },
-            "Camera battery level unknown" to @Composable { CameraBatteryReadout(percent = -1) },
-            "Timecode not available" to @Composable { TimecodeReadout(timecode = null) },
-            "Timecode 01:23:45" to @Composable { TimecodeReadout(timecode = "01:23:45:12") },
-            "Lens 24 mm" to @Composable {
-                ReadoutPill(value = "24 mm", accessibilityLabel = "Lens") { Spacer(Modifier.size(12.dp)) }
-            },
-        )
-        for ((expected, content) in cases) {
-            assertEquals(listOf(expected), render(content), "readout should speak \"$expected\" as one node")
-        }
-    }
-
-    /**
-     * Every readout here shares one shape, so a leak in it is a leak in all of
-     * them. This measures the shape itself rather than trusting it.
-     */
-    @Test fun fpsChipShapeDoesNotLeakItsChildText() {
-        assertEquals(
-            listOf("Live view 23.98 frames per second, 3 of 4 signal bars"),
-            render { FpsChip(fps = "23.98", bars = 3) },
-            "readout chips must merge; a stray \"FPS\" node means the convention leaks",
-        )
-    }
-
     @Test fun assistToolSpeaksItsNameStateAndHoldGesture() {
         val spoken = render {
             com.opencapture.openpocketcine.assists.AssistToolCell(

@@ -27,9 +27,6 @@ internal class MotionControlDragGesture(private val immediate: Boolean, private 
     }
 }
 
-internal fun motionDurationAfterDrag(start: Double, translationDp: Float, floor: Double): Double =
-    GimbalProgram.steppedDuration(start, -round(translationDp / 12f).toDouble() * 0.5, floor)
-
 /** Match settled selfie rotation and MIRROR in display space; native coordinates stay unchanged. */
 internal fun motionOverlayX(normalizedX: Double, poseInvertPan: Boolean, mirrored: Boolean): Double =
     if (CameraCommands.liveInvertPan(poseInvertPan, mirrored)) 1.0 - normalizedX else normalizedX

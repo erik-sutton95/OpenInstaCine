@@ -91,13 +91,6 @@ import com.opencapture.openpocketcine.OpcIcon
 import com.opencapture.openpocketcine.panelGlass
 import kotlin.math.roundToInt
 
-private fun chromeStyle(size: Float, weight: FontWeight, mono: Boolean = false): TextStyle =
-    if (mono) LiveType.mono(size, weight) else LiveType.ui(size, weight)
-
-/** iOS `monitorCardSurface`: solid Field Monitor card with a hairline border. */
-private fun Modifier.settingsCardSurface(): Modifier =
-    background(LiveDesign.surface, ChromeShape).border(1.dp, LiveDesign.hairline, ChromeShape)
-
 // Compose ports of the iOS operator-settings primitives (SettingsRootView /
 // AppSettings: SettingsRowCard, SettingsInlineRow, SettingsSwitchInlineRow,
 // SettingsSwitchGraphic, SettingsValueText, SettingsGroupCard,
@@ -127,12 +120,6 @@ fun SettingsRowCard(
     content: @Composable () -> Unit,
 ) {
     com.opencapture.monitorui.settings.MonitorSettingsRowCard(title = title, onReset = onReset, content = content)
-}
-
-/** Circular refresh-cw reset control (iOS `SettingsResetButton`, 28dp). */
-@Composable
-fun SettingsResetButton(onClick: () -> Unit) {
-    com.opencapture.monitorui.settings.MonitorSettingsResetButton(onClick = onClick)
 }
 
 /**
@@ -208,19 +195,6 @@ fun SettingsSwitchInlineRow(
 }
 
 /**
- * iOS `HelpBadge`: a quiet "?" beside a row title that reveals the row's help
- * copy in a glass popover.
- *
- * ponytail: a transcription of the private badge in media/PlaybackAssistOptions.kt
- * (the assist popups own theirs) - settings cannot see it. Hoist one copy if a
- * third surface ever needs it.
- */
-@Composable
-fun SettingsHelpBadge(text: String) {
-    com.opencapture.monitorui.settings.MonitorSettingsHelpBadge(text = text)
-}
-
-/**
  * iOS `SettingsSegmented`: pill track with equal or intrinsic segments. Active
  * segment uses surface fill + primary text (not accent chips).
  */
@@ -235,20 +209,6 @@ fun SettingsSegmented(
     onSelect: (String) -> Unit,
 ) =
     com.opencapture.monitorui.settings.MonitorSettingsSegmented(options, selected, compact, fillWidth, accentSelection, testTag, onSelect)
-
-/**
- * iOS `SettingsColorDots`: real colour circles (not text labels), selected with
- * a matching stroke ring.
- */
-@Composable
-fun SettingsColorDots(
-    dots: List<SettingsColorDot>,
-    selectedName: String,
-    compact: Boolean = true,
-    enabled: Boolean = true,
-    onSelect: (String) -> Unit,
-) =
-    com.opencapture.monitorui.settings.MonitorSettingsColorDots(dots, selectedName, compact, enabled, onSelect)
 
 /** One named swatch for [SettingsColorDots] (iOS `SettingsColorDots.Dot`). */
 typealias SettingsColorDot = com.opencapture.monitorui.settings.MonitorSettingsColorDot
@@ -276,131 +236,10 @@ object SettingsPalette {
         )
 }
 
-/**
- * iOS `SettingsNumberField`: compact mono value field with digit pad and clamp.
- * Done on the IME commits and hides the pad. Bring-into-view so Operator Setup
- * on a small phone still reveals Highlight / Midtone.
- */
-@Composable
-fun SettingsNumberField(value: Int, maximum: Int, onChange: (Int) -> Unit) {
-    com.opencapture.monitorui.settings.MonitorSettingsNumberField(value, maximum, onChange)
-}
-
-/** Compact native slider with the existing trailing numeric readout. */
-@Composable
-fun SettingsPercentSlider(
-    value: Int,
-    range: IntRange,
-    onChange: (Int) -> Unit,
-) =
-    com.opencapture.monitorui.settings.MonitorSettingsPercentSlider(value, range, onChange)
-
-/** Thin accent track + white thumb, matching iOS `Slider` in Operator Setup. */
-@Composable
-fun SettingsValueSlider(
-    value: Int,
-    range: IntRange,
-    label: String,
-    onChange: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-    labelWidth: Int = 40,
-) =
-    com.opencapture.monitorui.settings.MonitorSettingsValueSlider(value, range, label, onChange, modifier, labelWidth)
-
-/** Existing assist values adapt to a compact iOS-like track rather than the 44dp drum slider. */
-@Composable
-fun GlassPillSlider(value: Int, range: IntRange, onChange: (Int) -> Unit, modifier: Modifier = Modifier) =
-    com.opencapture.monitorui.settings.MonitorSettingsPillSlider(value, range, onChange, modifier)
-
-/**
- * iOS `SettingsCrushClipSegmented`: five equal stop segments with fraction
- * glyphs (0 · ¼ · ½ · ¾ · 1).
- */
-@Composable
-fun SettingsCrushClipSegmented(
-    options: List<Pair<String, String>>,
-    selectedLabel: String,
-    accentSelection: Boolean = false,
-    onSelect: (String) -> Unit,
-) =
-    com.opencapture.monitorui.settings.MonitorSettingsCrushClipSegmented(options, selectedLabel, accentSelection, onSelect)
-
 /** iOS `SettingsSwitchGraphic`: 39×22 capsule, cyan thumb on dim track when on. */
 @Composable
 fun SettingsSwitchGraphic(isOn: Boolean) {
     com.opencapture.monitorui.settings.MonitorSettingsSwitchGraphic(isOn = isOn)
-}
-
-/** Plain monospace value text (iOS `SettingsValueText`). */
-@Composable
-fun SettingsValueText(value: String) {
-    com.opencapture.monitorui.settings.MonitorSettingsValueText(value = value)
-}
-
-/** Accent inline action ("Open", "Sign in") - the iOS System-tab link button treatment. */
-@Composable
-fun SettingsLinkAction(
-    title: String,
-    contentDescription: String = title,
-    onClick: () -> Unit,
-): Unit {
-    Box(
-        Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-            .settingsClickable(role = Role.Button, onClick = onClick)
-            .semantics { this.contentDescription = contentDescription }
-            .padding(horizontal = 4.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            title,
-            style = chromeStyle(13f, FontWeight.SemiBold),
-            color = LiveDesign.accent,
-        )
-    }
-}
-
-/**
- * Quiet utility text link - mirrors the startup header's Privacy/Terms
- * treatment (iOS `StartupHeader.legalLink`): deliberately dimmer than row
- * titles so it never competes with them.
- */
-@Composable
-fun SettingsQuietLink(title: String, onClick: () -> Unit): Unit {
-    Box(
-        Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-            .settingsClickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 4.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            title,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            color = LiveDesign.faint,
-            maxLines = 1,
-        )
-    }
-}
-
-/**
- * Titled glass card with an optional per-tool reset and free-form content.
- *
- * [captionMaxLines] defaults to the compact settings-card treatment. Flows
- * that communicate a consequential choice can opt into an unbounded caption
- * so accessibility font scaling never hides that context.
- */
-@Composable
-fun SettingsGroupCard(title: String, caption: String, onReset: (() -> Unit)? = null,
-    captionMaxLines: Int = 2, expanded: Boolean? = null, onExpandToggle: (() -> Unit)? = null,
-    content: @Composable () -> Unit) {
-    com.opencapture.monitorui.settings.MonitorSettingsGroupCard(
-        title, caption, onReset, captionMaxLines, expanded, onExpandToggle, content)
-}
-
-/** Small label + switch tile for toggle grids (iOS `DisplayToggleItem`). */
-@Composable
-fun DisplayToggleItem(title: String, isOn: Boolean, modifier: Modifier = Modifier, onToggle: () -> Unit) {
-    com.opencapture.monitorui.settings.MonitorSettingsDisplayToggle(title, isOn, modifier, onToggle)
 }
 
 /** Floating xmark close button on a glass circle (iOS `CloseButton`, 37pt). */

@@ -169,36 +169,6 @@ object ParadeAssist {
     fun chip(mode: ParadeMode): String = mode.label.uppercase()
 }
 
-object VectorscopeAssist {
-    fun intensity(brightness: Int): Double = brightness.coerceIn(0, 200) / 100.0
-
-    fun chip(zoom: VectorscopeZoom): String = "MON · ${zoom.label.uppercase()}"
-}
-
-object VectorscopeGraticule {
-    const val SKIN_ANGLE_DEGREES = com.opencapture.monitorui.MonitorVectorscopeGraticule.SKIN_ANGLE_DEGREES
-    const val SKIN_LENGTH = com.opencapture.monitorui.MonitorVectorscopeGraticule.SKIN_LENGTH
-    const val BOX_SIDE = com.opencapture.monitorui.MonitorVectorscopeGraticule.BOX_SIDE
-    const val LABEL_PUSH = com.opencapture.monitorui.MonitorVectorscopeGraticule.LABEL_PUSH
-    const val CROSS_ARM = com.opencapture.monitorui.MonitorVectorscopeGraticule.CROSS_ARM
-    val targets = com.opencapture.monitorui.MonitorVectorscopeGraticule.targets
-    fun plotSquare(width: Float, height: Float, density: Float = 1f): AssistRect =
-        com.opencapture.monitorui.MonitorVectorscopeGraticule.plotSquare(width, height, density).let {
-            AssistRect(it.x, it.y, it.width, it.height)
-        }
-    fun skinEnd(rect: AssistRect): AssistPoint =
-        com.opencapture.monitorui.MonitorVectorscopeGraticule.skinEnd(rect.scopeRect()).let { AssistPoint(it.x, it.y) }
-    fun rec709Chroma(red: Double, green: Double, blue: Double): Pair<Double, Double> =
-        com.opencapture.opencine.media.ScopeChroma.rec709(red, green, blue)
-    fun targetCenter(red: Int, green: Int, blue: Int, rect: AssistRect): AssistPoint =
-        com.opencapture.monitorui.MonitorVectorscopeGraticule.targetCenter(red, green, blue, rect.scopeRect()).let {
-            AssistPoint(it.x, it.y)
-        }
-    private fun AssistRect.scopeRect() = com.opencapture.monitorui.MonitorScopeRect(x, y, width, height)
-}
-
-
-
 typealias MovablePanelMath = com.opencapture.monitorui.MonitorScopePanelMath
 
 object FalseColorBands {

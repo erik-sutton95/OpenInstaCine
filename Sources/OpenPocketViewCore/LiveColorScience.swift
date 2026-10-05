@@ -91,9 +91,6 @@ public final class ScopeExposureCeiling: OpenCineMedia.ScopeExposureCeiling, @un
     public static func referenceClipByte(transfer: MonitorTransfer) -> Int {
         ScopeExposureCeiling().clipByte(transfer: transfer)
     }
-    public static var linearCeilingAt1600: Double {
-        LiveColorScience.linearize(Double(dlog2LiveTapByteAt1600) / 255, transfer: .dlog2)
-    }
 }
 
 // MARK: - D-Gamut2 (Gamut unofficial white paper, Rev 1.0, 2026-06-30)

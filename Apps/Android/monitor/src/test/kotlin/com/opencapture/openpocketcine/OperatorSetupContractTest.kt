@@ -140,7 +140,6 @@ class OperatorSetupContractTest {
         assertEquals("D-Log2 → Rec.709", lutLookLabel("officialDLog2"))
         assertEquals("Off", lutLookLabel("off"))
         assertEquals("Look", lutLookLabel("custom:Look.cube"))
-        assertTrue(lutPickerAvailable())
         assertEquals("1.0 (12)", formatAppVersion("1.0", 12))
     }
 
