@@ -18,6 +18,7 @@ import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.opencine.insta360.luna.LunaCameraSession
 import com.opencapture.opencine.insta360.luna.LunaConnectPort
 import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
+import com.opencapture.opencine.insta360.luna.LunaSubjectTracking
 import com.opencapture.opencine.core.CommandStage
 import com.opencapture.opencine.core.ISOValue
 import com.opencapture.opencine.core.Rational
@@ -276,19 +277,23 @@ class PocketCameraSession(
     val zoomDialReadout: StateFlow<Double> = _zoomReadout.asStateFlow()
     private val _zoomPinching = MutableStateFlow(false)
     val zoomPinching: StateFlow<Boolean> = _zoomPinching.asStateFlow()
-    private var trackBoxes = LunaTrackBoxes()
-    private fun showTrack(next: LunaTrackBoxes) { trackBoxes = next; refreshTrackingHud() }
+    private val tracking = LunaSubjectTracking({ controls }, { refreshTrackingHud() })
     /** Deep Track boxes plus the AF-C face box and the dimmed scene faces (upstream `refreshTrackingHud`). */
     private fun refreshTrackingHud() {
-        val track = trackBoxes
+        val track = tracking.snapshot
+        val search = track.searchBox?.let(LunaShellMapping::trackingBox)
+        val subject = track.subjectBox?.let(LunaShellMapping::trackingBox)
         val sinceTap = lastTapFocusAt?.let { (SystemClock.elapsedRealtime() - it) / 1000.0 }
-        val overlay = if (FaceAFPolicy.shouldHoldTapBox(sinceTap)) track.hud.overlay.takeUnless { it is FocusOverlay.Face } ?: FocusOverlay.Focus
-            else FaceAFPolicy.resolve(_status.value.focusMode, track.locked, track.search, track.subject, faceBox)
+        val overlay = if (FaceAFPolicy.shouldHoldTapBox(sinceTap)) {
+            FocusOverlayPolicy.resolve(track.tracking, search, subject).takeUnless { it is FocusOverlay.Face } ?: FocusOverlay.Focus
+        } else {
+            FaceAFPolicy.resolve(_status.value.focusMode, track.tracking, search, subject, faceBox)
+        }
         val hiding = (overlay as? FocusOverlay.Face)?.box
         val occluder = when (overlay) {
             is FocusOverlay.Subject -> overlay.box
             is FocusOverlay.Search -> overlay.box
-            else -> track.subject
+            else -> subject
         }
         _trackingHud.value = TrackingHud(overlay, sceneFaces, SceneFacePolicy.dimmed(sceneFaces, hiding, occluder), isTracking = track.active)
     }
@@ -318,7 +323,7 @@ class PocketCameraSession(
         }
         controls?.let { link ->
             scope.launch { link.readout.collect(::applyReadout) }
-            scope.launch { link.trackFrames.collect { frame -> if (acceptsTrackFrame(frame)) trackBoxes.apply(frame)?.let(::showTrack) } }
+            scope.launch { link.trackFrames.collect { frame -> if (acceptsTrackFrame(frame)) tracking.ingest(frame) } }
             scope.launch { link.notices.collect(::applyNotice) }
             // Re-apply every second: the REC timer ticks and settled pins fall back to the camera's value.
             scope.launch { while (isActive) { delay(1_000); applyReadout(lastReadout) } }
@@ -411,7 +416,7 @@ class PocketCameraSession(
     fun disconnect() {
         backend.disconnect(); decoder.reset()
         holdsMonitor = false; hasVideoFormat = false
-        showTrack(LunaTrackBoxes())
+        tracking.clear()
     }
     fun close() { backend.close(); decoder.reset(); scope.cancel() }
     fun noteSceneBecameInactive() = backend.sceneActive(false)
@@ -927,10 +932,7 @@ class PocketCameraSession(
     /** iOS `applyNotification`: 8315 Deep Track state (the camera ends tracking) and 8201 capture stopped. */
     private fun applyNotice(notice: CameraNotice) {
         when (notice) {
-            is CameraNotice.Tracking -> trackBoxes.notice(notice.active)?.let { next ->
-                if (!next.active) trackingRequest = null
-                showTrack(next)
-            }
+            is CameraNotice.Tracking -> if (tracking.ingest(notice) && !tracking.snapshot.active) trackingRequest = null
             is CameraNotice.CaptureStopped -> {
                 if (notice.errorCode != 0L) presentControlNote("Recording stopped by the camera (code ${notice.errorCode}).")
                 _mediaCaptured.tryEmit(Unit)
@@ -957,7 +959,7 @@ class PocketCameraSession(
         refreshTrackingHud()
         _focusPoint.value = x to y
         // The backend centres its official ROI on the tap (iOS: 0.1545 x 0.2727).
-        scope.launch { if (controls?.tapFocus(x.toDouble(), y.toDouble()) != true) presentControlNote("Focus did not reach the camera.") }
+        scope.launch { if (!tracking.focus(x.toDouble(), y.toDouble())) presentControlNote("Focus did not reach the camera.") }
     }
     fun startTracking(x: Float, y: Float, width: Float = 0.2f, height: Float = 0.2f) =
         startTracking(TrackingBox((x - width / 2).toDouble(), (y - height / 2).toDouble(), width.toDouble(), height.toDouble()))
@@ -965,22 +967,18 @@ class PocketCameraSession(
         if (!can(CameraCapability.TRACKING)) return unavailable("Deep Track")
         if (box.isTooSmall) return presentControlNote("Frame Too Small")
         faceBox = null
-        showTrack(LunaTrackBoxes(search = box))
         trackingRequest = box
         trackingRequestAt = SystemClock.elapsedRealtime()
-        scope.launch {
-            val left = box.x.coerceIn(0.0, 1.0)
-            val top = box.y.coerceIn(0.0, 1.0)
-            val ok = controls?.startTracking(left, top, minOf(box.width, 1 - left), minOf(box.height, 1 - top)) == true
-            if (!ok) { showTrack(LunaTrackBoxes()); presentControlNote("Deep Track did not start.") }
+        // Undispatched: the search box shows before this returns, as the request goes out.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            if (!tracking.start(LunaShellMapping.lunaBox(box))) presentControlNote("Deep Track did not start.")
         }
     }
     fun cancelSubjectTracking() = cancelTracking()
     fun cancelTracking() {
-        if (!trackBoxes.active) return
+        if (!tracking.snapshot.active) return
         trackingRequest = null
-        showTrack(LunaTrackBoxes())
-        scope.launch { controls?.stopTracking() }
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { tracking.cancel() }
     }
     fun handleGamepadAction(action: GamepadOperatorAction) {
         when (action) {
