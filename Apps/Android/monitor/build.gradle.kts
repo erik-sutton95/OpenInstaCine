@@ -205,6 +205,7 @@ dependencies {
     implementation(libs.opencine.appkit)
     api(libs.opencine.monitor.ui)
     implementation("com.opencapture.opencine:media:0.1.0-SNAPSHOT")
+    implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT")
     implementation("com.opencapture.opencine:native-runtime:0.1.0-SNAPSHOT")
     implementation("com.opencapture.opencine:platform:0.1.0-SNAPSHOT")
     // Live-view MediaCodec decoder (HevcDecoder), shared with OpenPocketCine.

@@ -1,12 +1,12 @@
 package com.opencapture.openpocketcine
 
-import com.opencapture.opencine.media.GamepadGimbalStick
 import android.content.Context
 import androidx.core.content.edit
 import com.opencapture.monitorui.MonitorJoystickSize
 import com.opencapture.opencine.appkit.MonitorOperatorPreferences
 import com.opencapture.opencine.appkit.MonitorDisplayPreferences
 import com.opencapture.opencine.appkit.MonitorToolUsagePreferences
+import com.opencapture.opencine.vocabulary.GamepadGimbalStick
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.lut.LutCatalog
 import org.json.JSONObject

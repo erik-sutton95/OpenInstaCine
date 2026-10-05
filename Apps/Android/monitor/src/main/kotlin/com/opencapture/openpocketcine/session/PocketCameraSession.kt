@@ -9,10 +9,10 @@ import com.opencapture.opencine.motion.GimbalWaypoint
 import com.opencapture.opencine.motion.GimbalWaypointSlot
 import com.opencapture.opencine.motion.LevelReading
 import com.opencapture.opencine.motion.WorldLevelSnap
+import com.opencapture.opencine.vocabulary.GamepadOperatorAction
+import com.opencapture.opencine.vocabulary.GamepadShutterSync
 import com.opencapture.openpocketcine.CaptureLists
 import com.opencapture.openpocketcine.CaptureShutterPolicy
-import com.opencapture.opencine.media.GamepadOperatorAction
-import com.opencapture.opencine.media.GamepadShutterSync
 import com.opencapture.openpocketcine.EvComp
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.bridge.SwiftCore

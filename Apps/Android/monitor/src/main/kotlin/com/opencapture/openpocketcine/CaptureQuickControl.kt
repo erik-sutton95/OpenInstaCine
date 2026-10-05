@@ -1,6 +1,5 @@
 package com.opencapture.openpocketcine
 
-import com.opencapture.opencine.media.GamepadShutterSync
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -20,6 +19,7 @@ import com.opencapture.opencine.appkit.captureField
 import com.opencapture.opencine.appkit.commit
 import com.opencapture.opencine.appkit.quickControl
 import com.opencapture.opencine.core.SettingKey
+import com.opencapture.opencine.vocabulary.GamepadShutterSync
 import com.opencapture.openpocketcine.session.ApertureStrategy
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraModel
