@@ -205,6 +205,9 @@ targets:
       - OpenInstaCineUITests
     dependencies:
       - target: OpenInstaCine
+      # The UI tests every app shares (OpenCine OpenCineAppUITesting).
+      - package: OpenCine
+        product: OpenCineAppUITesting
     settings:
       base:
         SWIFT_VERSION: "5.0"
