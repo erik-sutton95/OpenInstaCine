@@ -65,8 +65,11 @@ final class DesqueezeUIFlowTests: XCTestCase {
         slider.adjust(toNormalizedSliderPosition: 0.57)
         let customValue = try XCTUnwrap(
             Double(readout.label.replacingOccurrences(of: "×", with: "")))
-        XCTAssertGreaterThan(customValue, 1)
-        XCTAssertLessThan(customValue, 2)
+        // XCUITest's adjust is best effort ("absolute fidelity is not guaranteed"): on iOS 26 the
+        // 0.57 drag lands between 1.48 and 1.68 by where the thumb starts, on main too. The app's
+        // linear 1-2 mapping is checked exactly against the slider's own position instead.
+        XCTAssertEqual(readout.label, String(format: "%.2f×", 1 + slider.normalizedSliderPosition))
+        XCTAssertTrue((1.45...1.75).contains(customValue), "0.57 landed on \(customValue)")
         XCTAssertEqual(customValue * 100, (customValue * 100).rounded(), accuracy: 0.0001)
         XCTAssertEqual(slider.value as? String, readout.label)
         let remembered = readout.label

@@ -195,7 +195,10 @@ Nothing is meant to look different. Underneath:
   label; iOS now offers Open Settings when Bluetooth is off or not allowed; one undecodable saved
   record no longer empties the list on the next save; Android forget also drops the camera's
   saved Wi-Fi (as iOS always did); iOS "on the camera network" now tests the Luna's
-  192.168.42.x (Pocket's 192.168.2.x test never matched).
+  192.168.42.x (Pocket's 192.168.2.x test never matched); a saved camera that still carries a
+  hotspot setup connects from that chip over the camera's own Wi-Fi without main's "Turn on
+  Personal Hotspot" prompt (no Insta camera could add a hotspot setup on main, and Luna joined
+  its own Wi-Fi after the prompt anyway; only the simulator review data reached it).
 
 ## Physical device checklist (Luna Ultra, iOS and Android)
 
