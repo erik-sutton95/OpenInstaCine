@@ -46,6 +46,8 @@ targets:
       - package: OpenCine
         product: OpenCineRelay
       - package: OpenCine
+        product: OpenCineRelayApple
+      - package: OpenCine
         product: OpenCineFrameIO
       - package: OpenCine
         product: MonitorUI
@@ -144,6 +146,8 @@ targets:
         product: OpenCineMotion
       - package: OpenCine
         product: OpenCineRelay
+      - package: OpenCine
+        product: OpenCineRelayApple
       - package: OpenCine
         product: Insta360Protocol
       # Also provides the Insta360Apple module; Xcode then shares one Insta360Apple

@@ -6,6 +6,7 @@ import MonitorPresentation
 import Observation
 import OpenCineAppKit
 import OpenCineCore
+import OpenCineRelayApple
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -272,7 +273,9 @@ final class AppModel {
     var frameioConnecting = false
     var frameioUser: FrameioUser?
     var delivery = MediaDeliveryCoordinator()
-    var relayHost = WatcherRelayHost()
+    var relayHost = WatcherRelayHost(
+        versionMismatchReason: WatcherRelayJoin.versionMismatchReason,
+        logSubsystem: "com.opencapture.openinstacine", journal: { ControlLiveLog.line($0) })
     private var relayStateTask: Task<Void, Never>?
     var relayBrowser = WatcherRelayBrowser()
     var relayClient = WatcherRelayClient()
