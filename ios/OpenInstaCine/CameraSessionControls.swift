@@ -1143,18 +1143,11 @@ extension CameraSession {
         let y = min(max(Double(normalized.y), 0), 1)
         focusPoint = CGPoint(x: x, y: y)
         guard canSendControl else { return }
-        // fw 1.1.15 official ROI with the camera upright, centred on the tap:
-        // 0.1545 × 0.271…0.275 of the 16:9 preview (square on the sensor). The
-        // smaller 0.0869 × 0.1545 box was captured with the camera lying on its side.
-        let w = 0.1545
-        let h = 0.2727
-        let left = min(max(x - w / 2, 0), 1 - w)
-        let top = min(max(y - h / 2, 0), 1 - h)
-        let mode = backend.functionMode
-        sendControl(
-            "Focus",
-            { try LunaProtocol.setTapFocus(x: left, y: top, width: w, height: h, functionMode: mode) },
-            refresh: false)
+        do {
+            try subjectTracking.focus(x: x, y: y, finished: controlFinished("Focus"))
+        } catch {
+            controlNote = "Focus: \(error.localizedDescription)"
+        }
     }
 
     /// Drag-to-track → Luna Deep Track (cmd 237) with the operator's rectangle.
@@ -1164,85 +1157,58 @@ extension CameraSession {
             return
         }
         guard canSendControl else { return }
-        searchBox = box
-        subjectBox = nil
-        isTracking = false
-        trackingSawLock = false
         faceBox = nil
-        let left = min(max(box.centerX - box.width / 2, 0), 1)
-        let top = min(max(box.centerY - box.height / 2, 0), 1)
-        let width = min(box.width, 1 - left)
-        let height = min(box.height, 1 - top)
-        sendControl(
-            "Track",
-            { try LunaProtocol.openTracking(x: left, y: top, width: width, height: height) },
-            refresh: false,
-            onFail: { [weak self] in self?.clearLocalTracking() })
+        do {
+            try subjectTracking.start(
+                .init(x: box.x, y: box.y, width: box.width, height: box.height),
+                finished: controlFinished("Track"))
+        } catch {
+            controlNote = "Track: \(error.localizedDescription)"
+        }
     }
 
-    /// Stream-borne Deep Track state (media 0x85, every frame): tracking moves the
-    /// green subject box with the camera's box; lost shows the last box white, like
-    /// the search box, until the camera reacquires (it may pick a new subject) or the
-    /// operator cancels; idle after a lock means the camera ended tracking.
+    /// Stream-borne Deep Track state (media 0x85, every frame), read by the Luna owner. A
+    /// tracking frame also drops the face box.
     func applyTrackFrame(_ frame: LunaTrackFrame) {
-        let box = TrackingBox(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
-        switch frame.state {
-        case .tracking:
-            isTracking = true
-            trackingSawLock = true
-            lastSubjectPushAt = Date()
-            searchBox = nil
-            faceBox = nil
-            subjectBox = box
-        case .lost:
-            guard trackingSawLock else { return }
-            // Not `isTracking`: FocusOverlayPolicy would draw the search box as a green subject.
-            isTracking = false
-            subjectBox = nil
-            searchBox = box
-        case .idle:
-            // Idle frames also arrive between cmd 237 and the lock; only a lock ending counts.
-            if trackingSawLock { clearLocalTracking() }
-        case nil:
-            break
-        }
+        if frame.state == .tracking { faceBox = nil }
+        subjectTracking.ingest(frame)
     }
 
     /// The camera reports the end of tracking on notification 8315 (cancel).
     func applyTrackingState(_ state: UInt64) {
-        switch state {
-        case 1, 2:
-            isTracking = true
-            trackingSawLock = true
-            lastSubjectPushAt = Date()
-            if let search = searchBox {
-                subjectBox = TrackingBox.subject(from: search)
-                searchBox = nil
-            }
-        default:
-            if trackingSawLock || searchBox != nil { clearLocalTracking() }
-        }
+        subjectTracking.ingest(trackingState: state)
     }
 
     func cancelSubjectTracking() {
-        let had = isTrackingActive
-        clearLocalTracking()
-        guard had, backend.isControlReady else { return }
-        sendControl("Track clear", { LunaProtocol.cancelTrackingRequest }, refresh: false)
+        subjectTracking.cancel(finished: controlFinished("Track clear"))
     }
 
     func clearLocalTracking() {
-        searchBox = nil
-        subjectBox = nil
-        isTracking = false
-        trackingSawLock = false
-        lastSubjectPushAt = nil
+        subjectTracking.clear()
+    }
+
+    func showTracking(_ snapshot: LunaSubjectTracking.Snapshot) {
+        searchBox = snapshot.searchBox.map(TrackingBox.init)
+        subjectBox = snapshot.subjectBox.map(TrackingBox.init)
+        isTracking = snapshot.tracking
+    }
+
+    /// An owner-sent request's outcome, reported like `sendControl` without a settings refresh.
+    func controlFinished(_ name: String) -> @MainActor (Error?) -> Void {
+        { [weak self] error in
+            guard let self else { return }
+            guard let error else {
+                ControlLiveLog.line("control: \(name) ok")
+                return
+            }
+            ControlLiveLog.line("control: \(name) failed \(error.localizedDescription)")
+            self.noteCommandFailure()
+            self.controlNote = "\(name) was not applied by the camera."
+        }
     }
 
     func noteFrameTooSmall() {
-        searchBox = nil
-        subjectBox = nil
-        isTracking = false
+        subjectTracking.clearBoxes()
         controlNote = "Frame Too Small"
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(ControlHud.toastHoldSeconds))
