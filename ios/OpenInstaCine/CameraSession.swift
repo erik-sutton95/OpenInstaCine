@@ -102,6 +102,8 @@ final class CameraSession {
     @ObservationIgnored let backend: LunaCameraBackend
     /// False for a lease (borrowed decoder or controls-only editor) on another session's backend.
     @ObservationIgnored let ownsBackend: Bool
+    /// Tests only: the Luna session requests go through instead of the backend's.
+    @ObservationIgnored var lunaSessionOverride: LunaCameraSession?
     /// Per-integration labels and media addressing for this camera (STATE-01: no launch globals).
     @ObservationIgnored let profile: CameraProfile
     /// This session's own drum coalescing and settings-read debounce (never shared).
@@ -261,7 +263,7 @@ final class CameraSession {
     private(set) var sceneFaces: [TrackingBox] = []
     /// Deep Track and tap focus on the connection's Luna session; the boxes above follow it.
     @ObservationIgnored lazy var subjectTracking = LunaSubjectTracking(
-        session: { [weak self] in self?.backend.session },
+        session: { [weak self] in self?.lunaSession },
         changed: { [weak self] in self?.showTracking($0) })
     @ObservationIgnored var lastTapFocusAt: Date?
     @ObservationIgnored var tapFocusTask: Task<Void, Never>?
@@ -640,7 +642,7 @@ final class CameraSession {
 
     /// Luna `IFRAME_REQUEST` (105). Rate limited: the body already sends a GOP every ~2 s.
     func requestKeyframe(reason: String) {
-        guard backend.isControlReady, !isBrowsingMedia else { return }
+        guard hasControlLink, !isBrowsingMedia else { return }
         guard Date().timeIntervalSince(lastIFrameRequestAt) > 1 else { return }
         lastIFrameRequestAt = Date()
         ControlLiveLog.line("feed: I-frame request (\(reason))")
@@ -956,7 +958,7 @@ final class CameraSession {
             try? await Task.sleep(for: .seconds(3))
             guard let self, case .live = self.phase else { return }
             if self.hasFreshRecoveryPicture(since: started) { return }
-            if self.backend.isControlReady {
+            if self.hasControlLink {
                 try? await self.backend.restartLive()
                 try? await Task.sleep(for: .seconds(3))
                 if self.hasFreshRecoveryPicture(since: started) { return }

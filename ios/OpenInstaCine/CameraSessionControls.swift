@@ -46,14 +46,17 @@ extension CameraSession {
     /// DJI camcap hop to the log curve's native ISO on a color change; the ISO sheet hides its toggle.
     var supportsNativeIsoHop: Bool { false }
     /// Luna media browse runs over HTTP next to the live socket.
-    var hasControlLink: Bool { backend.isControlReady }
+    /// The connection's Luna session: every request goes through it, and its admission is this
+    /// facade's control link (it flips with the backend's handshake). Tests set the override.
+    var lunaSession: LunaCameraSession? { lunaSessionOverride ?? backend.session }
+    var hasControlLink: Bool { lunaSession?.admitsControl == true }
     var bodyFamily: CameraBodyFamily { .other }
     var colorModes: [ColorMode] { LunaShellMapping.colorModes }
 
     var currentShootingMode: ShootingMode? { ShootingMode.fromStatus(status.shootingMode) }
 
     var canSendControl: Bool {
-        guard case .live = phase, backend.isControlReady else {
+        guard case .live = phase, hasControlLink else {
             controlNote = "Connect the camera to use its controls."
             return false
         }
@@ -67,7 +70,7 @@ extension CameraSession {
     /// Every camera request goes through the connection's Luna session, which sends only while it
     /// is ready and owned (the Insta360 rule: commands only through `LunaCameraSession`).
     func sendLuna(_ request: LunaRequest, timeout: Duration? = nil) async throws -> Data {
-        guard let session = backend.session else { throw CancellationError() }
+        guard let session = lunaSession else { throw CancellationError() }
         return try await session.control(request, timeout: timeout)
     }
 
@@ -432,7 +435,7 @@ extension CameraSession {
 
     /// Latest-wins at ~12 Hz: the camera lens cannot follow a 60 Hz pinch.
     private func queueZoomWrite(_ factor: Double) {
-        guard case .live = phase, backend.isControlReady else { return }
+        guard case .live = phase, hasControlLink else { return }
         pendingZoomWrite = factor
         guard zoomWriteTask == nil else { return }
         zoomWriteTask = Task { @MainActor [weak self] in
@@ -469,7 +472,7 @@ extension CameraSession {
 
     var canSetGimbalConfiguration: Bool {
         hasGimbal && !isLocked && phase == .live && gimbalControlSceneActive && !holdsMonitor
-            && !sessionRecovery.isRecovering && backend.isControlReady
+            && !sessionRecovery.isRecovering && hasControlLink
     }
 
     /// Stream MOVE while the on-screen stick is held. `x`/`y` are −1…1 (right / up).
@@ -528,7 +531,7 @@ extension CameraSession {
         guard gimbalStick.isHeld else { return }
         gimbalStick.reset()
         ControlLiveLog.line("control: gimbal stick rest")
-        guard backend.isControlReady else { return }
+        guard hasControlLink else { return }
         Task { [weak self] in _ = try? await self?.sendLuna(LunaProtocol.gimbalReleaseRequest()) }
     }
 
@@ -603,7 +606,7 @@ extension CameraSession {
             while !Task.isCancelled {
                 guard let self else { return }
                 // Head tracking reads GET_ANGLE itself on every tick.
-                if case .live = self.phase, self.backend.isControlReady, !self.isSteeringHead {
+                if case .live = self.phase, self.hasControlLink, !self.isSteeringHead {
                     await self.readGimbalAngle()
                 }
                 try? await Task.sleep(for: Self.gimbalAnglePollInterval)
@@ -748,7 +751,7 @@ extension CameraSession {
         }
         // A fresh task: this one is usually cancelled here, and a cancelled send never goes
         // out, which left the head coasting on the last stick value.
-        guard backend.isControlReady, gimbalAim?.token == token || gimbalAim == nil, !gimbalStick.isHeld else { return }
+        guard hasControlLink, gimbalAim?.token == token || gimbalAim == nil, !gimbalStick.isHeld else { return }
         // Again shortly after, in case a last MOVE still in flight lands behind the first.
         Task { @MainActor [weak self] in
             for attempt in 0..<2 {
