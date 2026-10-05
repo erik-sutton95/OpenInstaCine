@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.media
 
+import com.opencapture.monitorui.MonitorConfirmPopup
 import com.opencapture.opencine.appkit.*
 import com.opencapture.opencine.media.MediaAssetID
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
@@ -350,9 +351,10 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
         )
 
         if (confirmBatchDelete) {
-            MediaConfirmPopup(
+            MonitorConfirmPopup(
                 title = "Delete ${selectedIDs.size} item${if (selectedIDs.size == 1) "" else "s"} from the camera?",
                 confirmTitle = "Delete",
+                onClickFeedback = LocalOperatorHaptics.current::selection,
                 onDismiss = { confirmBatchDelete = false },
                 onConfirm = {
                     confirmBatchDelete = false
