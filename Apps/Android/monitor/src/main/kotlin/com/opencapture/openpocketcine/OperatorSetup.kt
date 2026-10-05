@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.media.GamepadGimbalStick
 import com.opencapture.opencine.appkit.diagnostics.ManualProblemReportDelivery
 import com.opencapture.openpocketcine.diagnostics.AppDiagnostics
 import com.opencapture.openpocketcine.feed.fromColorMode
