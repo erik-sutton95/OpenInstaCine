@@ -1,3 +1,5 @@
+import OpenCineWatch
+import OpenPocketViewCore
 import SwiftUI
 
 /// OpenInstaCine watchOS companion. Mirrors the iPhone monitor on the wrist: a 16:9
@@ -10,7 +12,7 @@ struct OpenInstaCineWatchApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WatchMonitorView()
+            WatchMonitorView(openOnIPhone: WatchRelayCopy.openOnIPhone)
                 .environment(controller)
                 .onAppear { controller.activate() }
                 .onChange(of: scenePhase) { _, phase in

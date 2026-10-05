@@ -8,6 +8,7 @@ import Observation
 import OpenCineAppKit
 import OpenCineCore
 import OpenCineRelayApple
+import OpenCineWatch
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
