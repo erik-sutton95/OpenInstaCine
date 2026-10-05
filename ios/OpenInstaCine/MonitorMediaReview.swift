@@ -105,7 +105,8 @@
                         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                         try data.write(to: url)
                     }
-                    let thumbnail = directory.appendingPathComponent(record.address.thumbnail)
+                    guard let thumbnailAddress = record.address.thumbnail else { throw InputError.invalid }
+                    let thumbnail = directory.appendingPathComponent(thumbnailAddress)
                     try FileManager.default.createDirectory(at: thumbnail.deletingLastPathComponent(), withIntermediateDirectories: true)
                     try jpeg.write(to: thumbnail)
                     files.append(file)
