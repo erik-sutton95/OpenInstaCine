@@ -7,11 +7,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import org.json.JSONObject
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** SIMULATED inputs exercise the actual packaged Swift library through all eight JNI bindings. */
+/** SIMULATED inputs exercise the actual packaged Swift library through all six JNI bindings. */
 @RunWith(AndroidJUnit4::class)
 class SwiftCoreInteropInputTest {
     @Test fun packagedCorePreservesSessionCurveIsolationAndNativeWireResponses() {
@@ -34,13 +33,5 @@ class SwiftCoreInteropInputTest {
         assertTrue(weight.indices.filter { it % 4 == 0 }.all { (weight[it].toInt() and 255) == 255 })
         assertTrue(assertNotNull(SwiftCore.packCreativeLut("Warm", 0.0, 0)).isNotEmpty())
         assertNull(SwiftCore.packImportedLut("not a cube".toByteArray(), 0.0, 0))
-        assertEquals("false", SwiftCore.cameraSoftAPDecision("canSendHandshake",
-            """{"receiveArmed":true,"connectionReady":false}"""))
-        assertEquals("true", SwiftCore.cameraSoftAPDecision("canSendHandshake",
-            """{"receiveArmed":true,"connectionReady":true}"""))
-        val conform = JSONObject(assertNotNull(SwiftCore.conformPreviewJSON(
-            """{"nominalFrameRate":120,"targetRate":24,"sourceSeconds":10}""")))
-        assertEquals(120.0, conform.getDouble("captureRate"))
-        assertEquals(50.0, conform.getDouble("conformedDuration"))
     }
 }

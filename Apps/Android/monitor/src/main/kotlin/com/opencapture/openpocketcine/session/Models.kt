@@ -607,7 +607,7 @@ data class CameraStatus(
             .put("audioPeakRight", audioPeakRight)
             .toString()
 
-    /** Interleaved `[res, fps, …]` matching JNI `statusJSON`. */
+    /** Interleaved `[res, fps, …]`. */
     private fun videoFormatsJson(): JSONArray {
         val arr = JSONArray()
         for (format in availableVideoFormats) {
