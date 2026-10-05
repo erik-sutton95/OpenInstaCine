@@ -44,6 +44,8 @@ targets:
       - package: OpenCine
         product: OpenCineMotion
       - package: OpenCine
+        product: OpenCineAppKitApple
+      - package: OpenCine
         product: OpenCineRelay
       - package: OpenCine
         product: OpenCineRelayApple
