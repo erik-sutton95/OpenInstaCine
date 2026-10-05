@@ -88,7 +88,7 @@ class PictureEVMeterTest {
         // All pixels at the Rec.709 code for 18% grey read 0 stops; an empty histogram reads nothing.
         val grey = (0..255).minBy { kotlin.math.abs(com.opencapture.openpocketcine.feed.LiveColorScience.stops(it / 255.0, MonitorTransfer.REC709)) }
         val histogram = IntArray(256).also { it[grey] = 100 }
-        assertEquals(0.0, NDFilterRecommendation.pictureStops(histogram, MonitorTransfer.REC709)!!, 0.1)
-        assertEquals(null, NDFilterRecommendation.pictureStops(IntArray(256), MonitorTransfer.REC709))
+        assertEquals(0.0, com.opencapture.opencine.media.MonitorNDFilterRecommendation.pictureStops(histogram, MonitorTransfer.REC709)!!, 0.1)
+        assertEquals(null, com.opencapture.opencine.media.MonitorNDFilterRecommendation.pictureStops(IntArray(256), MonitorTransfer.REC709))
     }
 }

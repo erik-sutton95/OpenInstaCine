@@ -131,7 +131,7 @@ fun SettingsActionPill(title: String, icon: OpcIcon? = null, tint: Color = LiveD
     background: Color = LiveDesign.accentDim, modifier: Modifier = Modifier,
     enabled: Boolean = true, onClick: () -> Unit) {
     com.opencapture.monitorui.settings.MonitorSettingsActionPill(
-        title, icon, tint, background, modifier, enabled, onClick)
+        title, icon, tint, background, modifier, enabled, onClick = onClick)
 }
 
 /**
