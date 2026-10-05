@@ -213,13 +213,16 @@ class LunaMediaPlaybackOwnerInputTest {
                 }
                 tap(files[0].filename)
                 await("Actual A decoder renders") { pictureMatches(scenario, "A") && node("Pause") != null && progress() > 0f }
+                // Loop and Pause before the evidence capture: on a loaded emulator the capture can
+                // outlast the 12 s clip, and a pause near 3 s lets the paused scrub below accept
+                // before its own seek frame lands.
+                tap("Loop clip")
+                tap("Pause")
+                await("Actual native pause reaches UI") { node("Play") != null }
                 val first = checkNotNull(readPicture(scenario))
                 val viewIdentity = first.view; val surfaceIdentity = first.surface
                 first.bitmap.recycle()
                 borrowed(); capture(scenario, "A-portrait", "A", false, source)
-                tap("Loop clip")
-                tap("Pause")
-                await("Actual native pause reaches UI") { node("Play") != null }
                 scrub(0.25f)
                 await("Paused native scrub reaches interior") {
                     kotlin.math.abs(progress() - 3f) < 0.5f && node("Play") != null && pictureAt(scenario, "A", 3f)
@@ -244,7 +247,7 @@ class LunaMediaPlaybackOwnerInputTest {
                 tap("Clip info"); await("Actual info cover appears") { node("Close clip information") != null }
                 borrowed(); assertPictureIdentity(scenario, viewIdentity, surfaceIdentity)
                 tap("Close clip information")
-                tap("Share clip"); await("Actual Share cover appears") { node("Frame.io") != null }
+                tap("Share clip"); await("Actual Share cover appears") { node("Nearby Share, Files, and other apps") != null }
                 borrowed(); assertPictureIdentity(scenario, viewIdentity, surfaceIdentity)
                 tap("Close"); await("Donor Share return stays paused") { node("Play") != null }
                 for (orientation in listOf(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE, ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)) {
@@ -406,7 +409,9 @@ class LunaMediaPlaybackOwnerInputTest {
         await("Actual native target is visible: $label") { node(label) != null }
         return Rect().also { checkNotNull(node(label)).getBoundsInScreen(it); assertFalse(it.isEmpty) }
     }
-    private fun progress(): Float = node("Playback position")?.rangeInfo?.current ?: Float.NaN
+    // Compose posts semantics changes only to enabled accessibility services, never to this
+    // UiAutomation client, so a cached position goes stale after a paused seek: refresh it.
+    private fun progress(): Float = node("Playback position")?.apply { refresh() }?.rangeInfo?.current ?: Float.NaN
     private fun tap(label: String) {
         val rect = bounds(label); val down = SystemClock.uptimeMillis()
         pointer(MotionEvent.ACTION_DOWN, rect.exactCenterX(), rect.exactCenterY(), down)
