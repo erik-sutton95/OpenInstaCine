@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.core.CameraValuePin
 import com.opencapture.openpocketcine.ShutterAngle
 import com.opencapture.opencine.media.ExtraMirrorHold
 import com.opencapture.opencine.media.FeedPresentPolicy

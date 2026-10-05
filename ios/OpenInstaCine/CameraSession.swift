@@ -6,6 +6,7 @@ import Insta360Protocol
 import Observation
 import OpenCineAppKit
 import struct OpenCineCore.CameraSessionID
+import struct OpenCineCore.CameraValuePin
 import OpenCineMedia
 import OpenPocketViewCore
 import UIKit

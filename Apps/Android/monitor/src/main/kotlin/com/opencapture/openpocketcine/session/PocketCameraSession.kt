@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
+import com.opencapture.opencine.motion.LevelReading
+import com.opencapture.opencine.motion.WorldLevelSnap
 import com.opencapture.openpocketcine.CaptureLists
 import com.opencapture.openpocketcine.CaptureShutterPolicy
 import com.opencapture.openpocketcine.GamepadOperatorAction

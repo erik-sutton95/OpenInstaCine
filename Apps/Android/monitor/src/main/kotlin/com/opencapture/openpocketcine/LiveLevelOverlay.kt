@@ -11,9 +11,9 @@ import com.opencapture.monitorui.MonitorLevelDisplay
 import com.opencapture.monitorui.MonitorLevelGeometry
 import com.opencapture.monitorui.MonitorLevelOverlay
 import com.opencapture.monitorui.MonitorScopeRect
-import com.opencapture.openpocketcine.session.LevelMode
-import com.opencapture.openpocketcine.session.LevelReading
-import com.opencapture.openpocketcine.session.WorldLevelSnap
+import com.opencapture.opencine.motion.LevelMode
+import com.opencapture.opencine.motion.LevelReading
+import com.opencapture.opencine.motion.WorldLevelSnap
 import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.delay
