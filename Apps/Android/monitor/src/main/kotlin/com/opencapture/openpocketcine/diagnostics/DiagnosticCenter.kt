@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.diagnostics
 
+import com.opencapture.opencine.appkit.MediaShare
 import com.opencapture.opencine.appkit.diagnostics.ManualProblemReport
 import com.opencapture.opencine.appkit.diagnostics.ManualProblemReportEnvelope
 import android.content.ClipData
@@ -17,7 +18,6 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.opencapture.opencine.media.DecoderErrorRecord
 import com.opencapture.openpocketcine.BuildConfig
-import com.opencapture.openpocketcine.media.MediaShare
 import com.opencapture.openpocketcine.pairing.DiscoveryPermissions
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import java.io.File
