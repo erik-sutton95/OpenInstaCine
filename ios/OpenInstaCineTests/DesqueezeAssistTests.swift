@@ -1,4 +1,5 @@
 import CoreImage
+import MonitorPresentation
 import OpenPocketViewCore
 import XCTest
 
@@ -34,13 +35,13 @@ final class DesqueezeAssistTests: XCTestCase {
     }
 
     func testPresetsAndHundredthStepsDoNotSelectANeighboringPreset() {
-        XCTAssertEqual(DesqueezeRatio.allCases.map(\.factor), [1.1, 1.2, 1.33, 1.5, 1.6, 1.8, 2])
+        XCTAssertEqual(MonitorDesqueezePreset.allCases.map(\.factor), [1.1, 1.2, 1.33, 1.5, 1.6, 1.8, 2])
         for step in 100...200 {
             let factor = Double(step) / 100
             XCTAssertEqual(DesqueezeAssist.snap(factor), factor, accuracy: 0.000_001)
         }
-        XCTAssertNil(DesqueezeRatio.matching(1.32))
-        XCTAssertNil(DesqueezeRatio.matching(1.34))
+        XCTAssertNil(MonitorDesqueezePreset.matching(1.32))
+        XCTAssertNil(MonitorDesqueezePreset.matching(1.34))
         XCTAssertEqual(DesqueezeAssist.snap(1.337), 1.34)
         XCTAssertEqual(DesqueezeAssist.snap(1.005), 1.01)
         XCTAssertEqual(DesqueezeAssist.snap(1.335), 1.34)
@@ -166,7 +167,7 @@ final class DesqueezeAssistTests: XCTestCase {
     }
 
     func testPlaybackZoomReclampsAfterChangingDirection() {
-        var zoom = AnchoredPinchZoom()
+        var zoom = MonitorPlaybackZoom()
         zoom.pinchChanged(
             magnification: 3, startAnchor: .center, size: CGSize(width: 800, height: 225))
         zoom.panChanged(translation: CGSize(width: 900, height: 900))

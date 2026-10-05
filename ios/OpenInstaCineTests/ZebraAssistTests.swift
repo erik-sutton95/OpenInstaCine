@@ -1,4 +1,5 @@
 import CoreImage
+import OpenCineApple
 import OpenPocketViewCore
 import XCTest
 
@@ -268,7 +269,7 @@ final class ZebraAssistTests: XCTestCase {
             by: CGAffineTransform(
                 scaleX: CGFloat(w) / max(image.extent.width, 1),
                 y: CGFloat(h) / max(image.extent.height, 1)))
-        let context = CIContext(options: LiveMonitorWorkingSpace.contextOptions)
+        let context = CIContext(options: MonitorWorkingSpace.contextOptions)
         context.render(
             scaled, toBitmap: &data, rowBytes: w * 4,
             bounds: CGRect(x: 0, y: 0, width: w, height: h),
@@ -281,7 +282,7 @@ final class ZebraAssistTests: XCTestCase {
     }
 
     private static func sampleRGB(_ image: CIImage) -> (Float, Float, Float) {
-        let context = CIContext(options: LiveMonitorWorkingSpace.contextOptions)
+        let context = CIContext(options: MonitorWorkingSpace.contextOptions)
         var bytes = [UInt8](repeating: 0, count: 4)
         context.render(
             image, toBitmap: &bytes, rowBytes: 4,

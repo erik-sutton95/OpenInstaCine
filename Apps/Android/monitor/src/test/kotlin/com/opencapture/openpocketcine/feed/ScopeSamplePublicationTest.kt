@@ -4,9 +4,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import com.opencapture.opencine.runtime.ScopeSampleBus
+import com.opencapture.opencine.media.ScopeSamples
 
 class ScopeSamplePublicationTest {
-    private val bus = LiveScopeSampleBus()
+    private val bus = ScopeSampleBus()
     @Test fun changingClipsClearsScopesAndRejectsAnAlreadyQueuedOldResult() {
         val first = bus.openSource()
         val oldFrame = picture(200)

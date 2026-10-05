@@ -5,8 +5,6 @@ import OpenCineMedia
 import OpenPocketViewCore
 
 /// The app supplies source-qualified look curves; the native owner retains admission and CI work.
-typealias AssistInspectorImageRenderer = MonitorInspectorImageRenderer
-
 extension MonitorInspectorImageRenderer {
     convenience init(now: @escaping Clock = { DispatchTime.now().uptimeNanoseconds }, operation: RenderOperation? = nil) {
         let curves = Dictionary(uniqueKeysWithValues: MonitorTransfer.allCases.compactMap { transfer in

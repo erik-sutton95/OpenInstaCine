@@ -29,9 +29,7 @@ import androidx.core.graphics.scale
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.MonitorGlass
 import com.opencapture.openpocketcine.feed.FeedEffectsRenderPlan
-import com.opencapture.openpocketcine.feed.LiveScopeSampleBus
 import com.opencapture.openpocketcine.feed.MonitorTransfer
-import com.opencapture.openpocketcine.feed.PocketScopeSampler
 import com.opencapture.openpocketcine.feed.ScopeAssistBundle
 import com.opencapture.openpocketcine.feed.ScopeExposureCeiling
 import kotlinx.coroutines.delay

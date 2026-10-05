@@ -1,14 +1,14 @@
 ---
 title: Android app
-description: OpenPocketCine's Compose phone shell with a Kotlin Luna adapter. arm64-v8a only, Android 10 or newer.
+description: App-owned Compose phone app on OpenCine's shared shell, with a Kotlin Luna adapter. arm64-v8a only, Android 10 or newer.
 ---
 
-The Android app lives in `Apps/Android/`. It runs the OpenPocketCine Android
-shell with OpenInstaCine identity, the yellow accent and a Luna adapter driving
-it. It runs against a real Luna Ultra (firmware 1.1.15): pairing, camera Wi-Fi,
-live view, camera and gimbal control, and media. iOS is the daily driver, and a
-few iOS features are still missing here (below). arm64 phones, Android 10 or
-newer.
+The Android app lives in `Apps/Android/`. It is app-owned Compose code on OpenCine's
+shared shell (`appkit`), no longer synced from the OpenPocketCine Android shell, with
+OpenInstaCine identity, the yellow accent and a Luna adapter driving it. It runs against
+a real Luna Ultra (firmware 1.1.15): pairing, camera Wi-Fi, live view, camera and gimbal
+control, and media. iOS is the daily driver, and a few iOS features are still missing
+here (below). arm64 phones, Android 10 or newer.
 
 If pairing or live view fails, tap **Report a problem** on the pairing screen or
 in **Operator Setup → System**
@@ -97,7 +97,7 @@ bytes are pinned to the same captured fixtures as the Swift package
 | Module | Role |
 | --- | --- |
 | `:app` | Thin launcher `com.opencapture.openinstacine`: installs the brand, the I-Log camera look and `LunaBackend` |
-| `:monitor` | Shared Compose shell, MediaCodec, Vulkan/GLES, assists, library and player (OpenPocketCine `app/src` as a library) |
+| `:monitor` | App-owned Compose code: MediaCodec, Vulkan/GLES, assists, library and player (derived from OpenPocketCine `app/src`, no longer synced) |
 | OpenCine `monitor-ui` | Shared Compose design language from the sibling OpenCine checkout (included build `opencine`); the accent is brand-assigned |
 | OpenCine `appkit` | Cameras, pairing, connection progress, failure recovery and versioned saved-camera records |
 | OpenCine `insta360-shell` | Kotlin backend contract: discovery, lifecycle, state, capabilities, frames, optional camera controls (included build) |

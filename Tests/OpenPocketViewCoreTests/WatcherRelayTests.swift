@@ -61,13 +61,24 @@ import Testing
 
     @Test func joinAcceptsEmptyPasscode() {
         let hello = WatcherRelayHello(hostName: "A", passcode: nil, watcherID: "w1")
-        #expect(WatcherRelayJoin.hostAccepts(hello: hello, requiredPasscode: "").isSuccess)
-        #expect(WatcherRelayJoin.hostAccepts(hello: hello, requiredPasscode: "  ").isSuccess)
+        #expect(
+            WatcherRelayJoin.hostAccepts(
+                hello: hello, requiredPasscode: "",
+                versionMismatchReason: WatcherRelayJoin.versionMismatchReason
+            ).isSuccess)
+        #expect(
+            WatcherRelayJoin.hostAccepts(
+                hello: hello, requiredPasscode: "  ",
+                versionMismatchReason: WatcherRelayJoin.versionMismatchReason
+            ).isSuccess)
     }
 
     @Test func joinRejectsWrongPasscode() {
         let hello = WatcherRelayHello(hostName: "A", passcode: "nope")
-        switch WatcherRelayJoin.hostAccepts(hello: hello, requiredPasscode: "secret") {
+        switch WatcherRelayJoin.hostAccepts(
+            hello: hello, requiredPasscode: "secret",
+            versionMismatchReason: WatcherRelayJoin.versionMismatchReason)
+        {
         case .failure(let denied):
             #expect(denied.passcodeRequired)
         case .success:
@@ -77,7 +88,10 @@ import Testing
 
     @Test func joinRejectsWrongVersion() {
         let hello = WatcherRelayHello(version: 99, hostName: "A")
-        switch WatcherRelayJoin.hostAccepts(hello: hello, requiredPasscode: "") {
+        switch WatcherRelayJoin.hostAccepts(
+            hello: hello, requiredPasscode: "",
+            versionMismatchReason: WatcherRelayJoin.versionMismatchReason)
+        {
         case .failure(let denied):
             #expect(!denied.passcodeRequired)
             #expect(denied.reason == "This app version cannot watch that feed.")

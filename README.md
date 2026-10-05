@@ -126,13 +126,13 @@ OpenCine shared packages, Luna protocol adapters and native app composition:
 
 | Layer | Path | Purpose |
 | --- | --- | --- |
-| **Shared core** | `Sources/` | OpenPocketCine monitor core (`OpenPocketViewCore`, ...) with small Luna hooks |
+| **App core** | `Sources/` | `OpenPocketViewCore`: an app-owned fork of the OpenPocketCine monitor core with small Luna hooks, no longer synced from OpenPocketCine and pending extraction into OpenCine |
 | **Shared UI** | `../OpenCine` | Sibling checkout of the OpenCine platform repository: SwiftUI `MonitorUI` and `MonitorPresentation`, Compose `monitor-ui` |
 | **App shell** | `../OpenCine` | `OpenCineAppKit` and Compose `appkit`: the root (cameras, pair, monitor and its Settings/Media covers), the monitor's camera lifetime and common controls (ISO, shutter, white balance, record), cameras, pairing, progress, recovery actions and saved-camera migration through `LunaIntegration` |
 | **Shared camera core** | `../OpenCine` | OpenCine: camera `CameraSession` contracts (Swift and Kotlin `:core`) and `OpenCineMedia` (LUT, curve, scope math) |
 | **Luna integration** | `../OpenCine` | OpenCine: `Insta360Protocol` (UCD2 framing, protobuf, status, settings, media and control messages) and `Insta360Apple` (CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport, the Luna `CameraSession`) |
-| **iOS app** | `ios/OpenInstaCine/` | Composition of the shared OpenCine shell, Luna presentation adapters and native app services; Apple Watch app in `ios/OpenInstaCineWatch/` |
-| **Android app** | `Apps/Android/` | Jetpack Compose shell (`app`, `monitor`) on OpenCineUI `monitor-ui`, and the Kotlin Luna adapter from OpenCine (`insta360-luna`) |
+| **iOS app** | `ios/OpenInstaCine/` | App-owned composition of the shared OpenCine shell (`OpenCineAppKit`), Luna presentation adapters and native app services; Apple Watch app in `ios/OpenInstaCineWatch/` |
+| **Android app** | `Apps/Android/` | App-owned Jetpack Compose code (`app`, `monitor`) on the shared OpenCine shell (`appkit`) and OpenCineUI `monitor-ui`, and the Kotlin Luna adapter from OpenCine (`insta360-luna`) |
 | **Android facade** | `Sources/OpenPocketCineAndroidFacade/` | Swift session and JNI boundary for Android |
 | **Tests** | `Tests/`, `ios/OpenInstaCineTests/` (protocol and Luna session tests live in OpenCine) | Core and app tests |
 
@@ -141,7 +141,7 @@ UIKit or Android dependencies). Platform adapters own native transports, permiss
 rendering; the app supplies configuration and composition. Common behavior changes belong in
 the owning OpenCine package and are adopted
 through the pinned dependency. The former Pocket source-sync workflow has been retired.
-The contract between the two apps is [`docs/SHARED-MONITOR-ENGINE.md`](docs/SHARED-MONITOR-ENGINE.md).
+[`docs/SHARED-MONITOR-ENGINE.md`](docs/SHARED-MONITOR-ENGINE.md) records the 2026-09-06 multi-brand design intent.
 
 ### Build from source
 
@@ -180,7 +180,7 @@ Play closed testing is in [`docs/android-play-ci.md`](docs/android-play-ci.md).
   Keep them current in the same PR ([standard](https://opencapture.org/openinstacine/docs/contribute/documentation/)).
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): layout, Simulator rig, DEBUG remote, Mac live-view lab
 - [`docs/implementation/luna-ios-status.md`](docs/implementation/luna-ios-status.md): feature status and parity with OpenPocketCine
-- [`docs/SHARED-MONITOR-ENGINE.md`](docs/SHARED-MONITOR-ENGINE.md): shared engine contract with OpenPocketCine
+- [`docs/SHARED-MONITOR-ENGINE.md`](docs/SHARED-MONITOR-ENGINE.md): multi-brand design intent (2026-09-06)
 - [`docs/RELEASE.md`](docs/RELEASE.md): TestFlight and Play release process
 - [`docs/research/luna-fw-1.1.15-verification.md`](docs/research/luna-fw-1.1.15-verification.md): hardware verification on firmware 1.1.15
 - [`docs/research/luna-command-catalog.md`](docs/research/luna-command-catalog.md): command catalog

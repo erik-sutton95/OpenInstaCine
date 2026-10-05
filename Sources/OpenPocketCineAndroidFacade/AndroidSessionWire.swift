@@ -90,23 +90,6 @@ public enum AndroidSessionWire {
         return text
     }
 
-    private final class WatchdogStore: @unchecked Sendable {
-        let lock = NSLock()
-        var boxes: [Int64: FeedWatchdog] = [:]
-        var beforeAction: [Int64: FeedWatchdog] = [:]
-        var next: Int64 = 1
-    }
-
-    private static let watchdogStore = WatchdogStore()
-
-    private final class RecoveryStore: @unchecked Sendable {
-        let lock = NSLock()
-        var boxes: [Int64: MultiviewRecovery] = [:]
-        var next: Int64 = 1
-    }
-
-    private static let recoveryStore = RecoveryStore()
-
     /// Android JNI: `CameraSoftAP` decisions so Kotlin does not clone the ladder.
     /// `kind` is the function name. Bool results are `true` / `false`. Enums use
     /// `HandshakeTimeoutStep` / `FirstPictureStep` raw values.

@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.appkit.monitorChromeEditStroke
 import com.opencapture.monitorui.PortraitZones
 import com.opencapture.monitorui.portraitAspectToggle
 import com.opencapture.monitorui.portraitAssistToolbar
@@ -132,7 +133,7 @@ fun LivePortraitChrome(
                 Modifier
                     .liveModuleFrame(rail)
                     .alpha(if (uiLocked) 0.4f else 1f)
-                    .chromeEditStroke(editing != null, true),
+                    .monitorChromeEditStroke(editing != null, true),
             ) {
                 com.opencapture.openpocketcine.assists.MonitorAssistCluster(
                     portrait = true, locked = uiLocked || !chromeInteractive,
@@ -178,7 +179,7 @@ fun LivePortraitChrome(
                     Modifier
                         .liveModuleFrame(zoom)
                         .alpha(if (uiLocked || zoomBlocked) 0.4f else 1f)
-                        .chromeEditStroke(editing != null, true),
+                        .monitorChromeEditStroke(editing != null, true),
                 onCycle = {
                     model.session.setZoom(LiveZoom.nextJump(model.session.zoomCycleFrom(), model.monitorZoomStops().primary))
                 },
@@ -207,7 +208,7 @@ fun LivePortraitChrome(
             )
         }
         if (showGimbalButton) {
-            Box(Modifier.liveModuleFrame(stick).alpha(if (captureOpen) 0f else 1f).chromeEditStroke(editing != null, true)) {
+            Box(Modifier.liveModuleFrame(stick).alpha(if (captureOpen) 0f else 1f).monitorChromeEditStroke(editing != null, true)) {
                 LiveGimbalStick(
                     enabled = !captureOpen && !uiLocked && cover == null && chromeInteractive,
                     onMove = model::updateGimbalStick,
@@ -289,7 +290,7 @@ fun LiveCaptureStrip(
     )
     fun value(sheet: LiveSheet, label: String, readout: String, annotation: String? = null,
         valueIcon: OpcIcon? = null, badgeIcon: OpcIcon? = null) =
-        com.opencapture.openpocketcine.monitor.MonitorValue(
+        com.opencapture.monitorui.MonitorValue(
             sheet.name, label, readout, selected = active == sheet, annotation = annotation,
             valueIcon = valueIcon, badgeIcon = badgeIcon,
         )
@@ -305,7 +306,7 @@ fun LiveCaptureStrip(
         add(value(LiveSheet.EXPO, "EXPOSURE", if (aeLocked) CaptureLists.AE_LOCK
             else if (status.expoMode == CameraCommands.EXPO_MANUAL) "M" else if (auto) "A" else "\u2014"))
         // iOS `LunaMeteringTile`: two values, so a tap toggles in place; hidden until the camera reports it.
-        if (faceMetering != null) add(com.opencapture.openpocketcine.monitor.MonitorValue(
+        if (faceMetering != null) add(com.opencapture.monitorui.MonitorValue(
             METER_TILE, "METER", if (faceMetering) "Face" else "Matrix"))
         add(value(LiveSheet.WB, "WB", captureReadoutLabel(LiveSheet.WB, status, model, CaptureLists.wbChipValue(status, awbLocked)),
             valueIcon = if (CaptureLists.wbIsAuto(status) && !awbLocked) OpcIcon.APERTURE else null))
@@ -379,7 +380,7 @@ internal fun LivePortraitStatus(model: AppModel, layout: LiveMonitorLayout, stat
                 Text(portraitStorageLabel(status).substringBefore(" ·"), style = LiveType.mono(13.5f, FontWeight.SemiBold))
             }
         }, link = {
-            com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
+            com.opencapture.monitorui.MonitorTelemetry(bars, fpsLabel,
                 model.phoneBatteryPercent, status.batteryPercent, horizontal = true, showsPower = false)
         }, format = {
                 val setupSheet = CaptureShutterPolicy.portraitSetupSheet(status.shootingMode)

@@ -36,10 +36,8 @@ extension AudioAssist {
             y: min(max(minY, point.y), max(minY, movement.maxY - size.height / 2)))
     }
 
-    @MainActor static var store: AudioAssistStore { AudioAssistStore.shared }
+    @MainActor static var store: MonitorAudioPreferenceStore { MonitorAudioPreferenceStore.shared }
 }
-
-typealias AudioAssistStore = MonitorAudioPreferenceStore
 
 // The app selects its storage domain and keeps each pre-existing namespace.
 @MainActor private enum InstaAssistStores {

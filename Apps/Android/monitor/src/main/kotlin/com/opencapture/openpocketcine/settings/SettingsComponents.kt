@@ -90,6 +90,7 @@ import com.opencapture.openpocketcine.LiveType
 import com.opencapture.openpocketcine.OpcIcon
 import com.opencapture.openpocketcine.panelGlass
 import kotlin.math.roundToInt
+import com.opencapture.monitorui.settings.MonitorSettingsColorDot
 
 // Compose ports of the iOS operator-settings primitives (SettingsRootView /
 // AppSettings: SettingsRowCard, SettingsInlineRow, SettingsSwitchInlineRow,
@@ -131,7 +132,7 @@ fun SettingsActionPill(title: String, icon: OpcIcon? = null, tint: Color = LiveD
     background: Color = LiveDesign.accentDim, modifier: Modifier = Modifier,
     enabled: Boolean = true, onClick: () -> Unit) {
     com.opencapture.monitorui.settings.MonitorSettingsActionPill(
-        title, icon, tint, background, modifier, enabled, onClick)
+        title, icon, tint, background, modifier, enabled, onClick = onClick)
 }
 
 /**
@@ -210,29 +211,26 @@ fun SettingsSegmented(
 ) =
     com.opencapture.monitorui.settings.MonitorSettingsSegmented(options, selected, compact, fillWidth, accentSelection, testTag, onSelect)
 
-/** One named swatch for [SettingsColorDots] (iOS `SettingsColorDots.Dot`). */
-typealias SettingsColorDot = com.opencapture.monitorui.settings.MonitorSettingsColorDot
-
 /** iOS `SettingsPalette` - zone-scoped stripe/peaking colours. */
 object SettingsPalette {
-    val highlight: List<SettingsColorDot> =
+    val highlight: List<MonitorSettingsColorDot> =
         listOf(
-            SettingsColorDot("White", LiveDesign.text),
-            SettingsColorDot("Amber", LiveDesign.accent),
-            SettingsColorDot("Red", LiveDesign.rec),
+            MonitorSettingsColorDot("White", LiveDesign.text),
+            MonitorSettingsColorDot("Amber", LiveDesign.accent),
+            MonitorSettingsColorDot("Red", LiveDesign.rec),
         )
-    val midtone: List<SettingsColorDot> =
+    val midtone: List<MonitorSettingsColorDot> =
         listOf(
-            SettingsColorDot("Amber", LiveDesign.accent),
-            SettingsColorDot("Cyan", LiveDesign.info),
-            SettingsColorDot("Green", LiveDesign.good),
+            MonitorSettingsColorDot("Amber", LiveDesign.accent),
+            MonitorSettingsColorDot("Cyan", LiveDesign.info),
+            MonitorSettingsColorDot("Green", LiveDesign.good),
         )
-    val peaking: List<SettingsColorDot> =
+    val peaking: List<MonitorSettingsColorDot> =
         listOf(
-            SettingsColorDot("White", LiveDesign.text),
-            SettingsColorDot("Blue", LiveDesign.info),
-            SettingsColorDot("Red", LiveDesign.rec),
-            SettingsColorDot("Green", LiveDesign.good),
+            MonitorSettingsColorDot("White", LiveDesign.text),
+            MonitorSettingsColorDot("Blue", LiveDesign.info),
+            MonitorSettingsColorDot("Red", LiveDesign.rec),
+            MonitorSettingsColorDot("Green", LiveDesign.good),
         )
 }
 

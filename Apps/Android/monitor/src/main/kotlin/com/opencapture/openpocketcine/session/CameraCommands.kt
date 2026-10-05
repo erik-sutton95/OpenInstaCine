@@ -10,44 +10,6 @@ import kotlin.math.roundToInt
  * No invented `0xE1` values. No 1 Hz `0x09/0xa8`.
  */
 object CameraCommands {
-    const val SET = 0x02
-    const val SENDER_APP = 0x02
-    const val RX_CAMERA = 0x01
-    const val FLAG_REQUEST = 0x40
-
-    const val CMD_RECORD = 0x02
-    const val CMD_EXPO = 0x1E
-    const val CMD_FOCUS = 0x24
-    const val CMD_SHUTTER = 0x28
-    const val CMD_ISO = 0x2A
-    const val CMD_WB = 0x2C
-    const val CMD_RES_FPS = 0x18
-    const val CMD_COLOR = 0x42
-    const val CMD_PARAM = 0x8E
-    const val CMD_AUDIO_DSP_SET = 0x9F
-    const val CMD_AUDIO_DSP_GET = 0xA0
-    const val CMD_TAP_PREPARE = 0x22
-    const val CMD_TAP_POINT = 0x30
-    const val CMD_TAP_HINT = 0x68
-    const val CMD_TAP_COMMIT = 0x32
-
-    const val PID_AUDIO_CHANNEL = 0x0020
-    const val PID_SELFIE_FLIP = 0x0038
-    const val PID_FOCUS_TRACK = 0x003B
-    const val PID_VOCAL_BOOST = 0x004C
-
-    /** Untracked pid `0x38` GET reply. Must not complete other `0x8E` waiters. */
-    fun isSelfieFlipGetReply(cmdSet: Int, cmdId: Int, payload: ByteArray): Boolean {
-        if ((cmdSet and 0xFF) != SET || (cmdId and 0xFF) != CMD_PARAM) return false
-        if (payload.size < 7) return false
-        if (payload[0] != 0.toByte() || payload[1] != 0.toByte() || payload[2] != 1.toByte()) {
-            return false
-        }
-        if (payload[5] != 1.toByte()) return false
-        val pid = (payload[3].toInt() and 0xFF) or ((payload[4].toInt() and 0xFF) shl 8)
-        return pid == PID_SELFIE_FLIP
-    }
-
     const val RES_1080 = 0x0A
     const val RES_4K = 0x10
 
@@ -63,9 +25,6 @@ object CameraCommands {
     const val COLOR_ILOG = 65_536
     /** Insta360 Dolby Vision. Not a DJI SET byte. */
     const val COLOR_DOLBY_VISION = 0xE5
-
-    private val COLOR_KNOWN =
-        setOf(COLOR_NORMAL, COLOR_HDR, COLOR_DLOG, COLOR_DLOG2, COLOR_NORMAL10, COLOR_DLOG_M)
 
     /**
      * Pocket 3 / Nano SET / `cam_image_effect` `@2`. Pocket 3 (#176): Normal
@@ -126,10 +85,6 @@ object CameraCommands {
     const val DIR_FRONT = 0x3A
     const val DIR_FRONT_BACK = 0xBA
 
-    fun recordStart(): ByteArray = byteArrayOf(0x01)
-
-    fun recordStop(): ByteArray = byteArrayOf(0x00)
-
     /** JNI extra for `CommandKind.setExpoMode`. */
     fun expoWireExtra(mode: Int): String? =
         when (mode) {
@@ -141,9 +96,6 @@ object CameraCommands {
     /** iOS `CameraSession.setWhiteBalanceCustom` clamp. */
     fun clampWhiteBalanceCustom(kelvin: Int, tint: Int): Pair<Int, Int> =
         kelvin.coerceIn(2_000, 10_000) to tint.coerceIn(-100, 100)
-
-    fun focusMode(continuous: Boolean): ByteArray =
-        byteArrayOf(if (continuous) FOCUS_CONTINUOUS.toByte() else FOCUS_SINGLE.toByte())
 
     /**
      * D-Log2 cannot zoom. Any step off 1× hops the body to D-Log.
@@ -203,35 +155,6 @@ object CameraCommands {
         return "$res\u001f$fpsIndex"
     }
 
-    const val AUDIO_DSP_SIZE = 26
-
-    fun audioDspGet(): ByteArray = ByteArray(0)
-
-    /** SET payload is the GET blob with only `@2` rewritten. Do not invent other bytes. */
-    fun audioDspSet(blob: ByteArray, at2: Int): ByteArray {
-        val out = blob.copyOf()
-        if (out.size > 2) out[2] = at2.toByte()
-        return out
-    }
-
-    /** Wind off is only `18`. Captured directional bytes already include wind-on. */
-    fun patchWind(blob: ByteArray, on: Boolean): ByteArray {
-        if (!on) return audioDspSet(blob, WIND_OFF)
-        val raw = if (blob.size > 2) blob[2].toInt() and 0xFF else -1
-        if (directionalFrom(raw) >= 0) return audioDspSet(blob, raw)
-        return audioDspSet(blob, WIND_ON)
-    }
-
-    fun patchDirectional(blob: ByteArray, mode: Int): ByteArray =
-        audioDspSet(
-            blob,
-            when (mode) {
-                1 -> DIR_FRONT
-                2 -> DIR_FRONT_BACK
-                else -> DIR_ALL
-            },
-        )
-
     /** `0` off, `1` on, `-1` leave. Directional bytes count as on. */
     fun windFrom(raw: Int): Int =
         when (raw) {
@@ -254,16 +177,6 @@ object CameraCommands {
             for (b in blob) append("%02x".format(b.toInt() and 0xFF))
         }
 
-    fun audioDspBytes(hex: String): ByteArray? {
-        if (hex.length < 6 || hex.length % 2 != 0) return null
-        val out = ByteArray(hex.length / 2)
-        for (i in out.indices) {
-            val b = hex.substring(i * 2, i * 2 + 2).toIntOrNull(16) ?: return null
-            out[i] = b.toByte()
-        }
-        return out
-    }
-
     fun audioChannelLabel(value: Int): String? =
         when (value) {
             AUDIO_MONO -> "Mono"
@@ -279,43 +192,6 @@ object CameraCommands {
             2 -> "Front+back"
             else -> null
         }
-
-    fun tapPrepare(): ByteArray = byteArrayOf(0x02)
-
-    fun tapPoint(x: Float, y: Float): ByteArray = floatLE(x) + floatLE(y) + ByteArray(12)
-
-    fun tapHint(): ByteArray = byteArrayOf(0x08)
-
-    fun tapCommit(x: Float, y: Float): ByteArray =
-        byteArrayOf(0x00, 0x02, 0x01, 0x00) + floatLE(x) + floatLE(y) + ByteArray(8)
-
-    const val RX_GIMBAL = 0x04
-    const val LIVE_VIEW_ENABLE_RECEIVER_POCKET = 0x08
-    const val LIVE_VIEW_ENABLE_RECEIVER_NANO = 0x41
-
-    const val CMD_PHOTO = 0x01
-    const val CMD_EV = 0x2E
-    const val CMD_ZOOM = 0xB8
-    const val CMD_TRACK_SET = 0xA6
-    const val CMD_TRACK_POLL = 0xA5
-    const val CMD_PLAYBACK = 0x0C
-    const val CMD_GIMBAL_ANGLE = 0x14
-    const val CMD_GIMBAL_MODE = 0x4C
-    const val CMD_GIMBAL_PARAMS = 0x50
-    const val CMD_MEDIA_LIST = 0x26
-    const val CMD_MEDIA_DELETE = 0x28
-    const val CMD_MEDIA_FAVORITE = 0xBF
-    const val CMD_NANO_GATE = 0x09
-    const val CMD_LIVE_VIEW = 0xA8
-
-    const val PID_ISO_LIMIT = 0x000F
-
-    const val ZOOM_LENS_1X = 217
-    const val ZOOM_LENS_3X = 651
-    const val ZOOM_LENS_6X = 1302
-    const val ZOOM_LENS_12X = 2604
-    const val ZOOM_SLEW_TELE = 100
-    const val ZOOM_SLEW_WIDE = 300
 
     const val SHOOT_SLOWMO = 0x00
     const val SHOOT_VIDEO = 0x01
@@ -386,8 +262,6 @@ object CameraCommands {
             SHOOT_SLOWMO,
         )
 
-    fun shootPhoto(): ByteArray = byteArrayOf(0x01)
-
     fun zoomLens(position: Int): ByteArray {
         val p = position.coerceIn(0, 0xFFFF)
         return byteArrayOf(0x0A, 0x4E, (p and 0xFF).toByte(), ((p shr 8) and 0xFF).toByte())
@@ -407,8 +281,6 @@ object CameraCommands {
             else -> CamFov.lensPosition(factor)
         }
 
-    fun zoomForFactor(factor: Double): ByteArray = zoomLens(lensForZoomFactor(factor))
-
     /** Native timed target: yaw/roll/pitch i16 LE, absolute + ignore roll, duration in 0.1s. */
     fun gimbalTimedTarget(target: GimbalWaypoint, duration: Double): ByteArray? {
         if (target.pitchDeg !in GimbalWaypoint.TILT_MIN_DEG..GimbalWaypoint.TILT_MAX_DEG) return null
@@ -427,37 +299,6 @@ object CameraCommands {
             byteArrayOf(0x05, tenth(duration).toByte())
     }
 
-    fun gimbalTimedStop(): ByteArray = byteArrayOf(0, 0, 0, 0, 0, 0, 4, 1)
-
-    fun gimbalRecenter(): ByteArray = byteArrayOf(0xFE.toByte(), 0x08)
-
-    fun gimbalFlip(): ByteArray = byteArrayOf(0xFE.toByte(), 0x09)
-
-    fun gimbalFollowFamily(): ByteArray = byteArrayOf(0x02, 0x08)
-
-    fun gimbalFpv(): ByteArray = byteArrayOf(0x01, 0x08)
-
-    fun gimbalDirectionLock(): ByteArray = byteArrayOf(0x00, 0x08)
-
-    fun gimbalParamsGet(): ByteArray = byteArrayOf(0x01, 0x04, 0x05)
-
-    fun setGimbalSpeed(speed: Int): ByteArray =
-        byteArrayOf(0x00, 0x05, 0x01, (speed and 0xFF).toByte())
-
-    fun setGimbalTiltLock(locked: Boolean): ByteArray =
-        byteArrayOf(0x00, 0x04, 0x01, if (locked) 0x01 else 0x00)
-
-    fun liveViewEnablePayload(): ByteArray =
-        byteArrayOf(0x00, 0x04, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
-
-    /** Nano `0x02/0x09` start `…03` / stop `…04`. Do not send on Pocket. */
-    fun nanoLiveViewGate(start: Boolean): ByteArray =
-        ByteArray(11).also { it[10] = if (start) 0x03 else 0x04 }
-
-    fun enterPlayback(): ByteArray = byteArrayOf(0x01, 0x01, 0x00, 0x01)
-
-    fun exitPlayback(): ByteArray = byteArrayOf(0x01, 0x01, 0x00, 0x00)
-
     fun trackingBox(id: Int, x: Float, y: Float, width: Float, height: Float): ByteArray {
         val uid = id and 0xFFFF
         return byteArrayOf(0x01, 0x00, 0x00) +
@@ -469,31 +310,6 @@ object CameraCommands {
     }
 
     fun pollTracking(): ByteArray = byteArrayOf(0x00)
-
-    fun mediaList(counter: Int, cursor: Int): ByteArray {
-        val payload = MEDIA_LIST_TEMPLATE.copyOf()
-        payload[4] = (counter and 0xFF).toByte()
-        payload[10] = (cursor and 0xFF).toByte()
-        payload[11] = ((cursor shr 8) and 0xFF).toByte()
-        payload[12] = ((cursor shr 16) and 0xFF).toByte()
-        payload[13] = ((cursor shr 24) and 0xFF).toByte()
-        return payload
-    }
-
-    fun mediaListTrigger(): ByteArray =
-        byteArrayOf(
-            0x4A, 0x04, 0x0E, 0x10,
-            0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x01, 0x00, 0x00, 0x00,
-        )
-
-    fun deleteMedia(handle: Int, counter: Int): ByteArray =
-        byteArrayOf(0x01) +
-            u32LE(handle) +
-            u32LE(counter) +
-            byteArrayOf(0x00) +
-            u32LE(1) +
-            byteArrayOf(0x01, 0x01, 0x00, 0x00)
 
     /** Action 6 moves On/Off to byte 1 and sends its captured tail verbatim (handbook `devices/action-6/coverage`). */
     fun setMediaFavorite(handle: Int, on: Boolean, counter: Int, cameraName: String = ""): ByteArray =
@@ -614,69 +430,6 @@ object CameraCommands {
         return x * scale to y * scale
     }
 
-    /** iOS `GimbalStick.streamInterval` — ACK pump emits while held. */
-    const val GIMBAL_STICK_STREAM_INTERVAL_MS = 40L
-    /** Stick throw can pause HEVC the same way zoom/AF-C do. */
-    const val GIMBAL_STICK_VIDEO_GRACE_SEC = 3.0
-    const val STALL_SEC = 2.0
-
-    fun shouldEmitGimbalStick(
-        held: Boolean,
-        restPending: Boolean,
-        nowMs: Long,
-        lastEmittedMs: Long,
-    ): Boolean {
-        if (restPending) return true
-        if (!held) return false
-        if (lastEmittedMs == 0L) return true
-        return nowMs - lastEmittedMs >= GIMBAL_STICK_STREAM_INTERVAL_MS
-    }
-
-    /** iOS `GimbalStick.shouldEmitOnSocket`. Rest still leaves while ingest is down. */
-    fun shouldEmitGimbalStickOnSocket(
-        rest: Boolean,
-        liveAccepting: Boolean,
-        hasConnection: Boolean,
-    ): Boolean {
-        if (!hasConnection) return false
-        if (rest) return true
-        return liveAccepting
-    }
-
-    /** Core `FeedWatchdog.cameraSetGrace`: any tracked SET can pause HEVC. */
-    const val CAMERA_SET_VIDEO_GRACE_SEC = 4.0
-
-    /** Core `FeedWatchdog.shouldHoldForCameraSet`. Same shape as the gimbal hold. */
-    fun shouldHoldCameraSetWatchdog(
-        secondsSinceSet: Double?,
-        lastVideoPacketAgeSec: Double? = null,
-    ): Boolean {
-        val s = secondsSinceSet ?: return false
-        if (s < 0.0 || s >= CAMERA_SET_VIDEO_GRACE_SEC) return false
-        if (lastVideoPacketAgeSec != null &&
-            lastVideoPacketAgeSec >= STALL_SEC + CAMERA_SET_VIDEO_GRACE_SEC
-        ) {
-            return false
-        }
-        return true
-    }
-
-    fun shouldHoldGimbalWatchdog(
-        secondsSinceThrow: Double?,
-        lastVideoPacketAgeSec: Double? = null,
-        stickHeld: Boolean = false,
-    ): Boolean {
-        if (stickHeld) return true
-        val s = secondsSinceThrow ?: return false
-        if (s < 0.0 || s >= GIMBAL_STICK_VIDEO_GRACE_SEC) return false
-        if (lastVideoPacketAgeSec != null &&
-            lastVideoPacketAgeSec >= STALL_SEC + GIMBAL_STICK_VIDEO_GRACE_SEC
-        ) {
-            return false
-        }
-        return true
-    }
-
     const val GIMBAL_FACE_UNKNOWN = -1
     const val GIMBAL_FACE_FRONT = 0
     const val GIMBAL_FACE_SELFIE = 1
@@ -688,43 +441,6 @@ object CameraCommands {
     /** Stick invert follows the visible picture (TT180 XOR MIRROR). */
     fun liveInvertPan(poseInvert: Boolean, assistMirror: Boolean): Boolean =
         poseInvert != assistMirror
-
-    /** `0x04/0x05` i16-LE @4 in 0.1°. |angle| > 90° is the selfie-facing pose. */
-    const val ROTATED_180_TENTH_DEG = 900
-    /** Invert latch like Mimo: end of the 180, not the midpoint. */
-    const val SETTLE_180_TENTH_DEG = 1650
-    const val SETTLE_FRONT_TENTH_DEG = 150
-    const val POSE_SEED_FRONT_VOTES = 3
-
-    /**
-     * The only `0x04/0x05` layout with known offsets. Another length is a different
-     * frame; reading it as attitude corrupts pan/tilt and Motion Control.
-     */
-    const val ATTITUDE_LENGTH = 50
-
-    fun isAttitude(payload: ByteArray): Boolean = payload.size == ATTITUDE_LENGTH
-
-    private fun i16(payload: ByteArray, at: Int): Int =
-        ((payload[at].toInt() and 0xFF) or ((payload[at + 1].toInt() and 0xFF) shl 8)).toShort().toInt()
-
-    fun yawTenthDeg(payload: ByteArray): Int? = if (isAttitude(payload)) i16(payload, 4) else null
-
-    /** Tilt 0.1° from i16-LE `@20`, negated so look-up is positive (Mimo stick-down → `@20` +). */
-    fun pitchTenthDeg(payload: ByteArray): Int? = if (isAttitude(payload)) -i16(payload, 20) else null
-
-    /** Native absolute pitch i16-LE `@0` (the `0x04/0x14` pitch reference). */
-    fun nativePitchTenthDeg(payload: ByteArray): Int? = if (isAttitude(payload)) i16(payload, 0) else null
-
-    fun rotationSettled(yawTenthDeg: Int, want180: Boolean): Boolean {
-        val angle = kotlin.math.abs(yawTenthDeg)
-        return if (want180) angle >= SETTLE_180_TENTH_DEG else angle <= SETTLE_FRONT_TENTH_DEG
-    }
-
-    /** Pocket `FE 09` destination: front half (`|yaw| ≤ 90°`) goes to ±180°. */
-    fun fe09GoesTo180(yawTenthDeg: Int?): Boolean {
-        val yaw = yawTenthDeg ?: return true
-        return kotlin.math.abs(yaw) <= ROTATED_180_TENTH_DEG
-    }
 
     /** 4 = 1.0 (captured ±550 throw). 5 saturates earlier; 1–3 never reach full throw. */
     fun gimbalSensitivityGain(sensitivity: Int): Float =
@@ -797,26 +513,6 @@ object CameraCommands {
         val tilt = if (mapping.invertTilt) -y else y
         return gimbalAxis(tilt, sensitivity, mapping) to gimbalAxis(pan, sensitivity, mapping)
     }
-
-    /** `0x04/0x01` payload: two u16-LE axes + trailer `00 80 22 00`. */
-    fun gimbalStickPayload(axis0: Int, axis1: Int): ByteArray {
-        val a0 = axis0.coerceIn(GIMBAL_STICK_MIN, GIMBAL_STICK_MAX)
-        val a1 = axis1.coerceIn(GIMBAL_STICK_MIN, GIMBAL_STICK_MAX)
-        return byteArrayOf(
-            (a0 and 0xFF).toByte(),
-            ((a0 shr 8) and 0xFF).toByte(),
-            0x00,
-            0x00,
-            (a1 and 0xFF).toByte(),
-            ((a1 shr 8) and 0xFF).toByte(),
-            0x00,
-            0x80.toByte(),
-            0x22,
-            0x00,
-        )
-    }
-
-    fun fpsIndex(fps: Int): Int? = VideoFrameRate.fromFps(fps)?.rawValue
 
     /**
      * iOS `CameraStatusDecoder.fps(index:)` — subscribe display table,
@@ -1008,18 +704,6 @@ object CameraCommands {
         return out
     }
 
-    fun parseColorModes(value: ByteArray, name: String = "", family: String = ""): List<Int> {
-        if (value.size < 5 || value[0] != 0x01.toByte()) return emptyList()
-        val inner = (value[1].toInt() and 0xFF) or ((value[2].toInt() and 0xFF) shl 8)
-        if (inner < 2 || 3 + inner > value.size) return emptyList()
-        val body = value.copyOfRange(3, 3 + inner)
-        val count = body[0].toInt() and 0xFF
-        if (count < 1 || body.size < 1 + count) return emptyList()
-        return body.copyOfRange(1, 1 + count)
-            .map { parseColorMode(it.toInt() and 0xFF, name, family) }
-            .filter { it in COLOR_KNOWN }
-    }
-
     fun parseIsoIndices(value: ByteArray): List<Int> {
         if (value.size < 5 || value[0] != 0x01.toByte()) return emptyList()
         val inner = (value[1].toInt() and 0xFF) or ((value[2].toInt() and 0xFF) shl 8)
@@ -1069,20 +753,6 @@ object CameraCommands {
         return list[next]
     }
 
-    val kelvinPresets = listOf(2000, 3200, 4000, 5000, 5600, 6500, 8000, 10000)
-
-    private val MEDIA_LIST_TEMPLATE =
-        byteArrayOf(
-            0x4A, 0x00, 0x2A, 0x10,
-            0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x01, 0x00, 0x00, 0x00,
-            0x2D, 0x00, 0x0D, 0x01, 0x00,
-            0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(),
-            0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(),
-            0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00,
-        )
-
     private fun u16LE(value: Int): ByteArray =
         byteArrayOf((value and 0xFF).toByte(), ((value shr 8) and 0xFF).toByte())
 
@@ -1122,19 +792,6 @@ enum class FocusTrackMode(val raw: Int, val label: String) {
         fun shouldHoldWatchdog(secondsSinceSet: Double?): Boolean {
             val s = secondsSinceSet ?: return false
             return s >= 0.0 && s < VIDEO_GRACE_SEC
-        }
-
-        /** GET reply `00 00 01 3B 00 02 01 <mode>`. */
-        fun parseReply(payload: ByteArray): FocusTrackMode? {
-            if (payload.size < 8) return null
-            if (payload[0] != 0.toByte() || payload[1] != 0.toByte() || payload[2] != 0x01.toByte()) {
-                return null
-            }
-            val pid = (payload[3].toInt() and 0xFF) or ((payload[4].toInt() and 0xFF) shl 8)
-            if (pid != CameraCommands.PID_FOCUS_TRACK) return null
-            val len = payload[5].toInt() and 0xFF
-            if (len != 2 || payload.size < 8 || payload[6] != 0x01.toByte()) return null
-            return fromRaw(payload[7].toInt() and 0xFF)
         }
     }
 }

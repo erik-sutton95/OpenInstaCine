@@ -5,6 +5,7 @@ import com.opencapture.monitorui.livePortraitReadoutFrame
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import com.opencapture.monitorui.LivePopupPlacement
 
 class LivePopupPlacementTest {
     @Test fun actualPortraitReadoutEdgeAnchorsBothTapAndHoldAcrossFeedLayouts() {

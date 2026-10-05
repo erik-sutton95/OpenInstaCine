@@ -14,12 +14,9 @@ import androidx.media3.exoplayer.audio.TeeAudioProcessor
 import com.opencapture.openpocketcine.assists.AudioMeterReading
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import com.opencapture.opencine.media.MonitorAudioMeterChannel
 
-typealias AudioMeterBallistics = com.opencapture.opencine.media.MonitorAudioMeterBallistics
-typealias AudioMeterChannel = com.opencapture.opencine.media.MonitorAudioMeterChannel
-typealias AudioMeterLevels = com.opencapture.opencine.media.MonitorAudioMeterLevels
-
-fun AudioMeterChannel.asReading(): AudioMeterReading = AudioMeterReading(levelDB = levelDB, peakDB = peakDB)
+fun MonitorAudioMeterChannel.asReading(): AudioMeterReading = AudioMeterReading(levelDB = levelDB, peakDB = peakDB)
 
 /** Legacy display adapter around the native source owner. */
 class AudioLevelTapBox : com.opencapture.opencine.runtime.MonitorAudioPeakAccumulator() {

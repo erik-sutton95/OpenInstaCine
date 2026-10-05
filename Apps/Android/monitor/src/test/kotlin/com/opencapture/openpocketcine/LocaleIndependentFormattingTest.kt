@@ -1,12 +1,13 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.media.MonitorNDFilterRecommendation
 import com.opencapture.opencine.media.FrameRateSampler
-import com.opencapture.openpocketcine.lut.LutExposureCompensation
 import com.opencapture.openpocketcine.media.MediaLibraryQuery
 import com.opencapture.openpocketcine.session.CamFov
 import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import com.opencapture.opencine.media.MonitorLUTExposureCompensation
 
 /**
  * Operator readouts are a fixed notation, not prose: the decimal point is part of
@@ -33,15 +34,15 @@ class LocaleIndependentFormattingTest {
 
     @Test
     fun ndLabelsKeepTheDecimalPoint() {
-        assertEquals("+2.0", underCommaLocale { NDFilterRecommendation.stopsLabel(2.0) })
-        assertEquals("−1.5", underCommaLocale { NDFilterRecommendation.stopsLabel(-1.5) })
-        assertEquals("ND 1.5", underCommaLocale { NDFilterRecommendation.densityLabel(5.0) })
+        assertEquals("+2.0", underCommaLocale { MonitorNDFilterRecommendation.stopsLabel(2.0, "\u2014") })
+        assertEquals("−1.5", underCommaLocale { MonitorNDFilterRecommendation.stopsLabel(-1.5, "\u2014") })
+        assertEquals("ND 1.5", underCommaLocale { MonitorNDFilterRecommendation.densityLabel(5.0, "\u2014") })
     }
 
     @Test
     fun lutExposureLabelKeepsTheDecimalPoint() {
-        assertEquals("+1.5", underCommaLocale { LutExposureCompensation.label(1.5) })
-        assertEquals("−2.0", underCommaLocale { LutExposureCompensation.label(-2.0) })
+        assertEquals("+1.5", underCommaLocale { MonitorLUTExposureCompensation.label(1.5) })
+        assertEquals("−2.0", underCommaLocale { MonitorLUTExposureCompensation.label(-2.0) })
     }
 
     @Test

@@ -1,5 +1,6 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineApple
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -72,8 +73,6 @@ enum SettingsHelpCopy {
     static let deleteStoredIncidents =
         "Remove local copies of saved freeze reports. Turn off Automatic error reports to clear pending uploads. Reports already sent cannot be removed here."
 }
-
-typealias OperatorSettingsTab = MonitorSettingsTab
 
 /// OpenZCine `OperatorSettingsPanel` chrome. Live chrome presents this; home uses `AppPanelHost`.
 ///
@@ -179,19 +178,19 @@ struct SettingsRootView: View {
             network: model.session.joinedSSID.flatMap { $0.isEmpty ? nil : $0 },
             networkHelp: "SSID joined for this session. The password stays in the iOS Keychain on this phone.")
 
-        if FeedUpscaler.supportedOnThisDevice.count > 1 {
+        if MonitorUpscaler.supportedOnThisDevice.count > 1 {
             SettingsRowCard(title: "Processing") {
-                SettingsInlineRow(
+                MonitorSettingsInlineRow(
                     title: "Feed Upscaler",
                     help: SettingsHelpCopy.feedUpscaler,
                     showTopDivider: false
                 ) {
                     SettingsSegmented(
-                        options: FeedUpscaler.supportedOnThisDevice.map(\.rawValue),
+                        options: MonitorUpscaler.supportedOnThisDevice.map(\.rawValue),
                         selected: FeedUpscaleSwitch.shared.upscaler.rawValue,
                         compact: true
                     ) { value in
-                        guard let choice = FeedUpscaler(rawValue: value) else { return }
+                        guard let choice = MonitorUpscaler(rawValue: value) else { return }
                         FeedUpscaleSwitch.shared.upscaler = choice
                     }
                 }
@@ -210,7 +209,7 @@ struct SettingsRootView: View {
     @ViewBuilder private var sharingRows: some View {
         if model.session.isMultiviewBorrowed {
             SettingsRowCard {
-                SettingsInlineRow(
+                MonitorSettingsInlineRow(
                     title: "Sharing unavailable in Multiview",
                     help:
                         "Connect to one camera from Your cameras to share its feed with watchers.",
@@ -237,12 +236,12 @@ struct SettingsRootView: View {
                 feedback: { OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled) })
         } else {
             SettingsRowCard {
-                SettingsInlineRow(
+                MonitorSettingsInlineRow(
                     title: SettingsHelpCopy.watchAFeed,
                     help: SettingsHelpCopy.shareFeed,
                     showTopDivider: false
                 ) {
-                    SettingsActionPill(title: "Browse") { model.openWatcherBrowse() }
+                    MonitorSettingsActionPill(title: "Browse") { model.openWatcherBrowse() }
                 }
             }
         }

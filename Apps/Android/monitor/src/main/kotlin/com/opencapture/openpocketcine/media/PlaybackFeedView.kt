@@ -20,6 +20,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.opencapture.opencine.media.MonitorPlaybackItemToken
 import com.opencapture.openpocketcine.feed.FeedEffectsRenderPlan
 import com.opencapture.openpocketcine.feed.LiveFeedEffectsSession
+import com.opencapture.monitorui.MonitorPlaybackZoom
 
 /**
  * Playback present path: ExoPlayer writes an OES surface, GLES grades LUT /
@@ -35,7 +36,7 @@ internal fun PlaybackFeedView(
     plan: FeedEffectsRenderPlan,
     mirrored: Boolean,
     flippedVertically: Boolean,
-    zoom: AnchoredPinchZoom,
+    zoom: MonitorPlaybackZoom,
     sourceWidth: Int,
     sourceHeight: Int,
     sourceIdentity: MonitorPlaybackItemToken,

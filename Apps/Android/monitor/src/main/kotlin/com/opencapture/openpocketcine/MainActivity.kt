@@ -68,7 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import com.opencapture.openpocketcine.diagnostics.AutomaticReportsPrompt
+import com.opencapture.opencine.appkit.diagnostics.AutomaticReportsPrompt
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.window.Dialog
@@ -263,6 +263,7 @@ private fun OpenPocketCineApp(model: AppModel) {
             model.legal != LegalKind.PRIVACY
         ) {
             AutomaticReportsPrompt(
+                product = AppDiagnostics.host.product,
                 onPrivacy = { model.legal = LegalKind.PRIVACY },
                 onEnable = {
                     AppDiagnostics.reporting.setConsent(true)

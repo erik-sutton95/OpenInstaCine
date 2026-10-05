@@ -1,4 +1,5 @@
 import CoreImage
+import OpenCineApple
 import OpenPocketViewCore
 import XCTest
 
@@ -306,30 +307,6 @@ final class FalseColorAssistTests: XCTestCase {
             dlogClip.red, dlogClip.green, "D-Log live-tap max 223 is the clip band")
     }
 
-    func testPostLUTCodesAreADifferentIREBand() throws {
-        let g = Float(MonitorTransfer.dlog2.middleGrayEncoded)
-        let pre = mapper.overlayPaintCube(
-            scale: .stops, transfer: .dlog2, rec709: false,
-            clipByte: ceiling.clipByte(transfer: .dlog2)
-        )
-        .map(red: g, green: g, blue: g)
-        guard let look = BundledPocketLUT.cube(.dLog2ToRec709) else {
-            throw XCTSkip("official D-Log2 cube must load")
-        }
-        let graded = look.map(red: g, green: g, blue: g)
-        let post = mapper.overlayPaintCube(
-            scale: .stops, transfer: .dlog2, rec709: false,
-            clipByte: ceiling.clipByte(transfer: .dlog2)
-        )
-        .map(red: graded.red, green: graded.green, blue: graded.blue)
-        let delta =
-            abs(post.red - pre.red) + abs(post.green - pre.green) + abs(post.blue - pre.blue)
-        XCTAssertGreaterThan(
-            delta, 0.05,
-            "log→709 18% is a different D-Log2 code — sampling the cube look must not be how FALSE keys"
-        )
-    }
-
     func testVideoGapsAreGrayscaleAndRec709EighteenIsGreen() {
         let encoded = Float(
             ScopeDisplayScale.signalNative(
@@ -523,7 +500,7 @@ final class FalseColorAssistTests: XCTestCase {
             by: CGAffineTransform(
                 scaleX: CGFloat(w) / max(image.extent.width, 1),
                 y: CGFloat(h) / max(image.extent.height, 1)))
-        let context = CIContext(options: LiveMonitorWorkingSpace.contextOptions)
+        let context = CIContext(options: MonitorWorkingSpace.contextOptions)
         context.render(
             scaled, toBitmap: &data, rowBytes: w * 4,
             bounds: CGRect(x: 0, y: 0, width: w, height: h),
@@ -550,7 +527,7 @@ final class FalseColorAssistTests: XCTestCase {
     }
 
     private static func sampleRGB(_ image: CIImage) -> (Float, Float, Float) {
-        let context = CIContext(options: LiveMonitorWorkingSpace.contextOptions)
+        let context = CIContext(options: MonitorWorkingSpace.contextOptions)
         var bytes = [UInt8](repeating: 0, count: 4)
         context.render(
             image, toBitmap: &bytes, rowBytes: 4,

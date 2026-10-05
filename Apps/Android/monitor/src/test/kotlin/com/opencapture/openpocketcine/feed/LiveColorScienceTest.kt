@@ -8,6 +8,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import com.opencapture.opencine.runtime.MonitorGlesUpscaler
+import com.opencapture.opencine.media.ScopeAnchors
+import com.opencapture.opencine.media.ScopeDisplayScale
+import com.opencapture.opencine.media.WaveformIre
+import com.opencapture.opencine.media.ScopeTrafficLights
+import com.opencapture.opencine.media.LiveColorScience
+import com.opencapture.opencine.media.ScopeSampler
 
 class FeedUpscaleTest {
     @Test
@@ -28,14 +35,14 @@ class FeedUpscaleTest {
     fun reconstructsOnlyWhenThePanelMagnifies() {
         // Fast reconstructs the 720p Rec.709 bake, not log RGB before the cube.
         assertTrue(
-            FeedUpscaler.shouldReconstructToDisplay(1280f, 720f, 1920f, 1080f),
+            MonitorGlesUpscaler.shouldReconstructToDisplay(1280f, 720f, 1920f, 1080f),
         )
         assertTrue(
-            !FeedUpscaler.shouldReconstructToDisplay(1280f, 720f, 1080f, 608f),
+            !MonitorGlesUpscaler.shouldReconstructToDisplay(1280f, 720f, 1080f, 608f),
             "portrait S25 well minifies 720p — cubic would alias",
         )
-        assertTrue(!FeedUpscaler.shouldReconstructToDisplay(1280f, 720f, 1280f, 720f))
-        assertTrue(!FeedUpscaler.shouldReconstructToDisplay(0f, 720f, 1920f, 1080f))
+        assertTrue(!MonitorGlesUpscaler.shouldReconstructToDisplay(1280f, 720f, 1280f, 720f))
+        assertTrue(!MonitorGlesUpscaler.shouldReconstructToDisplay(0f, 720f, 1920f, 1080f))
     }
 }
 
@@ -57,8 +64,8 @@ class LiveColorScienceTest {
         assertEquals(248, b.clipByte(MonitorTransfer.DLOG2))
         assertEquals(247, ScopeExposureCeiling.UNOBSERVED.clipByte(MonitorTransfer.DLOG2))
         val pixels = ByteArray(4 * 4 * 4) { 120 }
-        val bundleA = PocketScopeSampler.sample(pixels, 4, 4, 16, MonitorTransfer.DLOG2, includePoints = false, ceiling = a)
-        val bundleB = PocketScopeSampler.sample(pixels, 4, 4, 16, MonitorTransfer.DLOG2, includePoints = false, ceiling = b)
+        val bundleA = ScopeSampler.sample(pixels, 4, 4, 16, MonitorTransfer.DLOG2, includePoints = false, ceiling = a)
+        val bundleB = ScopeSampler.sample(pixels, 4, 4, 16, MonitorTransfer.DLOG2, includePoints = false, ceiling = b)
         assertEquals(800, bundleA.iso)
         assertEquals(231, bundleA.ceiling.clipByte(MonitorTransfer.DLOG2))
         assertEquals(1600, bundleB.iso)

@@ -4,7 +4,6 @@ import android.content.Context
 import com.opencapture.openpocketcine.OperatorPrefs
 
 typealias LiveAssistState = com.opencapture.opencine.appkit.MonitorAssistState
-internal typealias InspectorScopeDemand = com.opencapture.opencine.appkit.MonitorInspectorScopeDemand
 
 fun createLiveAssistState(context: Context): LiveAssistState {
     val app = context.applicationContext

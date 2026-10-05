@@ -55,7 +55,7 @@ struct VideoDisplayRepresentable: UIViewRepresentable {
     var pictureFlip: Bool
     var sampleBus: LiveFrameSampleBus
     var transfer: MonitorTransfer?
-    var feedUpscaler: FeedUpscaler
+    var feedUpscaler: MonitorUpscaler
     var hdrDisplay: Bool
 
     func makeUIView(context: Context) -> DisplayLayerView {

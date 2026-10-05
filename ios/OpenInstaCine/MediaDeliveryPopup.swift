@@ -1,5 +1,6 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineApple
 import OpenCineFrameIO
 import OpenPocketViewCore
 import SwiftUI
@@ -238,7 +239,7 @@ struct MediaDeliveryPopup: View {
                 help: MediaDeliveryCopy.bakeExposureHelp, isOn: configuration.bakeLUTExposure, enabled: lutAvailable) : nil,
             format: configuration.bakeLUT || configuration.convertLog || destination == .nativeShare
                 ? .init("Format", help: "MOV preserves quality; MP4 is more widely compatible.",
-                    options: MediaExportFormat.allCases.map { .init(id: $0.rawValue, label: $0.label) },
+                    options: MonitorMediaExporter.Format.allCases.map { .init(id: $0.rawValue, label: $0.label) },
                     selectedID: configuration.exportFormat.rawValue) : nil,
             includeMetadata: .init("Include metadata", help: "Filename, capture date, and size (best-effort JSON sidecar).",
                 isOn: configuration.includeMetadata),
@@ -287,7 +288,7 @@ struct MediaDeliveryPopup: View {
             case .outputCurve:
                 if let transform = LogColorTransform(rawValue: id) { configuration.logTransform = transform }
             case .format:
-                if let format = MediaExportFormat(rawValue: id) { configuration.exportFormat = format }
+                if let format = MonitorMediaExporter.Format(rawValue: id) { configuration.exportFormat = format }
             case .postExport:
                 if let action = MediaDeliveryPostExportAction(rawValue: id) { shareAction = action }
             case .project:

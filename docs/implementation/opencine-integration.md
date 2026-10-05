@@ -150,10 +150,10 @@ use simulated source facts, with no upload or network switch. Android adopts the
 export heading and native segmented/material controls; actual Android input, physical delivery,
 Adobe sign-in/upload and camera leave/rejoin remain untested. The app pin has not moved.
 
-The temporary Pocket source-sync script excludes the adopted delivery/export adapters and
-their native regressions, alongside the existing Frame.io folder exclusion. Upstream changes
-to these owned paths are reported for review; they cannot overwrite this shared-owner adoption.
-The script's final retirement still belongs to I-6 after the remaining generic owners migrate.
+The temporary Pocket source-sync script excluded the adopted delivery/export adapters and
+their native regressions, alongside the existing Frame.io folder exclusion, so upstream changes
+to these owned paths were reported for review and could not overwrite this shared-owner adoption.
+The script has since been retired (see RELEASE-01 below).
 
 ## What changes for users
 
@@ -321,8 +321,8 @@ behavior is **untested** (checklist item 16).
 Branch `opencine/apple` (on this candidate) runs `HevcDecoder` on OpenCineCore's `OpenCineApple`
 `VideoToolboxDecoder` (display layer, format, VT session, sample buffers, error ledger, generation
 fence). `HevcDecoder` keeps the presentation policy; its only API change is `onSourceFrame`, which
-lends a `DecodedFrameLease`. The refactor is identical to OpenPocketCine's, so the sync script
-carries it. App-side: the log subsystem, `SimulatorLiveFeed.isConfigured` and the watch preview guard.
+lends a `DecodedFrameLease`. The refactor is identical to OpenPocketCine's, so the sync script (since
+retired) carried it. App-side: the log subsystem, `SimulatorLiveFeed.isConfigured` and the watch preview guard.
 Pins OpenCineCore on its `apple` branch until that merges to Core main.
 
 ## MEDIA-02 step 3: Android Vulkan renderer

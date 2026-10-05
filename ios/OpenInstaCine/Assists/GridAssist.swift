@@ -23,15 +23,13 @@ enum GridAssist {
 
     /// OpenZCine `FeedGridView` overlay on the de-squeezed feed rect.
     static func overlay(feed: CGRect, thirds: Bool, phi: Bool, diagonal: Bool) -> some View {
-        GridOverlay(feed: feed, thirds: thirds, phi: phi, diagonal: diagonal)
+        MonitorFeedGrid(feed: feed, thirds: thirds, phi: phi, diagonal: diagonal)
     }
 
-    static func segments(in feed: CGRect, thirds: Bool, phi: Bool, diagonal: Bool) -> [GridSegment] {
+    static func segments(in feed: CGRect, thirds: Bool, phi: Bool, diagonal: Bool) -> [MonitorGridSegment] {
         MonitorGridGeometry.segments(in: feed, thirds: thirds, phi: phi, diagonal: diagonal)
     }
 }
-
-typealias GridSegment = MonitorGridSegment
 
 private struct GridLongPressMenu: View {
     @Bindable var assist: LiveAssistState
@@ -63,5 +61,3 @@ private struct GridLongPressMenu: View {
     }
 
 }
-
-private typealias GridOverlay = MonitorFeedGrid

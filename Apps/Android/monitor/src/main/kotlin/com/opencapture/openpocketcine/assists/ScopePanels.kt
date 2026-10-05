@@ -15,19 +15,21 @@ import com.opencapture.monitorui.MonitorVectorscopeScopePlot
 import com.opencapture.monitorui.MonitorScopeGuides
 import com.opencapture.openpocketcine.ChromeRect
 import com.opencapture.openpocketcine.LiveDesign
-import com.opencapture.openpocketcine.NDFilterRecommendation
+import com.opencapture.opencine.media.MonitorNDFilterRecommendation
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeAssistBundle
-import com.opencapture.openpocketcine.feed.WaveformIre
+import com.opencapture.monitorui.MonitorScopePoint
+import com.opencapture.monitorui.MonitorScopeSize
+import com.opencapture.opencine.media.WaveformIre
 
 @Composable
 internal fun MovableAssistPanel(
-    tool: LiveAssistTool, base: AssistSize, scale: Double, stored: StoredCenter?,
-    canvas: AssistRect, placementBounds: AssistRect, defaultCenter: AssistPoint, enabled: Boolean,
+    tool: LiveAssistTool, base: MonitorScopeSize, scale: Double, stored: StoredCenter?,
+    canvas: AssistRect, placementBounds: AssistRect, defaultCenter: MonitorScopePoint, enabled: Boolean,
     onStore: (StoredCenter) -> Unit, onScale: ((Double) -> Unit)? = null,
     onOpenOptions: ((ChromeRect) -> Unit)? = null, onActivate: () -> Unit = {},
-    fillPlate: Boolean = true, chip: Boolean = false, content: @Composable (AssistSize) -> Unit,
+    fillPlate: Boolean = true, chip: Boolean = false, content: @Composable (MonitorScopeSize) -> Unit,
 ) {
     val haptics = LocalOperatorHaptics.current
     com.opencapture.monitorui.MonitorMovableScopePanel(
@@ -95,9 +97,9 @@ object NDAssist {
 internal fun NDMeterPanel(state: LiveAssistState, modifier: Modifier = Modifier) {
     val transfer = state.scopeBundle.transfer
     val reading =
-        NDFilterRecommendation.reading(state.scopeBundle.samples.histogramLuma, transfer)
+        MonitorNDFilterRecommendation.reading(state.scopeBundle.samples.histogramLuma, transfer, "\u2014")
     com.opencapture.monitorui.MonitorNDFilterChip(reading, state.ndNotation, modifier,
-        emptyLabel = NDFilterRecommendation.NONE_LABEL)
+        emptyLabel = "\u2014")
 }
 
 private fun ScopeAssistBundle.resolvedTransfer(colorMode: Int): MonitorTransfer =

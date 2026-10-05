@@ -33,50 +33,6 @@ public enum CameraSoftAP: Sendable {
     }
 }
 
-/// Pocket → Nano SoftAP switch. Both APs are `192.168.2.1`, so a live
-/// `192.168.2.x` after leaving Pocket is not a failure — join the target.
-public enum CameraSoftAPSwitch {
-    /// A 5.8 GHz SoftAP in a DFS region (UK 5725–5850 MHz) may beacon only
-    /// after a ~60 s channel availability check. Mimo "takes forever" there;
-    /// one hotspot apply gave up in ~20 s with Unable to join (#235, #216).
-    /// Keep re-applying until the network shows up or this runs out.
-    public static let joinDeadlineSeconds: TimeInterval = 90
-    /// Each iOS apply that finds no network shows a system alert. Pause
-    /// between applies so a 90 s wait is a few alerts, not a dozen.
-    public static let joinRetryPauseSeconds: TimeInterval = 10
-    /// Operator copy for a missed join. 2.4 GHz is instant; 5.8 GHz can wait
-    /// out the channel check. Both shells.
-    public static let frequencyHint =
-        "On 5.8 GHz the camera Wi-Fi can take about a minute to appear. Try again, or set the camera to 2.4 GHz (Settings, Wireless, Frequency) for a faster join."
-
-    public static func shouldRetryJoin(secondsLeft: TimeInterval) -> Bool {
-        secondsLeft > joinRetryPauseSeconds
-    }
-
-    /// Unknown SSID after `apply` is treated as success (iOS often hides it).
-    public static func isOnTarget(currentSSID: String?, target: String) -> Bool {
-        guard let current = currentSSID, !current.isEmpty else { return true }
-        return current == target
-    }
-
-    /// Only another camera's access point is kicked. The operator's own Wi-Fi is never
-    /// removed: iOS names it once location is allowed, and a Wi-Fi setup configures it
-    /// through this app, so removing it stranded the join ("internal error", 2026-09-24).
-    public static func ssidToKick(
-        currentSSID: String?, target: String, knownCameraSSIDs: [String] = []
-    ) -> String? {
-        guard let current = currentSSID, !current.isEmpty, current != target,
-            isCameraNetwork(current, knownCameraSSIDs: knownCameraSSIDs)
-        else { return nil }
-        return current
-    }
-
-    /// Osmo access points are named `Osmo…`; a renamed one is known from saved cameras.
-    public static func isCameraNetwork(_ ssid: String, knownCameraSSIDs: [String]) -> Bool {
-        ssid.lowercased().hasPrefix("osmo") || knownCameraSSIDs.contains(ssid)
-    }
-}
-
 extension CameraSoftAP {
     /// One IPv4 on a named interface (`getifaddrs`). Used to pin UDP to the
     /// SoftAP instead of whatever `en0` Network.framework calls Wi-Fi.

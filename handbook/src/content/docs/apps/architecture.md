@@ -9,15 +9,15 @@ Bluetooth, crypto, Wi-Fi and sockets.
 
 | Layer | Path | Role |
 | --- | --- | --- |
-| Shared core | `Sources/`, OpenCine `OpenCineCore` and `OpenCineMedia` | Portable monitor logic, camera contracts and media math, with app-side Luna hooks for I-Log color mode, resolutions and `.lrv` proxy. |
+| Core | `Sources/` (app-owned `OpenPocketViewCore`, no longer synced from OpenPocketCine), OpenCine `OpenCineCore` and `OpenCineMedia` | Portable monitor logic, camera contracts and media math, with app-side Luna hooks for I-Log color mode, resolutions and `.lrv` proxy. |
 | Shared UI | OpenCine `MonitorPresentation`, `MonitorUI`, `Android/monitor-ui/` | The shared design system, in the OpenCine platform repository (sibling checkout `../OpenCine`). The app assigns the yellow accent at launch. |
 | Connection flow | OpenCine `OpenCineAppKit`, `Android/appkit/` | Cameras and pairing screens, discovery, connection progress, typed failures and saved-camera migration through `LunaIntegration`. |
 | Luna protocol | OpenCine `Sources/Insta360Protocol/` | Portable codec: UCD2 framing and checksum, bounded reassembly, protobuf, scheme-3 envelopes, status, settings, media and control messages. Foundation only: no Bluetooth, network or crypto implementation. |
 | Luna Apple adapter | OpenCine `Sources/Insta360Apple/` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, Network.framework TCP and session lifetime. |
-| iOS app | `ios/OpenInstaCine/` | Shared shell composition, Luna presentation adapters and native app services. |
+| iOS app | `ios/OpenInstaCine/` | App-owned code on the shared OpenCine shell (`OpenCineAppKit`), no longer synced from OpenPocketCine: Luna presentation adapters and native app services. |
 | Watch companion | `ios/OpenInstaCineWatch/` | watchOS remote; the phone stays the radio. |
-| Android app | `Apps/Android/` | Compose monitor shell (`:monitor`) on OpenCine `monitor-ui` and `appkit`, with the Kotlin shell contract and Luna adapter from OpenCine (`insta360-shell`, `insta360-luna`). |
-| Android facade | `Sources/OpenPocketCineAndroidFacade/`, `Sources/CJNI/` | JNI exports for the shared decoder, LUT and assist code. |
+| Android app | `Apps/Android/` | App-owned Compose code (`:app`, `:monitor`) on the shared OpenCine shell (`appkit`) and `monitor-ui`, no longer synced from OpenPocketCine, with the Kotlin shell contract and Luna adapter from OpenCine (`insta360-shell`, `insta360-luna`). |
+| Android facade | `Sources/OpenPocketCineAndroidFacade/` | JNI exports for the shared decoder, LUT and assist code. |
 | Lab tools | `tools/` | Python BLE and TCP research clients, the Mac live-view lab, `tools/LunaProbe` (Swift CLI) and the DEBUG remote client. |
 | Tests | `Tests/`, `ios/OpenInstaCineTests/`, `Apps/Android/monitor/src/test/`, OpenCine `Tests/` | Core, protocol and app tests, including saved-camera upgrade and downgrade fixtures on both platforms. |
 

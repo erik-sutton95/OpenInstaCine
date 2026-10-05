@@ -1,8 +1,8 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// The portable, UI-free, I/O-free core for OpenPocketCine: DUML framing, UDP datalink
-// byte math, BLE advert decode, command builders, status decode, and saved-camera
+// The portable, UI-free, I/O-free core for OpenPocketCine: UDP datalink byte math,
+// BLE advert decode, status decode, and saved-camera
 // records. Pure Foundation, so it builds and tests natively on macOS (`swift test`)
 // without a device. The iOS app (ios/) imports this and supplies CoreBluetooth /
 // Network / Hotspot I/O. Android consumes the same target via a JNI facade
@@ -35,6 +35,8 @@ let package = Package(
                 .product(name: "OpenCineMedia", package: "OpenCine"),
                 .product(name: "OpenCineMotion", package: "OpenCine"),
                 .product(name: "OpenCineRelay", package: "OpenCine"),
+                // Live chrome layout policy (`MonitorLayoutRegion`, `GimbalCluster`).
+                .product(name: "MonitorPresentation", package: "OpenCine"),
             ]
         ),
         .testTarget(

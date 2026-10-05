@@ -51,18 +51,6 @@ struct CloseButton: View {
     }
 }
 
-typealias HelpBadge = MonitorSettingsHelpBadge
-typealias SettingsInlineRow<Trailing: View> = MonitorSettingsInlineRow<Trailing>
-typealias SettingsValueText = MonitorSettingsValueText
-
-/// Compact mono value field with a number pad and a Done accessory.
-typealias SettingsNumberField = MonitorSettingsNumberField
-typealias SettingsActionPill = MonitorSettingsActionPill
-
-typealias SettingsSwitchGraphic = MonitorSettingsSwitchGraphic
-
-typealias DisplayToggleItem = MonitorSettingsDisplayToggle
-
 struct SettingsSwitchInlineRow: View {
     let title: String
     var help: String? = nil
@@ -136,17 +124,13 @@ struct SettingsRowCard<Content: View>: View {
     }
 }
 
-typealias SettingsTabScrollArea<Content: View> = MonitorSettingsTabScrollArea<Content>
-
-typealias SettingsDashScale = MonitorLinkHealthScale
-
 struct SettingsLinkHealthCard: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         let bars = model.session.liveSignalBars
         let score = min(4, max(0, bars)) * 25
-        SettingsDashScale(title: "Link Health", caption: caption, score: score)
+        MonitorLinkHealthScale(title: "Link Health", caption: caption, score: score)
     }
 
     private var caption: String {
@@ -251,16 +235,16 @@ struct AppPanelChrome<Content: View>: View {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("OPENINSTACINE")
-                        .font(LiveType.ui(size: 10, weight: .semibold, design: .rounded))
+                        .font(MonitorTheme.font(10, weight: .semibold))
                         .tracking(1.3)
                         .foregroundStyle(StartupColors.muted)
                     Text(title)
-                        .font(LiveType.ui(size: 17, weight: .bold, design: .rounded))
+                        .font(MonitorTheme.font(17, weight: .bold))
                         .foregroundStyle(StartupColors.ink)
                 }
                 Spacer()
                 Button("Done", action: onClose)
-                    .font(LiveType.ui(size: 16, weight: .semibold, design: .rounded))
+                    .font(MonitorTheme.font(16, weight: .semibold))
                     .foregroundStyle(StartupColors.darkText)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)

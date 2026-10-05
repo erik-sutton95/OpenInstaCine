@@ -2,10 +2,6 @@ import OpenCineApple
 import UIKit
 
 // Source calibration, display preference and diagnostics remain app inputs.
-typealias PlaybackFeedHandoff = OpenCineApple.MonitorPlaybackFeedHandoff
-typealias PlaybackDisplayLink = OpenCineApple.MonitorPlaybackDisplayLink
-typealias PlaybackVideoOutput = OpenCineApple.MonitorPlaybackVideoOutput
-typealias PlaybackPixelCopy = OpenCineApple.MonitorPlaybackPixelCopy
 
 final class PlaybackFeedSession: OpenCineApple.MonitorPlaybackFeedSession, @unchecked Sendable {
     @MainActor init() {

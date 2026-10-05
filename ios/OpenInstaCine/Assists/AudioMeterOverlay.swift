@@ -1,14 +1,16 @@
+import MonitorUI
+import OpenCineAppKit
 import OpenPocketViewCore
 import SwiftUI
 
 private struct AudioInspectorLevelsKey: EnvironmentKey {
-    static let defaultValue: AudioMeterLevels? = nil
+    static let defaultValue: MonitorAudioMeterLevels? = nil
 }
 
 extension EnvironmentValues {
     /// Playback injects levels from its existing meter owner. A nil value never
     /// substitutes camera audio while the inspector is grading a clip.
-    var audioInspectorLevels: AudioMeterLevels? {
+    var audioInspectorLevels: MonitorAudioMeterLevels? {
         get { self[AudioInspectorLevelsKey.self] }
         set { self[AudioInspectorLevelsKey.self] = newValue }
     }
@@ -79,10 +81,10 @@ struct AudioMeterOverlay: View {
     static let pointerSlop: CGFloat = 4
 
     static func allowsHits(locked: Bool, movement: CGRect) -> Bool {
-        !locked && ScopePanelPlacement.isUsable(movement)
+        !locked && MonitorScopePanelPlacement.isUsable(movement)
     }
 
-    let levels: AudioMeterLevels
+    let levels: MonitorAudioMeterLevels
     let sensitivity: String?
     let bounds: CGRect
     var chromeClearance: EdgeInsets = EdgeInsets()
@@ -92,12 +94,12 @@ struct AudioMeterOverlay: View {
     @Environment(\.scenePhase) private var scenePhase
     @GestureState private var pointerActive = false
     @State private var drag = AudioMeterDragLifecycle()
-    private var store: AudioAssistStore { AudioAssist.store }
+    private var store: MonitorAudioPreferenceStore { AudioAssist.store }
 
     var body: some View {
         let options = store.options
-        let movement = ScopePanelPlacement.bounds(in: bounds, clearance: chromeClearance)
-        let usable = ScopePanelPlacement.isUsable(movement)
+        let movement = MonitorScopePanelPlacement.bounds(in: bounds, clearance: chromeClearance)
+        let usable = MonitorScopePanelPlacement.isUsable(movement)
         let hittable = Self.allowsHits(locked: interfaceLocked, movement: movement)
         let preferred = AudioAssist.panelSize(orientation: options.orientation)
         let scale = min(
@@ -153,7 +155,7 @@ struct AudioMeterOverlay: View {
                     translation: value.translation, visualCenter: center, currentBounds: bounds,
                     size: size, canvas: bounds, movement: movement,
                     locked: interfaceLocked, sceneActive: scenePhase == .active,
-                    usable: ScopePanelPlacement.isUsable(movement)
+                    usable: MonitorScopePanelPlacement.isUsable(movement)
                 )
             }
             .onEnded { _ in
@@ -161,7 +163,7 @@ struct AudioMeterOverlay: View {
                 guard
                     let center = drag.persistableCenter(
                         locked: interfaceLocked, sceneActive: scenePhase == .active,
-                        usable: ScopePanelPlacement.isUsable(movement), currentBounds: bounds)
+                        usable: MonitorScopePanelPlacement.isUsable(movement), currentBounds: bounds)
                 else { return }
                 store.setCenter(center, in: bounds)
             }

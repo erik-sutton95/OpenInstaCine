@@ -1,3 +1,4 @@
+import OpenCineApple
 import UIKit
 import XCTest
 import MetalKit
@@ -98,7 +99,7 @@ final class VideoDisplayOwnershipTests: XCTestCase {
         window.rootViewController = host
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
-        func render(_ reading: NDFilterSuggestion?, name: String) async throws -> [UInt8] {
+        func render(_ reading: MonitorNDFilterSuggestion?, name: String) async throws -> [UInt8] {
             let probe = PanelProbe()
             probe.expectedSize = size
             probe.laidOut = expectation(description: "native ND chip laid out")
@@ -145,11 +146,15 @@ final class VideoDisplayOwnershipTests: XCTestCase {
             }
             return count
         }
-        let hot = try await render(NDFilterRecommendation.suggestion(pictureStops: 6), name: "hot")
+        let hot = try await render(
+            MonitorNDFilterRecommendation.suggestion(pictureStops: 6, noneLabel: NDAssist.noneLabel),
+            name: "hot")
         XCTAssertGreaterThan(accentPixels(hot), 100)
         let absent = try await render(nil, name: "absent")
         XCTAssertEqual(accentPixels(absent), 0)
-        let knownZero = try await render(NDFilterRecommendation.suggestion(pictureStops: 0), name: "zero")
+        let knownZero = try await render(
+            MonitorNDFilterRecommendation.suggestion(pictureStops: 0, noneLabel: NDAssist.noneLabel),
+            name: "zero")
         XCTAssertEqual(accentPixels(knownZero), 0)
     }
 

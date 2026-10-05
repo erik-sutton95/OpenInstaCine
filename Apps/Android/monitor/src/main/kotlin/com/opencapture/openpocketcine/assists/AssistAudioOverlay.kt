@@ -9,6 +9,7 @@ import com.opencapture.monitorui.MonitorAudioMetrics
 import com.opencapture.monitorui.MonitorAudioOrientation
 import com.opencapture.openpocketcine.ChromeRect
 import com.opencapture.openpocketcine.session.CameraStatus
+import com.opencapture.monitorui.MonitorScopeSize
 
 /** Floor telemetry still draws; missing packets use the status fields as silent readouts. */
 internal fun audioOverlayChannels(status: CameraStatus): Pair<AudioMeterReading, AudioMeterReading> {
@@ -23,12 +24,12 @@ internal fun AssistAudioOverlay(state: LiveAssistState, left: AudioMeterReading,
     onOpenOptions: ((ChromeRect) -> Unit)? = null) {
     val density = LocalDensity.current.density
     val orientation = state.audioOrientation
-    val base = AssistSize(
+    val base = MonitorScopeSize(
         MonitorAudioMetrics.panelWidth(orientation),
         MonitorAudioMetrics.panelHeight(orientation),
     )
     val portrait = canvas.height > canvas.width
-    val sizePx = AssistSize(base.width * density, base.height * density)
+    val sizePx = MonitorScopeSize(base.width * density, base.height * density)
     MovableAssistPanel(LiveAssistTool.AUDIO, base, 1.0, state.audioCenterFor(portrait),
         canvas, placement, AudioAssist.defaultCenter(canvas, placement, sizePx),
         enabled = !locked, onStore = { state.storeAudioCenter(it, portrait) },

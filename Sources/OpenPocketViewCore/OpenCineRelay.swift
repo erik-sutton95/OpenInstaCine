@@ -7,12 +7,4 @@
 extension WatcherRelayJoin {
     /// This app's version-mismatch copy, sent to the watcher in `joinDenied`.
     public static let versionMismatchReason = "This app version cannot watch that feed."
-
-    public static func hostAccepts(hello: WatcherRelayHello, requiredPasscode: String)
-        -> Result<Void, WatcherRelayJoinDenied>
-    {
-        hostAccepts(
-            hello: hello, requiredPasscode: requiredPasscode,
-            versionMismatchReason: versionMismatchReason)
-    }
 }

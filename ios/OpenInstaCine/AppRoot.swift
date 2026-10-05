@@ -1,4 +1,5 @@
 import MonitorUI
+import OpenCineApple
 import OpenCineMedia
 import OpenCineFrameIO
 import CoreVideo
@@ -104,7 +105,7 @@ final class AppModel {
     var assist = LiveAssistState()
     /// Decoded-frame scopes. Filled by `HevcDecoder.handleDecodedFrame` — not camera DUML.
     var frameSamples = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
-    @ObservationIgnored var inspectorPreview = AssistInspectorImageRenderer()
+    @ObservationIgnored var inspectorPreview = MonitorInspectorImageRenderer()
     @ObservationIgnored let liveBackdrop = MonitorVideoBackdropRenderer()
     @ObservationIgnored let playbackBackdrop = MonitorVideoBackdropRenderer()
     /// Monitor tools follow the displayed source; watcher scopes must never read the camera bus.
@@ -252,7 +253,7 @@ final class AppModel {
     var dispClean = OperatorPrefs.dispClean {
         didSet { OperatorPrefs.dispClean = dispClean }
     }
-    var operatorSettingsTab: OperatorSettingsTab = .link
+    var operatorSettingsTab: MonitorSettingsTab = .link
     /// DISP mode whose chrome the operator is editing on the monitor, or `nil` when live.
     var chromeEditorMode: PocketDispMode?
     /// Section Display settings should reopen on after Done.
@@ -792,7 +793,7 @@ struct AppRoot: View {
             if MonitorMediaReview.usesProductionShell { MonitorPlaybackReviewFacts(model: model) }
         }
         #endif
-        .environment(\.font, LiveType.text(16))
+        .environment(\.font, MonitorTheme.font(16))
         .environment(
             \.monitorHDRChromeGain,
             model.hdrDisplayActive ? CGFloat(LiveHDRDisplay.presentGain) : 1

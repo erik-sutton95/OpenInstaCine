@@ -1,4 +1,9 @@
-# Shared Foundation core extraction
+# Shared Foundation core extraction (superseded)
+
+This is a 2026-09-11 extraction report, kept as history. `SharedMonitorEngine`, `MonitorCore` and
+`Adapters/OsmoCompatibility` no longer exist. The portable core is now `Sources/OpenPocketViewCore`,
+an app-owned fork that is no longer synced from OpenPocketCine; shared owners live in OpenCine. See
+[architecture.md](architecture.md) for the current layout.
 
 The root `SharedMonitorEngine` package now exports a real **MonitorCore** library:
 25 Foundation-only source files, 3,677 lines of existing monitor math and policy.
