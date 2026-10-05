@@ -60,6 +60,11 @@ struct LiveViewScreen: View {
             || zoomDialMounted
     }
 
+    /// The Motion editor and its run pill take touches without a popup (main gated only popups).
+    private var gimbalPanelOpen: Bool {
+        model.liveGimbalPanel == .editor || model.liveGimbalPanel == .runPill
+    }
+
     private func gimbalCluster(_ layout: LiveMonitorLayout) -> GimbalCluster {
         layout.gimbalCluster(showGimbalButton: showsGimbalButton)
     }
@@ -261,7 +266,7 @@ struct LiveViewScreen: View {
                 captureMounted: model.chromeSectionMounts(.cameraValues),
                 captureHidden: hidesCaptureValues,
                 captureInteractive: model.captureSheet == nil || model.captureSheet?.isTopAnchored == true,
-                locked: interfaceLocked, popupInteractive: hasInteractivePopup,
+                locked: interfaceLocked, popupInteractive: hasInteractivePopup || gimbalPanelOpen,
                 capturePresented: captureControlsPresented && chromeInteractive,
                 panelsRaised: zoomDialMounted, recovering: model.session.sessionRecovery.isRecovering)
         ) {
@@ -289,7 +294,7 @@ struct LiveViewScreen: View {
         } tools: {
             nativeTools(layout).environment(\.interfaceLocked, interfaceLocked)
         } panels: {
-            popups(layout)
+            popups(layout).allowsHitTesting(hasInteractivePopup)
             // The expanded Motion editor owns its outside-tap minimization
             // region above camera controls, including the stable Record layer.
             if showsGimbalButton, chromeInteractive, !interfaceLocked,
