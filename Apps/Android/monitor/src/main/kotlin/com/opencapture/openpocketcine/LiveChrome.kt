@@ -229,7 +229,7 @@ object LiveViewLink {
     }
 }
 
-/** The native Lock tile surface also hosts Multiview's Exit action. */
+/** The native Lock tile surface. */
 @Composable
 internal fun MonitorChromeButton(
     icon: OpcIcon, label: String, modifier: Modifier = Modifier,

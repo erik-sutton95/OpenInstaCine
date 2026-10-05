@@ -1317,7 +1317,6 @@ internal fun LandscapeChrome(
     val cover = model.liveCover()
     val captureOpen = sheet != null || captureQuickActive
     val editing = model.chromeEditorMode
-    // Media browsing is not adapted to shared Wi-Fi; a borrowed Multiview tile hides it.
     val showsRecord = model.chromeSectionMounts(PocketDispSection.RAIL_RECORD) || status.isRecording
     val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR) &&
         cover == null && assist.configureTool == null

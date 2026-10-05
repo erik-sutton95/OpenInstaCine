@@ -522,13 +522,6 @@ class AppModel(
         session.close()
     }
 
-    /** The tile's LUT choice travels into and out of its borrowed Live View. */
-    fun setBorrowedLut(enabled: Boolean) {
-        if (assist.lutOn != enabled) assist.toggle(com.opencapture.openpocketcine.assists.LiveAssistTool.LUT)
-    }
-
-    fun borrowedLutEnabled(): Boolean = assist.lutOn
-
     companion object {
         /** The records every earlier build reads, kept mirrored (SHELL-02 D11). */
         const val LEGACY_CAMERAS = "openpocketcine.saved-cameras"

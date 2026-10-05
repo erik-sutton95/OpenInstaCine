@@ -767,7 +767,7 @@ data class CameraStatus(
     }
 }
 
-/** Shared by the single-camera and Multiview readouts; never rewrites decoded status. */
+/** The readout's timecode; never rewrites decoded status. */
 fun timecodeClock(value: String?): String? = value?.takeIf { it.isNotBlank() }?.let {
     val parts = it.split(':')
     if (parts.size >= 4) parts.take(3).joinToString(":") else it
