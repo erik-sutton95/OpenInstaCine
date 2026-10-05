@@ -7,7 +7,7 @@ struct OpenInstaCineApp: App {
         #if DEBUG
             ReliabilityReportingVerification.prepareIfRequested()
         #endif
-        ReliabilityReporting.install()
+        AppDiagnostics.reporting.install()
         #if DEBUG
             ReliabilityReportingVerification.runIfRequested()
         #endif

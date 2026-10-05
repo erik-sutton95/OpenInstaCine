@@ -492,7 +492,7 @@ final class CameraSession {
 
     /// What every connect sets before the backend runs; returns its generation.
     private func prepareConnection(to camera: FoundCamera, preserveMonitor: Bool) -> Int {
-        ReliabilityReporting.setCameraSessionActive(true)
+        AppDiagnostics.reporting.setCameraSessionActive(true)
         connectGeneration += 1
         LocalVPNProbe.noteIfActive()
         backend.stopScan()
@@ -511,8 +511,8 @@ final class CameraSession {
     }
 
     func disconnect() {
-        ReliabilityReporting.setCameraSessionActive(false)
-        FeedIncidentRuntime.endSession(now: ProcessInfo.processInfo.systemUptime)
+        AppDiagnostics.reporting.setCameraSessionActive(false)
+        AppDiagnostics.incidents.endSession(now: ProcessInfo.processInfo.systemUptime)
         incidentSessionActive = false
         connectGeneration += 1
         reconnectTarget = nil
@@ -989,7 +989,7 @@ final class CameraSession {
         if case .waitingForOperator = sessionRecovery { return }
         if sessionRecoveryTask != nil { return }
         guard let cameraID = connectedCamera?.id ?? recoveryCameraID else { return }
-        FeedIncidentRuntime.noteUnexpectedDisconnect(now: ProcessInfo.processInfo.systemUptime)
+        AppDiagnostics.incidents.noteUnexpectedDisconnect(now: ProcessInfo.processInfo.systemUptime)
         recordFeedRepair("session", phase: .requested, reason: String(describing: trigger))
         recoveryCameraID = cameraID
         if recoveryDeviceName.isEmpty { recoveryDeviceName = connectedCamera?.name ?? "" }
@@ -1142,7 +1142,7 @@ final class CameraSession {
     private func beginFeedIncidentSession() {
         incidentSessionActive = true
         let info = Bundle.main.infoDictionary ?? [:]
-        FeedIncidentRuntime.beginSession(
+        AppDiagnostics.incidents.beginSession(
             FeedIncidentSessionContext(
                 sessionID: UUID().uuidString,
                 appVersion: info["CFBundleShortVersionString"] as? String ?? "unknown",
@@ -1151,18 +1151,18 @@ final class CameraSession {
                 osName: "iOS", osVersion: UIDevice.current.systemVersion,
                 hardwareClass: DiagnosticCenter.machineIdentifier,
                 cameraFamily: "luna",
-                testSource: FeedIncidentOrigin.currentTestSource(),
-                buildIdentity: FeedIncidentOrigin.currentBuildIdentity()))
+                testSource: AppDiagnostics.origin.currentTestSource(),
+                buildIdentity: AppDiagnostics.origin.currentBuildIdentity()))
     }
 
     func recordFeedBreadcrumb(_ kind: FeedIncidentBreadcrumbKind, detail: String = "") {
-        FeedIncidentRuntime.recordBreadcrumb(
+        AppDiagnostics.incidents.recordBreadcrumb(
             FeedIncidentBreadcrumb(
                 monotonicAt: ProcessInfo.processInfo.systemUptime, kind: kind, detail: detail))
     }
 
     private func recordFeedRepair(_ action: String, phase: FeedRepairPhase, reason: String? = nil) {
-        FeedIncidentRuntime.recordRepair(
+        AppDiagnostics.incidents.recordRepair(
             FeedRepairRecord(
                 monotonicAt: ProcessInfo.processInfo.systemUptime, action: action, phase: phase,
                 reason: reason))
