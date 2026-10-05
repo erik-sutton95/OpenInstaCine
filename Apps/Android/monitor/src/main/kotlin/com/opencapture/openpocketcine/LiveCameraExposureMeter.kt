@@ -120,7 +120,7 @@ internal fun LiveCameraExposureMeter(
 internal fun pictureMeteredEv(session: PocketCameraSession, assist: LiveAssistState, status: CameraStatus): Int {
     if (!assist.evMeterFromPicture) return -1
     val bundle = assist.scopeBundle
-    val picture = NDFilterRecommendation.pictureStops(bundle.samples.histogramLuma, bundle.transfer) ?: return -1
+    val picture = com.opencapture.opencine.media.MonitorNDFilterRecommendation.pictureStops(bundle.samples.histogramLuma, bundle.transfer) ?: return -1
     val evComp = EvComp.fromRaw(status.evComp)?.takeIf { status.expoMode == CameraCommands.EXPO_AUTO }
     // Image-estimated: callers use it only when the camera reports no metered EV.
     val stops = session.pictureEV.stops(

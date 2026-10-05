@@ -97,6 +97,8 @@ import com.opencapture.monitorui.MonitorQuickGestureOwner
 import com.opencapture.monitorui.monitorReadoutGesture
 import com.opencapture.opencine.core.LocalVPNFilter
 import com.opencapture.openpocketcine.session.SessionRecoveryCopy
+import com.opencapture.opencine.appkit.MonitorRecoveryOverlay
+import com.opencapture.openpocketcine.session.SessionRecoveryUi
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import kotlinx.coroutines.delay
@@ -677,7 +679,7 @@ fun LiveViewScreen(model: AppModel) {
                 )
                 }
             }, power = {
-                com.opencapture.openpocketcine.monitor.MonitorTelemetry(bars, fpsLabel,
+                com.opencapture.monitorui.MonitorTelemetry(bars, fpsLabel,
                     model.phoneBatteryPercent, status.batteryPercent,
                     horizontal = portrait && !checkNotNull(layout.field).tablet,
                     showsLink = !portrait || checkNotNull(layout.field).tablet)
@@ -1049,8 +1051,11 @@ fun LiveViewScreen(model: AppModel) {
             }, recovery = {
             if (recovery.isRecovering) {
                 MonitorRecoveryOverlay(
-                    state = recovery,
-                    deviceName = model.session.connectedCamera?.name.orEmpty(),
+                    retrying = recovery is SessionRecoveryUi.Retrying,
+                    title = SessionRecoveryCopy.title(recovery),
+                    detail = SessionRecoveryCopy.detail(recovery, model.session.connectedCamera?.name.orEmpty()),
+                    retryTitle = SessionRecoveryCopy.RETRY_CONNECTION,
+                    operatorMenuTitle = SessionRecoveryCopy.OPERATOR_MENU,
                     onRetry = { model.session.retrySessionRecovery() },
                     onOperatorMenu = { model.disconnect() },
                 )
