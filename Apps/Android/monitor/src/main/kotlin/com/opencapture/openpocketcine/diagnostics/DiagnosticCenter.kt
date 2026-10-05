@@ -24,6 +24,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.atomic.AtomicBoolean
+import com.opencapture.opencine.media.BoundedDiagnosticFormatter
+import com.opencapture.opencine.media.DiagnosticJournal
 
 /**
  * On-device journal, exceptions, and a shareable report. Optional uploads belong
@@ -73,6 +75,7 @@ object DiagnosticCenter {
             BoundedDiagnosticFormatter.format(
                 environment =
                     BoundedDiagnosticFormatter.Environment(
+                        product = "OpenInstaCine",
                         appVersion = env.appVersion,
                         appBuild = env.appBuild,
                         osName = env.osName,
@@ -88,6 +91,7 @@ object DiagnosticCenter {
                 exceptions = exceptionLines(),
                 extras = FeedIncidentRuntime.reportExtras(),
                 cap = minOf(maxChars, BoundedDiagnosticFormatter.CHARACTER_CAP),
+                isSafeNetwork = PrivacyRedactor::isCameraNetwork,
             )
         return ManualProblemReportEnvelope.utf8Prefix(body, maxBytes)
     }
