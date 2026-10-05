@@ -5,9 +5,6 @@ import kotlin.math.abs
 
 /** Absolute-angle gimbal targets (cmd 226 SET_ANGLE / GET_ANGLE), iOS `CameraSessionControls` 309049f. */
 object LunaGimbalAim {
-    /** fw 1.1.15 pitch reach; SET_ANGLE routes yaw around the stop itself. */
-    val PITCH_RANGE = -57.0..90.0
-
     /** A GET_ANGLE reading as a shell waypoint (yaw unwrapped across the stop gap). */
     fun waypoint(angle: CameraGimbalAngle, zoom: Double) =
         GimbalWaypoint(GimbalWaypoint.unwrapYaw(angle.yaw), angle.pitch, zoom, -angle.pitch)
@@ -16,9 +13,9 @@ object LunaGimbalAim {
     fun levelTarget(angle: CameraGimbalAngle, headPitchDeg: Double, zoom: Double) =
         waypoint(angle.copy(pitch = angle.pitch - headPitchDeg), zoom)
 
-    /** SET_ANGLE arguments (pitch, yaw): yaw back to +-180, pitch inside the reach. */
-    fun setAngle(target: GimbalWaypoint): Pair<Double, Double> =
-        target.pitchDeg.coerceIn(PITCH_RANGE) to Math.IEEEremainder(target.yawDeg, 360.0)
+    /** The shell waypoint as the shared motion pose `LunaMotionService.aim` sends (yaw wrap and pitch reach there). */
+    fun motionPose(target: GimbalWaypoint) =
+        com.opencapture.opencine.motion.GimbalWaypoint(target.yawDeg, target.pitchDeg, target.zoom, target.nativePitchDeg)
 
     fun reached(angle: CameraGimbalAngle, target: GimbalWaypoint): Boolean =
         abs(Math.IEEEremainder(angle.yaw - target.yawDeg, 360.0)) <= 0.5 && abs(angle.pitch - target.pitchDeg) <= 0.5

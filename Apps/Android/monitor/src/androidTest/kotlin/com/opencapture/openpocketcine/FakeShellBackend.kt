@@ -90,7 +90,8 @@ internal class FakeShellBackend(
         return angle
     }
     override suspend fun gimbalSetAngle(pitch: Double, yaw: Double) = record("gimbalSetAngle", pitch, yaw)
-    override val gimbalHeadPitch: Double? = null
+    @Volatile var headPitch: Double? = null
+    override val gimbalHeadPitch: Double? get() = headPitch
 }
 
 /** Runs [block] on the main thread, where the session facade lives. */
@@ -111,8 +112,19 @@ internal fun waitUntil(timeoutMs: Long = 5_000, predicate: () -> Boolean): Boole
     return onMain(predicate)
 }
 
-/** A facade over [backend], as the brand launcher would build it. */
+/**
+ * A facade over [backend], as the brand launcher would build it. The process keeps the brand's own
+ * Luna composition installed afterwards, as the other instrumented tests leave it.
+ */
 internal fun liveSession(backend: FakeShellBackend): PocketCameraSession {
     MonitorConfiguration.install(MonitorConfiguration.identity) { backend }
-    return onMain { PocketCameraSession(InstrumentationRegistry.getInstrumentation().targetContext) }
+    try {
+        return onMain { PocketCameraSession(InstrumentationRegistry.getInstrumentation().targetContext) }
+    } finally {
+        MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
+            val wifi = com.opencapture.openpocketcine.pairing.CameraWifiCredentialStore(context)
+            com.opencapture.opencine.insta360.luna.LunaBackend(context,
+                savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
+        }
+    }
 }

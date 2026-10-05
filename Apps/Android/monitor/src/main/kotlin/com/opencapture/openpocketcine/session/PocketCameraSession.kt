@@ -18,6 +18,7 @@ import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.opencine.insta360.luna.LunaCameraSession
 import com.opencapture.opencine.insta360.luna.LunaConnectPort
 import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
+import com.opencapture.opencine.insta360.luna.LunaMotionService
 import com.opencapture.opencine.insta360.luna.LunaSubjectTracking
 import com.opencapture.opencine.core.CommandStage
 import com.opencapture.opencine.core.ISOValue
@@ -122,6 +123,8 @@ class PocketCameraSession(
     internal val pendingCameraSetCount: Int get() = 0
     val isMultiviewBorrowed = borrowing != null
     val decoder = borrowing ?: HevcDecoder(cadence, errorJournal = DiagnosticCenter::logDecoderError)
+    /** The Luna gimbal requests (`LunaMotionService`). Before `init`: its live handler starts the angle poll. */
+    private val motion = LunaMotionService({ controls }, scope)
     // Timecode, iOS `noteFrameClock`: live frame stamps to time of day (`LunaFrameTimecode`), with
     // the camera clock synced at live start (the backend). Before `init`: its collectors reset it.
     private val frameTimecode = LunaFrameTimecode()
@@ -667,8 +670,6 @@ class PocketCameraSession(
     }
 
     // Gimbal.
-    private var stickJob: Job? = null
-    @Volatile private var stick = 0.0 to 0.0
     fun performGimbalDoubleTap() = when (gimbalDoubleTap) {
         GimbalDoubleTap.RECENTER -> recenterGimbal()
         GimbalDoubleTap.LEVEL -> levelGimbalToWorld()
@@ -686,7 +687,7 @@ class PocketCameraSession(
         scope.launch {
             delay(2_500)
             val pitch = controls?.gimbalHeadPitch ?: return@launch
-            if (aimJob?.isActive != true && stickJob?.isActive != true && !_gimbalMoveRunning.value && abs(pitch) > 0.3) {
+            if (aimJob?.isActive != true && !motion.isHeld && !_gimbalMoveRunning.value && abs(pitch) > 0.3) {
                 levelGimbalToWorld(refine = false)
             }
         }
@@ -699,11 +700,11 @@ class PocketCameraSession(
     private fun freshGimbalAngle(maxAgeMs: Long) =
         gimbalAngle?.takeIf { SystemClock.elapsedRealtime() - it.second <= maxAgeMs }?.first
     private fun startGimbalAnglePoll() {
-        val link = controls?.takeIf { can(CameraCapability.GIMBAL) } ?: return
+        if (!can(CameraCapability.GIMBAL)) return
         anglePollJob?.cancel()
         anglePollJob = scope.launch {
             while (isActive) {
-                link.gimbalAngle()?.let { gimbalAngle = it to SystemClock.elapsedRealtime() }
+                motion.readAngle()?.let { gimbalAngle = it to SystemClock.elapsedRealtime() }
                 delay(100)
             }
         }
@@ -713,17 +714,16 @@ class PocketCameraSession(
         anglePollJob?.cancel(); anglePollJob = null; gimbalAngle = null
     }
     private fun sendGimbalAngle(target: GimbalWaypoint) {
-        val (pitch, yaw) = LunaGimbalAim.setAngle(target)
-        scope.launch { controls?.gimbalSetAngle(pitch, yaw) }
+        scope.launch { motion.aim(LunaGimbalAim.motionPose(target)) }
     }
     /** iOS `aimGimbal`: one SET_ANGLE; the aim ends once GET_ANGLE reads within 0.5 deg, or after 8 s. */
     private fun aimGimbal(target: GimbalWaypoint) {
-        if (!canSetGimbalConfiguration() || stickJob?.isActive == true || _gimbalMoveRunning.value) return
+        if (!canSetGimbalConfiguration() || motion.isHeld || _gimbalMoveRunning.value) return
         aimJob?.cancel()
         aimJob = scope.launch {
             sendGimbalAngle(target)
             val started = SystemClock.elapsedRealtime()
-            while (isActive && canSetGimbalConfiguration() && stickJob?.isActive != true) {
+            while (isActive && canSetGimbalConfiguration() && !motion.isHeld) {
                 val elapsed = SystemClock.elapsedRealtime() - started
                 if (elapsed > 8_000) break
                 val reading = gimbalAngle
@@ -737,11 +737,11 @@ class PocketCameraSession(
     fun recenterGimbal() {
         if (!hasGimbal) return
         aimJob?.cancel()
-        scope.launch { if (controls?.gimbalRecenter() != true) presentControlNote("Recenter did not reach the camera.") }
+        scope.launch { if (!motion.recenter()) presentControlNote("Recenter did not reach the camera.") }
     }
     fun flipGimbal() {
         if (!hasGimbal) return
-        scope.launch { if (controls?.gimbalFlip() != true) presentControlNote("Flip did not reach the camera.") }
+        scope.launch { if (!motion.flip()) presentControlNote("Flip did not reach the camera.") }
     }
     fun updateGimbalStick(
         x: Float,
@@ -764,21 +764,11 @@ class PocketCameraSession(
         fun shaped(v: Double) = (if (linear) v else v * abs(v)) * scale
         val pan = if (still) 0.0 else if (assistMirror) -x.toDouble() else x.toDouble()
         val tilt = if (still) 0.0 else y.toDouble()
-        stick = shaped(pan) to shaped(tilt)
-        if (stickJob?.isActive == true) return
-        // ponytail: fixed 20 Hz rate stream, same cadence as the iOS LunaStickStream.
-        stickJob = scope.launch {
-            while (isActive) {
-                val (p, t) = stick
-                controls?.gimbalStick(p, t)
-                delay(50)
-            }
-        }
+        motion.hold(shaped(pan), shaped(tilt))
     }
     fun endGimbalStick() {
-        stickJob?.cancel(); stickJob = null
-        stick = 0.0 to 0.0
-        if (hasGimbal) scope.launch { controls?.gimbalStick(0.0, 0.0) }
+        motion.endHold()
+        if (hasGimbal) scope.launch { motion.release() }
     }
     private fun canSetGimbalConfiguration() = hasGimbal && phase == ConnectionPhase.LIVE && !isBrowsingMedia
     fun setGimbalMode(mode: GimbalMode) {
@@ -801,7 +791,7 @@ class PocketCameraSession(
     }
     fun setGimbalWaypoint(slot: GimbalWaypointSlot) {
         if (!hasGimbal) return
-        if (_gimbalMoveRunning.value || stickJob?.isActive == true) return presentControlNote(GimbalHudCopy.HOLD_STILL)
+        if (_gimbalMoveRunning.value || motion.isHeld) return presentControlNote(GimbalHudCopy.HOLD_STILL)
         val angle = freshGimbalAngle(300) ?: return presentControlNote(GimbalHudCopy.POSE_NOT_READY)
         _gimbalProgram.update { it.withPoint(slot, LunaGimbalAim.waypoint(angle, _zoomReadout.value)) }
     }
@@ -846,7 +836,7 @@ class PocketCameraSession(
         }
         _controlNote.value = null
         aimJob?.cancel()
-        if (stickJob?.isActive == true) endGimbalStick()
+        if (motion.isHeld) endGimbalStick()
         _gimbalMoveRunning.value = true
         _gimbalMovePaused.value = false
         moveCanPause = false
@@ -1014,7 +1004,7 @@ class PocketCameraSession(
         val now = SystemClock.elapsedRealtime()
         val dt = lastFaceAt?.let { (now - it) / 1000.0 } ?: 0.04
         lastFaceAt = now
-        val moving = stickJob?.isActive == true
+        val moving = motion.isHeld
         sceneFaces = faces.take(SceneFacePolicy.MAX_FACES)
         if (isTrackingActive || !FaceAFPolicy.wantsFaceAF(_status.value.focusMode, _faceAFArmed.value)) {
             faceBox = null
@@ -1033,7 +1023,7 @@ class PocketCameraSession(
     }
     /** iOS `tickFaceBoxes`: drop the painted faces after the miss timeout. */
     private fun tickFaceHold(now: Long = SystemClock.elapsedRealtime()) {
-        if (!FaceTrackHold.shouldDrop(FaceTrackHold.secondsSinceHit(lastFaceHitAt, now), stickJob?.isActive == true)) return
+        if (!FaceTrackHold.shouldDrop(FaceTrackHold.secondsSinceHit(lastFaceHitAt, now), motion.isHeld)) return
         if (faceBox == null && sceneFaces.isEmpty()) return
         faceBox = null
         sceneFaces = emptyList()
