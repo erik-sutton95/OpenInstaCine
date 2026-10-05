@@ -1,3 +1,4 @@
+import MonitorUI
 import OpenCineMedia
 import OpenCineFrameIO
 import CoreVideo
@@ -757,7 +758,7 @@ struct AppRoot: View {
 
     var body: some View {
         ZStack {
-            ZCBackground()
+            MonitorTheme.background.ignoresSafeArea()
             #if targetEnvironment(simulator)
                 if MonitorMediaReview.isActive && !MonitorMediaReview.usesProductionShell {
                     MonitorMediaReviewView()
@@ -775,7 +776,7 @@ struct AppRoot: View {
             }
 
             if model.showsWatcherBrowse, !model.isLive {
-                ZCBackground()
+                MonitorTheme.background
                     .ignoresSafeArea()
                     .overlay {
                         WatcherBrowseView()

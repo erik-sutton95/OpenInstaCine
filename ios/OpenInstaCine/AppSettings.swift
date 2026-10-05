@@ -46,7 +46,7 @@ struct CloseButton: View {
                 .frame(width: size, height: size)
                 .glassCircle(interactive: true)
         }
-        .buttonStyle(.zcTapTarget)
+        .buttonStyle(.monitorTapTarget)
         .accessibilityLabel("Close")
     }
 }
@@ -96,7 +96,7 @@ struct SettingsSegmented: View {
                 OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
             }
         )
-        .buttonStyle(.zcTapTarget)
+        .buttonStyle(.monitorTapTarget)
     }
 }
 
@@ -266,9 +266,9 @@ struct AppPanelChrome<Content: View>: View {
                     .padding(.vertical, 10)
                     .background(
                         StartupColors.accent,
-                        in: RoundedRectangle(cornerRadius: DesignTokens.cornerRadius)
+                        in: RoundedRectangle(cornerRadius: MonitorTheme.radius)
                     )
-                    .buttonStyle(.zcTapTarget)
+                    .buttonStyle(.monitorTapTarget)
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
