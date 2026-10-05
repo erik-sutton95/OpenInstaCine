@@ -11,8 +11,8 @@ import com.opencapture.opencine.motion.LevelReading
 import com.opencapture.opencine.motion.WorldLevelSnap
 import com.opencapture.openpocketcine.CaptureLists
 import com.opencapture.openpocketcine.CaptureShutterPolicy
-import com.opencapture.openpocketcine.GamepadOperatorAction
-import com.opencapture.openpocketcine.GamepadShutterSync
+import com.opencapture.opencine.media.GamepadOperatorAction
+import com.opencapture.opencine.media.GamepadShutterSync
 import com.opencapture.openpocketcine.EvComp
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.bridge.SwiftCore

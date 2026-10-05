@@ -18,7 +18,7 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.opencapture.opencine.media.DecoderErrorRecord
 import com.opencapture.openpocketcine.BuildConfig
-import com.opencapture.openpocketcine.pairing.DiscoveryPermissions
+import com.opencapture.opencine.appkit.DiscoveryPermissions
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import java.io.File
 import java.text.SimpleDateFormat
