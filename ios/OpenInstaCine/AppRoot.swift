@@ -792,7 +792,7 @@ struct AppRoot: View {
             if MonitorMediaReview.usesProductionShell { MonitorPlaybackReviewFacts(model: model) }
         }
         #endif
-        .environment(\.font, LiveType.text(16))
+        .environment(\.font, MonitorTheme.font(16))
         .environment(
             \.monitorHDRChromeGain,
             model.hdrDisplayActive ? CGFloat(LiveHDRDisplay.presentGain) : 1

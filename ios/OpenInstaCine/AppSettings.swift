@@ -251,16 +251,16 @@ struct AppPanelChrome<Content: View>: View {
             HStack {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("OPENINSTACINE")
-                        .font(LiveType.ui(size: 10, weight: .semibold, design: .rounded))
+                        .font(MonitorTheme.font(10, weight: .semibold))
                         .tracking(1.3)
                         .foregroundStyle(StartupColors.muted)
                     Text(title)
-                        .font(LiveType.ui(size: 17, weight: .bold, design: .rounded))
+                        .font(MonitorTheme.font(17, weight: .bold))
                         .foregroundStyle(StartupColors.ink)
                 }
                 Spacer()
                 Button("Done", action: onClose)
-                    .font(LiveType.ui(size: 16, weight: .semibold, design: .rounded))
+                    .font(MonitorTheme.font(16, weight: .semibold))
                     .foregroundStyle(StartupColors.darkText)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)

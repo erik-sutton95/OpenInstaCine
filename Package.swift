@@ -35,6 +35,8 @@ let package = Package(
                 .product(name: "OpenCineMedia", package: "OpenCine"),
                 .product(name: "OpenCineMotion", package: "OpenCine"),
                 .product(name: "OpenCineRelay", package: "OpenCine"),
+                // Live chrome layout policy (`MonitorLayoutRegion`, `GimbalCluster`).
+                .product(name: "MonitorPresentation", package: "OpenCine"),
             ]
         ),
         .testTarget(

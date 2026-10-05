@@ -1,4 +1,5 @@
 import Foundation
+import MonitorPresentation
 import OpenCineCore
 
 /// Exposure auto/manual. SET is `0x02/0x1E` (`mimo-settings-1`, 8 writes, all ACK `00`).

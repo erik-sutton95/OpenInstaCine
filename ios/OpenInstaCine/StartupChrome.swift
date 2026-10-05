@@ -84,7 +84,7 @@ struct StartupFilledButtonStyle: ButtonStyle {
 
         var body: some View {
             configuration.label
-                .font(LiveType.ui(size: 16, weight: .semibold, design: .rounded))
+                .font(MonitorTheme.font(16, weight: .semibold))
                 .foregroundStyle(StartupColors.darkText)
                 .padding(.horizontal, 22)
                 .padding(.vertical, 14)
