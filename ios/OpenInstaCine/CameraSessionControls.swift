@@ -64,6 +64,13 @@ extension CameraSession {
         return true
     }
 
+    /// Every camera request goes through the connection's Luna session, which sends only while it
+    /// is ready and owned (the Insta360 rule: commands only through `LunaCameraSession`).
+    func sendLuna(_ request: LunaRequest, timeout: Duration? = nil) async throws -> Data {
+        guard let session = backend.session else { throw CancellationError() }
+        return try await session.control(request, timeout: timeout)
+    }
+
     /// Sends one Luna request off the main flow. Failure reverts through `onFail`.
     func sendControl(
         _ name: String, _ build: () throws -> LunaRequest, refresh: Bool = true,
@@ -78,7 +85,7 @@ extension CameraSession {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let reply = try await self.backend.send(request)
+                let reply = try await self.sendLuna(request)
                 ControlLiveLog.line("control: \(name) ok")
                 onSuccess?(reply)
                 if refresh { self.scheduleSettingsRefresh() }
@@ -510,7 +517,7 @@ extension CameraSession {
                 let pan = self.gimbalStick.pan
                 let tilt = self.gimbalStick.tilt
                 if let request = try? LunaProtocol.gimbalMove(upDown: tilt, leftRight: pan) {
-                    _ = try? await self.backend.send(request, timeout: .seconds(2))
+                    _ = try? await self.sendLuna(request, timeout: .seconds(2))
                 }
                 try? await Task.sleep(for: LunaStickStream.interval)
             }
@@ -522,7 +529,7 @@ extension CameraSession {
         gimbalStick.reset()
         ControlLiveLog.line("control: gimbal stick rest")
         guard backend.isControlReady else { return }
-        Task { _ = try? await backend.send(LunaProtocol.gimbalReleaseRequest()) }
+        Task { [weak self] in _ = try? await self?.sendLuna(LunaProtocol.gimbalReleaseRequest()) }
     }
 
     func performGimbalDoubleTap() {
@@ -607,7 +614,7 @@ extension CameraSession {
     @discardableResult
     func readGimbalAngle(timeout: Duration = .seconds(1)) async -> LunaGimbalAngle? {
         guard let request = try? LunaProtocol.gimbalGetAngleRequest(),
-            let reply = try? await backend.send(request, timeout: timeout),
+            let reply = try? await sendLuna(request, timeout: timeout),
             let angle = try? LunaGimbalAngle(response: reply)
         else { return nil }
         gimbalAngle = (angle, ProcessInfo.processInfo.systemUptime)
@@ -620,8 +627,7 @@ extension CameraSession {
         let pitch = min(max(target.pitchDeg, Self.gimbalPitchRange.lowerBound), Self.gimbalPitchRange.upperBound)
         guard let request = try? LunaProtocol.gimbalSetAngle(pitch: Float(pitch), yaw: Float(yaw))
         else { return }
-        let backend = self.backend
-        Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
+        Task { [weak self] in _ = try? await self?.sendLuna(request, timeout: .seconds(2)) }
     }
 
     #if DEBUG
@@ -732,8 +738,7 @@ extension CameraSession {
                 #endif
             }
             if let request = try? LunaProtocol.gimbalMove(upDown: tilt, leftRight: pan) {
-                let backend = self.backend
-                Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
+                Task { [weak self] in _ = try? await self?.sendLuna(request, timeout: .seconds(2)) }
             }
             let k = 1 - exp(-(now - last) / Self.stickLagSeconds)
             last = now
@@ -748,7 +753,7 @@ extension CameraSession {
         Task { @MainActor [weak self] in
             for attempt in 0..<2 {
                 guard let self, attempt == 0 || (self.gimbalAim == nil && !self.gimbalStick.isHeld) else { return }
-                _ = try? await self.backend.send(LunaProtocol.gimbalReleaseRequest())
+                _ = try? await self.sendLuna(LunaProtocol.gimbalReleaseRequest())
                 try? await Task.sleep(for: .milliseconds(150))
             }
         }
@@ -1143,18 +1148,11 @@ extension CameraSession {
         let y = min(max(Double(normalized.y), 0), 1)
         focusPoint = CGPoint(x: x, y: y)
         guard canSendControl else { return }
-        // fw 1.1.15 official ROI with the camera upright, centred on the tap:
-        // 0.1545 × 0.271…0.275 of the 16:9 preview (square on the sensor). The
-        // smaller 0.0869 × 0.1545 box was captured with the camera lying on its side.
-        let w = 0.1545
-        let h = 0.2727
-        let left = min(max(x - w / 2, 0), 1 - w)
-        let top = min(max(y - h / 2, 0), 1 - h)
-        let mode = backend.functionMode
-        sendControl(
-            "Focus",
-            { try LunaProtocol.setTapFocus(x: left, y: top, width: w, height: h, functionMode: mode) },
-            refresh: false)
+        do {
+            try subjectTracking.focus(x: x, y: y, finished: controlFinished("Focus"))
+        } catch {
+            controlNote = "Focus: \(error.localizedDescription)"
+        }
     }
 
     /// Drag-to-track → Luna Deep Track (cmd 237) with the operator's rectangle.
@@ -1164,85 +1162,58 @@ extension CameraSession {
             return
         }
         guard canSendControl else { return }
-        searchBox = box
-        subjectBox = nil
-        isTracking = false
-        trackingSawLock = false
         faceBox = nil
-        let left = min(max(box.centerX - box.width / 2, 0), 1)
-        let top = min(max(box.centerY - box.height / 2, 0), 1)
-        let width = min(box.width, 1 - left)
-        let height = min(box.height, 1 - top)
-        sendControl(
-            "Track",
-            { try LunaProtocol.openTracking(x: left, y: top, width: width, height: height) },
-            refresh: false,
-            onFail: { [weak self] in self?.clearLocalTracking() })
+        do {
+            try subjectTracking.start(
+                .init(x: box.x, y: box.y, width: box.width, height: box.height),
+                finished: controlFinished("Track"))
+        } catch {
+            controlNote = "Track: \(error.localizedDescription)"
+        }
     }
 
-    /// Stream-borne Deep Track state (media 0x85, every frame): tracking moves the
-    /// green subject box with the camera's box; lost shows the last box white, like
-    /// the search box, until the camera reacquires (it may pick a new subject) or the
-    /// operator cancels; idle after a lock means the camera ended tracking.
+    /// Stream-borne Deep Track state (media 0x85, every frame), read by the Luna owner. A
+    /// tracking frame also drops the face box.
     func applyTrackFrame(_ frame: LunaTrackFrame) {
-        let box = TrackingBox(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
-        switch frame.state {
-        case .tracking:
-            isTracking = true
-            trackingSawLock = true
-            lastSubjectPushAt = Date()
-            searchBox = nil
-            faceBox = nil
-            subjectBox = box
-        case .lost:
-            guard trackingSawLock else { return }
-            // Not `isTracking`: FocusOverlayPolicy would draw the search box as a green subject.
-            isTracking = false
-            subjectBox = nil
-            searchBox = box
-        case .idle:
-            // Idle frames also arrive between cmd 237 and the lock; only a lock ending counts.
-            if trackingSawLock { clearLocalTracking() }
-        case nil:
-            break
-        }
+        if frame.state == .tracking { faceBox = nil }
+        subjectTracking.ingest(frame)
     }
 
     /// The camera reports the end of tracking on notification 8315 (cancel).
     func applyTrackingState(_ state: UInt64) {
-        switch state {
-        case 1, 2:
-            isTracking = true
-            trackingSawLock = true
-            lastSubjectPushAt = Date()
-            if let search = searchBox {
-                subjectBox = TrackingBox.subject(from: search)
-                searchBox = nil
-            }
-        default:
-            if trackingSawLock || searchBox != nil { clearLocalTracking() }
-        }
+        subjectTracking.ingest(trackingState: state)
     }
 
     func cancelSubjectTracking() {
-        let had = isTrackingActive
-        clearLocalTracking()
-        guard had, backend.isControlReady else { return }
-        sendControl("Track clear", { LunaProtocol.cancelTrackingRequest }, refresh: false)
+        subjectTracking.cancel(finished: controlFinished("Track clear"))
     }
 
     func clearLocalTracking() {
-        searchBox = nil
-        subjectBox = nil
-        isTracking = false
-        trackingSawLock = false
-        lastSubjectPushAt = nil
+        subjectTracking.clear()
+    }
+
+    func showTracking(_ snapshot: LunaSubjectTracking.Snapshot) {
+        searchBox = snapshot.searchBox.map(TrackingBox.init)
+        subjectBox = snapshot.subjectBox.map(TrackingBox.init)
+        isTracking = snapshot.tracking
+    }
+
+    /// An owner-sent request's outcome, reported like `sendControl` without a settings refresh.
+    func controlFinished(_ name: String) -> @MainActor (Error?) -> Void {
+        { [weak self] error in
+            guard let self else { return }
+            guard let error else {
+                ControlLiveLog.line("control: \(name) ok")
+                return
+            }
+            ControlLiveLog.line("control: \(name) failed \(error.localizedDescription)")
+            self.noteCommandFailure()
+            self.controlNote = "\(name) was not applied by the camera."
+        }
     }
 
     func noteFrameTooSmall() {
-        searchBox = nil
-        subjectBox = nil
-        isTracking = false
+        subjectTracking.clearBoxes()
         controlNote = "Frame Too Small"
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(ControlHud.toastHoldSeconds))
@@ -1385,14 +1356,14 @@ extension CameraSession {
             guard let request = try? LunaProtocol.setClockRequest(
                 unixSeconds: UInt64(now.timeIntervalSince1970),
                 timeZoneSeconds: Int32(zone.secondsFromGMT(for: now)), zone: zone.identifier),
-                (try? await self.backend.send(request, timeout: .seconds(2))) != nil
+                (try? await self.sendLuna(request, timeout: .seconds(2))) != nil
             else { return }
             // Stamped at send: a GET round trip on the camera AP is about 4 ms (the clock
             // SET takes ~220 ms, but that is the camera's own processing).
             for count: UInt32 in 0..<2 {
                 let milliseconds = UInt64((Date().timeIntervalSince1970 * 1000).rounded())
                 if let request = try? LunaProtocol.syncTimeAccurateRequest(unixMilliseconds: milliseconds, count: count) {
-                    _ = try? await self.backend.send(request, timeout: .seconds(2))
+                    _ = try? await self.sendLuna(request, timeout: .seconds(2))
                 }
             }
             ControlLiveLog.line("luna: camera clock synced")

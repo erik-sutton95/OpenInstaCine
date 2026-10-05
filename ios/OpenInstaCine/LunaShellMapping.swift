@@ -389,3 +389,10 @@ extension OperatorPrefs {
         set { UserDefaults.standard.set(newValue, forKey: "OpenInstaCine.luna.flatPreview") }
     }
 }
+
+extension TrackingBox {
+    /// The Luna owner's box is the same top-left preview fraction box.
+    init(_ box: LunaSubjectTracking.Box) {
+        self.init(x: box.x, y: box.y, width: box.width, height: box.height)
+    }
+}

@@ -259,8 +259,10 @@ final class CameraSession {
     var isTracking = false
     var faceBox: TrackingBox?
     private(set) var sceneFaces: [TrackingBox] = []
-    @ObservationIgnored var trackingSawLock = false
-    @ObservationIgnored var lastSubjectPushAt: Date?
+    /// Deep Track and tap focus on the connection's Luna session; the boxes above follow it.
+    @ObservationIgnored lazy var subjectTracking = LunaSubjectTracking(
+        session: { [weak self] in self?.backend.session },
+        changed: { [weak self] in self?.showTracking($0) })
     @ObservationIgnored var lastTapFocusAt: Date?
     @ObservationIgnored var tapFocusTask: Task<Void, Never>?
     @ObservationIgnored private let faceDetector = LiveFaceDetector()
@@ -642,7 +644,7 @@ final class CameraSession {
         guard Date().timeIntervalSince(lastIFrameRequestAt) > 1 else { return }
         lastIFrameRequestAt = Date()
         ControlLiveLog.line("feed: I-frame request (\(reason))")
-        Task { _ = try? await backend.send(LunaRequest(code: 105, body: Data())) }
+        Task { [weak self] in _ = try? await self?.sendLuna(LunaRequest(code: 105, body: Data())) }
     }
 
     // MARK: - Status mapping (Luna → shared CameraStatus)
