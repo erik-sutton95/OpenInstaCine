@@ -66,7 +66,7 @@ struct LiveFocusResetButton: View {
                 .background(.black.opacity(0.55), in: Circle())
                 .overlay(Circle().strokeBorder(LiveDesign.hairline, lineWidth: 1))
         }
-        .buttonStyle(.zcTapTarget)
+        .buttonStyle(.monitorTapTarget)
         .accessibilityLabel("Recenter focus")
         .accessibilityHint("Moves the focus box back to the center and ends subject tracking")
         .accessibilityIdentifier("monitor.system.focusReset")
@@ -91,7 +91,7 @@ struct LiveAutoExposureUnlockButton: View {
             .background(.black.opacity(0.55), in: Capsule())
             .overlay(Capsule().strokeBorder(LiveDesign.hairline, lineWidth: 1))
         }
-        .buttonStyle(.zcTapTarget)
+        .buttonStyle(.monitorTapTarget)
         .accessibilityLabel("Unlock exposure")
         .accessibilityHint("Returns exposure to Auto")
         .accessibilityIdentifier("monitor.system.aeUnlock")
@@ -127,7 +127,7 @@ struct LiveHeadTrackCalibrateButton: View {
                 .background { plateFill }
                 .overlay { plateStroke }
         }
-        .buttonStyle(.zcTapTarget)
+        .buttonStyle(.monitorTapTarget)
         .accessibilityLabel(isStop ? "Stop head tracking" : "Calibrate Head Lock")
         .accessibilityHint(
             isStop

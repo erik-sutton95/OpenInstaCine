@@ -79,7 +79,7 @@ struct LiveGimbalButton: View {
                 )
                 .monitorReadoutShadow()
         }
-        .buttonStyle(.zcTapTarget)
+        .buttonStyle(.monitorTapTarget)
         .opacity(interfaceLocked ? 0.4 : 1)
         .allowsHitTesting(!interfaceLocked)
         .disabled(interfaceLocked)
@@ -460,7 +460,7 @@ private struct LiveGimbalMoveEditor: View {
                     .foregroundStyle(LiveDesign.text)
                     .frame(width: 30, height: 30)
             }
-            .buttonStyle(.zcTapTarget)
+            .buttonStyle(.monitorTapTarget)
             .accessibilityLabel("Minimize")
             .accessibilityIdentifier("motion.minimize")
             CloseButton(
@@ -532,7 +532,7 @@ private struct LiveGimbalMoveEditor: View {
                 Text(model.session.gimbalMovePaused ? "Restart" : LiveGimbalCopy.clear)
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
-            .buttonStyle(.zcTapTarget)
+            .buttonStyle(.monitorTapTarget)
             .accessibilityIdentifier(model.session.gimbalMovePaused ? "motion.restart" : "motion.clear")
             .foregroundStyle(LiveDesign.muted)
             .background(LiveDesign.glassBright, in: Capsule())
@@ -542,7 +542,7 @@ private struct LiveGimbalMoveEditor: View {
                     guard canInteract() else { return }
                     model.session.pauseOrResumeProgrammedMove()
                 }
-                .buttonStyle(.zcTapTarget)
+                .buttonStyle(.monitorTapTarget)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .foregroundStyle(LiveDesign.background)
                 .background(LiveDesign.accent, in: Capsule())
@@ -560,7 +560,7 @@ private struct LiveGimbalMoveEditor: View {
                 )
                 .frame(maxWidth: .infinity, minHeight: 44)
             }
-            .buttonStyle(.zcTapTarget)
+            .buttonStyle(.monitorTapTarget)
             .foregroundStyle(runEnabled ? LiveDesign.background : LiveDesign.muted)
             .background(
                 (model.session.gimbalMoveRunning
@@ -615,7 +615,7 @@ private struct LiveGimbalMoveEditor: View {
                         .frame(minWidth: 52, minHeight: 44)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.zcTapTarget)
+                .buttonStyle(.monitorTapTarget)
                 .accessibilityIdentifier("motion.waypoint.\(slot.letter)")
                 .accessibilityLabel(
                     "\(set ? LiveGimbalCopy.update : LiveGimbalCopy.set) \(slot.letter)")
@@ -629,7 +629,7 @@ private struct LiveGimbalMoveEditor: View {
                             .foregroundStyle(LiveDesign.muted)
                             .frame(width: 26, height: 26)
                     }
-                    .buttonStyle(.zcTapTarget)
+                    .buttonStyle(.monitorTapTarget)
                     .accessibilityLabel("Clear \(slot.letter)")
                 }
             }
@@ -714,7 +714,7 @@ private struct LiveGimbalRunPill: View {
                 .foregroundStyle(LiveDesign.text)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
-                .buttonStyle(.zcTapTarget)
+                .buttonStyle(.monitorTapTarget)
                 .accessibilityIdentifier("motion.pauseResume")
             }
             Button {
@@ -733,7 +733,7 @@ private struct LiveGimbalRunPill: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
             }
-            .buttonStyle(.zcTapTarget)
+            .buttonStyle(.monitorTapTarget)
             .accessibilityIdentifier("motion.startStop")
             .disabled(
                 !model.session.canRunProgrammedMove && !model.session.gimbalMoveRunning
@@ -750,7 +750,7 @@ private struct LiveGimbalRunPill: View {
                     .foregroundStyle(LiveDesign.text)
                     .frame(width: 44, height: 40)
             }
-            .buttonStyle(.zcTapTarget)
+            .buttonStyle(.monitorTapTarget)
             .accessibilityLabel("Expand motion control")
             .accessibilityIdentifier("motion.expand")
         }
