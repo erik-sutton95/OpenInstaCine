@@ -17,6 +17,7 @@ import com.opencapture.opencine.core.CapabilitySnapshot
 import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.opencine.insta360.luna.LunaCameraSession
 import com.opencapture.opencine.insta360.luna.LunaConnectPort
+import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
 import com.opencapture.opencine.core.CommandStage
 import com.opencapture.opencine.core.ISOValue
 import com.opencapture.opencine.core.Rational
@@ -120,6 +121,9 @@ class PocketCameraSession(
     internal val pendingCameraSetCount: Int get() = 0
     val isMultiviewBorrowed = borrowing != null
     val decoder = borrowing ?: HevcDecoder(cadence, errorJournal = DiagnosticCenter::logDecoderError)
+    // Timecode, iOS `noteFrameClock`: live frame stamps to time of day (`LunaFrameTimecode`), with
+    // the camera clock synced at live start (the backend). Before `init`: its collectors reset it.
+    private val frameTimecode = LunaFrameTimecode()
 
     val phase: ConnectionPhase get() = backend.phase.value
     val phaseFlow: StateFlow<ConnectionPhase> get() = backend.phase
@@ -490,30 +494,17 @@ class PocketCameraSession(
         publishFaceDetectWanted()
     }
 
-    // Timecode, iOS `noteFrameClock`. Frame stamps run on a camera clock that does not follow its
-    // time of day, so each is pinned to the phone clock by the earliest arrival; with the camera
-    // clock synced at live start (the backend), that is the camera's time-of-day timecode.
-    @Volatile private var frameClockOffsetMs: Long? = null
-    @Volatile private var lastTimecodeSecond: Long? = null
-
     private fun resetFrameClock() {
-        frameClockOffsetMs = null; lastTimecodeSecond = null
+        frameTimecode.reset()
         _status.update { it.copy(timecode = null) }
     }
 
     /** [stampMicros]: the frame's camera clock (Luna: its u64 ms header stamp, in microseconds). */
     private fun noteFrameClock(stampMicros: Long) {
-        val stamp = stampMicros / 1_000
-        val seen = System.currentTimeMillis() - stamp - FRAME_LATENCY_MS
-        val offset = minOf(frameClockOffsetMs ?: seen, seen)
-        frameClockOffsetMs = offset
-        val wall = stamp + offset
-        val second = Math.floorDiv(wall, 1_000L)
-        // The HUD shows HH:MM:SS: publish once per displayed second.
-        if (second == lastTimecodeSecond) return
-        lastTimecodeSecond = second
-        val zone = java.util.TimeZone.getDefault().getOffset(wall) / 1_000
-        val timecode = LunaShellMapping.cameraTimecode(wall / 1_000.0, zone, _status.value.fps)
+        // The HUD shows HH:MM:SS: published once per displayed second.
+        val timecode = frameTimecode.note(
+            stampMicros / 1_000, System.currentTimeMillis(), java.util.TimeZone.getDefault(), _status.value.fps,
+        ) ?: return
         _status.update { it.copy(timecode = LunaShellMapping.timecodeText(timecode)) }
         (control.state.value.session as? LunaCameraSession)?.ingest(timecode)
     }
@@ -1171,8 +1162,6 @@ class PocketCameraSession(
     companion object {
         /** fw 1.1.15 official presets, same as iOS `LunaShellMapping.zoomChips`; the ceiling is appended when larger. */
         val LUNA_ZOOM_CHIPS = listOf(1.0, 2.0, 3.0, 6.0, 15.0)
-        /** Capture to phone delay of a live frame at best (official-app captures: 90 to 200 ms after its stamp). */
-        const val FRAME_LATENCY_MS = 90L
         /** iOS `GimbalStick.doubleTapWindow` (0.35 s) for the feed double tap to Deep Track. */
         const val DOUBLE_TAP_WINDOW_MS = 350L
     }
