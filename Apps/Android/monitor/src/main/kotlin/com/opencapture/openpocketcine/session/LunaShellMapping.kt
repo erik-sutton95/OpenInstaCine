@@ -3,6 +3,7 @@ package com.opencapture.openpocketcine.session
 import com.opencapture.openpocketcine.EvComp
 import com.opencapture.opencine.core.CameraTimecode
 import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
+import com.opencapture.opencine.insta360.luna.LunaSubjectTracking
 import com.opencapture.opencine.insta360.shell.CameraColorProfile
 import com.opencapture.opencine.insta360.shell.CameraFocusMode
 import com.opencapture.opencine.insta360.shell.CameraGimbalMode
@@ -10,8 +11,6 @@ import com.opencapture.opencine.insta360.shell.CameraGimbalSpeed
 import com.opencapture.opencine.insta360.shell.CameraReadout
 import com.opencapture.opencine.insta360.shell.CameraRecordFormat
 import com.opencapture.opencine.insta360.shell.CameraShootingMode
-import com.opencapture.opencine.insta360.shell.CameraTrackFrame
-import com.opencapture.opencine.insta360.shell.CameraTrackState
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.reflect.KMutableProperty0
@@ -221,6 +220,10 @@ internal object LunaShellMapping {
     fun timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int): String =
         timecodeText(LunaFrameTimecode.timecode(unixSeconds, timeZoneSeconds, fps))
 
+    /** Deep Track boxes between the shared owner and the shell's overlays (same top-left frame). */
+    fun trackingBox(box: LunaSubjectTracking.Box) = TrackingBox(box.x, box.y, box.width, box.height)
+    fun lunaBox(box: TrackingBox) = LunaSubjectTracking.Box(box.x, box.y, box.width, box.height)
+
     /** `HH:MM:SS:FF`, the status text the HUD reads. */
     fun timecodeText(timecode: CameraTimecode): String = with(timecode) {
         String.format(Locale.US, "%02d:%02d:%02d:%02d", hours, minutes, seconds, frames)
@@ -296,39 +299,5 @@ internal object LunaShellMapping {
         val focus = readout.focusMode?.let(::focusOption)
         next = withFocus(next, pins::focus.hold(focus, now) ?: focus)
         return next to table
-    }
-}
-
-/**
- * Deep Track boxes (iOS `CameraSession.applyTrackFrame`), shown the upstream ActiveTrack way:
- * white search box until the camera locks, then the green subject box. [locked] is the camera's
- * lock; tracking stays active while any box is up so cancel stays available.
- */
-data class LunaTrackBoxes(
-    val search: TrackingBox? = null,
-    val subject: TrackingBox? = null,
-    val locked: Boolean = false,
-    val sawLock: Boolean = false,
-) {
-    val active: Boolean get() = locked || search != null || subject != null
-    val hud: TrackingHud get() = TrackingHud(overlay = FocusOverlayPolicy.resolve(locked, search, subject), isTracking = active)
-
-    /** Next state for one stream frame, or null when it changes nothing. */
-    fun apply(frame: CameraTrackFrame): LunaTrackBoxes? {
-        val box = TrackingBox(frame.x, frame.y, frame.width, frame.height)
-        return when (frame.state) {
-            CameraTrackState.TRACKING -> LunaTrackBoxes(subject = box, locked = true, sawLock = true)
-            // Lost: the last box as the search box until the camera reacquires (maybe a new subject) or the operator cancels.
-            CameraTrackState.LOST -> if (sawLock) LunaTrackBoxes(search = box, sawLock = true) else null
-            // Idle also arrives between the track request and the lock; only a lock ending counts.
-            CameraTrackState.IDLE -> if (sawLock) LunaTrackBoxes() else null
-        }
-    }
-
-    /** iOS `applyTrackingState` for notice 8315: locked promotes the search box; ended (the camera cancelled) clears. */
-    fun notice(locked: Boolean): LunaTrackBoxes? = when {
-        locked -> search?.let { LunaTrackBoxes(subject = TrackingBox.subject(it), locked = true, sawLock = true) } ?: copy(locked = true, sawLock = true)
-        sawLock || search != null -> LunaTrackBoxes()
-        else -> null
     }
 }

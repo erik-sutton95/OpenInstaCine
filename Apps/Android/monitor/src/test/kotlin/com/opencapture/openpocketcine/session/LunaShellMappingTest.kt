@@ -11,8 +11,6 @@ import com.opencapture.opencine.insta360.shell.CameraReadout
 import com.opencapture.opencine.insta360.shell.CameraRecordFormat
 import com.opencapture.opencine.insta360.shell.CameraShootingMode
 import com.opencapture.opencine.insta360.shell.CameraStorage
-import com.opencapture.opencine.insta360.shell.CameraTrackFrame
-import com.opencapture.opencine.insta360.shell.CameraTrackState
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.media.MediaFile
 import kotlin.test.*
@@ -227,36 +225,5 @@ class LunaShellMappingTest {
         // Wraps at midnight, west of GMT too.
         assertEquals("23:59:59:23", m.timecode(86_399.99, 0, 24))
         assertEquals("23:00:00:00", m.timecode(3600.0, -7200, 24))
-    }
-
-    @Test fun deepTrackStreamStatesDriveTheBoxes() {
-        fun frame(state: CameraTrackState, x: Double) = CameraTrackFrame(state, x, 0.3, 0.15, 0.27)
-        var boxes = LunaTrackBoxes()
-        assertNull(boxes.apply(frame(CameraTrackState.IDLE, 0.4)), "idle before any lock is ignored")
-        assertNull(boxes.apply(frame(CameraTrackState.LOST, 0.4)), "lost before any lock is ignored")
-        boxes = LunaTrackBoxes(search = TrackingBox(0.35, 0.3, 0.2, 0.2))
-        assertIs<FocusOverlay.Search>(boxes.hud.overlay, "requested box shows white until the lock")
-        assertTrue(boxes.hud.isTracking)
-        boxes = assertNotNull(boxes.apply(frame(CameraTrackState.TRACKING, 0.4)))
-        assertEquals(0.4, assertIs<FocusOverlay.Subject>(boxes.hud.overlay).box.x, 0.001)
-        boxes = assertNotNull(boxes.apply(frame(CameraTrackState.LOST, 0.42)))
-        assertNull(boxes.subject)
-        assertEquals(0.42, assertIs<FocusOverlay.Search>(boxes.hud.overlay).box.x, 0.001)
-        assertTrue(boxes.hud.isTracking, "lost keeps tracking on so cancel stays available")
-        boxes = assertNotNull(boxes.apply(frame(CameraTrackState.TRACKING, 0.3)))
-        assertIs<FocusOverlay.Subject>(boxes.hud.overlay)
-        boxes = assertNotNull(boxes.apply(frame(CameraTrackState.IDLE, 0.3)))
-        assertFalse(boxes.hud.isTracking, "idle after a lock ends tracking")
-        assertEquals(FocusOverlay.Focus, boxes.hud.overlay)
-    }
-
-    @Test fun deepTrackNoticeLocksOrEndsTracking() {
-        assertNull(LunaTrackBoxes().notice(false), "an end notice without tracking changes nothing")
-        val search = LunaTrackBoxes(search = TrackingBox(0.35, 0.3, 0.2, 0.2))
-        val locked = assertNotNull(search.notice(true))
-        assertIs<FocusOverlay.Subject>(locked.hud.overlay, "a lock notice promotes the search box")
-        assertTrue(locked.sawLock)
-        assertFalse(assertNotNull(locked.notice(false)).active, "8315 cancelled on the camera clears tracking")
-        assertFalse(assertNotNull(search.notice(false)).active, "an end before the lock drops the search box")
     }
 }
