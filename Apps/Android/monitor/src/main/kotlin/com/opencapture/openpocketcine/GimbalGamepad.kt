@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.appkit.OperatorHaptics
 import android.annotation.SuppressLint
 import android.content.Context
 import android.hardware.input.InputManager
