@@ -90,7 +90,8 @@ internal class FakeShellBackend(
         return angle
     }
     override suspend fun gimbalSetAngle(pitch: Double, yaw: Double) = record("gimbalSetAngle", pitch, yaw)
-    override val gimbalHeadPitch: Double? = null
+    @Volatile var headPitch: Double? = null
+    override val gimbalHeadPitch: Double? get() = headPitch
 }
 
 /** Runs [block] on the main thread, where the session facade lives. */
