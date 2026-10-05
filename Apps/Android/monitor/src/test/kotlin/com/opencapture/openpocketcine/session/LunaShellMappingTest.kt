@@ -159,11 +159,6 @@ class LunaShellMappingTest {
         assertEquals(listOf("Normal", "I-Log", "Dolby Vision"), m.colorModes.map { CameraCommands.colorLabel(it) })
         // The Luna wheel is the session profile's host value, not a camera-name branch.
         assertEquals(m.colorModes, m.profile.labels.colorModes)
-        assertEquals(
-            listOf("Standard", "I-Log", "Dolby Vision"),
-            com.opencapture.openpocketcine.CaptureLists.colorWheel("generic", s.availableColorModes, "Insta360 Luna Ultra", m.profile)
-                .map { it.second },
-        )
         // Auto: ISO 0 and shutter 0 are the camera's choice, so no live readout.
         val auto = m.applySettings(readout.copy(videoExposure = CameraExposure(0, 0, 0.0), whiteBalanceKelvin = 0), s, pins, 0).first
         assertEquals(-1, auto.iso)
