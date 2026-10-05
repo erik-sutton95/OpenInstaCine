@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.openpocketcine.diagnostics.AppDiagnostics
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
@@ -66,9 +67,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.opencapture.openpocketcine.diagnostics.AutomaticReportsPrompt
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
-import com.opencapture.openpocketcine.diagnostics.ManualProblemReport
-import com.opencapture.openpocketcine.diagnostics.ReliabilityReporting
-import com.opencapture.openpocketcine.diagnostics.ReliabilityReportingConsent
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -133,13 +131,13 @@ open class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         if (::model.isInitialized) model.shell.setSceneActive(false)
-        ManualProblemReport.setForeground(false)
+        AppDiagnostics.manualReport.setForeground(false)
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
-        ManualProblemReport.setForeground(true)
+        AppDiagnostics.manualReport.setForeground(true)
         if (::model.isInitialized) {
             model.shell.setSceneActive(true)
             model.gimbalGamepad.ensureListening(this, model)
@@ -258,7 +256,7 @@ private fun OpenPocketCineApp(model: AppModel) {
         LaunchSplashOverlay(visible = launchSplashVisible)
         model.legal?.let { kind -> if (!showLive) LegalDocumentScreen(kind) { model.legal = null } }
         var showAutomaticPrompt by remember {
-            mutableStateOf(ReliabilityReportingConsent.shouldOfferAutomaticPrompt())
+            mutableStateOf(AppDiagnostics.consent.shouldOfferAutomaticPrompt())
         }
         if (!launchSplashVisible && !showLive && showAutomaticPrompt &&
             model.legal != LegalKind.PRIVACY
@@ -266,11 +264,11 @@ private fun OpenPocketCineApp(model: AppModel) {
             AutomaticReportsPrompt(
                 onPrivacy = { model.legal = LegalKind.PRIVACY },
                 onEnable = {
-                    ReliabilityReporting.setConsent(true)
+                    AppDiagnostics.reporting.setConsent(true)
                     showAutomaticPrompt = false
                 },
                 onNotNow = {
-                    ReliabilityReporting.setConsent(false)
+                    AppDiagnostics.reporting.setConsent(false)
                     showAutomaticPrompt = false
                 },
             )
