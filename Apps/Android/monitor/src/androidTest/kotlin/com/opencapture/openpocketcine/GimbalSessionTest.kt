@@ -3,7 +3,7 @@ package com.opencapture.openpocketcine
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.opencapture.opencine.insta360.shell.CameraGimbalAngle
-import com.opencapture.openpocketcine.session.GimbalWaypoint
+import com.opencapture.opencine.motion.GimbalWaypoint
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import com.opencapture.opencine.motion.WorldLevelSnap
 import kotlin.test.assertEquals

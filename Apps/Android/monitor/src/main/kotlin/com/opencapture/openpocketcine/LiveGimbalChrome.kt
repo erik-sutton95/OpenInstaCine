@@ -5,6 +5,8 @@ import com.opencapture.monitorui.MonitorFloatingDrag
 import com.opencapture.monitorui.MonitorMotionDismissBackdrop
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntOffset
+import com.opencapture.opencine.motion.GimbalWaypointOverlay
+import com.opencapture.openpocketcine.session.project
 import kotlin.math.roundToInt
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorScrollFade
@@ -86,13 +88,12 @@ import com.opencapture.monitorui.MonitorValueDrum
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.session.GimbalHudCopy
 import com.opencapture.openpocketcine.session.GimbalMode
-import com.opencapture.openpocketcine.session.GimbalMoveEngine
-import com.opencapture.openpocketcine.session.GimbalProgramCurve
-import com.opencapture.openpocketcine.session.GimbalProgram
+import com.opencapture.opencine.motion.GimbalProgramCurve
+import com.opencapture.opencine.motion.GimbalProgram
 import com.opencapture.openpocketcine.session.GimbalDoubleTap
 import com.opencapture.openpocketcine.session.GimbalRamp
 import com.opencapture.openpocketcine.session.GimbalSpeed
-import com.opencapture.openpocketcine.session.GimbalWaypointSlot
+import com.opencapture.opencine.motion.GimbalWaypointSlot
 import kotlin.math.max
 import kotlin.math.min
 
@@ -351,7 +352,7 @@ private fun LiveGimbalWaypointMarks(model: AppModel, feed: ChromeRect, program: 
                 val path = Path()
                 var connected = false
                 for (sample in preview) {
-                    val (nx, ny, onScreen) = GimbalMoveEngine.project(sample, live, aspect)
+                    val (nx, ny, onScreen) = GimbalWaypointOverlay.project(sample, live, aspect)
                     if (!onScreen) { connected = false; continue }
                     val x = (feed.minX + motionOverlayX(nx, poseInvertPan, model.assist.mirrorsHorizontally).toFloat() * feed.width).dp.toPx()
                     val y = (feed.minY + ny.toFloat() * feed.height).dp.toPx()
@@ -364,7 +365,7 @@ private fun LiveGimbalWaypointMarks(model: AppModel, feed: ChromeRect, program: 
         }
         for (slot in GimbalWaypointSlot.entries) {
             val point = program.point(slot) ?: continue
-            val (nx, ny, onScreen) = GimbalMoveEngine.project(point, live, aspect)
+            val (nx, ny, onScreen) = GimbalWaypointOverlay.project(point, live, aspect)
             Box(
                 Modifier
                     .offset {
