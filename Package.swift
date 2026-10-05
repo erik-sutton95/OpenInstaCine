@@ -35,6 +35,8 @@ let package = Package(
                 .product(name: "OpenCineMedia", package: "OpenCine"),
                 .product(name: "OpenCineMotion", package: "OpenCine"),
                 .product(name: "OpenCineRelay", package: "OpenCine"),
+                // Camera control vocabulary shared with OpenPocketCine (re-exported).
+                .product(name: "OpenCineCameraVocabulary", package: "OpenCine"),
                 // Live chrome layout policy (`MonitorLayoutRegion`, `GimbalCluster`).
                 .product(name: "MonitorPresentation", package: "OpenCine"),
             ]
@@ -48,6 +50,7 @@ let package = Package(
             name: "OpenPocketCineAndroidFacade",
             dependencies: [
                 "OpenPocketViewCore",
+                .product(name: "OpenCineCameraVocabulary", package: "OpenCine"),
                 .product(name: "OpenCineJNISupport", package: "OpenCine"),
             ]
         ),

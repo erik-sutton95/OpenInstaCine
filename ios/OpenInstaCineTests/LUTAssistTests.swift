@@ -53,7 +53,7 @@ final class LUTAssistTests: XCTestCase {
 
         let offline = LiveAssistState()
         XCTAssertEqual(offline.monitorColorMode, .iLog)
-        XCTAssertEqual(offline.resolvedSource(), .lunaILog)
+        XCTAssertEqual(offline.resolvedSource(), .iLogRec709)
         offline.togglePlayback(.lut)
         XCTAssertGreaterThanOrEqual(offline.playbackEffects.lutDimension, 2)
         XCTAssertTrue(offline.playbackEffects.needsGPUFeed)
@@ -65,7 +65,7 @@ final class LUTAssistTests: XCTestCase {
         let assist = LiveAssistState()
         assist.syncLUT(to: color)
         assist.togglePlayback(.lut)
-        XCTAssertEqual(assist.resolvedSource(), .lunaILog)
+        XCTAssertEqual(assist.resolvedSource(), .iLogRec709)
         XCTAssertGreaterThanOrEqual(assist.playbackEffects.lutDimension, 2)
     }
 
@@ -289,7 +289,7 @@ final class LUTAssistTests: XCTestCase {
         assist.selectLUT(.djiAuto)
         assist.syncLUT(to: .iLog, family: .pocket, cameraName: "Luna Ultra")
         XCTAssertEqual(assist.lutSelection, .djiAuto)
-        XCTAssertEqual(assist.resolvedSource(), .lunaILog)
+        XCTAssertEqual(assist.resolvedSource(), .iLogRec709)
         XCTAssertEqual(assist.lutStatusLabel, "Auto · I-Log → Rec.709")
         guard BundledLunaLUT.iLogToRec709 != nil else {
             XCTFail("official Luna I-Log cube must load from the app bundle")
@@ -317,7 +317,7 @@ final class LUTAssistTests: XCTestCase {
         XCTAssertTrue(assist.lutEnabled)
         assist.syncLUT(to: .iLog)
         XCTAssertEqual(assist.lutSelection, .djiAuto)
-        XCTAssertEqual(assist.resolvedSource(), .lunaILog)
+        XCTAssertEqual(assist.resolvedSource(), .iLogRec709)
         XCTAssertEqual(assist.lutStatusLabel, "Auto · I-Log → Rec.709")
         guard BundledLunaLUT.iLogToRec709 != nil else {
             XCTFail("official Luna I-Log cube must load from the app bundle")
@@ -416,7 +416,7 @@ final class LUTAssistTests: XCTestCase {
         XCTAssertEqual(assist.lutSelection, .customDLog)
         XCTAssertEqual(assist.resolvedSource(), .off)
         XCTAssertEqual(LUTSelection.djiCatalog(isPhotoLive: true), [.djiAuto])
-        XCTAssertEqual(LUTSelection.djiCatalog(isPhotoLive: false), [.djiAuto, .lunaILog])
+        XCTAssertEqual(LUTSelection.djiCatalog(isPhotoLive: false), [.djiAuto, .iLogRec709])
         XCTAssertEqual(LUTAssist.photoRec709Caption, "Photo live view is Rec.709 — log conversions are off")
     }
 
@@ -441,15 +441,15 @@ final class LUTAssistTests: XCTestCase {
 
     func testPhotoDoesNotMutateSavedLUTPrefs() {
         let assist = LiveAssistState()
-        assist.selectLUT(.lunaILog)
+        assist.selectLUT(.iLogRec709)
         assist.syncLUT(to: .iLog)
         XCTAssertTrue(assist.lutEnabled)
         assist.syncLUT(to: .iLog, isPhoto: true)
-        XCTAssertEqual(assist.lutSelection, .lunaILog)
+        XCTAssertEqual(assist.lutSelection, .iLogRec709)
         XCTAssertTrue(assist.lutEnabled)
-        XCTAssertEqual(OperatorPrefs.lutSelection, .lunaILog)
+        XCTAssertEqual(OperatorPrefs.lutSelection, .iLogRec709)
         let restored = LiveAssistState()
-        XCTAssertEqual(restored.lutSelection, .lunaILog)
+        XCTAssertEqual(restored.lutSelection, .iLogRec709)
         XCTAssertTrue(restored.lutEnabled)
         XCTAssertEqual(OperatorPrefs.lastMonitorColorMode, .iLog)
     }

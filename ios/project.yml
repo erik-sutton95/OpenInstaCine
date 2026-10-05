@@ -42,6 +42,8 @@ targets:
       - package: OpenCine
         product: OpenCineMedia
       - package: OpenCine
+        product: OpenCineCameraVocabulary
+      - package: OpenCine
         product: OpenCineMotion
       - package: OpenCine
         product: OpenCineAppKitApple
@@ -143,6 +145,8 @@ targets:
         product: OpenPocketViewCore
       - package: OpenCine
         product: OpenCineMedia
+      - package: OpenCine
+        product: OpenCineCameraVocabulary
       - package: OpenCine
         product: OpenCineMotion
       - package: OpenCine

@@ -107,7 +107,7 @@ final class CameraSession {
     /// Tests only: the Luna session requests go through instead of the backend's.
     @ObservationIgnored var lunaSessionOverride: LunaCameraSession?
     /// Per-integration labels and media addressing for this camera (STATE-01: no launch globals).
-    @ObservationIgnored let profile: CameraProfile
+    @ObservationIgnored let profile: CameraLabelProfile
     /// This session's own drum coalescing and settings-read debounce (never shared).
     @ObservationIgnored let exposureCoalescer = LunaExposureCoalescer()
     @ObservationIgnored let refreshDebounce = LunaRefreshDebounce()
@@ -336,7 +336,7 @@ final class CameraSession {
     /// (`AppModel.makeBackend()`). A session that borrows a decoder or only edits controls is a
     /// lease on it: it never rebinds the backend's callbacks and never connects.
     init(
-        backend: LunaCameraBackend, profile: CameraProfile = LunaShellMapping.profile,
+        backend: LunaCameraBackend, profile: CameraLabelProfile = LunaShellMapping.profile,
         borrowing sharedDecoder: HevcDecoder? = nil, cameraMedia: CameraMedia? = nil,
         mediaStorage: MonitorMediaCacheStorage? = nil,
         controlsOnly: Bool = false

@@ -21,7 +21,7 @@ extension LUTSelection {
     var appliesTechnicalLogConversion: Bool {
         switch self {
         case .auto, .djiAuto, .officialDLog, .officialDLog2, .djiDLog, .djiDLog2, .djiDLogM,
-            .lunaILog, .customDLog, .customDLog2:
+            .iLogRec709, .customDLog, .customDLog2:
             true
         default:
             false
@@ -30,7 +30,7 @@ extension LUTSelection {
 
     static func djiCatalog(isPhotoLive: Bool) -> [LUTSelection] {
         // Luna ships one official cube; the DJI cubes are not bundled in this app.
-        isPhotoLive ? [.djiAuto] : [.djiAuto, .lunaILog]
+        isPhotoLive ? [.djiAuto] : [.djiAuto, .iLogRec709]
     }
 }
 
