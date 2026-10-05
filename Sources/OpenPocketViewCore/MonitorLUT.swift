@@ -41,10 +41,6 @@ public enum LUTSelection: String, CaseIterable, Sendable, Codable {
         }
     }
 
-    public var isBuiltIn: Bool {
-        self == .auto || self == .officialDLog || self == .officialDLog2
-    }
-
     /// Manufacturer (camera) catalog: DJI cubes plus the Luna I-Log cube.
     public var isDJI: Bool {
         self == .djiAuto || self == .djiDLog || self == .djiDLog2 || self == .djiDLogM
@@ -86,11 +82,9 @@ public enum LUTSelection: String, CaseIterable, Sendable, Codable {
         }
     }
 
-    public static let djiCases: [LUTSelection] = [.djiAuto, .djiDLog, .djiDLog2, .djiDLogM]
     public static let creativeCases: [LUTSelection] = [
         .creativeMono, .creativeContrast, .creativeWarm, .creativeCool,
     ]
-    public static let customCases: [LUTSelection] = [.customRec709, .customDLog, .customDLog2]
 }
 
 /// App-authored Rec.709 looks shipped in the iOS bundle (Built-in tab).
@@ -280,16 +274,6 @@ public enum LUTResolver {
         if colorMode == .iLog { return .lunaILog }
         return OfficialDJILUT.auto(colorMode: colorMode, family: family, cameraName: cameraName)
             .map(LUTSource.dji) ?? .off
-    }
-
-    /// Legacy name — same as DJI Auto.
-    public static func autoSource(
-        colorMode: ColorMode?,
-        hasCustomDLog: Bool,
-        hasCustomDLog2: Bool,
-        hasCustomRec709: Bool = false
-    ) -> LUTSource {
-        builtInAutoSource(colorMode: colorMode, family: .pocket)
     }
 
     public static func statusLabel(

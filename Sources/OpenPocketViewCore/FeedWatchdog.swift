@@ -223,26 +223,10 @@ public struct FeedWatchdog: Equatable, Sendable {
         return status < stallThreshold
     }
 
-    /// BLE still up and SoftAP still on the path — do not flap UDP / fullRejoin.
-    public static func shouldHoldBind(pathReady: Bool, lastBleNotifyAge: TimeInterval?) -> Bool {
-        pathReady && (lastBleNotifyAge ?? .infinity) < stallThreshold
-    }
-
     /// Sticky session signal: a real `0x02` video packet arrived.
     /// `noteRebuild()` nils the receive clocks; `videoPackets` stays.
     public static func hadVideo(videoPackets: Int, lastVideoPacketAge: TimeInterval?) -> Bool {
         videoPackets > 0 || lastVideoPacketAge != nil
-    }
-
-    /// HEVC landed after this `0x09/0xa8` — the IDR gap, not a still-paused encoder.
-    public static func enableRestartedVideo(
-        secondsSinceLastEnable: TimeInterval?,
-        lastVideoPacketAge: TimeInterval?
-    ) -> Bool {
-        guard let since = secondsSinceLastEnable, let video = lastVideoPacketAge else {
-            return false
-        }
-        return video + 0.05 < since
     }
 
     /// `0x09/0xa8` cuts the encoder GOP. Warm cameras answer in 25–167 ms;
@@ -286,29 +270,6 @@ public struct FeedWatchdog: Equatable, Sendable {
         return true
     }
 
-    /// Only the first time a hardware decoder that cannot join mid-GOP starts.
-    /// LUT / PEAK / WAVE off is a local present change — not an IDR request.
-    public static func shouldRequestKeyFrameForDecoderStart(
-        startingHardwareDecoder: Bool,
-        hasFormat: Bool,
-        hasPicture: Bool
-    ) -> Bool {
-        startingHardwareDecoder && hasFormat && hasPicture
-    }
-
-    /// Persist LUT/WAVE starts VT after the identity layer already consumed the
-    /// live-start IDR. Skipping a PLI because that enable was `< 1 s` ago leaves
-    /// a fresh VT with no IDR — WAITING FOR LIVE VIEW while UDP stays live.
-    /// Rapid A/B assist toggles still collapse (`liveViewEnableSends > 1`).
-    public static func shouldSendEnableForAssistVTStart(
-        secondsSinceLastEnable: TimeInterval,
-        hasPresentedPicture: Bool,
-        liveViewEnableSends: Int
-    ) -> Bool {
-        if secondsSinceLastEnable >= 1 { return true }
-        return hasPresentedPicture && liveViewEnableSends <= 1
-    }
-
     /// HEVC silent, a repair in flight, or clocks wiped after a live GOP.
     /// `lastVideoPacketAge == nil` after `hadVideo` is a rebuild (`lastVideo=none`
     /// on physical #148) — treating that as fresh re-grabs the stick into a GOP cut.
@@ -326,20 +287,6 @@ public struct FeedWatchdog: Equatable, Sendable {
     /// cancelled body force-enabling after `await` while a new rebuild started.
     public static func shouldStartFeedRecovery(rebuildInFlight: Bool) -> Bool {
         !rebuildInFlight
-    }
-
-    /// Mid-session IDR hold with UDP alive and a picture already on the layer
-    /// froze the last frame forever when the PLI did not cut a GOP (no periodic
-    /// IDR). First picture stays held until IRAP.
-    public static func shouldReleaseIDRHold(
-        awaitingIDR: Bool,
-        udpReceiveAlive: Bool,
-        secondsSinceLastEnable: TimeInterval?,
-        hasPresentedPicture: Bool
-    ) -> Bool {
-        guard awaitingIDR, udpReceiveAlive, hasPresentedPicture else { return false }
-        guard let since = secondsSinceLastEnable else { return false }
-        return since >= CameraSoftAP.firstPictureIDRGrace
     }
 
     /// First picture (`hadVideo == false`) may resend `0x09/0xa8` after stall.
@@ -572,41 +519,10 @@ public struct FeedWatchdog: Equatable, Sendable {
         }
     }
 
-    /// `feed: stall` while the last picture is still up; `feed: black` if recover
-    /// (or a failed layer) already wiped it.
-    public func stallLogLine(_ snap: Snapshot) -> String {
-        func age(_ value: TimeInterval?) -> String {
-            guard let value else { return "none" }
-            return String(format: "%.1f", value)
-        }
-        let flow = snap.flowHealthy ? "ready" : "dead"
-        let prefix = snap.displayedImageRemoved ? "feed: black" : "feed: stall"
-        return
-            "\(prefix) lastFrame=\(age(snap.lastDecodedFrameAge))s lastVideo=\(age(snap.lastVideoPacketAge))s lastAU=\(age(snap.lastAccessUnitAge))s lastStatus=\(age(snap.lastStatusAge))s lastBle=\(age(snap.lastBleNotifyAge))s flow=\(flow) tcp=\(snap.tcpPokeReady ? 1 : 0) path=\(snap.pathReady ? 1 : 0) format=\(snap.hasFormat ? 1 : 0) stage=\(stage.rawValue) recoverBlack=\(snap.displayedImageRemoved ? 1 : 0)"
-    }
-
-    /// Wipe the display layer only when the next decoded picture is in hand.
-    /// Passing `false` is the mid-session recover rule: keep the last frame.
-    public static func shouldFlushDisplayedImage(nextFrameReady: Bool) -> Bool {
-        nextFrameReady
-    }
-
     /// Re-enable only after SoftAP `192.168.2.x` and VT/display are ready.
     /// Same first-connect gate; mid-session recover used to skip it.
     public static func shouldSendRecoverEnable(pathReady: Bool, decoderReady: Bool) -> Bool {
         pathReady && decoderReady
-    }
-
-    /// Do not present an empty sample, and do not enqueue P-frames after a
-    /// GOP-reset enable until the IDR lands.
-    public static func shouldPresentSample(
-        hasPicture: Bool,
-        awaitingIDR: Bool,
-        isIDR: Bool
-    ) -> Bool {
-        guard hasPicture else { return false }
-        if awaitingIDR { return isIDR }
-        return true
     }
 
     private mutating func fire(_ action: Action, at now: TimeInterval) -> Action {

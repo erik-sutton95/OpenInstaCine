@@ -3,37 +3,6 @@ import Foundation
 // GimbalWaypoint, GimbalWaypointSlot, GimbalProgram and the straight-line pose math
 // (GimbalPath) live in OpenCineCore's OpenCineMotion. The DJI native-target engine stays here.
 
-/// First-order follow on analog throw. Off is a passthrough.
-public struct GimbalRampFilter: Equatable, Sendable {
-    public var x: Double = 0
-    public var y: Double = 0
-
-    public init(x: Double = 0, y: Double = 0) {
-        self.x = x
-        self.y = y
-    }
-
-    public mutating func reset() {
-        x = 0
-        y = 0
-    }
-
-    public mutating func tick(
-        targetX: Double, targetY: Double, ramp: GimbalRamp, dt: TimeInterval
-    ) -> (Double, Double) {
-        let tau = ramp.tau
-        if tau <= 0 || dt <= 0 {
-            x = targetX
-            y = targetY
-            return (x, y)
-        }
-        let alpha = 1 - exp(-dt / tau)
-        x += (targetX - x) * alpha
-        y += (targetY - y) * alpha
-        return (x, y)
-    }
-}
-
 /// Camera-executed timed positions. The phone sends one native command per
 /// leg and observes completion; it never approximates position with a stick.
 public struct GimbalMoveEngine: Equatable, Sendable {
@@ -182,18 +151,6 @@ public struct GimbalMoveEngine: Equatable, Sendable {
         return true
     }
 
-    /// Pause preserves ownership and the remaining itinerary; wall time is ignored.
-    public mutating func pause(live: GimbalWaypoint) -> Bool {
-        guard running, !isPaused else { return false }
-        verificationInterruptedByPause = verificationInterruptedByPause || !checkpoints.isEmpty
-        checkpoints = []
-        observations = []
-        isPaused = true
-        pendingZoomEndpoint = nil
-        lastReadout = snapshot(live: live)
-        return true
-    }
-
     public mutating func resume(live: GimbalWaypoint) -> Bool {
         guard running, isPaused, live.yawDeg.isFinite, live.pitchDeg.isFinite,
             live.zoom.isFinite, live == live.clamped(),
@@ -241,49 +198,6 @@ public struct GimbalMoveEngine: Equatable, Sendable {
         checkpoints = []
         observations = []
         commandHistory = []
-    }
-
-    /// Absolute lens samples share the take clock and a short command look-ahead.
-    /// The shell quantizes and sends them at no more than 20 Hz.
-    public var programmedZoomTarget: Double? {
-        guard program.changesZoom, running, !isPaused, index < legs.count else { return nil }
-        if let pendingZoomEndpoint { return pendingZoomEndpoint }
-        if phase == "APPROACH" || phase == "HOLD" { return program.a?.zoom }
-        return phase == "RUN" ? zoomPath.position(at: zoomElapsedOffset + elapsed) : zoomPath.end
-    }
-
-    /// Call only when the shell admits a lens sample; duplicate lens values also
-    /// consume the endpoint. A late tick must not skip a saved zoom amount.
-    public mutating func consumeProgrammedZoomTarget() -> Double? {
-        let target = programmedZoomTarget
-        if target != nil { pendingZoomEndpoint = nil }
-        return target
-    }
-
-    /// Linear lens targets share the pass/resume clock, including B when the
-    /// angular curve rounds that point. Reversals need no dwell.
-    public var nativeZoomDemand: NativeProgramZoomDemand? {
-        guard program.changesZoom, running, !isPaused, index < legs.count else { return nil }
-        if let pendingZoomEndpoint {
-            return .init(command: .track(pendingZoomEndpoint), destination: pendingZoomEndpoint)
-        }
-        if phase == "APPROACH" || phase == "HOLD", let zoom = program.a?.zoom {
-            return .init(command: .position(zoom), destination: zoom)
-        }
-        return phase == "RUN" ? zoomPath.nativeDemand(at: zoomElapsedOffset + elapsed)
-            : .init(command: .track(zoomPath.end), destination: zoomPath.end)
-    }
-
-    /// Consume only after sample admission, including duplicate quantized targets.
-    public mutating func consumeNativeZoomDemand() -> NativeProgramZoomDemand? {
-        let demand = nativeZoomDemand
-        if demand != nil { pendingZoomEndpoint = nil }
-        return demand
-    }
-
-    /// A shell capability change can invalidate a take before another command is sent.
-    public mutating func interrupt(live: GimbalWaypoint, reason: String) -> Output {
-        stop(live: live, reason: reason)
     }
 
     /// Wake on the command deadline, not a fixed sleep after a 25 Hz tick.
@@ -700,31 +614,6 @@ public struct GimbalMoveEngine: Equatable, Sendable {
         running ? snapshot(live: live) : lastReadout
     }
 
-    public func hudText(live: GimbalWaypoint?) -> String { hudText(program: program, live: live) }
-
-    public func hudText(program: GimbalProgram, live: GimbalWaypoint?) -> String {
-        Self.formatDebug(program: program, live: live, row: live.flatMap { readout(live: $0) } ?? lastReadout)
-    }
-
-    public static func formatHud(_ row: Readout) -> String {
-        formatDebug(program: GimbalProgram(), live: nil, row: row)
-    }
-
-    public static func formatDebug(program: GimbalProgram, live: GimbalWaypoint?, row: Readout?) -> String {
-        func xy(_ name: String, _ point: GimbalWaypoint?) -> String {
-            guard let point else { return "\(name)  --" }
-            return String(format: "%@  X%+7.1f  Y%+7.1f", name, point.yawDeg, point.pitchDeg)
-        }
-        var lines = [xy("A", program.a), xy("B", program.b), xy("C", program.c), xy("now", live)]
-        if let row {
-            lines.append("\(row.label)  \(row.phase)")
-            lines.append(String(format: "set %4.1fs  t %5.2fs", row.setDuration, row.elapsed))
-            lines.append(String(format: "tgt  X%+7.1f  Y%+7.1f", row.targetYaw, row.targetPitch))
-            lines.append(String(format: "rem %5.1f°", row.remainingDeg))
-        }
-        return lines.joined(separator: "\n")
-    }
-
     // Pose math moved to OpenCineMotion's GimbalPath; these keep the engine's call sites.
     public static func angularDistance(_ a: GimbalWaypoint, _ b: GimbalWaypoint) -> Double {
         GimbalPath.angularDistance(a, b)
@@ -758,8 +647,6 @@ public struct GimbalMoveEngine: Equatable, Sendable {
     public static func pitchDelta(from: GimbalWaypoint, to: GimbalWaypoint) -> Double {
         GimbalPath.pitchDelta(from: from, to: to)
     }
-
-
 }
 
 /// Project a stored yaw/pitch onto the live picture. Each waypoint is a

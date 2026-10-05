@@ -103,14 +103,6 @@ final class FirstConnectTests: XCTestCase {
             "Pocket 4 must not inherit the Pocket 3 format poke")
         XCTAssertTrue(CameraSoftAP.shouldForceEnableAfterUDPRebuild(hadVideo: false))
         XCTAssertFalse(CameraSoftAP.shouldForceEnableAfterUDPRebuild(hadVideo: true))
-        XCTAssertFalse(CameraSoftAP.shouldIngestLiveVideo(ingestArmed: false))
-        XCTAssertTrue(
-            CameraSoftAP.shouldIngestLiveVideo(ingestArmed: true),
-            "Mimo 20260828: HEVC at join+17ms, enable at +3s")
-        XCTAssertTrue(
-            CameraSoftAP.shouldIngestLiveVideo(
-                ingestArmed: true, browsingMedia: true, operatorOverlayHeld: true),
-            "#177: overlay/browse must not drop pktType 0x02")
         XCTAssertFalse(CameraSoftAP.shouldBeginIDRHoldOnEnable(hasPresentedPicture: true))
         XCTAssertTrue(
             CameraSoftAP.shouldRunFirstPictureRecover(
@@ -251,9 +243,6 @@ final class FirstConnectTests: XCTestCase {
             CameraSoftAP.canSendHandshake(receiveArmed: false, connectionReady: true),
             "bound-but-deaf: do not send 0x00 until receiveMessage is armed")
         XCTAssertTrue(CameraSoftAP.canSendHandshake(receiveArmed: true, connectionReady: true))
-        XCTAssertTrue(
-            CameraSoftAP.shouldRearmAfterError(isLiveConnection: true, canceled: true),
-            "spurious 89 on a live fd must not kill the handshake reader")
         XCTAssertTrue(CameraSoftAP.shouldReuseDatalink(isClosed: false))
         XCTAssertFalse(
             CameraSoftAP.shouldReuseDatalink(isClosed: true),
@@ -276,21 +265,6 @@ final class FirstConnectTests: XCTestCase {
     }
 
     func testDoNotEnableUntilWifiReady() {
-        XCTAssertFalse(
-            CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: false, displayAttached: true, alreadySent: false),
-            "first join: DHCP is not done — enable here blacks the feed")
-        XCTAssertTrue(
-            CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: true, displayAttached: true, alreadySent: false))
-        XCTAssertTrue(
-            CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: true, displayAttached: false, alreadySent: false),
-            "first boot must enable before the layer attaches")
-        XCTAssertFalse(
-            CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: true, displayAttached: true, alreadySent: true),
-            "do not spam 0x09/0xa8")
         XCTAssertTrue(
             CameraSoftAP.shouldSendLiveViewEnableAfterHandshake(alreadySent: false),
             "handshake is path proof — do not wait on getifaddrs")
@@ -377,16 +351,8 @@ final class FirstConnectTests: XCTestCase {
 
     func testRecoverKeepsLastFrameAndHoldsIDR() {
         XCTAssertFalse(
-            FeedWatchdog.shouldFlushDisplayedImage(nextFrameReady: false),
-            "do not flush to black before the next decoded frame")
-        XCTAssertFalse(
             FeedWatchdog.shouldSendRecoverEnable(pathReady: true, decoderReady: false),
             "same first-connect gate: VT/display before 0x09/0xa8")
-        XCTAssertFalse(
-            FeedWatchdog.shouldPresentSample(hasPicture: false, awaitingIDR: false, isIDR: false),
-            "do not present an empty sample")
-        XCTAssertFalse(
-            FeedWatchdog.shouldPresentSample(hasPicture: true, awaitingIDR: true, isIDR: false))
 
         let decoder = HevcDecoder()
         XCTAssertFalse(decoder.isPresentationReady, "detached layer is not ready")

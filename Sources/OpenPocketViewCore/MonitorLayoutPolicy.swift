@@ -142,11 +142,6 @@ public struct StartupSideCutoutAvoidance: Equatable, Sendable {
         self.trailing = trailing
     }
 
-    /// Whether either landscape side has a hardware cutout lane.
-    public var hasSideCutout: Bool {
-        leading > 0 || trailing > 0
-    }
-
     /// Keeps only large side safe-area insets as cutout lanes, allowing normal corner padding.
     public static func resolve(for safeArea: MonitorEdgeInsets) -> StartupSideCutoutAvoidance {
         StartupSideCutoutAvoidance(

@@ -498,40 +498,6 @@ import Testing
             dog.tick(snap) == .reopenDatalink, "past AF-C grace and still silent — then rebuild")
     }
 
-    @Test func assistVTStartSendsEnableWhenIdentityAlreadyPresented() {
-        #expect(
-            FeedWatchdog.shouldSendEnableForAssistVTStart(
-                secondsSinceLastEnable: 0.4, hasPresentedPicture: true, liveViewEnableSends: 1),
-            "identity already consumed the live-start IDR — new VT still needs a PLI")
-        #expect(
-            !FeedWatchdog.shouldSendEnableForAssistVTStart(
-                secondsSinceLastEnable: 0.4, hasPresentedPicture: false, liveViewEnableSends: 1),
-            "first enable still in flight — wait for that IDR")
-        #expect(
-            !FeedWatchdog.shouldSendEnableForAssistVTStart(
-                secondsSinceLastEnable: 0.4, hasPresentedPicture: true, liveViewEnableSends: 2),
-            "rapid A/B assist toggles collapse to one enable")
-        #expect(
-            FeedWatchdog.shouldSendEnableForAssistVTStart(
-                secondsSinceLastEnable: 1.0, hasPresentedPicture: false, liveViewEnableSends: 1))
-    }
-
-    @Test func assistDecoderStartRequestsIDROnlyOnce() {
-        #expect(
-            FeedWatchdog.shouldRequestKeyFrameForDecoderStart(
-                startingHardwareDecoder: true, hasFormat: true, hasPicture: true))
-        #expect(
-            !FeedWatchdog.shouldRequestKeyFrameForDecoderStart(
-                startingHardwareDecoder: false, hasFormat: true, hasPicture: true),
-            "LUT/PEAK/WAVE off is not a GOP reset")
-        #expect(
-            !FeedWatchdog.shouldRequestKeyFrameForDecoderStart(
-                startingHardwareDecoder: true, hasFormat: true, hasPicture: false))
-        #expect(
-            !FeedWatchdog.shouldRequestKeyFrameForDecoderStart(
-                startingHardwareDecoder: true, hasFormat: false, hasPicture: true))
-    }
-
     @Test func firstConnectFrozenVideoRebuildsUDP() {
         var dog = FeedWatchdog()
         #expect(
@@ -715,67 +681,6 @@ import Testing
         #expect(dog.tick(Self.snap(now: 11, frameAge: 0.2, videoAge: 0.1)) == .none)
         #expect(dog.stage == .idle)
         #expect(!dog.isRecovering)
-    }
-
-    @Test func stallLogNamesAgesAndStates() {
-        var dog = FeedWatchdog()
-        let snap = Self.snap(now: 10, frameAge: 3.2, videoAge: 3.1, statusAge: 3.1)
-        _ = dog.tick(snap)
-        let line = dog.stallLogLine(snap)
-        #expect(line.contains("feed: stall"))
-        #expect(line.contains("lastFrame=3.2"))
-        #expect(line.contains("lastVideo=3.1"))
-        #expect(line.contains("lastStatus=3.1"))
-        #expect(line.contains("flow=ready"))
-        #expect(line.contains("stage=reopenDatalink"))
-        #expect(line.contains("recoverBlack=0"))
-        #expect(!line.contains("feed: black"))
-    }
-
-    @Test func blackLogWhenRecoverWipedTheLayer() {
-        var dog = FeedWatchdog()
-        let snap = Self.snap(now: 10, frameAge: 4, displayedImageRemoved: true)
-        _ = dog.tick(snap)
-        let line = dog.stallLogLine(snap)
-        #expect(line.contains("feed: black"))
-        #expect(line.contains("recoverBlack=1"))
-        #expect(line.contains("lastFrame=4.0"))
-        #expect(line.contains("flow=ready"))
-    }
-
-    @Test func recoverDoesNotFlushToBlackBeforeNextFrame() {
-        #expect(!FeedWatchdog.shouldFlushDisplayedImage(nextFrameReady: false))
-        #expect(FeedWatchdog.shouldFlushDisplayedImage(nextFrameReady: true))
-        #expect(
-            !FeedWatchdog.shouldPresentSample(
-                hasPicture: false, awaitingIDR: false, isIDR: false))
-        #expect(
-            !FeedWatchdog.shouldReleaseIDRHold(
-                awaitingIDR: true, udpReceiveAlive: true, secondsSinceLastEnable: 2,
-                hasPresentedPicture: true),
-            "still inside GOP grace")
-        #expect(
-            FeedWatchdog.shouldReleaseIDRHold(
-                awaitingIDR: true, udpReceiveAlive: true, secondsSinceLastEnable: 8,
-                hasPresentedPicture: true),
-            "mid-session hold with UDP alive must not freeze the last frame forever")
-        #expect(
-            !FeedWatchdog.shouldReleaseIDRHold(
-                awaitingIDR: true, udpReceiveAlive: true, secondsSinceLastEnable: 8,
-                hasPresentedPicture: false),
-            "first picture stays held until IRAP")
-        #expect(
-            !FeedWatchdog.shouldPresentSample(
-                hasPicture: true, awaitingIDR: true, isIDR: false))
-        #expect(
-            FeedWatchdog.shouldPresentSample(
-                hasPicture: true, awaitingIDR: true, isIDR: true))
-        #expect(
-            FeedWatchdog.shouldPresentSample(
-                hasPicture: true, awaitingIDR: false, isIDR: false))
-        #expect(!FeedWatchdog.shouldSendRecoverEnable(pathReady: true, decoderReady: false))
-        #expect(!FeedWatchdog.shouldSendRecoverEnable(pathReady: false, decoderReady: true))
-        #expect(FeedWatchdog.shouldSendRecoverEnable(pathReady: true, decoderReady: true))
     }
 
     private static func snap(

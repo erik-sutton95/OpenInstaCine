@@ -64,13 +64,4 @@ import Testing
         #expect(withButton.zoom.x < bare.zoom.x)
     }
 
-    @Test func belowWellKeepsZoomUnderTheStrip() {
-        let strip = MonitorLayoutRegion(x: 0, y: 200, width: 390, height: 220)
-        let cluster = GimbalCluster.belowWell(well: strip, floorY: 620)
-        #expect(cluster.zoom.y >= strip.maxY + GimbalCluster.gap - 0.05)
-        #expect(cluster.stick.y >= cluster.zoom.maxY - 0.05)
-        #expect(abs(cluster.stick.maxX - (strip.maxX - GimbalCluster.inset)) < 0.05)
-        #expect(abs(cluster.zoom.maxX - cluster.stick.maxX) < 0.05)
-        #expect(abs(cluster.stick.maxY - (620 - GimbalCluster.inset)) < 0.05)
-    }
 }

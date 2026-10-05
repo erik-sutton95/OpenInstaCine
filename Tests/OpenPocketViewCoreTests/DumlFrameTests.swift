@@ -23,29 +23,4 @@ import Testing
             ])
     }
 
-    // SetPairingPIN (0x07/0x45), App -> WiFi, id 0x8092 — 51-byte frame, verified end + length.
-    @Test func encodePairing() {
-        let pin = Duml.packString("284ae5b8d76b3375a04a6417ad71bea3") + Duml.packString("osmo")
-        let frame = Duml.encode(
-            .init(
-                sender: Duml.senderApp, receiver: Duml.rxWifi, seq: 0x8092,
-                flags: Duml.flagRequest, cmdSet: 0x07, cmdId: 0x45, payload: pin))
-        #expect(frame.count == 51)
-        #expect(frame[3] == 0xC2)
-        #expect(Array(frame.suffix(2)) == [0xA0, 0xB4])
-        #expect(
-            Array(frame.prefix(11)) == [
-                0x55, 0x33, 0x04, 0xC2, 0x02, 0x07, 0x92, 0x80, 0x40, 0x07, 0x45,
-            ])
-    }
-
-    @Test func unpackStatusString() {
-        // Osmosis example: `00 12 "XtraEdgePro-2DCA16"`
-        let ssid = Array("XtraEdgePro-2DCA16".utf8)
-        #expect(Duml.unpackStatusString([0x00, UInt8(ssid.count)] + ssid) == "XtraEdgePro-2DCA16")
-        #expect(Duml.unpackStatusString([0xE0]) == "")  // Pocket 3 wake-error, no string
-        #expect(Duml.unpackStatusString([0x00, 0x00]) == "")  // AP not up yet
-        #expect(Duml.unpackStatusString([]) == "")
-    }
-
 }

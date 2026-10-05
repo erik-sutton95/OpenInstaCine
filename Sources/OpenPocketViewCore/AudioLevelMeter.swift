@@ -37,8 +37,6 @@ extension AudioMeterLevels {
 public enum CamAudioStatus {
     /// OpenZCine `PTPLiveViewSoundIndicator.maxSegment`.
     public static let maxSegment = 14
-    public static let subscribeKey = "cam_audio_status_v2"
-    public static let capturedSize = 114
 
     public static func parse(_ value: [UInt8]) -> AudioMeterLevels? {
         guard !value.isEmpty else { return nil }

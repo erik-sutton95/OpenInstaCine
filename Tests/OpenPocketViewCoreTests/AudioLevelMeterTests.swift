@@ -30,12 +30,6 @@ struct CamAudioStatusTests {
         0x00, 0x00,
     ]
 
-    @Test func subscribeKeyIsOnTheWireList() {
-        #expect(Commands.subscriptionKeys.contains(CamAudioStatus.subscribeKey))
-        #expect(Self.live1Quiet.count == CamAudioStatus.capturedSize)
-        #expect(Self.live1Louder.count == CamAudioStatus.capturedSize)
-    }
-
     @Test func capturedQuietIsAboveTheFloor() throws {
         let levels = try #require(CamAudioStatus.parse(Self.live1Quiet))
         let expected = AudioMeterBallistics.floorDB * (1 - 2.0 / 14.0)
@@ -65,22 +59,4 @@ struct CamAudioStatusTests {
         #expect(abs(levels.left.peakDB - AudioMeterBallistics.floorDB * (1 - 11.0 / 14.0)) < 1e-9)
     }
 
-    @Test func subscribePushLandsOnCameraStatus() {
-        var status = CameraStatus()
-        let payload = SubscribePush.pack(name: CamAudioStatus.subscribeKey, value: Self.live1Louder)
-        #expect(CameraStatusDecoder.applySubscribePush(payload, to: &status))
-        #expect(status.audioStatusRaw == Self.live1Louder)
-        #expect(status.audioMeters.left.levelDB > AudioMeterBallistics.floorDB + 1)
-        #expect(status.audioMeters != AudioMeterLevels.silent)
-    }
-
-    @Test func dumlSubscribeFrameLandsOnStatus() {
-        var status = CameraStatus()
-        let payload = SubscribePush.pack(name: CamAudioStatus.subscribeKey, value: Self.live1Louder)
-        let frame = Duml.Frame(
-            sender: 0, receiver: 0, seq: 0, flags: 0xC0, cmdSet: 0x00, cmdId: 0x99,
-            payload: payload)
-        #expect(CameraStatusDecoder.apply(frame, to: &status))
-        #expect(status.audioMeters.right.levelDB > status.audioMeters.left.levelDB)
-    }
 }

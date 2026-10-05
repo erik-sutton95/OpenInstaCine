@@ -76,50 +76,6 @@ import Testing
                 == "Van cam")
     }
 
-    @Test func ingestAfterHandshakeNotEnable() {
-        #expect(!CameraSoftAP.shouldIngestLiveVideo(ingestArmed: false))
-        #expect(
-            CameraSoftAP.shouldIngestLiveVideo(ingestArmed: true),
-            "Mimo 20260828: HEVC at join+17ms, 0xa8 at +3s")
-        #expect(
-            CameraSoftAP.shouldIngestLiveVideo(
-                ingestArmed: true, browsingMedia: true, operatorOverlayHeld: false),
-            "#177: library covering the monitor is not a leftover-GOP gate")
-        #expect(
-            CameraSoftAP.shouldIngestLiveVideo(
-                ingestArmed: true, browsingMedia: false, operatorOverlayHeld: true),
-            "#177: settings covering the monitor is not a leftover-GOP gate")
-        #expect(
-            !CameraSoftAP.shouldIngestLiveVideo(
-                ingestArmed: false, browsingMedia: true, operatorOverlayHeld: true))
-        #expect(CameraSoftAP.shouldBeginIDRHoldOnEnable(hasPresentedPicture: false))
-        #expect(!CameraSoftAP.shouldBeginIDRHoldOnEnable(hasPresentedPicture: true))
-        #expect(
-            CameraSoftAP.shouldSendLiveViewPrepare(usesNanoLiveViewGate: false),
-            "Pocket live-entry sends 0x02/0x68 08 before 0x09/0xa8")
-        #expect(
-            !CameraSoftAP.shouldSendLiveViewPrepare(usesNanoLiveViewGate: true),
-            "Nano has no captured 0x68 pair")
-    }
-
-    /// First connect: join callback fires before DHCP. Enable here is the black feed.
-    /// Display attach is not a gate — waiting ~2 s piles mid-GOP P-frames.
-    @Test func doNotEnableUntilWifiReady() {
-        #expect(
-            !CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: false, displayAttached: true, alreadySent: false))
-        #expect(
-            CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: true, displayAttached: false, alreadySent: false),
-            "enable as soon as SoftAP is up, even if the layer is not attached")
-        #expect(
-            !CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: true, displayAttached: true, alreadySent: true))
-        #expect(
-            CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: true, displayAttached: true, alreadySent: false))
-    }
-
     @Test func rebuildVTAfterInvalidSession() {
         #expect(CameraSoftAP.shouldRebuildVTSession(status: -12903))
         #expect(!CameraSoftAP.shouldRebuildVTSession(status: 0))
@@ -347,34 +303,6 @@ import Testing
             "camcap never arrived — poke the fallback")
     }
 
-    /// A keepalive / handshake leftover rebuild must not eat the first enable.
-    @Test func firstPictureSendsEnableWhenNeverSent() {
-        #expect(
-            CameraSoftAP.firstPictureStep(
-                videoPackets: 0, enableSends: 0, secondsSinceLastEnable: 0) == .resendEnable)
-        #expect(
-            CameraSoftAP.firstPictureStep(
-                videoPackets: 80, enableSends: 0, secondsSinceLastEnable: 10) == .resendEnable)
-        #expect(CameraSoftAP.shouldSendLiveViewEnableAfterHandshake(alreadySent: false))
-        #expect(!CameraSoftAP.shouldSendLiveViewEnableAfterHandshake(alreadySent: true))
-        #expect(CameraSoftAP.shouldRearmLiveIngestAfterUDPRebuild(wasAccepting: true))
-        #expect(!CameraSoftAP.shouldRearmLiveIngestAfterUDPRebuild(wasAccepting: false))
-        #expect(
-            !CameraSoftAP.shouldStampCommandSeq(
-                hasConnection: false, connectionReady: false, trackCommand: true))
-        #expect(
-            !CameraSoftAP.shouldStampCommandSeq(
-                hasConnection: true, connectionReady: false, trackCommand: true),
-            "tracked SET skips .waiting without burning seq")
-        #expect(
-            CameraSoftAP.shouldStampCommandSeq(
-                hasConnection: true, connectionReady: false, trackCommand: false),
-            "untracked enable still leaves on .waiting")
-        #expect(
-            CameraSoftAP.shouldStampCommandSeq(
-                hasConnection: true, connectionReady: true, trackCommand: true))
-    }
-
     @Test func firstPictureResendsEnableAfterRebuildWhenNeverGotVideo() {
         #expect(
             CameraSoftAP.firstPictureStep(
@@ -403,14 +331,6 @@ import Testing
             CameraSoftAP.firstPictureStep(
                 videoPackets: 420, enableSends: 2, secondsSinceLastEnable: 8,
                 secondsSinceLastVideo: 8, secondsSinceLastRebuild: 5) == .rejoin)
-    }
-
-    @Test func rebuildDeadWriteFlow() {
-        #expect(!CameraSoftAP.shouldRebuildFlow(.ready))
-        #expect(CameraSoftAP.shouldRebuildFlow(.writeRejected))
-        #expect(CameraSoftAP.shouldRebuildFlow(.notReady))
-        #expect(CameraSoftAP.shouldRebuildFlow(.cancelled))
-        #expect(CameraSoftAP.shouldRebuildFlow(.pathLost))
     }
 
     /// first-picture rebuild + keepalive rebuild canceled the live socket (89)
@@ -460,20 +380,6 @@ import Testing
                 videoPackets: 80, enableSends: 0, secondsSinceLastEnable: 0,
                 hasPresentedPicture: true) == .wait,
             "HEVC already presented before 0xa8 — do not PLI")
-    }
-
-    @Test func canceledReceiveIsNotTheLiveSocket() {
-        #expect(
-            CameraSoftAP.isCanceledReceive(
-                "The operation couldn't be completed. (Network.NWError error 89 - Operation canceled)"
-            ))
-        #expect(!CameraSoftAP.shouldCountReceiveError(isLiveConnection: false, canceled: true))
-        #expect(!CameraSoftAP.shouldRearmAfterError(isLiveConnection: false, canceled: true))
-        // Spurious 89 on a socket that is still .ready must re-arm. Treating
-        // that as fatal left first-connect bound-but-deaf (20× handshake, 0 inbound).
-        #expect(CameraSoftAP.shouldRearmAfterError(isLiveConnection: true, canceled: true))
-        #expect(CameraSoftAP.shouldRearmAfterError(isLiveConnection: true, canceled: false))
-        #expect(!CameraSoftAP.shouldApplyStaleSocketHealth(isLiveConnection: false))
     }
 
     @Test func firstPictureWaitsAfterUDPRebuild() {

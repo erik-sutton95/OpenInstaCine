@@ -33,14 +33,5 @@ public struct MultiviewRecovery {
         }
         return action
     }
-    public mutating func beginRejoin() -> Bool {
-        guard !failed, rejoins < 2 else {
-            failed = true
-            return false
-        }
-        rejoins += 1
-        watchdog = FeedWatchdog()
-        return true
-    }
     public mutating func fail() { failed = true }
 }

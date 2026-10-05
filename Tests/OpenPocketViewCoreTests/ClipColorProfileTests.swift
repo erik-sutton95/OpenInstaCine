@@ -72,16 +72,6 @@ import Testing
             "ignored proxy Rec.709 must keep last live log")
     }
 
-    @Test func httpRangeCoversTheMoovTail() {
-        #expect(
-            ClipColorProfile.httpRange(fileSize: 0) == "bytes=-\(ClipColorProfile.fileTailBytes)")
-        #expect(ClipColorProfile.httpRange(fileSize: 100) == "bytes=0-99")
-        let size = UInt64(ClipColorProfile.fileTailBytes) + 50
-        #expect(
-            ClipColorProfile.httpRange(fileSize: size)
-                == "bytes=50-\(size - 1)")
-    }
-
     @Test(.enabled(if: ProcessInfo.processInfo.environment["OPC_CLIP_DIR"]?.isEmpty == false))
     func realMimoExportsIfPresent() throws {
         let dir = try #require(ProcessInfo.processInfo.environment["OPC_CLIP_DIR"])

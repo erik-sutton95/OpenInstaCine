@@ -102,20 +102,6 @@ public enum GamepadGimbalStick: String, CaseIterable, Sendable {
 
 /// Angle HUD and D-pad 1/N steps share this resolution. Stepping stays `camcap_shutter`.
 public enum GamepadShutterSync: Sendable {
-    /// Preferred angle only when it maps to the live 1/N; otherwise the nearest live label.
-    public static func angleLabel(
-        denom: Int, fps: Int, available: [Int], preferredAngle: Double
-    ) -> String {
-        let preferred = ShutterAngle.label(ShutterAngle.nearestDegrees(preferredAngle))
-        guard denom > 0 else { return preferred }
-        let mapped = ShutterAngle.denom(
-            degrees: preferredAngle, fps: fps, available: available)
-        guard mapped != denom, let live = ShutterAngle.nearestLabel(denom: denom, fps: fps) else {
-            return preferred
-        }
-        return live
-    }
-
     public static func shouldPersistPreferredAngle(
         usesAngle: Bool, isPhoto: Bool, expoIsAuto: Bool
     ) -> Bool {

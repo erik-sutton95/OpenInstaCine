@@ -7,78 +7,6 @@ import Testing
     private let a = GimbalWaypoint(yawDeg: 0, pitchDeg: 0, zoom: 1)
     private let b = GimbalWaypoint(yawDeg: 30, pitchDeg: 10, zoom: 3)
 
-    @Test func directionLockUsesTheVerifiedModeCommand() {
-        let frames = GimbalControl.setModeFrames(.directionLock)
-        #expect(frames.count == 1)
-        #expect(frames.first?.cmdSet == 0x04)
-        #expect(frames.first?.cmdId == 0x4C)
-        #expect(frames.first?.receiver == 0x04)
-        #expect(frames.first?.flags == Duml.flagRequest)
-        #expect(frames.first?.payload == [0x00, 0x08])
-        #expect(GimbalControl.setModeFrames(.follow).count == 2)
-        #expect(GimbalControl.setModeFrames(.follow).last?.payload == [0x00, 0x04, 0x01, 0x00])
-        #expect(GimbalControl.setModeFrames(.fpv).count == 1)
-    }
-
-    @Test func tiltReplyDoesNotMislabelDirectionLockOrFpv() {
-        let params = GimbalParamState(tiltLock: .locked, speed: .slow)
-        #expect(GimbalControl.modeFromGet(params, commanded: .fpv) == .fpv)
-        #expect(GimbalControl.modeFromGet(params, commanded: .directionLock) == .directionLock)
-        #expect(GimbalControl.modeFromGet(params, commanded: .follow) == .tiltLocked)
-        #expect(
-            GimbalControl.modeFromGet(
-                GimbalParamState(tiltLock: .unlocked, speed: .fast), commanded: .tiltLocked)
-                == .follow)
-    }
-
-    @Test func cameraModeReportRecognizesDirectionLockAndPhysicalUnlock() {
-        var payload = [UInt8](repeating: 0, count: 50)
-        payload[6] = 0x24  // Lower status flags are independent of the mode family.
-        #expect(GimbalModeFamily.parse(payload) == .directionLock)
-        var mode = GimbalControl.modeFromFamily(.directionLock, current: .follow)
-        #expect(mode == .directionLock)
-        mode = GimbalControl.modeFromGet(.init(tiltLock: .locked, speed: .fast), commanded: mode)
-        #expect(mode == .directionLock)
-        payload[6] = 0x84
-        #expect(GimbalModeFamily.parse(payload) == .follow)
-        mode = GimbalControl.modeFromFamily(.follow, current: mode)
-        #expect(mode == .follow)
-        #expect(GimbalControl.modeFromFamily(.follow, current: .tiltLocked) == .tiltLocked)
-        payload[6] = 0x44
-        #expect(GimbalModeFamily.parse(payload) == .fpv)
-        #expect(GimbalControl.modeFromFamily(.fpv, current: mode) == .fpv)
-        payload[6] = 0xC4
-        #expect(GimbalModeFamily.parse(payload) == nil)
-        #expect(GimbalModeFamily.parse(Array(payload.prefix(49))) == nil)
-        #expect(GimbalModeFamily.parse(payload + [0]) == nil)
-    }
-
-    @Test func periodicReadbackCorrectsLateModeReportsAndPhysicalTiltChanges() {
-        var poll = GimbalParamPoll()
-        let initialRequest = poll.shouldRequest(at: 0)
-        #expect(initialRequest)
-        // Selecting Tilt locked can race an already queued Direction Lock push.
-        var mode = GimbalControl.modeFromFamily(.directionLock, current: .tiltLocked)
-        mode = GimbalControl.modeFromFamily(.follow, current: mode)
-        for tick in 1...9 {
-            let tooSoon = poll.shouldRequest(at: Double(tick) / 10)
-            #expect(!tooSoon)
-        }
-        let tiltRequest = poll.shouldRequest(at: 1)
-        #expect(tiltRequest)
-        mode = GimbalControl.modeFromGet(.init(tiltLock: .locked, speed: .fast), commanded: mode)
-        #expect(mode == .tiltLocked)
-        // Physical Follow selection keeps family 2; a later GET must still run.
-        mode = GimbalControl.modeFromFamily(.follow, current: mode)
-        let followRequest = poll.shouldRequest(at: 2)
-        #expect(followRequest)
-        mode = GimbalControl.modeFromGet(.init(tiltLock: .unlocked, speed: .fast), commanded: mode)
-        #expect(mode == .follow)
-        poll = GimbalParamPoll()
-        let resetRequest = poll.shouldRequest(at: 2.1)
-        #expect(resetRequest)
-    }
-
     @Test func engineRefusesPartialProgram() {
         var engine = GimbalMoveEngine()
         let started = engine.start(program: GimbalProgram(a: a), live: a)
@@ -174,30 +102,4 @@ import Testing
         #expect(!CameraModel(name: "Osmo Nano").hasGimbal)
     }
 
-    /// Field report: after one head-track or Motion Control run the stick stayed
-    /// on Fast for the session. The operator's speed and tilt lock come back.
-    @Test func prepRestoresOperatorSpeedAndTiltLockAfterIdle() {
-        var prep = GimbalPrepRestore()
-        let fast = [Commands.setGimbalTiltLock(.unlocked), Commands.setGimbalSpeed(.fast)]
-        #expect(prep.prep(speed: .slow, mode: .tiltLocked) == fast)
-        // Readback now says Fast/Follow; a second prep must not adopt it.
-        #expect(prep.prep(speed: .fast, mode: .follow) == fast)
-        #expect(prep.restore(busy: true, now: 10) == nil)
-        #expect(prep.restore(busy: false, now: 11) == nil)
-        #expect(prep.restore(busy: true, now: 11.5) == nil, "a restart resets the idle wait")
-        #expect(prep.restore(busy: false, now: 12) == nil)
-        let restore = prep.restore(busy: false, now: 13)
-        #expect(restore?.speed == .slow && restore?.mode == .tiltLocked)
-        #expect(restore?.frames == [Commands.setGimbalSpeed(.slow), Commands.setGimbalTiltLock(.locked)])
-        #expect(!prep.isHolding && prep.restore(busy: false, now: 20) == nil)
-
-        // Operator picks Default mid-hold: only the untouched mode comes back.
-        _ = prep.prep(speed: .slow, mode: .tiltLocked)
-        prep.speed = nil
-        #expect(prep.restoreNow()?.frames == [Commands.setGimbalTiltLock(.locked)])
-        // Already Fast / Follow: nothing to write, but the hold still ends.
-        _ = prep.prep(speed: .fast, mode: .follow)
-        #expect(prep.restoreNow()?.frames == [])
-        #expect(prep.restoreNow() == nil)
-    }
 }

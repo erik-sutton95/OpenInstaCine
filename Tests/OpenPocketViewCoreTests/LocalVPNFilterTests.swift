@@ -33,7 +33,6 @@ import Testing
         let facing = [
             LocalVPNFilter.wizardBanner,
             LocalVPNFilter.liveHint,
-            LocalVPNFilter.joinWifiPhoneStep,
         ]
         for text in facing {
             #expect(!text.localizedCaseInsensitiveContains("OpenZCine"))

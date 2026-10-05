@@ -8,9 +8,6 @@ import Foundation
 /// is why the feed appears after disconnect/reconnect.
 public enum CameraSoftAP: Sendable {
     public static let host = "192.168.2.1"
-    /// Camera listen port. The phone binds an **ephemeral** local port — local
-    /// `:9004` kept `0x01` and dropped every pktType `0x02`.
-    public static let remotePort: UInt16 = 9004
     public static let invalidVTSessionStatus: Int32 = -12903  // kVTInvalidSessionErr
 
     /// Phone address on the camera AP. `.1` is the camera; `.0` / `.255` are not hosts.
@@ -117,20 +114,6 @@ extension CameraSoftAP {
         addrs.contains { $0.name.hasPrefix("bridge") || $0.ipv4 == "172.20.10.1" }
     }
 
-    /// UDP channel-flow health. `writeRejected` is iOS
-    /// `nw_flow_add_write_request … cannot accept write requests`.
-    public enum DatalinkFlowHealth: Equatable, Sendable {
-        case ready
-        case writeRejected
-        case notReady
-        case cancelled
-        case pathLost
-    }
-
-    public static func shouldRebuildFlow(_ health: DatalinkFlowHealth) -> Bool {
-        health != .ready
-    }
-
     /// Keepalive must not tear down a socket that first-picture / watchdog just
     /// opened. Cancel of the *old* UDP is NWError 89 — that is not the new flow dying.
     public static let rebuildCooldown: TimeInterval = 5
@@ -192,12 +175,6 @@ extension CameraSoftAP {
         return true
     }
 
-    /// SET ACK timeout is not a dead socket when video is still arriving.
-    /// Tearing UDP for a late shutter / ISO ACK is what killed SoftAP: the
-    /// rebuild dropped a working receive, then the watchdog flapped the bind.
-    /// Downlink dead too → the receive watchdog owns recovery. Superseded
-    /// mailbox timeouts are not counted by the caller.
-    public static let commandTimeoutWindow: TimeInterval = 5
     public static let commandTimeoutRebuildCount = 2
 
     public static func shouldRebuildAfterCommandTimeouts(
@@ -218,32 +195,9 @@ extension CameraSoftAP {
         return true
     }
 
-    /// Darwin `ECANCELED` / `Network.NWError error 89 - Operation canceled`.
-    public static func isCanceledReceive(_ message: String) -> Bool {
-        message.contains("error 89") || message.localizedCaseInsensitiveContains("canceled")
-            || message.localizedCaseInsensitiveContains("cancelled")
-    }
-
-    public static func shouldCountReceiveError(isLiveConnection: Bool, canceled: Bool) -> Bool {
-        isLiveConnection && !canceled
-    }
-
-    /// A live fd that reports 89 is a path blip, not a dead reader. `canceled`
-    /// only decides whether we *count* the error; the socket state decides re-arm.
-    public static func shouldRearmAfterError(isLiveConnection: Bool, canceled: Bool) -> Bool {
-        _ = canceled
-        return isLiveConnection
-    }
-
     /// First 0x00 must not go out on a bound socket that is not reading.
     public static func canSendHandshake(receiveArmed: Bool, connectionReady: Bool) -> Bool {
         receiveArmed && connectionReady
-    }
-
-    /// Write / state callbacks from a discarded UDP socket must not mark the
-    /// live flow dead (that is what triggered the colliding keepalive rebuild).
-    public static func shouldApplyStaleSocketHealth(isLiveConnection: Bool) -> Bool {
-        isLiveConnection
     }
 
     /// First connect: no decoded picture yet. Resending `0x09/0xa8` forever
@@ -264,10 +218,6 @@ extension CameraSoftAP {
     public static let firstPictureIDRGrace: TimeInterval = 8
     /// One extra IDR request if P-frames keep arriving with no picture.
     public static let firstPictureResendWhileLive: TimeInterval = 5
-    /// Floor after each first-picture `0x02/0x18` so the encoder can cut a GOP.
-    public static let firstPictureFormatPokeMinSettle: TimeInterval = 0.8
-    /// Pin wait for that SET. Matches `CameraSetMailbox` settle.
-    public static let firstPictureFormatPokePinWait: TimeInterval = 2
 
     /// `enableSends` counts every `0x09/0xa8` including the initial one.
     /// A non-zero `videoPackets` is not alive — the first burst can freeze
@@ -396,54 +346,10 @@ extension CameraSoftAP {
         wasAccepting
     }
 
-    /// Tracked SETs skip a missing / not-ready socket without burning seq.
-    /// Untracked writes (enable, presence) still leave on `.waiting`.
-    public static func shouldStampCommandSeq(
-        hasConnection: Bool, connectionReady: Bool, trackCommand: Bool
-    ) -> Bool {
-        guard hasConnection else { return false }
-        if trackCommand { return connectionReady }
-        return true
-    }
-
-    /// Mimo 2026-08-28 live-start: HEVC at join+17 ms, `0x09/0xa8` at +3 s.
-    /// Ingest pktType `0x02` once the UDP handshake is acked. Decoder still
-    /// latches VPS/SPS only, so leftover TRAIL P-frames do not present.
-    /// Enable is PLI for a dead encoder, not a gate to look.
-    public static func shouldIngestLiveVideo(ingestArmed: Bool) -> Bool {
-        ingestArmed
-    }
-
-    /// Settings / media covering the monitor is not a leftover-GOP gate.
-    /// Android used to drop pktType `0x02` while the overlay was up; Pocket
-    /// has no periodic GOP, and the watchdog will not PLI while UDP `0x02`
-    /// is still arriving — return is a black well with live HUD (#177).
-    public static func shouldIngestLiveVideo(
-        ingestArmed: Bool,
-        browsingMedia: Bool,
-        operatorOverlayHeld: Bool
-    ) -> Bool {
-        _ = browsingMedia
-        _ = operatorOverlayHeld
-        return ingestArmed
-    }
-
     /// Skip GOP-reset IDR hold when a picture is already on the layer.
     /// Mimo's enable at +3 s must not black a feed that started at +17 ms.
     public static func shouldBeginIDRHoldOnEnable(hasPresentedPicture: Bool) -> Bool {
         !hasPresentedPicture
-    }
-
-    /// `0x09/0xa8` once path is up. Do not wait for the display layer —
-    /// first-boot attach is ~2 s and mid-GOP P-frames pile up; enable
-    /// before subscribe is ignored. Display can attach after format exists.
-    public static func shouldSendLiveViewEnable(
-        pathReady: Bool,
-        displayAttached: Bool,
-        alreadySent: Bool
-    ) -> Bool {
-        _ = displayAttached
-        return pathReady && !alreadySent
     }
 
     /// After UDP handshake the path is proven. Do not ask `getifaddrs` again —
@@ -511,24 +417,11 @@ extension CameraSoftAP {
         status == invalidVTSessionStatus
     }
 
-    /// One UDP bind of handshake sends. Camera SoftAP can be up (DHCP) before
-    /// 9004 is listening — settle, then send, then rebind without tearing Wi-Fi.
-    public static let handshakeSendsPerBind = 20
-    public static let handshakeSendIntervalMilliseconds = 350
-    /// Driver must poll this often and break when the handshake ACK flag is set.
-    /// handshakeSendIntervalMilliseconds remains the max wait per send.
-    public static let handshakePollMilliseconds = 20
-    public static let handshakeSettleMilliseconds = 400
     public static let handshakeRebindLimit = 3
-    public static let handshakeRetryPauseMilliseconds = 500
     /// openDatalinkKeepingLive must stop after this many failed open attempts.
     public static let handshakeOpenRetryLimit = 6
     public static func shouldGiveUpOpenRetry(attempts: Int) -> Bool {
         attempts >= handshakeOpenRetryLimit
-    }
-    /// Saved cameras keep NEHotspotConfiguration across background.
-    public static func shouldPersistHotspot(isSavedCamera: Bool) -> Bool {
-        isSavedCamera
     }
 
     public enum HandshakeTimeoutStep: String, Equatable, Sendable {
