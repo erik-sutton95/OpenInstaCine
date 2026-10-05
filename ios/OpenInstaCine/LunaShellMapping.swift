@@ -313,22 +313,9 @@ enum LunaShellMapping {
         stops.min { abs($0 - factor) < abs($1 - factor) } ?? 1
     }
 
-    /// Time-of-day timecode, non-drop. Frames count at the recording rate, halved above 30
-    /// (50 and 100 count 25s, 60 and 120 count 30s).
+    /// Time-of-day timecode text (`LunaFrameTimecode.timecode`).
     static func timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int) -> String {
-        timecodeText(cameraTimecode(unixSeconds: unixSeconds, timeZoneSeconds: timeZoneSeconds, fps: fps))
-    }
-
-    static func cameraTimecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int) -> CameraTimecode {
-        var base = fps > 0 ? fps : 25
-        while base > 30 { base /= 2 }
-        let local = unixSeconds + Double(timeZoneSeconds)
-        let whole = local.rounded(.down)
-        let second = ((Int(whole) % 86_400) + 86_400) % 86_400
-        let frame = min(base - 1, Int((local - whole) * Double(base)))
-        return CameraTimecode(
-            hours: second / 3600, minutes: (second / 60) % 60, seconds: second % 60, frames: frame,
-            dropFrame: false)
+        timecodeText(LunaFrameTimecode.timecode(unixSeconds: unixSeconds, timeZoneSeconds: timeZoneSeconds, fps: fps))
     }
 
     /// `HH:MM:SS:FF`, the status text the HUD reads.

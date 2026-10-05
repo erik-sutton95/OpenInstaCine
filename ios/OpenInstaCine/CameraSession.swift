@@ -204,9 +204,10 @@ final class CameraSession {
     /// Head-tracking targets stamped with their AirPods measurement time (last second).
     @ObservationIgnored var headTrackSamples: [HeadTrackSample] = []
     @ObservationIgnored var isSteeringHead = false
-    /// Phone wall-clock seconds minus the live frame clock (earliest arrival), reset per live start.
-    @ObservationIgnored var frameClockOffset: Double?
-    @ObservationIgnored var lastTimecodeSecond: Int?
+    /// Live frame stamps to time-of-day timecode, reset per live start.
+    @ObservationIgnored var frameTimecode = LunaFrameTimecode()
+    /// Phone wall-clock seconds minus the live frame clock (earliest arrival).
+    var frameClockOffset: Double? { frameTimecode.offset }
     @ObservationIgnored var lastFeedTap: (at: Double, x: Double, y: Double)?
     #if DEBUG
         @ObservationIgnored var lastFrameClock: UInt64 = 0
