@@ -1,5 +1,11 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.media.GamepadDpad
+import com.opencapture.opencine.media.GamepadFaceButton
+import com.opencapture.opencine.media.GamepadGimbalStick
+import com.opencapture.opencine.media.GamepadOperatorAction
+import com.opencapture.opencine.media.GamepadOperatorMap
+import com.opencapture.opencine.media.GamepadShoulder
 import com.opencapture.opencine.appkit.OperatorHaptics
 import android.annotation.SuppressLint
 import android.content.Context
