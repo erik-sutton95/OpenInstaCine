@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.core.CameraValuePin
 import kotlin.math.abs
 import kotlin.math.round
 import kotlin.math.roundToInt

@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.motion.GimbalWaypoint
 import kotlin.math.hypot
 import kotlin.math.pow
 import kotlin.math.roundToInt

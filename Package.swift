@@ -31,6 +31,7 @@ let package = Package(
         .target(
             name: "OpenPocketViewCore",
             dependencies: [
+                .product(name: "OpenCineCore", package: "OpenCine"),
                 .product(name: "OpenCineMedia", package: "OpenCine"),
                 .product(name: "OpenCineMotion", package: "OpenCine"),
                 .product(name: "OpenCineRelay", package: "OpenCine"),

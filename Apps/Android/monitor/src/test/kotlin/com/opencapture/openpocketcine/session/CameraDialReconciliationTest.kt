@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.core.CameraValuePin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
