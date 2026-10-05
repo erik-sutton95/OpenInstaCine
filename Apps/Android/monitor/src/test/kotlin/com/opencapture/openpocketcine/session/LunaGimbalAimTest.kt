@@ -11,11 +11,9 @@ class LunaGimbalAimTest {
         val target = LunaGimbalAim.levelTarget(CameraGimbalAngle(pitch = 12.0, yaw = -170.0), 5.0, 2.0)
         assertEquals(7.0, target.pitchDeg, 1e-9)
         assertEquals(190.0, target.yawDeg, 1e-9) // unwrapped past the -92 gap
-        val (pitch, yaw) = LunaGimbalAim.setAngle(target)
-        assertEquals(7.0, pitch, 1e-9)
-        assertEquals(-170.0, yaw, 1e-9)
+        // SET_ANGLE's wrap and reach moved to OpenCine `LunaMotionServiceTest.aimWrapsYawAndKeepsPitchInsideTheDeclaredReach`.
+        assertEquals(com.opencapture.opencine.motion.GimbalWaypoint(190.0, 7.0, 2.0, -7.0), LunaGimbalAim.motionPose(target))
         assertTrue(LunaGimbalAim.reached(CameraGimbalAngle(7.3, -170.4), target))
-        assertEquals(-57.0, LunaGimbalAim.setAngle(target.copy(pitchDeg = -80.0)).first, 1e-9)
     }
 
     @Test fun programPoseFollowsStraightLegs() {
