@@ -79,13 +79,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.opencapture.openpocketcine.glass.LiquidSlider
 import com.opencapture.openpocketcine.assists.AssistLongPress
 import com.opencapture.openpocketcine.session.ApertureStrategy
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraModel
 import com.opencapture.openpocketcine.session.CameraProfile
-import com.opencapture.openpocketcine.settings.SettingsHelpBadge
 import com.opencapture.openpocketcine.session.CameraStatus
 import com.opencapture.openpocketcine.session.VideoAspect
 import com.opencapture.openpocketcine.session.VideoFormat

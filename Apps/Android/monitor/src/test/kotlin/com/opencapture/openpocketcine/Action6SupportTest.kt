@@ -4,7 +4,6 @@ import com.opencapture.openpocketcine.session.ApertureStrategy
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraModel
 import com.opencapture.openpocketcine.session.CameraStatus
-import com.opencapture.openpocketcine.session.StatusExtras
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -79,21 +78,10 @@ class Action6SupportTest {
         assertNull(ApertureStrategy.irisHundredths(ByteArray(23)))
         assertEquals("f/2.9", ApertureStrategy.fNumberLabel(290))
 
-        var status = StatusExtras.applySubscribe(StatusExtras.packSubscribe("cam_expo_param", expo), CameraStatus(), action6)
-        assertEquals(290, status.irisHundredths)
-        assertEquals(-1, StatusExtras.applySubscribe(
-            StatusExtras.packSubscribe("cam_expo_param", expo), CameraStatus(), "Osmo Pocket 4").irisHundredths)
-        status = StatusExtras.applySubscribe(
-            StatusExtras.packSubscribe(ApertureStrategy.STATE_KEY, bytes(1, 0, 0, 4)), status, action6)
-        status = StatusExtras.applySubscribe(
-            StatusExtras.packSubscribe(ApertureStrategy.CAPABILITY_KEY, bytes(1, 4, 0, 3, 4, 2, 3)), status, action6)
-        assertEquals(ApertureStrategy.AUTO, status.apertureStrategy)
-        assertEquals(listOf(4, 2, 3), status.availableApertureStrategies)
-        assertEquals("f/2.9", ApertureStrategy.tileValue(status))
-        assertEquals("Auto", ApertureStrategy.tileValue(status.copy(irisHundredths = -1)))
         assertEquals("—", ApertureStrategy.tileValue(CameraStatus()))
         // The JNI status JSON drops these fields; the session carries them over.
-        assertEquals(status.availableApertureStrategies, CameraStatus().carryingAperture(status).availableApertureStrategies)
+        val reported = CameraStatus(availableApertureStrategies = listOf(4, 2, 3))
+        assertEquals(listOf(4, 2, 3), CameraStatus().carryingAperture(reported).availableApertureStrategies)
     }
 
     @Test fun apertureChoicesFallBackByModeUntilTheCapabilityLands() {

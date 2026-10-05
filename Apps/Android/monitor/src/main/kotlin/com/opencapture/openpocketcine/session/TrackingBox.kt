@@ -135,31 +135,6 @@ data class TrackingBox(
     }
 }
 
-sealed class TrackingPoll {
-    data class Locked(val box: TrackingBox?) : TrackingPoll()
-    data object Idle : TrackingPoll()
-
-    companion object {
-        fun parse(payload: ByteArray): TrackingPoll? {
-            if (payload.size < 4) return null
-            if (payload[0] != 0.toByte() || payload[2] != 0.toByte() || payload[3] != 0.toByte()) {
-                return null
-            }
-            return when (payload[1].toInt() and 0xFF) {
-                0x01 -> {
-                    val extra = if (payload.size >= 20) payload.copyOfRange(4, payload.size) else byteArrayOf()
-                    val raw = TrackingBox.parseNormalized(extra, requireOriginFits = false)
-                    Locked(
-                        raw?.let { TrackingBox.fromCenter(it.x, it.y, it.width, it.height) },
-                    )
-                }
-                0x00 -> Idle
-                else -> null
-            }
-        }
-    }
-}
-
 object TrackingBoxSmoothing {
     const val POSITION_TIME_CONSTANT = 0.10
     const val SIZE_TIME_CONSTANT = 0.42
@@ -181,21 +156,6 @@ object TrackingBoxSmoothing {
         val w = from.width + (toward.width - from.width) * s
         val h = from.height + (toward.height - from.height) * s
         return TrackingBox.fromCenter(cx, cy, w, h)
-    }
-}
-
-object TrackingClearPolicy {
-    const val LEFTOVER_IGNORE_SEC = 0.28
-    const val PUSH_SILENCE_SEC = 0.35
-
-    fun shouldApplyLivePush(operatorClearedAtElapsed: Long?, nowElapsed: Long): Boolean {
-        if (operatorClearedAtElapsed == null) return true
-        return (nowElapsed - operatorClearedAtElapsed) / 1000.0 >= LEFTOVER_IGNORE_SEC
-    }
-
-    fun shouldDropForSilence(lastPushElapsed: Long?, nowElapsed: Long): Boolean {
-        if (lastPushElapsed == null) return false
-        return (nowElapsed - lastPushElapsed) / 1000.0 >= PUSH_SILENCE_SEC
     }
 }
 
@@ -377,17 +337,6 @@ object SceneFacePolicy {
         other.intersectionOverUnion(owner) >= OCCLUDER_OVERLAP
 }
 
-object LiveFeedTapPolicy {
-    enum class Action { TRACK_FACE, TAP_FOCUS, IGNORE }
-
-    fun action(supportsTapFocus: Boolean, tappedFace: Boolean): Action =
-        when {
-            tappedFace -> Action.TRACK_FACE
-            supportsTapFocus -> Action.TAP_FOCUS
-            else -> Action.IGNORE
-        }
-}
-
 /**
  * Right after an operator ActiveTrack SET the camera can still push its previous
  * subject (often a face). Drawing that paints the lock on the wrong thing, then
@@ -402,42 +351,6 @@ object TrackingStartPolicy {
         if (secondsSinceRequest < 0 || secondsSinceRequest >= SETTLE_SECONDS) return true
         return push.intersectionOverUnion(requested) > 0 ||
             requested.contains(push.centerX, push.centerY, PADDING)
-    }
-}
-
-/**
- * Double-tap the same spot, as in Mimo and on the camera: the first tap
- * focuses as usual, the second starts ActiveTrack on a box centred there.
- */
-class FeedDoubleTapTrack {
-    private var lastX = 0.0
-    private var lastY = 0.0
-    private var lastAt: Double? = null
-
-    /** The tracking box when this tap completes a double tap, otherwise `null`. */
-    fun register(x: Double, y: Double, at: Double): TrackingBox? {
-        val last = lastAt
-        if (last != null && at >= last && at - last <= WINDOW && hypot(x - lastX, y - lastY) <= RADIUS) {
-            lastAt = null
-            return TrackingBox.fromCenter(x, y, BOX_WIDTH, BOX_HEIGHT)
-        }
-        lastX = x
-        lastY = y
-        lastAt = at
-        return null
-    }
-
-    fun reset() {
-        lastAt = null
-    }
-
-    companion object {
-        const val WINDOW = 0.45
-        /** Feed-normalised distance that still counts as the same spot. */
-        const val RADIUS = 0.06
-        /** Roughly square on a 16:9 picture; the camera's tracker finds the subject. */
-        const val BOX_WIDTH = 0.14
-        const val BOX_HEIGHT = 0.25
     }
 }
 
@@ -469,28 +382,6 @@ object FaceTrackTap {
     }
 }
 
-/** Triangle/Y: track a face in frame, or cancel if already tracking. */
-object GamepadFaceTrack {
-    sealed class Action {
-        data object Cancel : Action()
-
-        data class Track(val box: TrackingBox) : Action()
-
-        data object None : Action()
-    }
-
-    fun action(
-        trackingActive: Boolean,
-        overlay: FocusOverlay,
-        sceneFaces: List<TrackingBox>,
-    ): Action {
-        if (trackingActive) return Action.Cancel
-        if (overlay is FocusOverlay.Face) return Action.Track(FaceTrackTap.trackingBox(overlay.box))
-        val face = sceneFaces.maxByOrNull { it.area } ?: return Action.None
-        return Action.Track(FaceTrackTap.trackingBox(face))
-    }
-}
-
 object FocusResetPolicy {
     const val OFF_CENTER_THRESHOLD = 0.04
 
@@ -499,13 +390,6 @@ object FocusResetPolicy {
         if (x == null || y == null) return false
         return abs(x - 0.5) > OFF_CENTER_THRESHOLD || abs(y - 0.5) > OFF_CENTER_THRESHOLD
     }
-}
-
-object CameraFocusPolicy {
-    const val CHANGE_THRESHOLD = 0.012
-
-    fun shouldAdopt(currentX: Double, currentY: Double, cameraX: Double, cameraY: Double): Boolean =
-        abs(currentX - cameraX) >= CHANGE_THRESHOLD || abs(currentY - cameraY) >= CHANGE_THRESHOLD
 }
 
 object LiveTrackingChrome {

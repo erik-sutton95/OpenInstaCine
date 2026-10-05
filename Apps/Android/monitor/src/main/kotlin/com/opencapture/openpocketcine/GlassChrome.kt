@@ -27,32 +27,6 @@ enum class GlassTier {
     FULL,
 }
 
-fun resolveTier(
-    sdkInt: Int,
-    override: String? = null,
-    isLowRamDevice: Boolean = false,
-    totalRamBytes: Long = Long.MAX_VALUE,
-): GlassTier {
-    val lowEnd =
-        isLowRamDevice ||
-            (totalRamBytes in 1L until MIN_FULL_GLASS_RAM_BYTES)
-    val capability =
-        when {
-            sdkInt < 33 -> GlassTier.FLAT
-            lowEnd -> GlassTier.FLAT
-            else -> GlassTier.FULL
-        }
-    val requested =
-        when (override?.lowercase()) {
-            "full" -> GlassTier.FULL
-            "flat", "blur" -> GlassTier.FLAT
-            else -> capability
-        }
-    return if (requested.ordinal < capability.ordinal) requested else capability
-}
-
-const val MIN_FULL_GLASS_RAM_BYTES: Long = 4L * 1024L * 1024L * 1024L
-
 class MonitorGlass(
     initialTier: GlassTier,
     val layerBackdrop: LayerBackdrop? = null,
@@ -92,45 +66,9 @@ fun Modifier.liveChromeGlass(shape: Shape = ChromeShape): Modifier =
     monitorMaterial(MonitorMaterial.Compact, shape)
 
 @Composable
-fun Modifier.playbackBarGlass(shape: Shape = ChromeShape): Modifier = liveChromeGlass(shape)
-
-@Composable
 fun Modifier.pickerPanelGlass(shape: Shape = ChromeShape): Modifier =
     monitorMaterial(MonitorMaterial.Expanded, shape)
 
 fun Modifier.chipGlass(shape: Shape = ChromeShape): Modifier =
     background(LiveDesign.tile, shape)
 
-internal data class LiveFeedContentRect(
-    val left: Int,
-    val top: Int,
-    val width: Int,
-    val height: Int,
-)
-
-internal fun liveFeedContentRect(
-    containerWidth: Float,
-    containerHeight: Float,
-    sourceWidth: Int,
-    sourceHeight: Int,
-    aspectFill: Boolean = false,
-): LiveFeedContentRect? {
-    if (containerWidth <= 0f || containerHeight <= 0f || sourceWidth <= 0 || sourceHeight <= 0) {
-        return null
-    }
-    val scale =
-        if (aspectFill) {
-            max(containerWidth / sourceWidth, containerHeight / sourceHeight)
-        } else {
-            min(containerWidth / sourceWidth, containerHeight / sourceHeight)
-        }
-    val width = (sourceWidth * scale).roundToInt()
-    val height = (sourceHeight * scale).roundToInt()
-    if (width <= 0 || height <= 0) return null
-    return LiveFeedContentRect(
-        left = ((containerWidth - width) / 2f).roundToInt(),
-        top = ((containerHeight - height) / 2f).roundToInt(),
-        width = width,
-        height = height,
-    )
-}

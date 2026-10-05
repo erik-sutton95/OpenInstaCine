@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine.feed
 
+import com.opencapture.opencine.media.feedEffectsCubeAtlas
+import com.opencapture.opencine.media.feedEffectsCubeVk3d
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals

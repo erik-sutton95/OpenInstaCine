@@ -344,8 +344,6 @@ private data class ScopePanelSpec(
     val onScale: (Double) -> Unit,
 )
 
-private fun scopePanelShape() = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
-
 @Composable
 private fun GuidesOverlay(state: LiveAssistState, feed: AssistRect) {
     com.opencapture.monitorui.MonitorAspectGuideFrames(
@@ -360,21 +358,6 @@ private fun GridOverlay(state: LiveAssistState, feed: AssistRect) {
 @Composable
 private fun CrosshairOverlay(feed: AssistRect) {
     com.opencapture.monitorui.MonitorFeedCrosshair(feed)
-}
-
-@Composable
-private fun FocusBox(nx: Float, ny: Float) {
-    Canvas(Modifier.fillMaxSize()) {
-        val side = minOf(size.width, size.height) * 0.14f
-        val cx = nx * size.width
-        val cy = ny * size.height
-        drawRect(
-            LiveDesign.accent,
-            Offset(cx - side / 2f, cy - side / 2f),
-            Size(side, side),
-            style = Stroke(1.5.dp.toPx()),
-        )
-    }
 }
 
 @Composable
@@ -405,11 +388,3 @@ internal fun falseColorReferenceValues(state: LiveAssistState, colorMode: Int):
             axisLabels = FalseColorReference.axisLabels(state.falseColorScale))
 }
 
-private fun panelPx(
-    base: AssistSize,
-    scale: Double,
-    density: androidx.compose.ui.unit.Density,
-): AssistSize {
-    val scaled = MovablePanelMath.panelSize(base, scale)
-    return with(density) { AssistSize(scaled.width.dp.toPx(), scaled.height.dp.toPx()) }
-}

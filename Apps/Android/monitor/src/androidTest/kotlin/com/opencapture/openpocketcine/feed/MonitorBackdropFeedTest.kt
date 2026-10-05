@@ -3,6 +3,7 @@ package com.opencapture.openpocketcine.feed
 import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.opencapture.opencine.runtime.InspectorPreviewRenderer
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -66,7 +67,7 @@ class MonitorBackdropFeedTest {
 
     @Test fun rawOrientationAndRealGradeRemainBoundedAcrossResize() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val renderer = InspectorPreviewRenderer()
+        val renderer = InspectorPreviewRenderer(::Media3GlBackend)
         try {
             // Distinct rows catch double flips between bottom-up GLES and top-down Vulkan taps.
             val raw = byteArrayOf(255.toByte(), 0, 0, 255.toByte(), 0, 0, 255.toByte(), 255.toByte())

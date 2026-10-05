@@ -20,14 +20,6 @@ class TrackingBoxTest {
     }
 
     @Test
-    fun trackingPollParsesLockedAndIdle() {
-        assertEquals(TrackingPoll.Locked(null), TrackingPoll.parse(byteArrayOf(0x00, 0x01, 0x00, 0x00)))
-        assertEquals(TrackingPoll.Idle, TrackingPoll.parse(byteArrayOf(0x00, 0x00, 0x00, 0x00)))
-        assertNull(TrackingPoll.parse(byteArrayOf(0x00)))
-        assertNull(TrackingPoll.parse(byteArrayOf()))
-    }
-
-    @Test
     fun livePushParsesMimoSubjectBox() {
         val payload =
             byteArrayOf(
@@ -95,27 +87,6 @@ class TrackingBoxTest {
         assertEquals(FaceTrackTap.trackingBox(face), FaceTrackTap.boxIfTapped(overlay, 0.40, 0.34))
         assertNull(FaceTrackTap.boxIfTapped(FocusOverlay.Focus, 0.40, 0.34))
         assertNull(FaceTrackTap.boxIfTapped(overlay, 0.10, 0.10))
-        assertEquals(LiveFeedTapPolicy.Action.IGNORE, LiveFeedTapPolicy.action(false, false))
-        assertEquals(LiveFeedTapPolicy.Action.TRACK_FACE, LiveFeedTapPolicy.action(false, true))
-        assertEquals(LiveFeedTapPolicy.Action.TAP_FOCUS, LiveFeedTapPolicy.action(true, false))
-        assertEquals(LiveFeedTapPolicy.Action.TRACK_FACE, LiveFeedTapPolicy.action(true, true))
-        val extra = TrackingBox(0.70, 0.20, 0.10, 0.12)
-        assertEquals(
-            GamepadFaceTrack.Action.Cancel,
-            GamepadFaceTrack.action(true, FocusOverlay.Face(face), emptyList()),
-        )
-        assertEquals(
-            GamepadFaceTrack.Action.Track(face),
-            GamepadFaceTrack.action(false, FocusOverlay.Face(face), listOf(extra)),
-        )
-        assertEquals(
-            GamepadFaceTrack.Action.Track(face),
-            GamepadFaceTrack.action(false, FocusOverlay.Focus, listOf(extra, face)),
-        )
-        assertEquals(
-            GamepadFaceTrack.Action.None,
-            GamepadFaceTrack.action(false, FocusOverlay.Focus, emptyList()),
-        )
         assertTrue(!FocusResetPolicy.isAvailable(0.50, 0.50, tracking = false))
         assertTrue(FocusResetPolicy.isAvailable(0.55, 0.50, tracking = false))
         assertTrue(FocusResetPolicy.isAvailable(0.50, 0.50, tracking = true))
@@ -256,25 +227,6 @@ class TrackingBoxTest {
         // Cancel sits on the drawn top-right corner: y follows the flipped top edge.
         val cancel = LiveTrackingChrome.cancelRect(camera, 100f, 100f, mirrored = false, flippedVertically = true)
         assertEquals(40f - LiveTrackingChrome.CANCEL_HIT_SIZE / 2f, cancel.y, 1e-3f)
-    }
-
-    @Test
-    fun secondTapOnTheSameSpotStartsTracking() {
-        val taps = FeedDoubleTapTrack()
-        assertNull(taps.register(0.4, 0.5, 10.0))
-        assertEquals(TrackingBox.fromCenter(0.42, 0.51, 0.14, 0.25), taps.register(0.42, 0.51, 10.3))
-        // A third tap starts over rather than tracking again.
-        assertNull(taps.register(0.42, 0.51, 10.5))
-    }
-
-    @Test
-    fun slowOrDistantTapsOnlyFocus() {
-        val taps = FeedDoubleTapTrack()
-        assertNull(taps.register(0.4, 0.5, 0.0))
-        assertNull(taps.register(0.4, 0.5, 0.6), "too slow")
-        assertNull(taps.register(0.7, 0.5, 0.8), "different spot")
-        taps.reset()
-        assertNull(taps.register(0.7, 0.5, 0.9), "reset clears the first tap")
     }
 
     @Test

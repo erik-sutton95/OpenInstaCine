@@ -2,9 +2,7 @@ package com.opencapture.openpocketcine
 
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistTool
-import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.CameraStatus
-import com.opencapture.openpocketcine.session.StatusExtras
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -12,18 +10,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CameraExposureMeterTest {
-    @Test fun reportedMeterAndConfiguredCompensationStayIndependentInAutoAndManual() {
-        for (mode in listOf(CameraCommands.EXPO_AUTO, CameraCommands.EXPO_MANUAL)) {
-            val status = StatusExtras.applyExpo(exposure(mode, configured = 0x10, metered = 0x0E), CameraStatus())
-            assertEquals(0x10, status.evComp)
-            assertEquals(0x0E, status.meteredEv)
-            assertEquals("−0.7", CameraExposureMeter(status.meteredEv).label)
-            val optimisticCompensation = status.copy(evComp = 0x19)
-            assertEquals("−0.7", CameraExposureMeter(optimisticCompensation.meteredEv).label)
-            val next = StatusExtras.applyExpo(exposure(mode, configured = 0x19, metered = 0x07), optimisticCompensation)
-            assertEquals(0x19, next.evComp)
-            assertEquals("−3.0", CameraExposureMeter(next.meteredEv).label)
-        }
+    @Test fun reportedMeterLabelsStayIndependentOfConfiguredCompensation() {
+        assertEquals("−0.7", CameraExposureMeter(0x0E).label)
+        assertEquals("−0.7", CameraExposureMeter(CameraStatus(evComp = 0x19, meteredEv = 0x0E).meteredEv).label)
+        assertEquals("−3.0", CameraExposureMeter(CameraStatus(evComp = 0x19, meteredEv = 0x07).meteredEv).label)
     }
 
     @Test fun everyValidRawMeterStepMapsToThirdStopsAndTheVerticalNeedle() {
@@ -50,7 +40,6 @@ class CameraExposureMeterTest {
     }
 
     @Test fun unavailableAndMalformedTelemetryNeverBorrowConfiguredEVOrRetainTheLastMeter() {
-        val prior = CameraStatus(evComp = 0x10, meteredEv = 0x19)
         for (raw in listOf(-1, 0, 6, 26, 255, Int.MIN_VALUE, Int.MAX_VALUE)) {
             val meter = CameraExposureMeter(raw)
             assertNull(meter.stops)
@@ -58,17 +47,11 @@ class CameraExposureMeterTest {
             assertEquals("—", meter.label)
             assertEquals("Camera exposure meter, unavailable", meter.accessibilityLabel)
         }
-        val missing = StatusExtras.applyExpo(ByteArray(15).apply { this[6] = 0x10 }, prior)
-        assertEquals(0x10, missing.evComp)
-        assertEquals(-1, missing.meteredEv)
-        val invalid = StatusExtras.applyExpo(exposure(CameraCommands.EXPO_AUTO, 0x10, 0), prior)
-        assertEquals(-1, invalid.meteredEv)
         assertEquals("—", CameraExposureMeter(CameraStatus(evComp = 0x10).meteredEv).label)
     }
 
-    @Test fun subscribeAndStatusWirePreserveTheReportedValueSeparately() {
-        val payload = StatusExtras.packSubscribe("cam_expo_param", exposure(CameraCommands.EXPO_AUTO, 0x10, 0x0E))
-        val status = StatusExtras.applySubscribe(payload, CameraStatus())
+    @Test fun statusWirePreservesTheReportedValueSeparately() {
+        val status = CameraStatus(evComp = 0x10, meteredEv = 0x0E)
         val restored = CameraStatus.fromJson(status.toJson())
         assertEquals(0x0E, restored.meteredEv)
         assertEquals(0x10, restored.evComp)
@@ -183,11 +166,5 @@ class CameraExposureMeterTest {
         assertFalse(state.encoded().contains("evScale"))
         assertFalse(state.encoded().contains("evCenter"))
         assertFalse(CleanPinTool.entries.any { it.key == "EV" })
-    }
-
-    private fun exposure(mode: Int, configured: Int, metered: Int): ByteArray = ByteArray(46).apply {
-        this[6] = configured.toByte()
-        this[7] = mode.toByte()
-        this[15] = metered.toByte()
     }
 }

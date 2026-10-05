@@ -61,18 +61,6 @@ class ConformPreviewTest {
     }
 
     @Test
-    fun frameTapRestartsAtEnd() {
-        assertEquals(
-            PlaybackFrameTap.RESTART_PLAYBACK,
-            PlaybackFrameTap.action(chromeVisible = true, reachedEnd = true),
-        )
-        assertEquals(
-            PlaybackFrameTap.TOGGLE_TRANSPORT,
-            PlaybackFrameTap.action(chromeVisible = true, reachedEnd = false),
-        )
-    }
-
-    @Test
     fun aspectFitCentersTheRaster() {
         val rect =
             PlaybackVideoLayout.aspectFitRect(

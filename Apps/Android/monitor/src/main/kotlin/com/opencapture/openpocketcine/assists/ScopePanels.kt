@@ -21,8 +21,6 @@ import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeAssistBundle
 import com.opencapture.openpocketcine.feed.WaveformIre
 
-private val PanelShape = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
-
 @Composable
 internal fun MovableAssistPanel(
     tool: LiveAssistTool, base: AssistSize, scale: Double, stored: StoredCenter?,
@@ -84,7 +82,6 @@ internal fun TrafficLightsPanel(state: LiveAssistState, modifier: Modifier = Mod
     com.opencapture.monitorui.MonitorTrafficLightsMeter((previewBundle ?: state.scopeBundle).traffic, modifier)
 }
 
-
 object NDAssist {
     const val HELP =
         "Meters the live picture against middle gray and suggests a screw-on ND — stops and ND number — to balance it. The app cannot set a filter."
@@ -106,6 +103,3 @@ internal fun NDMeterPanel(state: LiveAssistState, modifier: Modifier = Modifier)
 private fun ScopeAssistBundle.resolvedTransfer(colorMode: Int): MonitorTransfer =
     if (revision > 0L) transfer else MonitorTransfer.fromColorMode(colorMode)
 
-@Composable
-internal fun Modifier.scopePanelChrome(): Modifier =
-    monitorMaterial(MonitorMaterial.Scope, PanelShape)

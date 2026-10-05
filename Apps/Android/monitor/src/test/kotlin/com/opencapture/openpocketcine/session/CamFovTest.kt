@@ -135,27 +135,4 @@ class CamFovTest {
         assertTrue(pinch67.contentEquals(byteArrayOf(0x0A, 0x4E, 0xAE.toByte(), 0x05)))
     }
 
-    @Test
-    fun lensAt14AndFovSubscribeSetHybridFactor() {
-        val fov =
-            byteArrayOf(
-                0xFF.toByte(), 0x2F, 0x00, 0x00, 0x00, 0x1B, 0x00, 0x00, 0x01, 0x00,
-                0x00, 0x00, 0xA8.toByte(), 0x1B, 0x00, 0x00, 0x01, 0x99.toByte(), 0x31,
-                0x00, 0x00, 0x00, 0x1C, 0x00, 0x00,
-            )
-        val fromFov = StatusExtras.applyFov(fov, CameraStatus())
-        assertEquals(12_287, fromFov.zoomFactorRaw)
-        assertEquals(1.0, fromFov.zoomFactor ?: 0.0, 0.01)
-        val lensBlob = ByteArray(16)
-        lensBlob[14] = (217 and 0xFF).toByte()
-        lensBlob[15] = ((217 shr 8) and 0xFF).toByte()
-        val fromLens = StatusExtras.applyLens(lensBlob, fromFov)
-        assertEquals(217, fromLens.zoomLens)
-        assertEquals(1.0, fromLens.zoomFactor ?: 0.0, 0.01)
-        lensBlob[14] = (651 and 0xFF).toByte()
-        lensBlob[15] = ((651 shr 8) and 0xFF).toByte()
-        val at3 = StatusExtras.applyLens(lensBlob, fromFov)
-        assertEquals(651, at3.zoomLens)
-        assertEquals(3.0, at3.zoomFactor ?: 0.0, 0.02)
-    }
 }

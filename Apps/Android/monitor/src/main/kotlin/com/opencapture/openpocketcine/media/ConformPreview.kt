@@ -2,19 +2,6 @@ package com.opencapture.openpocketcine.media
 
 import kotlin.math.min
 
-/** Decision for a tap on the letterboxed playback frame. */
-enum class PlaybackFrameTap {
-    RESTART_PLAYBACK,
-    TOGGLE_TRANSPORT,
-    IGNORE,
-    ;
-
-    companion object {
-        fun action(@Suppress("UNUSED_PARAMETER") chromeVisible: Boolean, reachedEnd: Boolean): PlaybackFrameTap =
-            if (reachedEnd) RESTART_PLAYBACK else TOGGLE_TRANSPORT
-    }
-}
-
 /** Letterbox the video raster in a container — OpenZCine `aspectFitRect`. */
 object PlaybackVideoLayout {
     data class Size(val width: Float, val height: Float)

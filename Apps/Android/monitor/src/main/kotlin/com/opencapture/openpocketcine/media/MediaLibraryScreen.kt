@@ -651,58 +651,6 @@ private fun ListingState(listed: Int) {
     }
 }
 
-@Composable
-private fun LucideActionPill(
-    icon: OpcIcon,
-    title: String,
-    onClick: () -> Unit,
-    active: Boolean = false,
-    enabled: Boolean = true,
-    badge: Int? = null,
-    contentDescription: String? = null,
-) {
-    Row(
-        Modifier
-            .alpha(if (enabled) 1f else 0.5f)
-            .clip(MediaCapsuleShape)
-            .then(if (active) Modifier.background(LiveDesign.accentDim, MediaCapsuleShape) else Modifier)
-            .border(1.dp, LiveDesign.hairline, MediaCapsuleShape)
-            .chromeClickable(enabled = enabled, onClick = onClick)
-            .semantics { this.contentDescription = contentDescription ?: title }
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        OpcIcon(
-            icon = icon,
-            contentDescription = null,
-            tint = if (active) LiveDesign.accent else LiveDesign.muted,
-            modifier = Modifier.size(12.dp),
-        )
-        Text(
-            title,
-            color = if (active) LiveDesign.accent else LiveDesign.muted,
-            fontSize = 9.5.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-        )
-        if (badge != null) {
-            Text(
-                "$badge",
-                color = LiveDesign.background,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-                modifier =
-                    Modifier
-                        .clip(MediaCapsuleShape)
-                        .background(LiveDesign.accent)
-                        .padding(horizontal = 5.dp, vertical = 2.dp),
-            )
-        }
-    }
-}
-
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterPopup(

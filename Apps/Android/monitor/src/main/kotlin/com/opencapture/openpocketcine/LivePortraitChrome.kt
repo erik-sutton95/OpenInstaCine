@@ -67,7 +67,6 @@ import com.opencapture.monitorui.monitorReadoutGesture
 import com.opencapture.monitorui.monitorPickerPassthrough
 import com.opencapture.monitorui.monitorScrollFade
 import com.opencapture.openpocketcine.assists.AssistToolGlyph
-import com.opencapture.openpocketcine.assists.LiveAssistBar
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistTool
 import com.opencapture.openpocketcine.session.ApertureStrategy
@@ -110,21 +109,6 @@ object LivePortraitMetrics {
             )
 }
 
-fun liveFitFeedOriginY(
-    viewportHeight: Float,
-    feedHeight: Float,
-    topBarMaxY: Float,
-    chromeFloorY: Float,
-    belowFeedSlot: Float = LivePortraitMetrics.FIT_BELOW_FEED_SLOT,
-): Float {
-    val height = max(0f, feedHeight)
-    val top = max(0f, topBarMaxY)
-    val keepClear = chromeFloorY - max(0f, belowFeedSlot)
-    val ideal = (max(0f, viewportHeight) - height) / 2f
-    val latest = max(top, keepClear - height)
-    return min(max(ideal, top), latest)
-}
-
 fun portraitZones(
     viewportWidth: Float,
     viewportHeight: Float,
@@ -155,23 +139,6 @@ fun livePortraitReadoutFrame(layout: LiveMonitorLayout, zones: PortraitZones): C
 fun portraitFillCropContent(well: ChromeRect): ChromeRect {
     val contentWidth = well.height * 16f / 9f
     return ChromeRect(well.midX - contentWidth / 2f, well.minY, contentWidth, well.height)
-}
-
-fun fillAssistRail(
-    feed: ChromeRect,
-    captureStripTop: Float?,
-    expanded: Boolean,
-): ChromeRect {
-    val edge = LivePortraitMetrics.ASSIST_RAIL_EDGE
-    val feedBottom = feed.maxY
-    val railBottom = captureStripTop?.let { min(max(it, feed.minY), feedBottom) } ?: feedBottom
-    val top = feed.minY + edge
-    val width =
-        if (expanded) LivePortraitMetrics.ASSIST_RAIL_EXPANDED else LivePortraitMetrics.ASSIST_RAIL_COLLAPSED
-    val height =
-        if (expanded) max(0f, railBottom - top - edge) else LivePortraitMetrics.ASSIST_RAIL_COLLAPSED
-    val y = if (expanded) top else max(top, railBottom - height - edge)
-    return ChromeRect(feed.minX + edge, y, width, height)
 }
 
 fun portraitAspectToggle(viewportWidth: Float, floorY: Float): ChromeRect {
@@ -261,8 +228,6 @@ fun LivePortraitChrome(
                 )
             }
         }
-
-
 
         if (editing == null && !sourceIsVertical && !desqueezeVisible) {
             LivePortraitAspectToggle(
@@ -356,36 +321,6 @@ fun LivePortraitChrome(
             }
         }
 
-
-
-
-    }
-}
-
-@Composable
-fun LivePortraitTopBar(model: AppModel, status: CameraStatus) {
-    Box(Modifier.fillMaxSize().monitorMaterial(MonitorMaterial.Expanded)) {
-        if (model.chromeSectionMounts(PocketDispSection.STORAGE)) {
-            Text(
-                portraitStorageLabel(status),
-                color = LiveDesign.text,
-                style = LiveType.ui(13f, FontWeight.SemiBold),
-                maxLines = 1,
-                modifier = Modifier.align(Alignment.Center),
-            )
-        }
-        Row(
-            Modifier.fillMaxSize().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (model.chromeSectionMounts(PocketDispSection.TIMECODE)) {
-                TimecodeReadout(status.timecode, portrait = true)
-            }
-            Spacer(Modifier.weight(1f))
-            if (model.chromeSectionMounts(PocketDispSection.BATTERIES)) {
-                CameraBatteryReadout(status.batteryPercent)
-            }
-        }
     }
 }
 
@@ -496,240 +431,6 @@ fun LiveCaptureStrip(
 }
 
 private const val METER_TILE = "METER"
-
-/** iOS `a.circle.fill` stand-in for Auto white-balance. */
-@Composable
-private fun WbAutoGlyph(tint: Color, modifier: Modifier = Modifier) {
-    Box(modifier.size(18.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            drawCircle(tint)
-        }
-        Text(
-            "A",
-            color = LiveDesign.background,
-            style = LiveType.ui(10f, FontWeight.Bold),
-            maxLines = 1,
-        )
-    }
-}
-
-@Composable
-fun LivePortraitAssistRail(
-    assist: LiveAssistState,
-    expanded: Boolean,
-    locked: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
-    onLongPress: (LiveAssistTool) -> Unit,
-    showsAudio: Boolean = true,
-) {
-    if (!expanded) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .monitorGlass(CircleShape)
-                .chromeClickable(enabled = !locked) { onExpandedChange(true) }
-                .semantics { contentDescription = "Show view assists" },
-            contentAlignment = Alignment.Center,
-        ) {
-            SliderHorizontal3Glyph(LiveDesign.text, Modifier.size(18.dp))
-        }
-        return
-    }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .clip(ChromeShape)
-            .monitorGlass()
-            .padding(horizontal = 4.dp),
-    ) {
-        Box(
-            Modifier
-                .align(Alignment.CenterHorizontally)
-                .size(36.dp, 28.dp)
-                .chromeClickable(enabled = !locked) { onExpandedChange(false) }
-                .semantics { contentDescription = "Hide view assists" },
-            contentAlignment = Alignment.Center,
-        ) {
-            ChevronLeftGlyph(LiveDesign.accent, Modifier.size(13.dp))
-        }
-        val railScroll = rememberScrollState()
-        Column(
-            Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .monitorScrollFade(railScroll)
-                .verticalScroll(railScroll)
-                .padding(vertical = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            val tools =
-                if (showsAudio) LiveAssistTool.toolbarCases + LiveAssistTool.AUDIO
-                else LiveAssistTool.toolbarCases
-            tools.forEach { tool ->
-                LivePortraitRailTool(
-                    tool = tool,
-                    on = assist.isOn(tool),
-                    locked = locked,
-                    onClick = { assist.toggle(tool) },
-                    onLongPress = {
-                        if (tool.hasConfiguration) onLongPress(tool)
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun LivePortraitRecOptionsButton(
-    locked: Boolean,
-    modifier: Modifier = Modifier,
-    onOpen: (LiveSheet) -> Unit,
-    isPhoto: Boolean = false,
-) {
-    var open by remember { mutableStateOf(false) }
-    val menuOffset = with(LocalDensity.current) { IntOffset(0, 8.dp.roundToPx()) }
-    Box(modifier) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .monitorGlass(CircleShape)
-                .chromeClickable(enabled = !locked) { open = !open }
-                .semantics { contentDescription = "Recording options" },
-            contentAlignment = Alignment.Center,
-        ) {
-            VideoGlyph(LiveDesign.text.copy(alpha = 0.86f))
-        }
-        if (open) {
-            Popup(
-                alignment = Alignment.BottomEnd,
-                offset = menuOffset,
-                onDismissRequest = { open = false },
-            ) {
-                Column(Modifier.width(220.dp).monitorMaterial(MonitorMaterial.Expanded)) {
-                    if (isPhoto) {
-                        LivePopupAction("Shooting mode") {
-                            open = false
-                            onOpen(LiveSheet.MODE)
-                        }
-                    } else {
-                        LivePopupAction("Resolution · Framerate") {
-                            open = false
-                            onOpen(LiveSheet.FORMAT)
-                        }
-                        Box(Modifier.fillMaxWidth().height(1.dp).background(LiveDesign.hairline))
-                        LivePopupAction("Color") {
-                            open = false
-                            onOpen(LiveSheet.COLOR)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** Shared floating-menu action used by Live View and Multiview camera menus. */
-@Composable
-internal fun LivePopupAction(
-    title: String, enabled: Boolean = true, destructive: Boolean = false,
-    onClick: () -> Unit,
-) {
-    Text(
-        title,
-        color = if (destructive) LiveDesign.rec else LiveDesign.text,
-        style = LiveType.ui(14f, FontWeight.Medium),
-        maxLines = 2,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)
-            .alpha(if (enabled) 1f else 0.4f)
-            .chromeClickable(enabled = enabled, onClick = onClick)
-            .semantics { role = Role.Button }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-    )
-}
-
-@Composable
-private fun LivePortraitRailTool(
-    tool: LiveAssistTool,
-    on: Boolean,
-    locked: Boolean,
-    onClick: () -> Unit,
-    onLongPress: () -> Unit,
-) {
-    val tint = if (on) LiveDesign.accent else LiveDesign.muted
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .background(if (on) LiveDesign.accentDim else Color.Transparent, ChromeShape)
-                .border(1.dp, if (on) LiveDesign.accent else Color.Transparent, ChromeShape)
-                .chromeClickable(
-                    enabled = !locked,
-                    onLongClick = if (tool.hasConfiguration) onLongPress else null,
-                    onClick = onClick,
-                )
-                // Portrait rail speaks the same sentence as the landscape cell.
-                .clearAndSetSemantics {
-                    val options = if (tool.hasConfiguration) ". Hold for options" else ""
-                    contentDescription = "${tool.title}, ${if (on) "on" else "off"}$options"
-                    if (locked) disabled()
-                }
-                .padding(vertical = 5.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        AssistToolGlyph(tool = tool, tint = tint, modifier = Modifier.size(19.dp))
-        Text(
-            tool.chipLabel,
-            color = tint,
-            fontSize = 9.sp,
-            fontFamily = com.opencapture.openpocketcine.OpcFonts.sora,
-            maxLines = 1,
-            letterSpacing = 0.9.sp,
-        )
-    }
-}
-
-@Composable
-private fun SliderHorizontal3Glyph(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val stroke = size.minDimension * 0.085f
-        val knobRadius = size.minDimension * 0.09f
-        val rows = listOf(0.24f, 0.5f, 0.76f)
-        val knobs = listOf(0.68f, 0.34f, 0.58f)
-        rows.forEachIndexed { index, rowY ->
-            val y = size.height * rowY
-            drawLine(
-                tint,
-                Offset(size.width * 0.06f, y),
-                Offset(size.width * 0.94f, y),
-                strokeWidth = stroke,
-                cap = StrokeCap.Round,
-            )
-            drawCircle(tint, radius = knobRadius, center = Offset(size.width * knobs[index], y))
-        }
-    }
-}
-
-@Composable
-private fun ChevronLeftGlyph(tint: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val path =
-            Path().apply {
-                moveTo(size.width * 0.62f, size.height * 0.22f)
-                lineTo(size.width * 0.38f, size.height * 0.5f)
-                lineTo(size.width * 0.62f, size.height * 0.78f)
-            }
-        drawPath(
-            path,
-            tint,
-            style = Stroke(width = size.minDimension * 0.12f, cap = StrokeCap.Round),
-        )
-    }
-}
 
 private fun portraitStorageLabel(status: CameraStatus): String =
     CaptureLists.storageLabel(status, showDuration = false)

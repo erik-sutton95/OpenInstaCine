@@ -107,22 +107,15 @@ import com.opencapture.openpocketcine.feed.FeedUpscaler
 import com.opencapture.openpocketcine.feed.LutLookResolver
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.lut.LUTPicker
-import com.opencapture.openpocketcine.settings.DisplayToggleItem
 import com.opencapture.openpocketcine.settings.PanelCloseButton
-import com.opencapture.openpocketcine.settings.SettingsValueSlider
 import com.opencapture.openpocketcine.settings.SettingsActionPill
 import com.opencapture.openpocketcine.settings.SettingsColorDot
-import com.opencapture.openpocketcine.settings.SettingsColorDots
-import com.opencapture.openpocketcine.settings.SettingsCrushClipSegmented
-import com.opencapture.openpocketcine.settings.SettingsGroupCard
 import com.opencapture.openpocketcine.settings.SettingsInlineRow
 import com.opencapture.openpocketcine.settings.SettingsPalette
-import com.opencapture.openpocketcine.settings.SettingsPercentSlider
 import com.opencapture.openpocketcine.settings.SettingsRowCard
 import com.opencapture.openpocketcine.settings.SettingsSegmented
 import com.opencapture.openpocketcine.settings.SettingsSwitchInlineRow
 import com.opencapture.openpocketcine.settings.SettingsSwitchRow
-import com.opencapture.openpocketcine.settings.SettingsValueText
 import com.opencapture.openpocketcine.settings.settingsClickable
 import java.io.File
 import java.util.Locale
@@ -373,8 +366,6 @@ internal fun toggledCleanPins(current: Set<String>, toolKey: String): Set<String
     return OperatorPrefs.resolvedCleanPins(next)
 }
 
-internal fun lutPickerAvailable(): Boolean = true
-
 internal enum class CleanPinTool(val key: String, val title: String) {
     LUT("LUT", "LUT"),
     PEAKING("PEAK", "Peaking"),
@@ -534,16 +525,6 @@ fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {
     }
     }
 }
-
-@Composable
-fun AppSettingsScreen(model: AppModel, onClose: () -> Unit = { model.shell.dismissCover() }) {
-    OperatorSetupScreen(model, onClose)
-}
-
-private fun liveCameraName(model: AppModel): String =
-    model.session.connectedCamera?.name
-        ?: model.savedCameras.firstOrNull()?.displayName
-        ?: "Pocket"
 
 @Composable
 private fun LutPickerHost(model: AppModel, onClose: () -> Unit) {
