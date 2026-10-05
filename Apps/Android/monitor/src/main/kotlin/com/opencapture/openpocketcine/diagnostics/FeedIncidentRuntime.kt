@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.diagnostics
 
+import com.opencapture.opencine.appkit.diagnostics.FeedSessionSummaryStore
 import com.opencapture.opencine.media.FeedIncidentRecorder
 import java.io.File
 import java.util.concurrent.Executors
