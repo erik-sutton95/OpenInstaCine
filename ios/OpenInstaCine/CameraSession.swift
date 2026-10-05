@@ -203,7 +203,7 @@ final class CameraSession {
     @ObservationIgnored var gimbalAimTask: Task<Void, Never>?
     @ObservationIgnored var gimbalAimGeneration: UInt64 = 0
     /// Head-tracking targets stamped with their AirPods measurement time (last second).
-    @ObservationIgnored var headTrackSamples: [HeadTrackSample] = []
+    @ObservationIgnored var headTrackSamples: [HeadTrack.Sample] = []
     @ObservationIgnored var isSteeringHead = false
     /// Live frame stamps to time-of-day timecode, reset per live start.
     @ObservationIgnored var frameTimecode = LunaFrameTimecode()

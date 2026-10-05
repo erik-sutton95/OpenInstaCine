@@ -565,11 +565,6 @@ extension CameraSession {
     /// fw 1.1.15: 30 Hz follows a moving target with ~60 ms lag and is visibly smoother
     /// than 20 Hz (~70 ms) or 10 Hz (~120 ms, steppy).
     static let gimbalSetInterval: Duration = .milliseconds(33)
-    /// fw 1.1.15 reach: pitch -57.3...+90; yaw is one arc from about -125 through ±180
-    /// to -58.5 (gap centred near -92, like the shell's `HeadTrack.Reach`), and SET_ANGLE
-    /// takes yaw in -180...180 and routes around the stop itself. Declared once in
-    /// `LunaCameraSession.motion`.
-    static let gimbalPitchRange = LunaCameraSession.motion.bounds.tilt
 
     func startGimbalAnglePoll() {
         gimbalAnglePoll?.cancel()
@@ -645,8 +640,7 @@ extension CameraSession {
                 let now = ProcessInfo.processInfo.systemUptime
                 if now - started > 8 { break }
                 if now - started > 0.3, let reading = self.gimbalAngle, reading.at > started + 0.2,
-                    abs(remainder(Double(reading.angle.yaw) - aim.target.yawDeg, 360)) <= 0.5,
-                    abs(Double(reading.angle.pitch) - aim.target.pitchDeg) <= 0.5
+                    LunaMotionService.hasReached(reading.angle, aim.target)
                 { break }
                 try? await Task.sleep(for: Self.gimbalSetInterval)
             }
@@ -655,10 +649,8 @@ extension CameraSession {
         return token
     }
 
-    /// Head tracking steers with the stick (MOVE), not SET_ANGLE: fw 1.1.15 re-plans every
-    /// SET as its own start-stop move, so a SET stream judders at the send rate (about 11
-    /// deg/s rms at 30 Hz against 0.05 for the stick). Each tick reads GET_ANGLE, then
-    /// commands the head's own rate plus a pull toward its exact angle.
+    /// Head tracking steers with the stick (`LunaHeadTrackSteering`): each tick reads
+    /// GET_ANGLE, then sends the stick toward the AirPods head.
     private func steerHeadTrack(token: UInt64) async {
         isSteeringHead = true
         // Angles are read back to back beside the loop, so a slow or lost reply never
@@ -674,41 +666,33 @@ extension CameraSession {
             isSteeringHead = false
             reader.cancel()
         }
-        var rate = (yaw: 0.0, pitch: 0.0)  // modelled camera rate from the sent stick
-        var last = ProcessInfo.processInfo.systemUptime
+        var steering = LunaHeadTrackSteering(now: ProcessInfo.processInfo.systemUptime)
         while !Task.isCancelled {
             guard let aim = gimbalAim, aim.token == token, canSetGimbalConfiguration, !gimbalStick.isHeld
             else { break }
             let now = ProcessInfo.processInfo.systemUptime
+            let tuning = LunaHeadTrackSteering.Tuning(
+                panDegPerSec: Self.stickPanDegPerSec, tiltDegPerSec: Self.stickTiltDegPerSec,
+                gain: Self.headTrackGain, accelFeed: Self.headTrackAccelFeed)
             var pan: Int32 = 0
             var tilt: Int32 = 0
             // No reading for 0.3 s: stop rather than steer blind.
             if let reading = gimbalAngle, now - reading.at < 0.3 {
-                let head = Self.headTrackReference(headTrackSamples, at: now + Self.headTrackLead)
-                    ?? HeadTrackReference(yaw: aim.target.yawDeg, pitch: aim.target.pitchDeg)
-                // The reading was taken about half a round trip before it arrived; the
-                // head has kept turning since.
-                let age = now - reading.at + Self.angleReadLatency
-                let yaw = GimbalWaypoint.unwrapYaw(Double(reading.angle.yaw)) + rate.yaw * age
-                let pitch = Double(reading.angle.pitch) + rate.pitch * age
-                let wantPitch = min(max(head.pitch, Self.gimbalPitchRange.lowerBound), Self.gimbalPitchRange.upperBound)
-                // Feed the head's rate forward, plus its acceleration times the stick's ease-in
-                // lag so the camera speeds up in step with the head instead of trailing it.
-                let lag = Self.stickLagSeconds * Self.headTrackAccelFeed
-                let yawRate = head.yawRate + head.yawAccel * lag + Self.headTrackGain * (head.yaw - yaw)
-                let pitchRate = head.pitchRate + head.pitchAccel * lag + Self.headTrackGain * (wantPitch - pitch)
-                pan = Int32(min(max((yawRate / Self.stickPanDegPerSec).rounded(), -99), 99))
-                tilt = Int32(min(max((pitchRate / Self.stickTiltDegPerSec).rounded(), -99), 99))
+                let head =
+                    HeadTrack.reference(headTrackSamples, at: now + Self.headTrackLead, fitWindow: Self.headTrackFitWindow)
+                    ?? HeadTrack.Reference(yaw: aim.target.yawDeg, pitch: aim.target.pitchDeg)
+                let step = steering.step(
+                    yaw: GimbalWaypoint.unwrapYaw(Double(reading.angle.yaw)), pitch: Double(reading.angle.pitch),
+                    readAt: reading.at, toward: head, now: now, tuning: tuning)
+                pan = step.pan
+                tilt = step.tilt
                 #if DEBUG
-                    headTrackLog.append([now, head.yaw, wantPitch, yaw, pitch, Double(pan), Double(tilt)])
+                    headTrackLog.append([now, head.yaw, step.wantPitch, step.yaw, step.pitch, Double(pan), Double(tilt)])
                     if headTrackLog.count > 1500 { headTrackLog.removeFirst(300) }
                 #endif
             }
             Task { [weak self, pan, tilt] in await self?.motion.steer(pan: pan, tilt: tilt) }
-            let k = 1 - exp(-(now - last) / Self.stickLagSeconds)
-            last = now
-            rate.yaw += (Double(pan) * Self.stickPanDegPerSec - rate.yaw) * k
-            rate.pitch += (Double(tilt) * Self.stickTiltDegPerSec - rate.pitch) * k
+            steering.sent(pan: pan, tilt: tilt, now: now, tuning: tuning)
             try? await Task.sleep(for: .seconds(Self.headTrackTick))
         }
         // A fresh task: this one is usually cancelled here, and a cancelled send never goes
@@ -724,73 +708,16 @@ extension CameraSession {
         }
     }
 
-    /// Stick rate per VirtualRC unit and its ease-in lag, fw 1.1.15. The gyro reads 0.635
-    /// and 0.54 deg/s per unit at steady speed; these are what tracked a 20° sine best
-    /// against GET_ANGLE (lag 0.02 s, 8% overshoot).
-    nonisolated(unsafe) static var stickPanDegPerSec = 0.75
-    nonisolated(unsafe) static var stickTiltDegPerSec = 0.64
-    static let stickLagSeconds = 0.23
-    /// GET_ANGLE round trip is 20 to 40 ms on the camera AP; half of it, roughly.
-    static let angleReadLatency = 0.015
-    /// Live-tunable head tracking feel (debug remote `headTune`).
+    /// Live-tunable head tracking feel (debug remote `headTune`); defaults are the Luna's.
+    nonisolated(unsafe) static var stickPanDegPerSec = LunaHeadTrackSteering.Tuning().panDegPerSec
+    nonisolated(unsafe) static var stickTiltDegPerSec = LunaHeadTrackSteering.Tuning().tiltDegPerSec
     /// Pull toward the head's exact angle (1/s).
-    nonisolated(unsafe) static var headTrackGain = 4.0
+    nonisolated(unsafe) static var headTrackGain = LunaHeadTrackSteering.Tuning().gain
     /// How far ahead of the newest AirPods sample the head is aimed (covers link latency).
     nonisolated(unsafe) static var headTrackLead = 0.0
     nonisolated(unsafe) static var headTrackTick = 0.033
-    nonisolated(unsafe) static var headTrackAccelFeed = 1.0
+    nonisolated(unsafe) static var headTrackAccelFeed = LunaHeadTrackSteering.Tuning().accelFeed
     nonisolated(unsafe) static var headTrackFitWindow = 0.3
-
-    /// Head angle at `time` with its rate (deg/s) and acceleration (deg/s²), from a
-    /// quadratic least-squares fit of the last 250 ms of samples (a line with fewer than
-    /// four), carried on past the newest sample; after 0.2 s without one it holds.
-    static func headTrackReference(_ samples: [HeadTrackSample], at time: Double) -> HeadTrackReference? {
-        guard let newest = samples.last else { return nil }
-        let recent = samples.filter { newest.t - $0.t <= Self.headTrackFitWindow }
-        let xs = recent.map { $0.t - newest.t }
-        func fit(_ ys: [Double]) -> (value: Double, rate: Double, accel: Double) {
-            let n = Double(xs.count)
-            var s = [Double](repeating: 0, count: 5)
-            var sy = [0.0, 0.0, 0.0]
-            for (x, y) in zip(xs, ys) {
-                var power = 1.0
-                for k in 0..<5 {
-                    s[k] += power
-                    if k < 3 { sy[k] += power * y }
-                    power *= x
-                }
-            }
-            func det3(_ m: [[Double]]) -> Double {
-                m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-                    + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
-            }
-            if xs.count >= 4 {
-                let m = [[s[0], s[1], s[2]], [s[1], s[2], s[3]], [s[2], s[3], s[4]]]
-                let d = det3(m)
-                if abs(d) > 1e-12 {
-                    func solve(_ column: Int) -> Double {
-                        var c = m
-                        for row in 0..<3 { c[row][column] = sy[row] }
-                        return det3(c) / d
-                    }
-                    return (solve(0), solve(1), 2 * solve(2))
-                }
-            }
-            let denominator = n * s[2] - s[1] * s[1]
-            guard xs.count >= 2, abs(denominator) > 1e-12 else { return (ys.last ?? 0, 0, 0) }
-            let rate = (n * sy[1] - s[1] * sy[0]) / denominator
-            return ((sy[0] - rate * s[1]) / n, rate, 0)
-        }
-        // A stale head (no sample for 0.2 s) holds its last angle instead of drifting on.
-        guard time - newest.t <= 0.2 else { return HeadTrackReference(yaw: newest.yaw, pitch: newest.pitch) }
-        let yaw = fit(recent.map(\.yaw))
-        let pitch = fit(recent.map(\.pitch))
-        let h = max(time - newest.t, 0)
-        return HeadTrackReference(
-            yaw: yaw.value + yaw.rate * h + yaw.accel * h * h / 2,
-            pitch: pitch.value + pitch.rate * h + pitch.accel * h * h / 2,
-            yawRate: yaw.rate, pitchRate: pitch.rate, yawAccel: yaw.accel, pitchAccel: pitch.accel)
-    }
 
     private func finishGimbalAim(token: UInt64) {
         guard gimbalAim?.token == token else { return }
@@ -869,7 +796,7 @@ extension CameraSession {
         gimbalAim = (target, token)
         let t = measuredAt ?? ProcessInfo.processInfo.systemUptime
         if t > headTrackSamples.last?.t ?? -.infinity {
-            headTrackSamples.append(HeadTrackSample(t: t, yaw: target.yawDeg, pitch: target.pitchDeg))
+            headTrackSamples.append(HeadTrack.Sample(t: t, yaw: target.yawDeg, pitch: target.pitchDeg))
             headTrackSamples.removeAll { t - $0.t > 1 }
             #if DEBUG
                 headSampleLog.append([t, target.yawDeg, target.pitchDeg])
@@ -948,21 +875,6 @@ extension CameraSession {
             && gimbalProgram.canRun
     }
 
-    /// Target pose `time` seconds into a take: the shell's rounded-corner curve for
-    /// A·B·C with smoothness, straight legs otherwise.
-    nonisolated static func programPose(_ take: GimbalProgram, at time: TimeInterval) -> GimbalWaypoint? {
-        guard let a = take.a, let b = take.b else { return nil }
-        if let curve = GimbalProgramCurve(program: take) { return curve.position(at: time) }
-        if time < take.durationAB || take.c == nil {
-            return GimbalMoveEngine.lerp(a, b, u: min(max(time / take.durationAB, 0), 1))
-        }
-        return GimbalMoveEngine.lerp(b, take.c!, u: min((time - take.durationAB) / take.durationBC, 1))
-    }
-
-    nonisolated static func programDuration(_ take: GimbalProgram) -> TimeInterval {
-        take.durationAB + (take.c == nil ? 0 : take.durationBC)
-    }
-
     /// Countdown while the head goes to A, then stream the path at the SET rate.
     /// Loop plays the take backwards and forwards until stopped.
     func runProgrammedMove() {
@@ -998,8 +910,8 @@ extension CameraSession {
             guard let self, !Task.isCancelled, self.gimbalMoveRunning else { return }
             self.gimbalStartCountdown = nil
             self.gimbalMoveCanPause = true
-            ControlLiveLog.line("gimbal-move: start \(take.summary) duration=\(Self.programDuration(take))")
-            let duration = Self.programDuration(take)
+            ControlLiveLog.line("gimbal-move: start \(take.summary) duration=\(take.duration)")
+            let duration = take.duration
             var last = ProcessInfo.processInfo.systemUptime
             var reverse = false
             var loggedAt = 0.0
@@ -1017,8 +929,7 @@ extension CameraSession {
                     reverse.toggle()
                 }
                 if !self.gimbalMovePaused,
-                    let target = Self.programPose(
-                        take, at: reverse ? duration - self.gimbalMoveClock : self.gimbalMoveClock)
+                    let target = take.pose(at: reverse ? duration - self.gimbalMoveClock : self.gimbalMoveClock)
                 {
                     self.sendGimbalAngle(target)
                     if now - loggedAt >= 0.5, let reading = self.gimbalAngle {
@@ -1032,7 +943,7 @@ extension CameraSession {
                 try? await Task.sleep(for: Self.gimbalSetInterval)
             }
             guard !Task.isCancelled, self.gimbalMoveRunning else { return }
-            if let end = Self.programPose(take, at: reverse ? 0 : duration) { self.sendGimbalAngle(end) }
+            if let end = take.pose(at: reverse ? 0 : duration) { self.sendGimbalAngle(end) }
             ControlLiveLog.line("gimbal-move: done")
             self.finishProgrammedMove()
         }
@@ -1283,22 +1194,6 @@ final class LunaRefreshDebounce {
             await work()
         }
     }
-}
-
-struct HeadTrackReference: Equatable {
-    var yaw: Double
-    var pitch: Double
-    var yawRate = 0.0
-    var pitchRate = 0.0
-    var yawAccel = 0.0
-    var pitchAccel = 0.0
-}
-
-/// One head-tracking target at its measurement time (uptime seconds).
-struct HeadTrackSample: Equatable {
-    var t: Double
-    var yaw: Double
-    var pitch: Double
 }
 
 // MARK: - Timecode
