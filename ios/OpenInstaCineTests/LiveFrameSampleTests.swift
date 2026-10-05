@@ -1,6 +1,8 @@
 import AVFoundation
 import CoreImage
 import CoreVideo
+import MonitorUI
+import OpenCineApple
 import OpenPocketViewCore
 import XCTest
 
@@ -507,12 +509,12 @@ final class LiveFrameSampleTests: XCTestCase {
 
     func testMoreScopesAndHeatSlowTheTapNeverSpeedItUp() {
         XCTAssertGreaterThan(
-            PocketScopeSampler.minInterval(activeScopeCount: 3, thermalState: .nominal),
-            PocketScopeSampler.minInterval(activeScopeCount: 2, thermalState: .nominal),
+            ScopeSampler.minInterval(activeScopeCount: 3, thermalState: .nominal),
+            ScopeSampler.minInterval(activeScopeCount: 2, thermalState: .nominal),
             "more than two scopes go slower, not faster")
         XCTAssertGreaterThan(
-            PocketScopeSampler.minInterval(activeScopeCount: 1, thermalState: .serious),
-            PocketScopeSampler.minInterval(activeScopeCount: 1, thermalState: .nominal),
+            ScopeSampler.minInterval(activeScopeCount: 1, thermalState: .serious),
+            ScopeSampler.minInterval(activeScopeCount: 1, thermalState: .nominal),
             "thermal tiers shed the interval, never the sampling density")
     }
 
@@ -528,13 +530,13 @@ final class LiveFrameSampleTests: XCTestCase {
             let points = bytes.map {
                 ScopePoint(xRatio: 0.5, yRatio: 0.5, red: $0, green: $0, blue: $0, luma: $0)
             }
-            let capacity = ScopeTraceMetal.maxVertexCount(
+            let capacity = MonitorScopeTraceMetal.maxVertexCount(
                 points: points.count, mode: .waveform(.rgb))
-            var vertices = [ScopeTraceMetal.Vertex](
-                repeating: ScopeTraceMetal.Vertex(position: .zero, size: 0, color: .zero),
+            var vertices = [MonitorScopeTraceMetal.Vertex](
+                repeating: MonitorScopeTraceMetal.Vertex(position: .zero, size: 0, color: .zero),
                 count: capacity)
             let written = vertices.withUnsafeMutableBufferPointer { out in
-                ScopeTraceMetal.fillVertices(
+                MonitorScopeTraceMetal.fillVertices(
                     out, from: 0, points: points, mode: .waveform(.rgb), rect: plot,
                     opacity: 1, levelTable: table)
             }
@@ -567,7 +569,7 @@ final class LiveFrameSampleTests: XCTestCase {
         for _ in 0..<16 {
             bytes.append(contentsOf: [code, code, code, 255])
         }
-        let wave = PocketScopeSampler.sample(
+        let wave = ScopeSampler.sample(
             bytes: bytes, width: 16, height: 1, bytesPerRow: 64,
             transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: true,
             includeVectorPoints: false,
@@ -575,7 +577,7 @@ final class LiveFrameSampleTests: XCTestCase {
         XCTAssertFalse(wave.samples.points.isEmpty)
         XCTAssertTrue(wave.vectorscopePoints.isEmpty, "WAVE/PARADE must not walk the monitor cube")
         XCTAssertEqual(wave.revision, 1)
-        let vector = PocketScopeSampler.sample(
+        let vector = ScopeSampler.sample(
             bytes: bytes, width: 16, height: 1, bytesPerRow: 64,
             transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: false,
             includeVectorPoints: true,
@@ -594,11 +596,11 @@ final class LiveFrameSampleTests: XCTestCase {
         for _ in 0..<16 {
             bytes.append(contentsOf: [code, code, code, 255])
         }
-        let plain = PocketScopeSampler.sample(
+        let plain = ScopeSampler.sample(
             bytes: bytes, width: 16, height: 1, bytesPerRow: 64,
             transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: true,
             look: nil, previous: .empty)
-        let looked = PocketScopeSampler.sample(
+        let looked = ScopeSampler.sample(
             bytes: bytes, width: 16, height: 1, bytesPerRow: 64,
             transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: true,
             look: BuiltInLook.mono.cube(),
@@ -620,7 +622,7 @@ final class LiveFrameSampleTests: XCTestCase {
         for _ in 0..<16 {
             bytes.append(contentsOf: [code, code, code, 255])
         }
-        let bundle = PocketScopeSampler.sample(
+        let bundle = ScopeSampler.sample(
             bytes: bytes, width: 16, height: 1, bytesPerRow: 64,
             transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: true,
             look: nil, previous: .empty)
@@ -638,7 +640,7 @@ final class LiveFrameSampleTests: XCTestCase {
                 16, transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), plot),
             WaveformAxis.scaleLineY(0, plot),
             accuracy: 0.5)
-        let histoPlot = HistogramAssist.plotRect(in: ScopePanelSize.histogram)
+        let histoPlot = HistogramAssist.plotRect(in: MonitorScopePanelSize.histogram)
         XCTAssertEqual(
             HistogramAssist.plotX(Double(displayPeak) / 255 * 100, in: histoPlot),
             HistogramAssist.ireX(0, in: histoPlot),
@@ -737,13 +739,13 @@ final class LiveFrameSampleTests: XCTestCase {
     // MARK: - Bake
 
     func testBakeSizeKeepsSourceAspectAndClampsToDrawable() {
-        let fourK = FeedFrameBaker.bakeSize(
+        let fourK = MonitorFrameBaker.bakeSize(
             source: CGSize(width: 3840, height: 2160),
             drawable: CGSize(width: 1920, height: 1080))
         XCTAssertEqual(fourK.width, 1920, accuracy: 1)
         XCTAssertEqual(fourK.height, 1080, accuracy: 1)
 
-        let smaller = FeedFrameBaker.bakeSize(
+        let smaller = MonitorFrameBaker.bakeSize(
             source: CGSize(width: 1280, height: 720),
             drawable: CGSize(width: 1920, height: 1080))
         XCTAssertEqual(smaller.width, 1280, accuracy: 1)
@@ -756,7 +758,7 @@ final class LiveFrameSampleTests: XCTestCase {
     /// IOSurface BGRA, then 8-bit 420v.
     private static func makeLiveLikeBuffer(width: Int, height: Int) -> CVPixelBuffer? {
         func usable(_ buffer: CVPixelBuffer) -> CVPixelBuffer? {
-            PocketScopeSampler.copyBGRA(buffer, maxWidth: 200) == nil ? nil : buffer
+            ScopeSampler.copyBGRA(buffer, maxWidth: 200) == nil ? nil : buffer
         }
         if let ten = ScopeTestBuffers.makeX420(
             width: width, height: height,

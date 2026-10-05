@@ -42,19 +42,17 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import com.opencapture.monitorui.settings.MonitorSettingsTab
 
-/** [borrowing] builds a Live View model over a Multiview tile's decoder (iOS `CameraSession(borrowing:)`). */
 class AppModel(
     context: Context,
-    borrowing: com.opencapture.opencine.decoder.HevcDecoder? = null,
-    controlLease: com.opencapture.openpocketcine.session.MultiviewControlLease? = null,
 ) {
     private val appContext = context.applicationContext
     init {
         DiagnosticCenter.install(appContext)
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    val session = PocketCameraSession(context, borrowing, controlLease)
+    val session = PocketCameraSession(context)
     private val mediaStorage = com.opencapture.opencine.appkit.MonitorMediaCacheStorage()
     private val initialMedia = com.opencapture.openpocketcine.media.createLunaMediaLibrary(appContext, session, mediaStorage, null, scope)
     var mediaLibrary by mutableStateOf(initialMedia.first)
@@ -98,7 +96,7 @@ class AppModel(
     var coreVersion by mutableStateOf<String?>(null)
     /** A legal document over the cameras page (product composition, not a shell cover). */
     var legal by mutableStateOf<LegalKind?>(null)
-    var operatorSettingsTab by mutableStateOf(OperatorSettingsTab.LINK)
+    var operatorSettingsTab by mutableStateOf(MonitorSettingsTab.LINK)
     var chromeEditorMode by mutableStateOf<PocketDispMode?>(null)
     var chromeEditorReturnMode by mutableStateOf<PocketDispMode?>(null)
     var liveChromeInteractive by mutableStateOf(true)
@@ -226,7 +224,7 @@ class AppModel(
     fun endChromeEditing() {
         chromeEditorReturnMode = chromeEditorMode
         chromeEditorMode = null
-        operatorSettingsTab = OperatorSettingsTab.DISPLAY
+        operatorSettingsTab = MonitorSettingsTab.DISPLAY
         shell.open(ShellModel.Cover.SETTINGS)
     }
 

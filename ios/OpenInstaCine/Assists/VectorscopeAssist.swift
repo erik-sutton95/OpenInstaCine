@@ -19,7 +19,7 @@ import UIKit
 /// normalised centre (OpenZCine `MovablePanelStoredCenter`).
 enum VectorscopeAssist {
     static let panelID = "vector"
-    static let baseSize = ScopePanelSize.vectorscope
+    static let baseSize = MonitorScopePanelSize.vectorscope
     static let brightnessRange: ClosedRange<Int> = 0...200
 
     /// OpenZCine `AssistConfiguration.Scopes.VectorscopeZoom`.

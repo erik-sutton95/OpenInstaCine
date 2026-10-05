@@ -96,6 +96,8 @@ import com.opencapture.openpocketcine.session.GimbalSpeed
 import com.opencapture.opencine.motion.GimbalWaypointSlot
 import kotlin.math.max
 import kotlin.math.min
+import com.opencapture.monitorui.GimbalCluster
+import com.opencapture.monitorui.LiveChromeMetrics
 
 enum class LiveGimbalPanel {
     NONE,

@@ -39,7 +39,7 @@ struct CameraEVMeterOverlay: View {
     private var pictureEV: EvComp? {
         guard model.assist.evMeterFromPicture else { return nil }
         let bundle = model.monitorSamples.bundle
-        guard let picture = NDFilterRecommendation.pictureStops(
+        guard let picture = MonitorNDFilterRecommendation.pictureStops(
             lumaHistogram: bundle.samples.histogramLuma, transfer: bundle.transfer)
         else { return nil }
         let session = model.session

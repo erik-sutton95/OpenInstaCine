@@ -7,9 +7,9 @@ import com.opencapture.opencine.appkit.MonitorOperatorPreferences
 import com.opencapture.opencine.appkit.MonitorDisplayPreferences
 import com.opencapture.opencine.appkit.MonitorToolUsagePreferences
 import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.feed.FeedUpscaler
 import com.opencapture.openpocketcine.lut.LutCatalog
 import org.json.JSONObject
+import com.opencapture.opencine.runtime.MonitorGlesUpscaler
 
 typealias PocketDispMode = com.opencapture.opencine.appkit.MonitorDisplayMode
 typealias PocketDispSection = com.opencapture.opencine.appkit.MonitorDisplaySection
@@ -25,8 +25,6 @@ enum class PortraitFeedAspect(val raw: String) {
             entries.firstOrNull { it.raw == raw } ?: FIT_16X9
     }
 }
-
-typealias OperatorSettingsTab = com.opencapture.monitorui.settings.MonitorSettingsTab
 
 object OperatorPrefs {
     private const val PREFS = "openpocketcine.operator"
@@ -194,10 +192,10 @@ object OperatorPrefs {
         prefs(context).edit { putStringSet(CLEAN_PINS, HashSet(resolvedCleanPins(value))) }
     }
 
-    fun feedUpscaler(context: Context): FeedUpscaler =
-        FeedUpscaler.fromStored(prefs(context).getString(FEED_UPSCALER, null))
+    fun feedUpscaler(context: Context): MonitorGlesUpscaler =
+        MonitorGlesUpscaler.fromStored(prefs(context).getString(FEED_UPSCALER, null))
 
-    fun setFeedUpscaler(context: Context, value: FeedUpscaler) {
+    fun setFeedUpscaler(context: Context, value: MonitorGlesUpscaler) {
         prefs(context).edit { putString(FEED_UPSCALER, value.label) }
     }
 

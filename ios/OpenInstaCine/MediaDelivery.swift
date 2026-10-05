@@ -48,8 +48,6 @@ private struct FrameioMarkShape: Shape {
     }
 }
 
-typealias MediaExportFormat = MonitorMediaExporter.Format
-
 enum MediaDeliveryDestination: String, CaseIterable, Identifiable, Sendable {
     case nativeShare
     case frameio
@@ -94,7 +92,7 @@ struct MediaDeliveryConfiguration: Sendable {
     var convertLog = false
     /// The destination applies to the whole selection, including mixed log clips.
     var logTransform: LogColorTransform = .dLogToDLog2
-    var exportFormat: MediaExportFormat = .mov
+    var exportFormat: MonitorMediaExporter.Format = .mov
     var includeMetadata = true
     var forceFrameioReupload = false
 }

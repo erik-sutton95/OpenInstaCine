@@ -2,6 +2,7 @@
     import CoreImage
     import Foundation
     import Insta360Protocol
+    import MonitorPresentation
     import Network
     import OpenPocketViewCore
     import UIKit
@@ -404,7 +405,7 @@
                 default: model.shell.dismissCover()
                 }
             case "settingsTab":
-                if let tab = OperatorSettingsTab.allCases.first(where: { $0.rawValue == str("value") || "\($0)" == str("value") }) {
+                if let tab = MonitorSettingsTab.allCases.first(where: { $0.rawValue == str("value") || "\($0)" == str("value") }) {
                     model.operatorSettingsTab = tab
                 }
             case "gimbalPanel":

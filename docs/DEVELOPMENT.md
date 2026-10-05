@@ -1,7 +1,7 @@
 # Developing OpenInstaCine
 
-Lab and build notes that used to live in the README. The shared monitor engine
-contract is [SHARED-MONITOR-ENGINE.md](SHARED-MONITOR-ENGINE.md).
+Lab and build notes that used to live in the README. [SHARED-MONITOR-ENGINE.md](SHARED-MONITOR-ENGINE.md)
+records the 2026-09-06 multi-brand design intent.
 
 The public handbook ([opencapture.org/openinstacine/docs](https://opencapture.org/openinstacine/docs/))
 is the Astro Starlight site in [`handbook/`](../handbook/README.md); update it in the
@@ -11,8 +11,8 @@ same change when protocol, app behavior or setup changes.
 
 | Path | What |
 | --- | --- |
-| `ios/` | XcodeGen project (`ios/project.yml`), app `ios/OpenInstaCine`, tests, watch app |
-| `Sources/` | Shared OpenPocketCine core (`OpenPocketViewCore`, ...) with small Luna hooks (I-Log color mode, Luna resolutions, `.lrv` proxy) |
+| `ios/` | XcodeGen project (`ios/project.yml`), app `ios/OpenInstaCine` (app-owned code on the shared OpenCine shell, `OpenCineAppKit`), tests, watch app |
+| `Sources/` | `OpenPocketViewCore`, an app-owned fork of the OpenPocketCine core (no longer synced), with small Luna hooks (I-Log color mode, Luna resolutions, `.lrv` proxy) |
 | `../OpenCine` (sibling) | The OpenCine platform repository, pinned in `opencine-pins.txt` (check out with `scripts/checkout-opencine.sh`); `Package.swift`, `ios/project.yml` and `Apps/Android/settings.gradle.kts` reference it by path (Android: one included build named `opencine`). Products used here: the shared design system (`MonitorUI`, `MonitorPresentation`, Android `monitor-ui`); `OpenCineCore`: common camera contracts (`CameraSession`, command outcomes; Android `:core`); `OpenCineMedia`: LUT, curve (incl. I-Log), scope and false-colour math, shutter angle, frame timing, framing, re-exported by `OpenPocketViewCore`; the Luna integration: `Insta360Protocol` (portable codec) and `Insta360Apple` (CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport, `LunaCameraSession`), plus `Insta360AppleTestSupport` (FakeLuna) for app tests, and Android `insta360-shell`/`insta360-luna`. The app passes its names (keychain service, app name, log prefix) in `AppModel.lunaConfiguration` |
 | `tools/LunaProbe` | Swift CLI that drives the camera from a Mac on its Wi-Fi (used for the fw 1.1.15 verification) |
 | `tools/` | Python lab tools: BLE capture, Mac preview, DEBUG remote client |
@@ -44,7 +44,7 @@ Needs Xcode 26, XcodeGen and `just`. Run from the repository root.
 | `just ios-build` | Simulator build, no signing, derived data in `.local/DD` |
 | `just ios-run [device]` | Development-signed build, install and launch on a USB iPhone (devicectl id) |
 | `just ios-test` | App unit tests on the first available iPhone simulator |
-| `just core-test` | `swift test` for the shared core and `Adapters/Insta360Protocol` |
+| `just core-test` | `swift test` for this package and the OpenCine `Insta360` tests |
 | `just oic-remote ...` | DEBUG remote client (see below) |
 | `just luna-official-xc device` | XCUITest driver for the official Insta360 app (lab captures) |
 | `just lab-setup`, `just luna-view` | Python venv and the Mac live-view lab |

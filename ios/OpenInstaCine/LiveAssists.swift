@@ -60,10 +60,6 @@ extension MonitorAssistSelection {
     var title: String { sharedTool?.title ?? (self == .instantReview ? "Instant Playback" : "Magnify") }
 }
 
-typealias GuideFamily = MonitorGuideFamily
-
-typealias GuideAspect = MonitorGuideAspect
-
 /// Catalog and camera source interpretation belong to the app; shared state receives media values.
 @MainActor @Observable
 final class AppMonitorLooks: MonitorLookProvider {
@@ -98,10 +94,9 @@ final class AppMonitorLooks: MonitorLookProvider {
 
     var cube: CubeLUT? {
         switch resolvedSource() {
-        case .official(let id):
-            return BundledPocketLUT.cube(id)
-        case .dji(let id):
-            return BundledOfficialDJILUT.cube(id)
+        case .official, .dji:
+            // No Pocket or DJI cube ships with this app.
+            return nil
         case .lunaILog:
             return BundledLunaLUT.iLogToRec709
         case .creative(let look):
@@ -282,7 +277,7 @@ struct FeedAlignedAssists: View {
     var grid: Bool
     var crosshair: Bool
     var guides: Bool
-    var guideAspect: GuideAspect
+    var guideAspect: MonitorGuideAspect
     var focusPoint: CGPoint
     var overlay: FocusOverlay = .focus
     var sceneFaces: [TrackingBox] = []
@@ -334,16 +329,16 @@ struct FeedAlignedAssists: View {
                     GuidesAssist.overlay(feed: feed, assist: assist, fallback: guideAspect)
                 }
                 if grid {
-                    FeedGridView(
+                    MonitorFeedGrid(
                         feed: feed,
                         thirds: assist.gridThirds,
                         phi: assist.gridPhi,
                         diagonal: assist.gridDiagonal
                     )
                 }
-                if crosshair { FeedCrosshairView(feed: feed) }
+                if crosshair { MonitorFeedCrosshair(feed: feed) }
                 if assist.splitComparison, assist.isVisible(.lut) {
-                    FeedSplitComparisonMarks(vertical: assist.splitVertical, feed: feed)
+                    MonitorFeedComparisonMarks(vertical: assist.splitVertical, feed: feed)
                 }
                 MonitorTrackingLayer(brackets: marks.brackets, focus: marks.focus, feed: focusFeed)
             }
@@ -413,12 +408,6 @@ enum LiveTrackingChrome {
     static func bracketArm(along length: CGFloat) -> CGFloat { MonitorTrackingGeometry.bracketArm(along: length) }
     static func bracketPath(in size: CGSize) -> Path { MonitorTrackingGeometry.bracketPath(in: size) }
 }
-
-typealias FeedGridView = MonitorFeedGrid
-
-typealias FeedCrosshairView = MonitorFeedCrosshair
-
-typealias FeedSplitComparisonMarks = MonitorFeedComparisonMarks
 
 /// Camera attitude sampling stays in the source adapter; shared UI receives resolved values.
 enum LevelAssist {

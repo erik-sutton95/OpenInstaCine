@@ -1,3 +1,4 @@
+import MonitorUI
 import OpenPocketViewCore
 import SwiftUI
 import XCTest
@@ -139,11 +140,11 @@ final class WaveformAssistTests: XCTestCase {
         let mid = ScopePoint(
             xRatio: 0.5, yRatio: 0.5, red: grey, green: grey, blue: grey, luma: grey)
         let clip = ScopePoint(xRatio: 0.5, yRatio: 0.5, red: 247, green: 247, blue: 247, luma: 247)
-        var vertices = [ScopeTraceMetal.Vertex](
-            repeating: ScopeTraceMetal.Vertex(position: .zero, size: 0, color: .zero),
-            count: ScopeTraceMetal.maxVertexCount(points: 3, mode: .waveform(.rgb)))
+        var vertices = [MonitorScopeTraceMetal.Vertex](
+            repeating: MonitorScopeTraceMetal.Vertex(position: .zero, size: 0, color: .zero),
+            count: MonitorScopeTraceMetal.maxVertexCount(points: 3, mode: .waveform(.rgb)))
         let written = vertices.withUnsafeMutableBufferPointer { out in
-            ScopeTraceMetal.fillVertices(
+            MonitorScopeTraceMetal.fillVertices(
                 out, from: 0, points: [black, mid, clip], mode: .waveform(.rgb), rect: plot,
                 opacity: 1, levelTable: table)
         }

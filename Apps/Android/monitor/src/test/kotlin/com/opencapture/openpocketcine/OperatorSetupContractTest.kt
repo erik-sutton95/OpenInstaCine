@@ -1,13 +1,13 @@
 package com.opencapture.openpocketcine
 
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
-import com.opencapture.openpocketcine.feed.FeedUpscaler
 import com.opencapture.openpocketcine.session.CameraCommands
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.json.JSONObject
+import com.opencapture.opencine.runtime.MonitorGlesUpscaler
 
 class OperatorSetupContractTest {
     @Test
@@ -159,10 +159,10 @@ class OperatorSetupContractTest {
 
     @Test
     fun feedUpscalerOffersOffAndFastOnly() {
-        assertEquals(listOf("Off", "Fast"), FeedUpscaler.supported.map { it.label })
-        assertEquals(FeedUpscaler.FAST, FeedUpscaler.fromStored(null))
-        assertEquals(FeedUpscaler.OFF, FeedUpscaler.fromStored("Off"))
-        assertEquals(FeedUpscaler.FAST, FeedUpscaler.fromStored("Lanczos"))
+        assertEquals(listOf("Off", "Fast"), MonitorGlesUpscaler.supported.map { it.label })
+        assertEquals(MonitorGlesUpscaler.FAST, MonitorGlesUpscaler.fromStored(null))
+        assertEquals(MonitorGlesUpscaler.OFF, MonitorGlesUpscaler.fromStored("Off"))
+        assertEquals(MonitorGlesUpscaler.FAST, MonitorGlesUpscaler.fromStored("Lanczos"))
     }
 
     @Test

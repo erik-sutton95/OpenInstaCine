@@ -11,12 +11,12 @@ import UIKit
 ///
 /// Long-press options are **only** Crush/Clip Compensation (0 / 0.25 / 0.5 / 0.75 / 1.0 stops).
 /// That value is shared with the histogram's edge lights. The floating meter is the
-/// RED-style RGB goal-post (`TrafficLightsMeterMini`): `TL` title, three centre-anchored
+/// RED-style RGB goal-post (`MonitorTrafficLightsMeter`): `TL` title, three centre-anchored
 /// columns, clip lamps on top, crush lamps on the floor. Draggable immediately
 /// and uniformly scalable 0.6…1.6 from the bottom-trailing grip.
 enum TrafficLightsAssist {
     static let panelID = "traffic-lights"
-    static let baseSize = ScopePanelSize.trafficLights
+    static let baseSize = MonitorScopePanelSize.trafficLights
     static let defaultCompensation = CrushClipCompensation.zero
     static let compensationTitle = "Crush/Clip Compensation"
     static let compensationHelp =
@@ -102,7 +102,7 @@ enum TrafficLightsAssist {
 
     /// OpenZCine keeps one `scopes.crushClipCompensation` for histogram + goal-post.
     @MainActor
-    static var store: TrafficLightsAssistStore { TrafficLightsAssistStore.shared }
+    static var store: MonitorTrafficLightsPreferenceStore { MonitorTrafficLightsPreferenceStore.shared }
 
     @MainActor
     static func sharedCompensation() -> CrushClipCompensation {
@@ -134,8 +134,6 @@ enum TrafficLightsAssist {
     typealias Snapshot = MonitorTrafficLightsOptions
 }
 
-typealias TrafficLightsAssistStore = MonitorTrafficLightsPreferenceStore
-
 // MARK: - Long-press rows
 
 struct TrafficLightsLongPressMenu: View {
@@ -165,7 +163,7 @@ private enum TrafficLightsAssistHaptics {
 
 /// Drag to reposition; drag the corner grip to scale.
 struct TrafficLightsMovablePanel<Content: View>: View {
-    @Bindable var store: TrafficLightsAssistStore
+    @Bindable var store: MonitorTrafficLightsPreferenceStore
     let size: CGSize
     let defaultCenter: CGPoint
     let bounds: CGRect

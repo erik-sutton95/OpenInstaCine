@@ -7,10 +7,12 @@ import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistTool
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.openpocketcine.lut.LutCatalog
-import com.opencapture.openpocketcine.lut.LutExposureCompensation
 import com.opencapture.openpocketcine.session.CameraCommands
 import java.io.File
 import java.util.LinkedHashMap
+import com.opencapture.opencine.media.MonitorLUTCube
+import com.opencapture.opencine.media.ScopeTapPolicy
+import com.opencapture.opencine.media.MonitorLUTExposureCompensation
 
 private const val TAG = "OpcFeedFx"
 
@@ -163,53 +165,13 @@ internal object FeedEffectsRenderPlanFactory {
         )
     }
 
-    /**
-     * Multiview tile: the camera-specific DJI Auto conversion only, no assists.
-     * iOS `MultiviewSession.Tile.updateLUT`. Returns the plan and its caption.
-     */
-    fun multiviewAutoLut(
-        context: Context,
-        enabled: Boolean,
-        colorMode: Int,
-        family: String,
-        cameraName: String?,
-    ): Pair<FeedEffectsRenderPlan, String> {
-        val source = LutLookResolver.resolve(LutCatalog.AUTO, true, colorMode, family, cameraName)
-        if (source == LutLookSource.Off) {
-            val caption = if (colorMode < 0) "Waiting for camera color" else "Auto · no conversion needed"
-            return FeedEffectsRenderPlan.IDENTITY to caption
-        }
-        val caption = "Auto · " + LutLookResolver.sourceTitle(source)
-        if (!enabled) return FeedEffectsRenderPlan.IDENTITY to caption
-        val cube = lutCube(context, source, 0.0, colorMode) ?: return FeedEffectsRenderPlan.IDENTITY to "LUT unavailable"
-        val identity = FeedEffectsRenderPlan.IDENTITY
-        return FeedEffectsRenderPlan(
-            lutCube = cube,
-            falseColorPaint = null,
-            falseColorWeight = null,
-            peaking = false,
-            peakingColor = identity.peakingColor,
-            peakingRatioThreshold = identity.peakingRatioThreshold,
-            peakingNoiseGate = identity.peakingNoiseGate,
-            zebraHighlightOn = false,
-            zebraHighlightCode = identity.zebraHighlightCode,
-            zebraHighlightColor = identity.zebraHighlightColor,
-            zebraMidtoneOn = false,
-            zebraMidtoneCode = identity.zebraMidtoneCode,
-            zebraMidtoneHalf = identity.zebraMidtoneHalf,
-            zebraMidtoneColor = identity.zebraMidtoneColor,
-            splitComparison = false,
-            splitVertical = identity.splitVertical,
-        ) to caption
-    }
-
     private fun lutCube(
         context: Context,
         source: LutLookSource,
         exposureStops: Double,
         colorMode: Int,
-    ): FeedEffectsCube? {
-        val snapped = LutExposureCompensation.snap(exposureStops)
+    ): MonitorLUTCube? {
+        val snapped = MonitorLUTExposureCompensation.snap(exposureStops)
         val exposureColorMode = LutLookResolver.exposureColorMode(source, colorMode)
         val key =
             when (source) {
@@ -250,7 +212,7 @@ internal object FeedEffectsRenderPlanFactory {
         colorMode: Int,
         iso: Int,
         rec709: Boolean,
-    ): FeedEffectsCube? {
+    ): MonitorLUTCube? {
         if (!SwiftCore.isAvailable) return null
         // 4…7 = each scale read through the official Rec.709 look (Swift `FeedEffectsWire`).
         val ordinal =
@@ -274,15 +236,15 @@ internal object FeedEffectsRenderPlanFactory {
 private object PackedCubeCache {
     private const val MAX_ENTRIES = 8
     private val cubes =
-        object : LinkedHashMap<String, FeedEffectsCube>(MAX_ENTRIES, 0.75f, true) {
+        object : LinkedHashMap<String, MonitorLUTCube>(MAX_ENTRIES, 0.75f, true) {
             override fun removeEldestEntry(
-                eldest: MutableMap.MutableEntry<String, FeedEffectsCube>?,
+                eldest: MutableMap.MutableEntry<String, MonitorLUTCube>?,
             ): Boolean = size > MAX_ENTRIES
         }
 
-    fun value(key: String, bake: () -> ByteArray?): FeedEffectsCube? =
+    fun value(key: String, bake: () -> ByteArray?): MonitorLUTCube? =
         synchronized(cubes) {
             cubes[key]
-                ?: bake()?.let(FeedEffectsCube::fromPacked)?.also { cubes[key] = it }
+                ?: bake()?.let(MonitorLUTCube::fromPacked)?.also { cubes[key] = it }
         }
 }

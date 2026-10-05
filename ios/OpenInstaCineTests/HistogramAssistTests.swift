@@ -12,7 +12,7 @@ final class HistogramAssistTests: XCTestCase {
     private let ceiling = ScopeExposureCeiling()
 
     func testHistogramPlotUsesWaveIREAxis() {
-        let size = ScopePanelSize.histogram
+        let size = MonitorScopePanelSize.histogram
         let plot = HistogramAssist.plotRect(in: size)
         XCTAssertEqual(plot.minX, HistogramAssist.trafficGutter, accuracy: 0.01)
         XCTAssertEqual(plot.minY, WaveformAxis.titleHeight, accuracy: 0.01)
@@ -50,7 +50,7 @@ final class HistogramAssistTests: XCTestCase {
     }
 
     func testTrafficLightsSitOutsideMinMaxLines() {
-        let size = ScopePanelSize.histogram
+        let size = MonitorScopePanelSize.histogram
         let plot = HistogramAssist.plotRect(in: size)
         let leftLampMinX = HistogramAssist.trafficHorizontalInset
         let leftLampMaxX = leftLampMinX + HistogramAssist.trafficLampWidth

@@ -1293,7 +1293,7 @@ final class CameraSession {
         if facePriorityAcquireAt == nil { facePriorityAcquireAt = now }
         let spacing = FacePriorityExposure.interval(sinceAcquire: facePriorityAcquireAt, now: now)
         guard now.timeIntervalSince(lastFacePriorityEVAt) >= spacing else { return }
-        guard let packed = PocketScopeSampler.copyBGRA(buffer, maxWidth: PocketScopeSampler.maxWidth)
+        guard let packed = ScopeSampler.copyBGRA(buffer, maxWidth: ScopeSampler.maxWidth)
         else { return }
         lastFacePriorityEVAt = now
         let transfer = MonitorTransfer(decoder.incomingColorMode ?? .normal)

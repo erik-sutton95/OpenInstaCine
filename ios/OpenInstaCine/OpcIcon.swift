@@ -1,5 +1,4 @@
 import MonitorUI
 
-/// Compatibility names for the shared native icon catalog and renderer.
+/// Compatibility name for the shared native icon catalog.
 typealias OpcIcon = MonitorIcon
-typealias LucideIconView = MonitorUI.LucideIconView

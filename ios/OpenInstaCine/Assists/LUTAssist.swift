@@ -30,64 +30,6 @@ enum LUTAssist {
     }
 }
 
-/// Official Pocket 4P Rec.709 cubes from the app bundle. Parsed once.
-enum BundledPocketLUT {
-    private static let lock = NSLock()
-    private static var cache: [OfficialPocketLUT: CubeLUT] = [:]
-
-    static func cube(_ id: OfficialPocketLUT) -> CubeLUT? {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached = cache[id] { return cached }
-        guard let url = url(for: id),
-            let text = try? String(contentsOf: url, encoding: .utf8),
-            let parsed = try? CubeLUT.parse(text)
-        else { return nil }
-        cache[id] = parsed
-        return parsed
-    }
-
-    private static func url(for id: OfficialPocketLUT) -> URL? {
-        let name = id.resourceName
-        if let url = Bundle.main.url(forResource: name, withExtension: "cube") { return url }
-        if let url = Bundle.main.url(
-            forResource: name, withExtension: "cube", subdirectory: "Resources")
-        {
-            return url
-        }
-        return Bundle.main.url(forResource: id.fileName, withExtension: nil)
-    }
-}
-
-/// Official DJI Rec.709 cubes from the app bundle. Parsed once.
-enum BundledOfficialDJILUT {
-    private static let lock = NSLock()
-    private static var cache: [OfficialDJILUT: CubeLUT] = [:]
-
-    static func cube(_ id: OfficialDJILUT) -> CubeLUT? {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached = cache[id] { return cached }
-        guard let url = url(for: id),
-            let text = try? String(contentsOf: url, encoding: .utf8),
-            let parsed = try? CubeLUT.parse(text)
-        else { return nil }
-        cache[id] = parsed
-        return parsed
-    }
-
-    private static func url(for id: OfficialDJILUT) -> URL? {
-        let name = id.resourceName
-        if let url = Bundle.main.url(forResource: name, withExtension: "cube") { return url }
-        if let url = Bundle.main.url(
-            forResource: name, withExtension: "cube", subdirectory: "Resources")
-        {
-            return url
-        }
-        return Bundle.main.url(forResource: id.fileName, withExtension: nil)
-    }
-}
-
 /// Official Insta360 Luna I-Log to Rec.709 cube from the app bundle. Parsed once.
 enum BundledLunaLUT {
     static let resourceName = "Luna_I-Log_to_Rec709_BT1886_s33_v2"

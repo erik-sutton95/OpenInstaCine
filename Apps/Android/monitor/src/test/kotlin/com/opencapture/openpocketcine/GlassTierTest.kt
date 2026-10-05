@@ -1,9 +1,9 @@
 package com.opencapture.openpocketcine
 
 import com.opencapture.monitorui.portraitFillCropContent
-import com.opencapture.openpocketcine.feed.GpuLiveLayout
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import com.opencapture.opencine.runtime.GpuLiveLayout
 
 /** Pure-JVM checks of the hardware glass gate. No runtime demote. */
 class GlassTierTest {

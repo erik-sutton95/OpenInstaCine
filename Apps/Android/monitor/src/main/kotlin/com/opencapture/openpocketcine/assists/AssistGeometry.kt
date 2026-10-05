@@ -2,33 +2,25 @@ package com.opencapture.openpocketcine.assists
 
 import com.opencapture.openpocketcine.feed.fromColorMode
 
-import com.opencapture.openpocketcine.feed.LiveColorScience
 import com.opencapture.openpocketcine.feed.MonitorTransfer
-import com.opencapture.openpocketcine.feed.ScopeDisplayScale
 import com.opencapture.openpocketcine.feed.ScopeExposureCeiling
 import com.opencapture.opencine.media.ScopeClipSource
-import com.opencapture.openpocketcine.feed.WaveformIre
 import com.opencapture.openpocketcine.session.CameraStatus
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import com.opencapture.monitorui.MonitorScopePoint
+import com.opencapture.monitorui.MonitorScopeSize
+import com.opencapture.monitorui.MonitorScopePanelMath
+import com.opencapture.opencine.media.ScopeDisplayScale
+import com.opencapture.opencine.media.WaveformIre
+import com.opencapture.opencine.media.LiveColorScience
 
-typealias AssistPoint = com.opencapture.monitorui.MonitorScopePoint
-typealias AssistSize = com.opencapture.monitorui.MonitorScopeSize
 typealias AssistRect = com.opencapture.monitorui.MonitorScopeRect
 typealias StoredCenter = com.opencapture.monitorui.MonitorScopeStoredCenter
 typealias ScopeGuides = com.opencapture.monitorui.MonitorScopeGuides
-typealias ScopePanelSize = com.opencapture.monitorui.MonitorScopePanelSize
-
-typealias GridSegment = com.opencapture.monitorui.MonitorGridSegment
-
-typealias GridAssist = com.opencapture.monitorui.MonitorGridGeometry
-
-typealias GuidesAssist = com.opencapture.monitorui.MonitorGuideGeometry
-
-typealias CrosshairAssist = com.opencapture.monitorui.MonitorCrosshairGeometry
 
 object MirrorAssist {
     const val EXPLANATION =
@@ -50,9 +42,9 @@ object AudioAssist {
     val guideMarks = doubleArrayOf(0.0, -6.0, -18.0, -36.0)
 
     /** Fresh meter: left of the movement well, vertically centered on the canvas. */
-    fun defaultCenter(canvas: AssistRect, movement: AssistRect, size: AssistSize): AssistPoint {
-        val fallback = AssistPoint(movement.minX + size.width / 2f, canvas.midY)
-        return MovablePanelMath.clamp(fallback, size, movement)
+    fun defaultCenter(canvas: AssistRect, movement: AssistRect, size: MonitorScopeSize): MonitorScopePoint {
+        val fallback = MonitorScopePoint(movement.minX + size.width / 2f, canvas.midY)
+        return MonitorScopePanelMath.clamp(fallback, size, movement)
     }
 }
 
@@ -168,8 +160,6 @@ object ParadeAssist {
 
     fun chip(mode: ParadeMode): String = mode.label.uppercase()
 }
-
-typealias MovablePanelMath = com.opencapture.monitorui.MonitorScopePanelMath
 
 object FalseColorBands {
     data class Band(
@@ -438,4 +428,4 @@ fun Pair<Double, Double>.asMeterChannels(): Pair<AudioMeterReading, AudioMeterRe
 
 data class AudioMeterReading(val levelDB: Double, val peakDB: Double)
 
-fun AssistSize.scaled(scale: Double): AssistSize = MovablePanelMath.panelSize(this, scale)
+fun MonitorScopeSize.scaled(scale: Double): MonitorScopeSize = MonitorScopePanelMath.panelSize(this, scale)

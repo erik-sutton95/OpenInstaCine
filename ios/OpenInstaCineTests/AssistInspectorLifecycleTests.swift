@@ -1,5 +1,6 @@
 import CoreImage
 import CoreVideo
+import OpenCineApple
 import SwiftUI
 import XCTest
 
@@ -24,7 +25,7 @@ final class AssistInspectorLifecycleTests: XCTestCase {
             CIContext().createCGImage(
                 CIImage(color: .white).cropped(to: CGRect(x: 0, y: 0, width: 1, height: 1)),
                 from: CGRect(x: 0, y: 0, width: 1, height: 1)))
-        let renderer = AssistInspectorImageRenderer(
+        let renderer = MonitorInspectorImageRenderer(
             now: { clock.now },
             operation: { _, _ in
                 let invocation = work.begin()

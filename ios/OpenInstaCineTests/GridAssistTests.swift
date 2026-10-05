@@ -1,3 +1,4 @@
+import MonitorUI
 import OpenPocketViewCore
 import XCTest
 
@@ -40,8 +41,8 @@ final class GridAssistTests: XCTestCase {
         XCTAssertEqual(
             lines,
             [
-                GridSegment(from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 50)),
-                GridSegment(from: CGPoint(x: 100, y: 0), to: CGPoint(x: 0, y: 50)),
+                MonitorGridSegment(from: CGPoint(x: 0, y: 0), to: CGPoint(x: 100, y: 50)),
+                MonitorGridSegment(from: CGPoint(x: 100, y: 0), to: CGPoint(x: 0, y: 50)),
             ]
         )
     }

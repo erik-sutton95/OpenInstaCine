@@ -102,13 +102,11 @@ import com.opencapture.openpocketcine.assists.ZebraUnit
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.openpocketcine.diagnostics.ManualProblemReportDialog
-import com.opencapture.openpocketcine.feed.FeedUpscaler
 import com.opencapture.openpocketcine.feed.LutLookResolver
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.lut.LUTPicker
 import com.opencapture.openpocketcine.settings.PanelCloseButton
 import com.opencapture.openpocketcine.settings.SettingsActionPill
-import com.opencapture.openpocketcine.settings.SettingsColorDot
 import com.opencapture.openpocketcine.settings.SettingsInlineRow
 import com.opencapture.openpocketcine.settings.SettingsPalette
 import com.opencapture.openpocketcine.settings.SettingsRowCard
@@ -119,6 +117,8 @@ import com.opencapture.openpocketcine.settings.settingsClickable
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.delay
+import com.opencapture.monitorui.settings.MonitorSettingsTab
+import com.opencapture.opencine.runtime.MonitorGlesUpscaler
 
 object SettingsHelpCopy {
     const val CURRENT_TRANSPORT =
@@ -173,8 +173,6 @@ object SettingsHelpCopy {
     const val CLEAR_CACHE =
         "Removes downloaded clip files from this phone. The clip list stays so you can cache them again from the camera."
     const val LUT_LOOK = "Looks apply on this phone. The file on the camera is unchanged."
-    const val PROTOCOL =
-        "Camera control speaks DUML over Bluetooth and the camera's Wi-Fi. No DJI SDK is bundled or required."
     const val APP_VERSION = "Current OpenInstaCine build from the native project metadata."
     const val LOCAL_CACHE = "Originals and playback proxies downloaded from the camera."
     const val CACHE_FULL_RESOLUTION =
@@ -477,13 +475,13 @@ fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
         ) { tab ->
             when (tab) {
-                OperatorSettingsTab.LINK -> LinkRows(model, isLive, phaseLabel, bars)
-                OperatorSettingsTab.SHARING -> SharingRows()
-                OperatorSettingsTab.ASSIST -> AssistRows(model, status.monitorColorMode) { showLutPicker = true }
-                OperatorSettingsTab.CONTROLS -> ControlsRows(model)
-                OperatorSettingsTab.DISPLAY -> DisplayRows(model, isLive)
-                OperatorSettingsTab.STORAGE -> StorageRows(model) { confirmClearCache = true }
-                OperatorSettingsTab.SYSTEM -> SystemRows(model) { legalKind = it }
+                MonitorSettingsTab.LINK -> LinkRows(model, isLive, phaseLabel, bars)
+                MonitorSettingsTab.SHARING -> SharingRows()
+                MonitorSettingsTab.ASSIST -> AssistRows(model, status.monitorColorMode) { showLutPicker = true }
+                MonitorSettingsTab.CONTROLS -> ControlsRows(model)
+                MonitorSettingsTab.DISPLAY -> DisplayRows(model, isLive)
+                MonitorSettingsTab.STORAGE -> StorageRows(model) { confirmClearCache = true }
+                MonitorSettingsTab.SYSTEM -> SystemRows(model) { legalKind = it }
             }
         }
         legalKind?.let { kind ->
@@ -544,18 +542,18 @@ private fun LinkRows(model: AppModel, isLive: Boolean, phaseLabel: String, bars:
         network = model.session.joinedSSID?.takeIf { it.isNotEmpty() },
         networkHelp = SettingsHelpCopy.CAMERA_WIFI,
     )
-    if (FeedUpscaler.supported.size > 1) {
+    if (MonitorGlesUpscaler.supported.size > 1) {
         val context = LocalContext.current
         var upscaler by remember { mutableStateOf(OperatorPrefs.feedUpscaler(context)) }
         SettingsRowCard(title = "Processing") {
             SettingsInlineRow("Feed Upscaler", SettingsHelpCopy.FEED_UPSCALER, showTopDivider = false) {
                 SettingsSegmented(
-                    options = FeedUpscaler.supported.map { it.label },
+                    options = MonitorGlesUpscaler.supported.map { it.label },
                     selected = upscaler.label,
                     compact = true,
                     fillWidth = false,
                 ) { label ->
-                    val next = FeedUpscaler.fromStored(label)
+                    val next = MonitorGlesUpscaler.fromStored(label)
                     upscaler = next
                     OperatorPrefs.setFeedUpscaler(context, next)
                 }
@@ -595,8 +593,8 @@ internal fun AssistRows(model: AppModel, statusColorMode: Int, onOpenLut: () -> 
 
     SettingsRowCard(title = "Anamorphic Desqueeze", onReset = {
         assist.updateDesqueezeFactor(1.33)
-        assist.selectDesqueezePreset(com.opencapture.openpocketcine.assists.DesqueezePreset.X133)
-        assist.updateDesqueezeDirection(com.opencapture.openpocketcine.assists.DesqueezeDirection.HORIZONTAL)
+        assist.selectDesqueezePreset(com.opencapture.opencine.media.MonitorDesqueezePreset.X133)
+        assist.updateDesqueezeDirection(com.opencapture.opencine.media.MonitorDesqueezeDirection.HORIZONTAL)
     }) {
         SettingsSwitchInlineRow("Enabled", isOn = assist.desqueeze, showTopDivider = false) {
             assist.toggle(LiveAssistTool.DESQ)

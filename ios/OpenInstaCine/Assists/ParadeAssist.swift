@@ -9,7 +9,7 @@ import UIKit
 /// Sources: `OperatorPreferences.Scopes.ParadeMode`,
 /// `MonitorPanels.AssistQuickSettingsContent.paradeRows`,
 /// `MonitorOverlays.LiveParadeScopePanel` / `ParadeScopePlot` / `ScopeMini` chip,
-/// `ScopeTraceMetal.Mode.parade`.
+/// `MonitorScopeTraceMetal.Mode.parade`.
 ///
 /// Long-press toolbar rows (`AssistQuickSettingsContent.paradeRows`):
 /// * Mode - RGB / YRGB
@@ -24,7 +24,7 @@ import UIKit
 /// normalised centre (OpenZCine `MovablePanelStoredCenter`).
 enum ParadeAssist {
     static let panelID = "parade"
-    static let baseSize = ScopePanelSize.parade
+    static let baseSize = MonitorScopePanelSize.parade
     static let brightnessRange: ClosedRange<Int> = 0...200
 
     typealias Mode = MonitorParadeMode

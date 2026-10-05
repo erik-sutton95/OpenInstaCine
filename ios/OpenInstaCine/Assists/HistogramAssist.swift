@@ -20,14 +20,14 @@ import UIKit
 /// Position persists as a normalised centre (OpenZCine `MovablePanelStoredCenter`).
 enum HistogramAssist {
     static let panelID = "histo"
-    static let baseSize = ScopePanelSize.histogram
+    static let baseSize = MonitorScopePanelSize.histogram
     /// OpenZCine `ScopeMini` title / chip (`"Histo"` → HISTO, `"RGBL"`).
     static let panelTitle = "Histo"
     static let chip = "RGBL"
     static let plotTop: CGFloat = WaveformAxis.titleHeight
     /// OpenZCine `histogramReferenceX(95)` clip band - on WAVE’s IRE axis.
     static let clipZoneIRE = MonitorUI.MonitorHistogramGeometry.clipZoneIRE
-    /// Crush / clip lamp size - must match ``HistogramScopePlot`` blocks.
+    /// Crush / clip lamp size - must match ``MonitorHistogramScopePlot`` blocks.
     static let trafficLampWidth: CGFloat = MonitorUI.MonitorHistogramGeometry.trafficLampWidth
     static let trafficLampHeight: CGFloat = MonitorUI.MonitorHistogramGeometry.trafficLampHeight
     /// Inset from the panel edge so the top lamp clears the rounded corner.

@@ -6,8 +6,10 @@ import android.view.Surface
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.opencine.runtime.GlesPresentationOptions
+import com.opencapture.opencine.runtime.InspectorPreviewPipeline
+import com.opencapture.opencine.runtime.ScopeSampleBus
 
-internal class LiveVulkanSession(context: Context, scopeBus: LiveScopeSampleBus,
+internal class LiveVulkanSession(context: Context, scopeBus: ScopeSampleBus,
     preview: InspectorPreviewPipeline, onDecoderSurface: (Surface) -> Unit,
     onFirstFrame: () -> Unit, onFailed: () -> Unit,
     onFramePresented: (Long) -> Unit = {}, backdrop: MonitorBackdropFeed? = null,

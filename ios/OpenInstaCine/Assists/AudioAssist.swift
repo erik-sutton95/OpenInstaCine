@@ -24,7 +24,7 @@ enum AudioAssist {
         AudioLongPressMenu(compact: compact)
     }
 
-    static func meter(levels: AudioMeterLevels, sensitivity: String?) -> AudioMetersPanelMini {
+    static func meter(levels: MonitorAudioMeterLevels, sensitivity: String?) -> AudioMetersPanelMini {
         AudioMetersPanelMini(levels: levels, sensitivity: sensitivity)
     }
 }
@@ -48,7 +48,7 @@ struct AudioLongPressMenu: View {
 
 /// Draw-only body; movement and options gestures belong to AudioMeterOverlay.
 struct AudioMetersPanelMini: View {
-    let levels: AudioMeterLevels
+    let levels: MonitorAudioMeterLevels
     let sensitivity: String?
     var orientation: AudioAssist.Orientation = .vertical
     var showsDB = false

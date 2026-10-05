@@ -1,12 +1,12 @@
 ---
 title: iOS app
-description: SwiftUI iPhone and iPad shell shared with OpenPocketCine, with a Luna Ultra backend. Physical device for BLE and camera Wi-Fi.
+description: App-owned SwiftUI iPhone and iPad app on OpenCine's shared shell, with a Luna Ultra backend. Physical device for BLE and camera Wi-Fi.
 ---
 
-The iOS app is a universal iPhone and iPad SwiftUI shell in
-`ios/OpenInstaCine/`. It is the OpenPocketCine monitor with a yellow accent and
-a Luna Ultra backend in place of the DJI link, and it is the daily driver.
-Generate the Xcode project with XcodeGen: see [Setup](../../guides/setup/).
+The iOS app is a universal iPhone and iPad SwiftUI app in `ios/OpenInstaCine/`: app-owned
+code on OpenCine's shared shell (`OpenCineAppKit`), no longer synced from OpenPocketCine.
+It is the OpenPocketCine monitor with a yellow accent and a Luna Ultra backend in place of
+the DJI link, and it is the daily driver. Generate the Xcode project with XcodeGen: see [Setup](../../guides/setup/).
 
 Luna-specific code lives in `CameraSession.swift`, `CameraSessionControls.swift`,
 `CameraMedia.swift` (Luna extension), `LunaShellMapping.swift`,

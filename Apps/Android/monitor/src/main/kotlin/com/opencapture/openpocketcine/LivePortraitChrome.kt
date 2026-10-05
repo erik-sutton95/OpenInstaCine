@@ -290,7 +290,7 @@ fun LiveCaptureStrip(
     )
     fun value(sheet: LiveSheet, label: String, readout: String, annotation: String? = null,
         valueIcon: OpcIcon? = null, badgeIcon: OpcIcon? = null) =
-        com.opencapture.openpocketcine.monitor.MonitorValue(
+        com.opencapture.monitorui.MonitorValue(
             sheet.name, label, readout, selected = active == sheet, annotation = annotation,
             valueIcon = valueIcon, badgeIcon = badgeIcon,
         )
@@ -306,7 +306,7 @@ fun LiveCaptureStrip(
         add(value(LiveSheet.EXPO, "EXPOSURE", if (aeLocked) CaptureLists.AE_LOCK
             else if (status.expoMode == CameraCommands.EXPO_MANUAL) "M" else if (auto) "A" else "\u2014"))
         // iOS `LunaMeteringTile`: two values, so a tap toggles in place; hidden until the camera reports it.
-        if (faceMetering != null) add(com.opencapture.openpocketcine.monitor.MonitorValue(
+        if (faceMetering != null) add(com.opencapture.monitorui.MonitorValue(
             METER_TILE, "METER", if (faceMetering) "Face" else "Matrix"))
         add(value(LiveSheet.WB, "WB", captureReadoutLabel(LiveSheet.WB, status, model, CaptureLists.wbChipValue(status, awbLocked)),
             valueIcon = if (CaptureLists.wbIsAuto(status) && !awbLocked) OpcIcon.APERTURE else null))

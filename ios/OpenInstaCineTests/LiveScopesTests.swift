@@ -1,5 +1,6 @@
 import CoreVideo
 import Metal
+import MonitorUI
 import OpenPocketViewCore
 import XCTest
 
@@ -31,7 +32,7 @@ final class LiveScopesTests: XCTestCase {
         XCTAssertGreaterThan(line100, clip.minY)
         XCTAssertLessThan(line100, line0, "y grows downward")
 
-        let scissor = ScopeTraceMetal.scissor(
+        let scissor = MonitorScopeTraceMetal.scissor(
             clip: clip, bounds: bounds, drawable: CGSize(width: 750, height: 459))
         XCTAssertNotNil(scissor)
         XCTAssertGreaterThan(scissor?.width ?? 0, 0)
@@ -63,8 +64,8 @@ final class LiveScopesTests: XCTestCase {
                 + (liveClip10 - ScopeTestBuffers.dlog2Black10) * x / (width - 1)
         }
         let buffer = try XCTUnwrap(made, "x420 must be creatable for the live-format contract")
-        let packed = try XCTUnwrap(PocketScopeSampler.copyBGRA(buffer, maxWidth: width))
-        let bundle = PocketScopeSampler.sample(
+        let packed = try XCTUnwrap(ScopeSampler.copyBGRA(buffer, maxWidth: width))
+        let bundle = ScopeSampler.sample(
             bytes: packed.bytes, width: packed.width, height: packed.height,
             bytesPerRow: packed.bytesPerRow, transfer: .dlog2,
             clipByte: ceiling.clipByte(transfer: .dlog2),
@@ -86,8 +87,8 @@ final class LiveScopesTests: XCTestCase {
             ScopeTestBuffers.makeX420(width: 32, height: 16) { _, _ in
                 ScopeTestBuffers.dlog2Grey10
             })
-        let greyPacked = try XCTUnwrap(PocketScopeSampler.copyBGRA(greyBuffer, maxWidth: 32))
-        let greyBundle = PocketScopeSampler.sample(
+        let greyPacked = try XCTUnwrap(ScopeSampler.copyBGRA(greyBuffer, maxWidth: 32))
+        let greyBundle = ScopeSampler.sample(
             bytes: greyPacked.bytes, width: greyPacked.width, height: greyPacked.height,
             bytesPerRow: greyPacked.bytesPerRow, transfer: .dlog2,
             clipByte: ceiling.clipByte(transfer: .dlog2),
@@ -105,7 +106,7 @@ final class LiveScopesTests: XCTestCase {
             ScopeTestBuffers.dlog2Black10
         }
         let buffer = try XCTUnwrap(made, "x420 paper black must be creatable")
-        let packed = try XCTUnwrap(PocketScopeSampler.copyBGRA(buffer, maxWidth: 32))
+        let packed = try XCTUnwrap(ScopeSampler.copyBGRA(buffer, maxWidth: 32))
         var minC = UInt8.max
         var maxC: UInt8 = 0
         for i in stride(from: 0, to: packed.bytes.count - 2, by: 4) {
@@ -115,7 +116,7 @@ final class LiveScopesTests: XCTestCase {
         XCTAssertEqual(minC, 16, "x420 Y119 / limited paper black expands to RGB 16, not a lift")
         XCTAssertEqual(maxC, 16)
 
-        let bundle = PocketScopeSampler.sample(
+        let bundle = ScopeSampler.sample(
             bytes: packed.bytes, width: packed.width, height: packed.height,
             bytesPerRow: packed.bytesPerRow, transfer: .dlog2,
             clipByte: ceiling.clipByte(transfer: .dlog2),
@@ -132,11 +133,11 @@ final class LiveScopesTests: XCTestCase {
             ScopeDisplayScale.crushLevel, scopePlotRect(CGSize(width: 250, height: 153), top: 26))
         let table = WaveformAxis.levelTable(
             for: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2))
-        var vertices = [ScopeTraceMetal.Vertex](
-            repeating: ScopeTraceMetal.Vertex(position: .zero, size: 0, color: .zero),
-            count: ScopeTraceMetal.maxVertexCount(points: 1, mode: .waveform(.rgb)))
+        var vertices = [MonitorScopeTraceMetal.Vertex](
+            repeating: MonitorScopeTraceMetal.Vertex(position: .zero, size: 0, color: .zero),
+            count: MonitorScopeTraceMetal.maxVertexCount(points: 1, mode: .waveform(.rgb)))
         let written = vertices.withUnsafeMutableBufferPointer { out in
-            ScopeTraceMetal.fillVertices(
+            MonitorScopeTraceMetal.fillVertices(
                 out, from: 0, points: [point], mode: .waveform(.rgb), rect: plot,
                 opacity: 1, levelTable: table)
         }
@@ -153,7 +154,7 @@ final class LiveScopesTests: XCTestCase {
 
     func testLimitedRangeY16RGBDoesNotSitAtFivePercent() {
         let buffer = ScopeTestBuffers.make420v(width: 32, height: 16, leftY: 16, rightY: 16)
-        guard let packed = PocketScopeSampler.copyBGRA(buffer, maxWidth: 32) else {
+        guard let packed = ScopeSampler.copyBGRA(buffer, maxWidth: 32) else {
             XCTFail("420v Y16 must tap")
             return
         }
@@ -178,7 +179,7 @@ final class LiveScopesTests: XCTestCase {
         let made = ScopeTestBuffers.makeIOSurfaceBGRA(width: 64, height: 48, left: 16, right: 16)
         try XCTSkipIf(!made.filled, "IOSurface BGRA is not CPU-writable here")
         let packed = try XCTUnwrap(
-            PocketScopeSampler.copyBGRA(made.buffer, maxWidth: 32),
+            ScopeSampler.copyBGRA(made.buffer, maxWidth: 32),
             "IOSurface D-Log2 black must tap")
         var sum = 0
         var count = 0
@@ -189,7 +190,7 @@ final class LiveScopesTests: XCTestCase {
         let mean = count == 0 ? 0 : Double(sum) / Double(count)
         XCTAssertEqual(mean, 16, accuracy: 1, "tap must keep the curve byte, not γ-lift it")
 
-        let bundle = PocketScopeSampler.sample(
+        let bundle = ScopeSampler.sample(
             bytes: packed.bytes, width: packed.width, height: packed.height,
             bytesPerRow: packed.bytesPerRow, transfer: .dlog2,
             clipByte: ceiling.clipByte(transfer: .dlog2),
@@ -224,7 +225,7 @@ final class LiveScopesTests: XCTestCase {
         for _ in 0..<32 {
             bytes.append(contentsOf: [10, 10, 10, 255])
         }
-        let bundle = PocketScopeSampler.sample(
+        let bundle = ScopeSampler.sample(
             bytes: bytes, width: 32, height: 1, bytesPerRow: 128,
             transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: false,
             look: nil, previous: .empty)
@@ -241,7 +242,7 @@ final class LiveScopesTests: XCTestCase {
             x < 16 ? 80 : ScopeTestBuffers.dlog2Black10
         }
         let buffer = try XCTUnwrap(made, "x420 must be creatable")
-        let packed = try XCTUnwrap(PocketScopeSampler.copyBGRA(buffer, maxWidth: 32))
+        let packed = try XCTUnwrap(ScopeSampler.copyBGRA(buffer, maxWidth: 32))
         var values = Set<UInt8>()
         for i in stride(from: 1, to: packed.bytes.count, by: 4) {
             values.insert(packed.bytes[i])
@@ -265,8 +266,8 @@ final class LiveScopesTests: XCTestCase {
         // A noise-only frame meters clean: below the crush band, no lights.
         let noiseOnly = try XCTUnwrap(
             ScopeTestBuffers.makeX420(width: 32, height: 16) { _, _ in 80 })
-        let noisePacked = try XCTUnwrap(PocketScopeSampler.copyBGRA(noiseOnly, maxWidth: 32))
-        let bundle = PocketScopeSampler.sample(
+        let noisePacked = try XCTUnwrap(ScopeSampler.copyBGRA(noiseOnly, maxWidth: 32))
+        let bundle = ScopeSampler.sample(
             bytes: noisePacked.bytes, width: noisePacked.width, height: noisePacked.height,
             bytesPerRow: noisePacked.bytesPerRow, transfer: .dlog2,
             clipByte: ceiling.clipByte(transfer: .dlog2),

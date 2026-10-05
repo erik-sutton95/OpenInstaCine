@@ -5,17 +5,6 @@ import com.opencapture.opencine.media.MonitorTransfer.Companion as MonitorTransf
 import com.opencapture.openpocketcine.session.CameraCommands
 
 typealias MonitorTransfer = com.opencapture.opencine.media.MonitorTransfer
-typealias ScopeAnchors = com.opencapture.opencine.media.ScopeAnchors
-typealias ScopeDisplayScale = com.opencapture.opencine.media.ScopeDisplayScale
-typealias WaveformIre = com.opencapture.opencine.media.WaveformIre
-typealias ScopeChannelLight = com.opencapture.opencine.media.ScopeChannelLight
-typealias ScopeTrafficLightsReading = com.opencapture.opencine.media.ScopeTrafficLightsReading
-typealias ScopeTrafficLights = com.opencapture.opencine.media.ScopeTrafficLights
-typealias LiveColorScience = com.opencapture.opencine.media.LiveColorScience
-typealias Hlg = com.opencapture.opencine.media.Hlg
-typealias DLog = com.opencapture.opencine.media.DLog
-typealias DLog2 = com.opencapture.opencine.media.DLog2
-typealias ILog = com.opencapture.opencine.media.ILog
 
 /** Raw colour identifiers stay in the source adapter; the renderer receives a neutral curve. */
 val MonitorTransfer.colorMode: Int

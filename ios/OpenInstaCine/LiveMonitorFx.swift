@@ -18,18 +18,9 @@ extension LiveImageEffects {
     }
 }
 
-/// OpenZCine `Peaking.Color` — paint table lives on ``PeakingAssist/Color``.
-typealias PeakingPaint = PeakingAssist.Color
-/// OpenZCine `Peaking.Sensitivity` — detector steps live on ``PeakingAssist/Sensitivity``.
-typealias PeakingSense = PeakingAssist.Sensitivity
-
 /// Raw values are the persisted keys. `stops` is the scale now labeled Video;
 /// its key stays "CineStop" so saved settings keep the scale they chose.
 typealias FalseColorScaleKind = OpenCineMedia.MonitorFalseColorSelection
-
-typealias ZebraPaint = MonitorZebraPaint
-
-typealias LiveMonitorWorkingSpace = OpenCineApple.MonitorWorkingSpace
 
 enum LiveMonitorCompositor {
     static var fusedPeakingAvailable: Bool { OpenCineApple.MonitorImageCompositor.fusedPeakingAvailable }
@@ -62,12 +53,6 @@ extension LiveImageEffects {
 
 }
 
-
-/// Compatibility name; the actual bake and retained texture pool are native-owned.
-typealias FeedFrameBaker = OpenCineApple.MonitorFrameBaker
-
-typealias FeedPresentationMetrics = OpenCineApple.MonitorPresentationMetrics
-typealias FeedPresentOperations = OpenCineApple.MonitorPresentOperations
 
 /// The app supplies operator choices; the stable native host owns rendering and presentation.
 final class CIFeedView: OpenCineApple.MonitorPictureHost {

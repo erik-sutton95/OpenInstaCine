@@ -61,8 +61,8 @@ enum ZebraAssist {
         }
     }
 
-    /// OpenZCine `AssistConfiguration.Zebra.StripeColor` - GPU fill lives on ``ZebraPaint``.
-    typealias StripeColor = ZebraPaint
+    /// OpenZCine `AssistConfiguration.Zebra.StripeColor` - GPU fill lives on ``MonitorZebraPaint``.
+    typealias StripeColor = MonitorZebraPaint
 
     /// OpenZCine `SettingsPalette.highlight`.
     static let highlightPalette: [StripeColor] = [.white, .amber, .red]
@@ -211,7 +211,7 @@ enum ZebraAssist {
     }
 }
 
-extension ZebraPaint {
+extension MonitorZebraPaint {
     /// OpenZCine `SettingsPalette` token (not overlay RGB).
     var swatch: Color {
         switch self {

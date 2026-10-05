@@ -39,8 +39,6 @@ struct MediaShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-typealias AnchoredPinchZoom = MonitorPlaybackZoom
-
 enum MediaTimeFormatting {
     static func label(_ seconds: Double) -> String {
         guard seconds.isFinite, seconds >= 0 else { return "0:00" }
@@ -58,7 +56,7 @@ struct MediaPhotoViewer: View {
 
     @State private var image: UIImage?
     @State private var isLoading = true
-    @State private var zoom = AnchoredPinchZoom()
+    @State private var zoom = MonitorPlaybackZoom()
     @State private var isSharePresented = false
     @State private var isPreparingShare = false
     @State private var isDeleteConfirmPresented = false
@@ -346,7 +344,7 @@ struct MediaPlayerView: View {
     @State private var deliveryPresentation: MediaDeliveryPresentation?
     @State private var playbackAssistToolbarFrame: CGRect = .zero
     @State private var playbackBarFrame: CGRect = .zero
-    @State private var playbackAudioLevels = AudioMeterLevels.silent
+    @State private var playbackAudioLevels = MonitorAudioMeterLevels.silent
     @State private var audioMeterController = PlaybackAudioMeterController()
 
     private var player: AVPlayer { nativePlayback.player }

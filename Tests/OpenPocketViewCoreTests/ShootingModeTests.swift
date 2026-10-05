@@ -16,17 +16,20 @@ import Testing
     }
 
     @Test func photoSetByteIsBodySpecificAndDefaultStaysPocket4() {
-        #expect(Commands.setShootingMode(.photo).payload == [0x17])
         let pocket3 = CameraModel.resolve(modelId: 0x0020, name: "Osmo Pocket 3")
         let nano = CameraModel.resolve(modelId: 0x0019, name: "Osmo Nano")
         let pocket4 = CameraModel.resolve(modelId: 0x0021, name: "Osmo Pocket 4")
         let pro = CameraModel.resolve(modelId: 0x0022, name: "Osmo Pocket 4 Pro")
-        #expect(Commands.setShootingMode(.photo, model: pocket3).payload == [0x05])
-        #expect(Commands.setShootingMode(.photo, model: nano).payload == [0x05])
-        #expect(Commands.setShootingMode(.photo, model: pocket4).payload == [0x17])
-        #expect(Commands.setShootingMode(.photo, model: pro).payload == [0x17])
-        #expect(Commands.setShootingMode(.video, model: pocket3).payload == [0x01])
+        #expect(ShootingMode.photo.wireByte(for: pocket3) == 0x05)
+        #expect(ShootingMode.photo.wireByte(for: nano) == 0x05)
+        #expect(ShootingMode.photo.wireByte(for: pocket4) == 0x17)
+        #expect(ShootingMode.photo.wireByte(for: pro) == 0x17)
+        #expect(ShootingMode.video.wireByte(for: pocket3) == 0x01)
         #expect(ShootingMode.photo.wireByte(for: nil) == 0x17)
+        // The enum rawValue only carries Pocket 4; fromWire maps both photo bytes to `.photo`.
+        #expect(ShootingMode(rawValue: 0x05) == nil)
+        #expect(ShootingMode.fromWire(0x05) == .photo)
+        #expect(ShootingMode(rawValue: 0x17) == .photo)
     }
 
     @Test func slowMoTrailerIsModeAndRateSpecificAndDefaultApiUnchanged() {
@@ -35,18 +38,12 @@ import Testing
         let hd240 = VideoFormat(resolution: .p1080, frameRate: .fps240)
         let fourK30 = VideoFormat(resolution: .p4K, frameRate: .fps30)
         #expect(fourK120.setPayload == [0x10, 0x07, 0x00, 0x00, 0x00])
-        #expect(
-            Commands.setVideoFormat(resolution: .p4K, frameRate: .fps120).payload
-                == [0x10, 0x07, 0x00, 0x00, 0x00])
+        #expect(fourK120.setPayload(shootingMode: nil) == [0x10, 0x07, 0x00, 0x00, 0x00])
         #expect(fourK120.setPayload(shootingMode: .slowMo) == [0x10, 0x07, 0x00, 0x04, 0x00])
         #expect(fourK100.setPayload(shootingMode: .slowMo) == [0x10, 0x0A, 0x00, 0x04, 0x00])
         #expect(hd240.setPayload(shootingMode: .slowMo) == [0x0A, 0x08, 0x00, 0x08, 0x00])
         #expect(fourK30.setPayload(shootingMode: .slowMo) == [0x10, 0x03, 0x00, 0x00, 0x00])
         #expect(fourK120.setPayload(shootingMode: .video) == [0x10, 0x07, 0x00, 0x00, 0x00])
         #expect(fourK120.setPayload(shootingMode: .superNight) == [0x10, 0x07, 0x00, 0x00, 0x00])
-        #expect(
-            Commands.setVideoFormat(
-                resolution: .p4K, frameRate: .fps120, shootingMode: .slowMo
-            ).payload == [0x10, 0x07, 0x00, 0x04, 0x00])
     }
 }

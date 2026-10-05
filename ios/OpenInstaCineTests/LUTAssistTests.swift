@@ -1,5 +1,6 @@
 import CoreImage
 import Metal
+import OpenCineApple
 import OpenPocketViewCore
 import XCTest
 
@@ -467,7 +468,7 @@ final class LUTAssistTests: XCTestCase {
         fx.lutRGBA = cube.rgbaComponents.withUnsafeBytes { Data($0) }
         let graded = LiveMonitorCompositor.apply(to: source, effects: fx)
 
-        let baker = FeedFrameBaker(device: device)
+        let baker = MonitorFrameBaker(device: device)
         let drawable = CGSize(width: 32, height: 32)
         let done = expectation(description: "bake")
         baker.scheduleBake(
@@ -483,7 +484,7 @@ final class LUTAssistTests: XCTestCase {
         defer { baker.releaseBakedTexture(texture) }
         guard
             let wrapped = CIImage(
-                mtlTexture: texture, options: LiveMonitorWorkingSpace.imageOptions)
+                mtlTexture: texture, options: MonitorWorkingSpace.imageOptions)
         else {
             XCTFail("CIImage(mtlTexture:) must wrap the bake")
             return
@@ -552,7 +553,7 @@ final class LUTAssistTests: XCTestCase {
     }
 
     private static func sampleRGB(_ image: CIImage) -> (Float, Float, Float) {
-        let context = CIContext(options: LiveMonitorWorkingSpace.contextOptions)
+        let context = CIContext(options: MonitorWorkingSpace.contextOptions)
         var bytes = [UInt8](repeating: 0, count: 4)
         context.render(
             image, toBitmap: &bytes, rowBytes: 4,

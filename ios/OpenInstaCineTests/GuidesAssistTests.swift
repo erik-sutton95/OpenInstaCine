@@ -1,3 +1,4 @@
+import MonitorPresentation
 import OpenPocketViewCore
 import XCTest
 
@@ -8,24 +9,24 @@ import XCTest
 final class GuidesAssistTests: XCTestCase {
     func testFilmAndSocialListsMatchOpenZCine() {
         XCTAssertEqual(
-            GuideAspect.ratios(for: .film).map(\.rawValue),
+            MonitorGuideAspect.ratios(for: .film).map(\.rawValue),
             ["2.76:1", "2.39:1", "2.35:1", "2.00:1", "1.85:1", "16:9", "1.66:1", "1.43:1", "4:3"]
         )
         XCTAssertEqual(
-            GuideAspect.ratios(for: .social).map(\.rawValue),
+            MonitorGuideAspect.ratios(for: .social).map(\.rawValue),
             ["9:16", "4:5", "1:1", "2:3", "16:9", "1.91:1"]
         )
-        XCTAssertTrue(GuideAspect.ratios(for: .social).contains(.vertical))
-        XCTAssertFalse(GuideAspect.ratios(for: .film).contains(.vertical))
-        XCTAssertTrue(GuideAspect.ratios(for: .film).contains(.cinema))
-        XCTAssertFalse(GuideAspect.ratios(for: .social).contains(.cinema))
+        XCTAssertTrue(MonitorGuideAspect.ratios(for: .social).contains(.vertical))
+        XCTAssertFalse(MonitorGuideAspect.ratios(for: .film).contains(.vertical))
+        XCTAssertTrue(MonitorGuideAspect.ratios(for: .film).contains(.cinema))
+        XCTAssertFalse(MonitorGuideAspect.ratios(for: .social).contains(.cinema))
     }
 
     func testAspectRatioValueParsesLabel() {
-        XCTAssertEqual(GuideAspect.cinema.ratio, 2.39, accuracy: 1e-9)
-        XCTAssertEqual(GuideAspect.vertical.ratio, 0.5625, accuracy: 1e-9)
-        XCTAssertEqual(GuideAspect.square.ratio, 1.0, accuracy: 1e-9)
-        XCTAssertEqual(GuideAspect.hd.ratio, 16.0 / 9.0, accuracy: 1e-9)
+        XCTAssertEqual(MonitorGuideAspect.cinema.ratio, 2.39, accuracy: 1e-9)
+        XCTAssertEqual(MonitorGuideAspect.vertical.ratio, 0.5625, accuracy: 1e-9)
+        XCTAssertEqual(MonitorGuideAspect.square.ratio, 1.0, accuracy: 1e-9)
+        XCTAssertEqual(MonitorGuideAspect.hd.ratio, 16.0 / 9.0, accuracy: 1e-9)
     }
 
     func testToggleAddsAndRemoves() {

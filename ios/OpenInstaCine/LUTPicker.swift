@@ -333,7 +333,7 @@ struct LUTExposureCompensationBar: View {
     @Bindable var assist: LiveAssistState
 
     var body: some View {
-        SettingsInlineRow(
+        MonitorSettingsInlineRow(
             title: LUTAssist.exposureTitle, help: LUTAssist.exposureHelp, showTopDivider: false,
             stacked: true
         ) {

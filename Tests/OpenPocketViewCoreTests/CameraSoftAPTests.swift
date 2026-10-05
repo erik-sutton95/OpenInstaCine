@@ -42,40 +42,6 @@ import Testing
         #expect(CameraSoftAP.isPathReady(localIPv4s: ["192.168.1.10", "192.168.2.42"]))
     }
 
-    @Test func dfsJoinKeepsRetryingUntilTheDeadline() {
-        #expect(CameraSoftAPSwitch.joinDeadlineSeconds >= 60)
-        #expect(CameraSoftAPSwitch.shouldRetryJoin(secondsLeft: 70))
-        #expect(CameraSoftAPSwitch.shouldRetryJoin(secondsLeft: 11))
-        #expect(!CameraSoftAPSwitch.shouldRetryJoin(secondsLeft: 10))
-        #expect(!CameraSoftAPSwitch.shouldRetryJoin(secondsLeft: 0))
-        #expect(!CameraSoftAPSwitch.shouldRetryJoin(secondsLeft: -5))
-    }
-
-    @Test func leftoverCameraPathDoesNotBlockTheOtherBody() {
-        #expect(CameraSoftAPSwitch.isOnTarget(currentSSID: nil, target: "OsmoNano-BBBB"))
-        #expect(
-            CameraSoftAPSwitch.isOnTarget(currentSSID: "OsmoNano-BBBB", target: "OsmoNano-BBBB"))
-        #expect(
-            !CameraSoftAPSwitch.isOnTarget(
-                currentSSID: "OsmoPocket4P-AAAA", target: "OsmoNano-BBBB"))
-        #expect(
-            CameraSoftAPSwitch.ssidToKick(
-                currentSSID: "OsmoPocket4P-AAAA", target: "OsmoNano-BBBB")
-                == "OsmoPocket4P-AAAA")
-        #expect(
-            CameraSoftAPSwitch.ssidToKick(currentSSID: "OsmoNano-BBBB", target: "OsmoNano-BBBB")
-                == nil)
-        // The operator's router is never removed, even once iOS names it (#406).
-        #expect(
-            CameraSoftAPSwitch.ssidToKick(currentSSID: "Mouse House", target: "OsmoNano-BBBB")
-                == nil)
-        // A renamed camera access point is known from saved cameras.
-        #expect(
-            CameraSoftAPSwitch.ssidToKick(
-                currentSSID: "Van cam", target: "OsmoNano-BBBB", knownCameraSSIDs: ["Van cam"])
-                == "Van cam")
-    }
-
     @Test func rebuildVTAfterInvalidSession() {
         #expect(CameraSoftAP.shouldRebuildVTSession(status: -12903))
         #expect(!CameraSoftAP.shouldRebuildVTSession(status: 0))

@@ -3,7 +3,6 @@ import OpenCineFrameIO
 import Security
 
 typealias StoredFrameioToken = OpenCineFrameIO.StoredFrameioToken
-typealias FrameioError = OpenCineFrameIO.FrameioError
 
 /// Reads the Frame.io OAuth configuration from Info.plist. Register an OAuth Single Page App in the
 /// Adobe Developer Console (Frame.io API on the project) and set `FrameioClientID` + `FrameioRedirectURI`.

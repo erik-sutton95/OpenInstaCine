@@ -1,5 +1,6 @@
 import CoreImage
 import CoreVideo
+import OpenCineApple
 import OpenPocketViewCore
 import XCTest
 
@@ -106,7 +107,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
         let release = DispatchSemaphore(value: 0)
         let clock = InspectorPreviewTestClock()
         let reference = try Self.referenceImage()
-        let renderer = AssistInspectorImageRenderer(now: { clock.now }, operation: { _, _ in
+        let renderer = MonitorInspectorImageRenderer(now: { clock.now }, operation: { _, _ in
             started.signal()
             XCTAssertEqual(release.wait(timeout: .now() + 10), .success)
             return reference
@@ -134,7 +135,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
         let live = bus.openSource(.live)
         bus.publish(live, source: try Self.buffer(width: 8, height: 8), transfer: .rec709, bundle: nil)
         let frame = try XCTUnwrap(bus.inspectorFrame)
-        let renderer = AssistInspectorImageRenderer()
+        let renderer = MonitorInspectorImageRenderer()
         let owner = UUID()
         renderer.activate(owner: owner)
         let playback = bus.openSource(.playback)
@@ -159,7 +160,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
     }
 
     func testPreviewImageIsBoundedBeforeRendering() async throws {
-        let renderer = AssistInspectorImageRenderer()
+        let renderer = MonitorInspectorImageRenderer()
         let owner = UUID()
         renderer.activate(owner: owner)
         let buffer = try Self.buffer(width: 640, height: 360)
@@ -218,7 +219,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
             CIContext().createCGImage(
                 CIImage(color: .white).cropped(to: CGRect(x: 0, y: 0, width: 1, height: 1)),
                 from: CGRect(x: 0, y: 0, width: 1, height: 1)))
-        let renderer = AssistInspectorImageRenderer(
+        let renderer = MonitorInspectorImageRenderer(
             now: { clock.now },
             operation: { _, _ in
                 if invocations.increment() == 1 {
@@ -274,7 +275,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
             return LiveImageEffects()
         }
         let reference = try Self.referenceImage()
-        let renderer = AssistInspectorImageRenderer(
+        let renderer = MonitorInspectorImageRenderer(
             now: { clock.now },
             operation: { _, _ in
                 _ = invocations.increment()
@@ -316,7 +317,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
         let sourceStarted = InspectorPreviewTestSignal("Source render started")
         let invocations = InspectorRenderInvocationCounter()
         let reference = try Self.referenceImage()
-        let renderer = AssistInspectorImageRenderer(
+        let renderer = MonitorInspectorImageRenderer(
             now: { clock.now },
             operation: { _, _ in
                 if invocations.increment() == 1 {

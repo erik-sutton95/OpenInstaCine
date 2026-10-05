@@ -1,4 +1,5 @@
 import MonitorUI
+import OpenCineAppKit
 import OpenPocketViewCore
 import XCTest
 
@@ -40,7 +41,7 @@ final class AudioAssistTests: XCTestCase {
         let suite = "AudioAssistTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let store = AudioAssistStore(defaults: defaults)
+        let store = MonitorAudioPreferenceStore(defaults: defaults)
         XCTAssertNil(store.options.landscapeCenter)
         XCTAssertNil(store.options.portraitCenter)
         XCTAssertFalse(store.options.showsDB)
@@ -53,7 +54,7 @@ final class AudioAssistTests: XCTestCase {
         store.options.orientation = .horizontal
         store.options.showsDB = true
         store.persist()
-        let restored = AudioAssistStore(defaults: defaults)
+        let restored = MonitorAudioPreferenceStore(defaults: defaults)
         XCTAssertEqual(restored.options.orientation, .horizontal)
         XCTAssertTrue(restored.options.showsDB)
         let restoredLandscape = try XCTUnwrap(
@@ -71,7 +72,7 @@ final class AudioAssistTests: XCTestCase {
         XCTAssertEqual(AudioAssist.levelFraction(-120), 0)
         XCTAssertEqual(AudioAssist.levelFraction(12), 1)
         XCTAssertEqual(AudioAssist.dbText(.infinity), "−∞")
-        XCTAssertEqual(AudioAssist.dbText(AudioMeterBallistics.floorDB), "−∞")
+        XCTAssertEqual(AudioAssist.dbText(MonitorAudioMeterBallistics.floorDB), "−∞")
         XCTAssertEqual(AudioAssist.dbText(-12), "-12")
     }
 

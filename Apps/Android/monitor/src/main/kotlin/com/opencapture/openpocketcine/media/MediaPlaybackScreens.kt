@@ -95,6 +95,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
+import com.opencapture.opencine.media.MonitorAudioMeterChannel
+import com.opencapture.opencine.media.MonitorAudioMeterLevels
+import com.opencapture.monitorui.MonitorPlaybackGestureConfig
+import com.opencapture.monitorui.MonitorPlaybackZoom
 
 @Composable
 fun MediaPhotoViewer(
@@ -109,7 +113,7 @@ fun MediaPhotoViewer(
     var showDesqueezeOptions by remember { mutableStateOf(false) }
     var bitmap by remember(file.id) { mutableStateOf<Bitmap?>(null) }
     var loading by remember { mutableStateOf(true) }
-    var zoom by remember(file.id) { mutableStateOf(AnchoredPinchZoom()) }
+    var zoom by remember(file.id) { mutableStateOf(MonitorPlaybackZoom()) }
     var confirmDelete by remember { mutableStateOf(false) }
     val photoDensity = LocalDensity.current
     val photoLayoutDir = LocalLayoutDirection.current
@@ -135,7 +139,7 @@ fun MediaPhotoViewer(
 
     LaunchedEffect(file.id) {
         loading = true
-        zoom = AnchoredPinchZoom()
+        zoom = MonitorPlaybackZoom()
         bitmap =
             withContext(Dispatchers.IO) {
                 val cached = controller.localFile(file) ?: controller.thumbnailFile(file)
@@ -174,7 +178,7 @@ fun MediaPhotoViewer(
                     .pointerInput(file.id, fitted.width, fitted.height) {
                         detectPlaybackVideoGestures(
                             isReady = { true }, isZoomed = { zoom.isZoomed },
-                            config = PlaybackGestureConfig(enableTap = false, enableScrub = false, enableSwipe = false),
+                            config = MonitorPlaybackGestureConfig(enableTap = false, enableScrub = false, enableSwipe = false),
                             onTap = {}, onChromeSwipe = {}, onScrubStart = {}, onScrubDelta = {}, onScrubEnd = {},
                             onPinch = { magnification, centroid ->
                                 val anchor = unitPoint(centroid, fitted.width, fitted.height)
@@ -310,8 +314,8 @@ fun MediaPlayerScreen(
     val haptics = LocalOperatorHaptics.current
     var active by remember { mutableStateOf(startingAt) }
     val playlist = if (files.any { it.id == active.id }) files else listOf(active)
-    var meterLeft by remember { mutableStateOf(AudioMeterChannel.Silent) }
-    var meterRight by remember { mutableStateOf(AudioMeterChannel.Silent) }
+    var meterLeft by remember { mutableStateOf(MonitorAudioMeterChannel.Silent) }
+    var meterRight by remember { mutableStateOf(MonitorAudioMeterChannel.Silent) }
     val libraryState by controller.library.state.collectAsState()
     val activeRecord = controller.record(active)
     val favorite = activeRecord?.favorite ?: active.isStarred
@@ -405,8 +409,8 @@ fun MediaPlayerScreen(
     LaunchedEffect(audioMetersOn, conformTarget != null) {
         meterSampler.reset()
         if (!audioMetersOn) {
-            meterLeft = AudioMeterChannel.Silent
-            meterRight = AudioMeterChannel.Silent
+            meterLeft = MonitorAudioMeterChannel.Silent
+            meterRight = MonitorAudioMeterChannel.Silent
             meterBox.readAndReset()
             return@LaunchedEffect
         }
@@ -414,15 +418,15 @@ fun MediaPlayerScreen(
         val conforming = conformTarget != null
         if (conforming) {
             meterBox.readAndReset()
-            meterLeft = AudioMeterChannel.Silent
-            meterRight = AudioMeterChannel.Silent
+            meterLeft = MonitorAudioMeterChannel.Silent
+            meterRight = MonitorAudioMeterChannel.Silent
         }
         while (true) {
             delay(42)
             val now = System.nanoTime()
             val dt = (now - last) / 1_000_000_000.0
             last = now
-            val levels = meterSampler.step(dt, outputMuted = conformTarget != null) ?: AudioMeterLevels.Silent
+            val levels = meterSampler.step(dt, outputMuted = conformTarget != null) ?: MonitorAudioMeterLevels.Silent
             meterLeft = levels.left
             meterRight = levels.right
         }
@@ -521,8 +525,8 @@ fun MediaPlayerScreen(
 private fun PlaybackAudioMetersOverlay(
     video: PlaybackVideoLayout.Rect,
     canvas: PlaybackVideoLayout.Rect,
-    left: AudioMeterChannel,
-    right: AudioMeterChannel,
+    left: MonitorAudioMeterChannel,
+    right: MonitorAudioMeterChannel,
     state: LiveAssistState,
 ) {
     val density = LocalDensity.current.density

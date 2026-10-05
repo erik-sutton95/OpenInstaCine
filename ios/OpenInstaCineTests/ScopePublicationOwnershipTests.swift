@@ -1,4 +1,5 @@
 import CoreVideo
+import OpenCineApple
 import OpenCineMedia
 import XCTest
 @testable import OpenInstaCine

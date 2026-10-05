@@ -29,7 +29,7 @@ enum MediaLUT {
     }
 
     static func export(
-        sourceURL: URL, outputFilename: String, format: MediaExportFormat, cube: CubeLUT?,
+        sourceURL: URL, outputFilename: String, format: MonitorMediaExporter.Format, cube: CubeLUT?,
         logTransform: LogColorTransform? = nil, metadata: MediaClipDeliveryMetadata?,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws -> ExportResult {
@@ -51,7 +51,7 @@ enum MediaLUT {
             metadata: metadata, progress: progress)
     }
 
-    private static func makeExportURL(filename: String, format: MediaExportFormat) throws -> URL {
+    private static func makeExportURL(filename: String, format: MonitorMediaExporter.Format) throws -> URL {
         let trimmed = filename.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ExportError.invalidFilename }
         let exports = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

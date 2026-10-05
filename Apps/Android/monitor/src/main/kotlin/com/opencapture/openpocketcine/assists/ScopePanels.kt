@@ -19,15 +19,17 @@ import com.opencapture.opencine.media.MonitorNDFilterRecommendation
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeAssistBundle
-import com.opencapture.openpocketcine.feed.WaveformIre
+import com.opencapture.monitorui.MonitorScopePoint
+import com.opencapture.monitorui.MonitorScopeSize
+import com.opencapture.opencine.media.WaveformIre
 
 @Composable
 internal fun MovableAssistPanel(
-    tool: LiveAssistTool, base: AssistSize, scale: Double, stored: StoredCenter?,
-    canvas: AssistRect, placementBounds: AssistRect, defaultCenter: AssistPoint, enabled: Boolean,
+    tool: LiveAssistTool, base: MonitorScopeSize, scale: Double, stored: StoredCenter?,
+    canvas: AssistRect, placementBounds: AssistRect, defaultCenter: MonitorScopePoint, enabled: Boolean,
     onStore: (StoredCenter) -> Unit, onScale: ((Double) -> Unit)? = null,
     onOpenOptions: ((ChromeRect) -> Unit)? = null, onActivate: () -> Unit = {},
-    fillPlate: Boolean = true, chip: Boolean = false, content: @Composable (AssistSize) -> Unit,
+    fillPlate: Boolean = true, chip: Boolean = false, content: @Composable (MonitorScopeSize) -> Unit,
 ) {
     val haptics = LocalOperatorHaptics.current
     com.opencapture.monitorui.MonitorMovableScopePanel(
