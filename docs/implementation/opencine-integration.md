@@ -259,8 +259,8 @@ Nothing below has run on hardware.
 17. Cameras-page follow-up (iPhone and Android, physical check untested): press and hold
     the Luna's Camera Wi-Fi chip, rename only that setup, relaunch, and reconnect without
     another approval or password prompt. Clear the setup name and confirm the default label
-    returns. Open Privacy and Terms from both an empty first-pair screen and the saved-camera
-    screen; close each and confirm the same page remains. An older build has no setup-name
+    returns. The empty first-pair and saved-camera screens show no Privacy or Terms links (as
+    on main); Settings opens both. An older build has no setup-name
     field: installing it, editing the camera name, and upgrading again must keep the new
     setup name, saved Wi-Fi, favorites and approval identity.
 

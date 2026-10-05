@@ -16,7 +16,6 @@ struct LinkExperience: View {
     @State private var orientation = InterfaceOrientationObserver()
     @State private var diagnostics: DiagnosticSharePayload?
     @State private var showProblemReport = false
-    @State private var legalKind: LegalDocumentView.Kind?
 
     var body: some View {
         AppShell(
@@ -31,9 +30,7 @@ struct LinkExperience: View {
                 // No Multiview entry: this app qualifies no multicam budget (one camera).
                 watchFeed: {
                     if model.shell.route == .pair || model.cameras.attempts.isEmpty { model.openWatcherBrowse() }
-                },
-                privacy: { legalKind = .privacy },
-                terms: { legalKind = .terms }),
+                }),
             safeArea: safeArea
         ) { _ in
             LiveViewScreen()
@@ -45,9 +42,6 @@ struct LinkExperience: View {
         .onDisappear { orientation.stop() }
         .sheet(item: $diagnostics) { payload in DiagnosticActivityShareView(items: [payload.url]) }
         .sheet(isPresented: $showProblemReport) { ProblemReportView().environment(model) }
-        .sheet(item: $legalKind) { kind in
-            LegalDocumentView(kind: kind, onClose: { legalKind = nil }).environment(model)
-        }
         .onChange(of: model.session.phase) { _, phase in
             if phase == .openingDatalink { LocalVPNProbe.noteIfActive() }
         }
