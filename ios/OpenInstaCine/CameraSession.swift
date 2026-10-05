@@ -245,6 +245,8 @@ final class CameraSession {
     var gimbalLimitPanSign: Double = 0
     var gimbalLimitTiltSign: Double = 0
     @ObservationIgnored var gimbalStick = LunaStickStream()
+    /// Gimbal requests (MOVE stream, release, SET_ANGLE, GET_ANGLE) on the session's control path.
+    @ObservationIgnored lazy var motion = LunaMotionService(session: { [weak self] in self?.lunaSession })
 
     // The shared actual library/cache owner. Source/playback compatibility stays in CameraMedia.
     var mediaLibrary: MonitorMediaLibraryModel<LunaMediaLibraryPayload>!
@@ -543,6 +545,7 @@ final class CameraSession {
         pendingZoomWrite = nil
         zoomWriteTask?.cancel()
         gimbalStick.reset()
+        motion.endHold()
         gimbalAnglePoll?.cancel()
         gimbalAnglePoll = nil
         gimbalAngle = nil

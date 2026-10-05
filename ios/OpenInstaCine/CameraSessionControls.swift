@@ -5,23 +5,13 @@ import Insta360Protocol
 import OpenCineCore
 import OpenPocketViewCore
 
-/// Held gimbal stick streamed as Luna `GIMBAL_CONTROL` MOVE (cmd 226) at a fixed rate.
+/// The operator's held gimbal stick; `LunaMotionService` streams its MOVEs.
 struct LunaStickStream {
-    /// Official app range: sint32 ±99 on each VirtualRC axis.
-    static let fullScale = 99.0
-    static let interval: Duration = .milliseconds(50)
-    var pan: Int32 = 0
-    var tilt: Int32 = 0
     var lastPan = 0.0
     var lastTilt = 0.0
     var isHeld = false
-    var task: Task<Void, Never>?
 
     mutating func reset() {
-        task?.cancel()
-        task = nil
-        pan = 0
-        tilt = 0
         lastPan = 0
         lastTilt = 0
         isHeld = false
@@ -497,42 +487,23 @@ extension CameraSession {
         let tiltValue = magnitude < dead ? 0 : y
         if assistMirror { panValue = -panValue }
         // Ease-in curve: fine control near centre, full speed at the rim.
-        func shaped(_ v: Double) -> Int32 {
-            let curved = linear ? v : v * abs(v)
-            return Int32((curved * scale * LunaStickStream.fullScale).rounded())
-        }
-        gimbalStick.pan = shaped(panValue)
-        gimbalStick.tilt = shaped(tiltValue)
+        func shaped(_ v: Double) -> Double { (linear ? v : v * abs(v)) * scale }
         gimbalStick.lastPan = panValue
         gimbalStick.lastTilt = tiltValue
         if !gimbalStick.isHeld {
             gimbalStick.isHeld = true
             ControlLiveLog.line("control: gimbal stick stream")
-            startStickStream()
         }
-    }
-
-    private func startStickStream() {
-        gimbalStick.task?.cancel()
-        gimbalStick.task = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                guard let self, self.gimbalStick.isHeld else { return }
-                let pan = self.gimbalStick.pan
-                let tilt = self.gimbalStick.tilt
-                if let request = try? LunaProtocol.gimbalMove(upDown: tilt, leftRight: pan) {
-                    _ = try? await self.sendLuna(request, timeout: .seconds(2))
-                }
-                try? await Task.sleep(for: LunaStickStream.interval)
-            }
-        }
+        motion.hold(pan: shaped(panValue), tilt: shaped(tiltValue))
     }
 
     func endGimbalStick(cancelMove: Bool = false) {
         guard gimbalStick.isHeld else { return }
         gimbalStick.reset()
+        motion.endHold()
         ControlLiveLog.line("control: gimbal stick rest")
         guard hasControlLink else { return }
-        Task { [weak self] in _ = try? await self?.sendLuna(LunaProtocol.gimbalReleaseRequest()) }
+        Task { [weak self] in await self?.motion.release() }
     }
 
     func performGimbalDoubleTap() {
@@ -616,21 +587,14 @@ extension CameraSession {
 
     @discardableResult
     func readGimbalAngle(timeout: Duration = .seconds(1)) async -> LunaGimbalAngle? {
-        guard let request = try? LunaProtocol.gimbalGetAngleRequest(),
-            let reply = try? await sendLuna(request, timeout: timeout),
-            let angle = try? LunaGimbalAngle(response: reply)
-        else { return nil }
+        guard let angle = await motion.readAngle(timeout: timeout) else { return nil }
         gimbalAngle = (angle, ProcessInfo.processInfo.systemUptime)
         return angle
     }
 
     /// Fire and forget: the camera re-targets on every SET_ANGLE (latest wins).
     func sendGimbalAngle(_ target: GimbalWaypoint) {
-        let yaw = remainder(target.yawDeg, 360)  // unwrapped shell yaw back to ±180
-        let pitch = min(max(target.pitchDeg, Self.gimbalPitchRange.lowerBound), Self.gimbalPitchRange.upperBound)
-        guard let request = try? LunaProtocol.gimbalSetAngle(pitch: Float(pitch), yaw: Float(yaw))
-        else { return }
-        Task { [weak self] in _ = try? await self?.sendLuna(request, timeout: .seconds(2)) }
+        Task { [weak self] in await self?.motion.aim(at: target) }
     }
 
     #if DEBUG
@@ -740,9 +704,7 @@ extension CameraSession {
                     if headTrackLog.count > 1500 { headTrackLog.removeFirst(300) }
                 #endif
             }
-            if let request = try? LunaProtocol.gimbalMove(upDown: tilt, leftRight: pan) {
-                Task { [weak self] in _ = try? await self?.sendLuna(request, timeout: .seconds(2)) }
-            }
+            Task { [weak self, pan, tilt] in await self?.motion.steer(pan: pan, tilt: tilt) }
             let k = 1 - exp(-(now - last) / Self.stickLagSeconds)
             last = now
             rate.yaw += (Double(pan) * Self.stickPanDegPerSec - rate.yaw) * k
@@ -756,7 +718,7 @@ extension CameraSession {
         Task { @MainActor [weak self] in
             for attempt in 0..<2 {
                 guard let self, attempt == 0 || (self.gimbalAim == nil && !self.gimbalStick.isHeld) else { return }
-                _ = try? await self.sendLuna(LunaProtocol.gimbalReleaseRequest())
+                await self.motion.release()
                 try? await Task.sleep(for: .milliseconds(150))
             }
         }

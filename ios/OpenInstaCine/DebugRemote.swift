@@ -227,13 +227,11 @@
                 for step in steps where step.count == 3 {
                     let end = ProcessInfo.processInfo.systemUptime + step[2]
                     while ProcessInfo.processInfo.systemUptime < end {
-                        if let request = try? LunaProtocol.gimbalMove(upDown: Int32(step[1]), leftRight: Int32(step[0])) {
-                            Task { _ = try? await s.sendLuna(request, timeout: .seconds(2)) }
-                        }
+                        Task { await s.motion.steer(pan: Int32(step[0]), tilt: Int32(step[1])) }
                         try? await Task.sleep(for: .seconds(period))
                     }
                 }
-                _ = try? await s.sendLuna(LunaProtocol.gimbalReleaseRequest())
+                await s.motion.release()
             case "recenter": s.recenterGimbal()
             case "aim":
                 guard let live = s.freshGimbalWaypoint else { return ["ok": false, "error": "no pose"] }
