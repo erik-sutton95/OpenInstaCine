@@ -228,13 +228,12 @@
                     let end = ProcessInfo.processInfo.systemUptime + step[2]
                     while ProcessInfo.processInfo.systemUptime < end {
                         if let request = try? LunaProtocol.gimbalMove(upDown: Int32(step[1]), leftRight: Int32(step[0])) {
-                            let backend = s.backend
-                            Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
+                            Task { _ = try? await s.sendLuna(request, timeout: .seconds(2)) }
                         }
                         try? await Task.sleep(for: .seconds(period))
                     }
                 }
-                _ = try? await s.backend.send(LunaProtocol.gimbalReleaseRequest())
+                _ = try? await s.sendLuna(LunaProtocol.gimbalReleaseRequest())
             case "recenter": s.recenterGimbal()
             case "aim":
                 guard let live = s.freshGimbalWaypoint else { return ["ok": false, "error": "no pose"] }
@@ -450,6 +449,7 @@
                 guard let code = num("code") else { return ["ok": false] }
                 let body = Data(hex: str("hex") ?? "")
                 do {
+                    // Lab probe: the one request that may bypass the session (DEBUG only).
                     let reply = try await s.backend.send(LunaRequest(code: UInt16(code), body: body))
                     return ["ok": true, "reply": reply.map { String(format: "%02x", $0) }.joined()]
                 } catch {

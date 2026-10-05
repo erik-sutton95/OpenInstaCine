@@ -64,6 +64,13 @@ extension CameraSession {
         return true
     }
 
+    /// Every camera request goes through the connection's Luna session, which sends only while it
+    /// is ready and owned (the Insta360 rule: commands only through `LunaCameraSession`).
+    func sendLuna(_ request: LunaRequest, timeout: Duration? = nil) async throws -> Data {
+        guard let session = backend.session else { throw CancellationError() }
+        return try await session.control(request, timeout: timeout)
+    }
+
     /// Sends one Luna request off the main flow. Failure reverts through `onFail`.
     func sendControl(
         _ name: String, _ build: () throws -> LunaRequest, refresh: Bool = true,
@@ -78,7 +85,7 @@ extension CameraSession {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let reply = try await self.backend.send(request)
+                let reply = try await self.sendLuna(request)
                 ControlLiveLog.line("control: \(name) ok")
                 onSuccess?(reply)
                 if refresh { self.scheduleSettingsRefresh() }
@@ -510,7 +517,7 @@ extension CameraSession {
                 let pan = self.gimbalStick.pan
                 let tilt = self.gimbalStick.tilt
                 if let request = try? LunaProtocol.gimbalMove(upDown: tilt, leftRight: pan) {
-                    _ = try? await self.backend.send(request, timeout: .seconds(2))
+                    _ = try? await self.sendLuna(request, timeout: .seconds(2))
                 }
                 try? await Task.sleep(for: LunaStickStream.interval)
             }
@@ -522,7 +529,7 @@ extension CameraSession {
         gimbalStick.reset()
         ControlLiveLog.line("control: gimbal stick rest")
         guard backend.isControlReady else { return }
-        Task { _ = try? await backend.send(LunaProtocol.gimbalReleaseRequest()) }
+        Task { [weak self] in _ = try? await self?.sendLuna(LunaProtocol.gimbalReleaseRequest()) }
     }
 
     func performGimbalDoubleTap() {
@@ -607,7 +614,7 @@ extension CameraSession {
     @discardableResult
     func readGimbalAngle(timeout: Duration = .seconds(1)) async -> LunaGimbalAngle? {
         guard let request = try? LunaProtocol.gimbalGetAngleRequest(),
-            let reply = try? await backend.send(request, timeout: timeout),
+            let reply = try? await sendLuna(request, timeout: timeout),
             let angle = try? LunaGimbalAngle(response: reply)
         else { return nil }
         gimbalAngle = (angle, ProcessInfo.processInfo.systemUptime)
@@ -620,8 +627,7 @@ extension CameraSession {
         let pitch = min(max(target.pitchDeg, Self.gimbalPitchRange.lowerBound), Self.gimbalPitchRange.upperBound)
         guard let request = try? LunaProtocol.gimbalSetAngle(pitch: Float(pitch), yaw: Float(yaw))
         else { return }
-        let backend = self.backend
-        Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
+        Task { [weak self] in _ = try? await self?.sendLuna(request, timeout: .seconds(2)) }
     }
 
     #if DEBUG
@@ -732,8 +738,7 @@ extension CameraSession {
                 #endif
             }
             if let request = try? LunaProtocol.gimbalMove(upDown: tilt, leftRight: pan) {
-                let backend = self.backend
-                Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
+                Task { [weak self] in _ = try? await self?.sendLuna(request, timeout: .seconds(2)) }
             }
             let k = 1 - exp(-(now - last) / Self.stickLagSeconds)
             last = now
@@ -748,7 +753,7 @@ extension CameraSession {
         Task { @MainActor [weak self] in
             for attempt in 0..<2 {
                 guard let self, attempt == 0 || (self.gimbalAim == nil && !self.gimbalStick.isHeld) else { return }
-                _ = try? await self.backend.send(LunaProtocol.gimbalReleaseRequest())
+                _ = try? await self.sendLuna(LunaProtocol.gimbalReleaseRequest())
                 try? await Task.sleep(for: .milliseconds(150))
             }
         }
@@ -1351,14 +1356,14 @@ extension CameraSession {
             guard let request = try? LunaProtocol.setClockRequest(
                 unixSeconds: UInt64(now.timeIntervalSince1970),
                 timeZoneSeconds: Int32(zone.secondsFromGMT(for: now)), zone: zone.identifier),
-                (try? await self.backend.send(request, timeout: .seconds(2))) != nil
+                (try? await self.sendLuna(request, timeout: .seconds(2))) != nil
             else { return }
             // Stamped at send: a GET round trip on the camera AP is about 4 ms (the clock
             // SET takes ~220 ms, but that is the camera's own processing).
             for count: UInt32 in 0..<2 {
                 let milliseconds = UInt64((Date().timeIntervalSince1970 * 1000).rounded())
                 if let request = try? LunaProtocol.syncTimeAccurateRequest(unixMilliseconds: milliseconds, count: count) {
-                    _ = try? await self.backend.send(request, timeout: .seconds(2))
+                    _ = try? await self.sendLuna(request, timeout: .seconds(2))
                 }
             }
             ControlLiveLog.line("luna: camera clock synced")

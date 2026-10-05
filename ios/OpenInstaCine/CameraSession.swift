@@ -644,7 +644,7 @@ final class CameraSession {
         guard Date().timeIntervalSince(lastIFrameRequestAt) > 1 else { return }
         lastIFrameRequestAt = Date()
         ControlLiveLog.line("feed: I-frame request (\(reason))")
-        Task { _ = try? await backend.send(LunaRequest(code: 105, body: Data())) }
+        Task { [weak self] in _ = try? await self?.sendLuna(LunaRequest(code: 105, body: Data())) }
     }
 
     // MARK: - Status mapping (Luna → shared CameraStatus)
