@@ -105,6 +105,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
+import com.opencapture.monitorui.LiveChromeMetrics
 
 val ChromeShape = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
 
@@ -157,8 +158,6 @@ fun Modifier.chromeClickable(enabled: Boolean = true, onLongClick: (() -> Unit)?
         enabled, onLongClick, { haptics.selection() }, { haptics.longPress() }, onClick)
 }
 
-typealias LiveChromeMetrics = com.opencapture.monitorui.LiveChromeMetrics
-typealias LivePopupPlacement = com.opencapture.monitorui.LivePopupPlacement
 typealias LiveMonitorLayout = com.opencapture.monitorui.LiveMonitorLayout
 
 typealias ChromeRect = com.opencapture.monitorui.MonitorRect

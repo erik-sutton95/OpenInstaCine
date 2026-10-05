@@ -32,11 +32,3 @@ import Testing
     }
 
 }
-
-@Suite struct CommandsTests {
-
-}
-
-@Suite struct CameraStatusTests {
-
-}

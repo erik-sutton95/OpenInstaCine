@@ -1,6 +1,7 @@
 import CoreImage
 import CoreVideo
 import Metal
+import OpenCineApple
 import OpenPocketViewCore
 import XCTest
 
@@ -13,10 +14,10 @@ final class LUTPresentPerfTests: XCTestCase {
     func testWorkingRasterCapsFourKBeforeTheCube() {
         XCTAssertEqual(FeedPresentPolicy.maxWorkingWidth, 1440)
         XCTAssertEqual(
-            FeedWorkingRaster.targetSize(width: 1280, height: 720).width, 1280,
+            MonitorWorkingRaster.targetSize(width: 1280, height: 720).width, 1280,
             "720p proxy must not be rescaled")
-        XCTAssertEqual(FeedWorkingRaster.targetSize(width: 3840, height: 2160).width, 1440)
-        XCTAssertEqual(FeedWorkingRaster.targetSize(width: 1920, height: 1080).width, 1440)
+        XCTAssertEqual(MonitorWorkingRaster.targetSize(width: 3840, height: 2160).width, 1440)
+        XCTAssertEqual(MonitorWorkingRaster.targetSize(width: 1920, height: 1080).width, 1440)
     }
 
     func testLUTBakeOf720pProxyIsCheapRelativeToFourK() throws {
@@ -28,7 +29,7 @@ final class LUTPresentPerfTests: XCTestCase {
         fx.lutDimension = cube.size
         fx.lutRGBA = cube.rgbaComponents.withUnsafeBytes { Data($0) }
 
-        let baker = FeedFrameBaker(device: device)
+        let baker = MonitorFrameBaker(device: device)
         let drawable = CGSize(width: 1920, height: 1080)
         // First GPU compiles the cube pipeline — discard that hitch.
         _ = measureBake(
@@ -64,11 +65,11 @@ final class LUTPresentPerfTests: XCTestCase {
     }
 
     private func measureBake(
-        baker: FeedFrameBaker, drawable: CGSize, width: Int, height: Int,
+        baker: MonitorFrameBaker, drawable: CGSize, width: Int, height: Int,
         effects: LiveImageEffects, frames: Int, skip: Int
     ) -> Double {
         let buffer = ScopeTestBuffers.makeFlatBuffer(code: 78, width: width, height: height)
-        let source = CIImage(cvPixelBuffer: buffer, options: LiveMonitorWorkingSpace.imageOptions)
+        let source = CIImage(cvPixelBuffer: buffer, options: MonitorWorkingSpace.imageOptions)
         let display = CIImage(cvPixelBuffer: buffer)
         var total: Double = 0
         var counted = 0

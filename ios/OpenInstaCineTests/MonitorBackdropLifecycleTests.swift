@@ -2,6 +2,7 @@ import CoreImage
 import CoreVideo
 import MonitorPresentation
 import MonitorUI
+import OpenCineApple
 import OpenPocketViewCore
 import XCTest
 
@@ -228,7 +229,7 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
     }
 
     func testLeasedWorkingRasterPreservesHeldPixelsAndBackdropIdentity() async throws {
-        let raster = FeedWorkingRaster()
+        let raster = MonitorWorkingRaster()
         let large = ScopeTestBuffers.makeBGRA(width: 1600, height: 64) { _, _ in 21 }
         let held = raster.prepared(large)
         XCTAssertEqual(CVPixelBufferGetWidth(held), 1440)

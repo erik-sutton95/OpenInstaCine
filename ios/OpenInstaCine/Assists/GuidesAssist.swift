@@ -22,8 +22,8 @@ enum GuidesAssist {
 
     @MainActor
     @ViewBuilder
-    static func overlay(feed: CGRect, assist: LiveAssistState, fallback: GuideAspect) -> some View {
-        AspectGuideFrameView(
+    static func overlay(feed: CGRect, assist: LiveAssistState, fallback: MonitorGuideAspect) -> some View {
+        MonitorAspectGuideFrames(
             selectedRatios: assist.selectedGuides.isEmpty ? [fallback] : assist.selectedGuides,
             maskEnabled: assist.guideMask,
             feed: feed
@@ -31,7 +31,7 @@ enum GuidesAssist {
     }
 
     /// OpenZCine `AssistConfiguration.Guides.summaryLabel`.
-    static func summaryLabel(for selected: Set<GuideAspect>) -> String {
+    static func summaryLabel(for selected: Set<MonitorGuideAspect>) -> String {
         if selected.count == 1 { return selected.first?.rawValue ?? "—" }
         return selected.isEmpty ? "—" : "\(selected.count) ratios"
     }
@@ -57,6 +57,3 @@ private struct GuidesLongPressMenu: View {
         }, onToggle: { assist.toggleGuide($0) })
     }
 }
-
-/// Native guide rendering and the union mask belong to the common monitor UI.
-typealias AspectGuideFrameView = MonitorAspectGuideFrames

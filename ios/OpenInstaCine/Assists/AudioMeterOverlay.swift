@@ -1,15 +1,16 @@
 import MonitorUI
+import OpenCineAppKit
 import OpenPocketViewCore
 import SwiftUI
 
 private struct AudioInspectorLevelsKey: EnvironmentKey {
-    static let defaultValue: AudioMeterLevels? = nil
+    static let defaultValue: MonitorAudioMeterLevels? = nil
 }
 
 extension EnvironmentValues {
     /// Playback injects levels from its existing meter owner. A nil value never
     /// substitutes camera audio while the inspector is grading a clip.
-    var audioInspectorLevels: AudioMeterLevels? {
+    var audioInspectorLevels: MonitorAudioMeterLevels? {
         get { self[AudioInspectorLevelsKey.self] }
         set { self[AudioInspectorLevelsKey.self] = newValue }
     }
@@ -83,7 +84,7 @@ struct AudioMeterOverlay: View {
         !locked && MonitorScopePanelPlacement.isUsable(movement)
     }
 
-    let levels: AudioMeterLevels
+    let levels: MonitorAudioMeterLevels
     let sensitivity: String?
     let bounds: CGRect
     var chromeClearance: EdgeInsets = EdgeInsets()
@@ -93,7 +94,7 @@ struct AudioMeterOverlay: View {
     @Environment(\.scenePhase) private var scenePhase
     @GestureState private var pointerActive = false
     @State private var drag = AudioMeterDragLifecycle()
-    private var store: AudioAssistStore { AudioAssist.store }
+    private var store: MonitorAudioPreferenceStore { AudioAssist.store }
 
     var body: some View {
         let options = store.options

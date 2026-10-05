@@ -42,7 +42,7 @@ final class PlaybackAudioMeterController {
     })
     func attach(to item: AVPlayerItem) { runtime.attach(to: item) }
     func detach(from item: AVPlayerItem?) { runtime.detach(from: item) }
-    func startPolling(onLevels: @escaping @MainActor (AudioMeterLevels) -> Void) {
+    func startPolling(onLevels: @escaping @MainActor (MonitorAudioMeterLevels) -> Void) {
         runtime.startPolling { onLevels($0 ?? .silent) }
     }
     func stopPolling() { runtime.stopPolling() }

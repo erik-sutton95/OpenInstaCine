@@ -39,18 +39,21 @@ import com.opencapture.openpocketcine.ChromeRect
 import com.opencapture.openpocketcine.LiveDesign
 
 import com.opencapture.openpocketcine.feed.GpuOverlayBus
-import com.opencapture.openpocketcine.feed.LiveScopeSampleBus
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.session.CameraStatus
 import kotlin.math.roundToInt
+import com.opencapture.monitorui.MonitorScopePoint
+import com.opencapture.monitorui.MonitorScopeSize
+import com.opencapture.monitorui.MonitorScopePanelSize
+import com.opencapture.opencine.runtime.ScopeSampleBus
 
 /**
  * Feed-aligned assist overlays. LUT / PEAK / FALSE / ZEBRA paint through the
  * GLES live feed (`LiveFeedEffectsSession`); this layer draws guides, scopes,
  * and the false-colour ruler. WAVE / PARADE / HISTO / VECTOR / LIGHTS read
- * the GLES tap on [com.opencapture.openpocketcine.feed.LiveScopeSampleBus].
+ * the GLES tap on [com.opencapture.opencine.runtime.ScopeSampleBus].
  *
  * [LiveAssistLayer] does not flip the video. See [LiveAssistState.mirror].
  * Pass [playback] to gate chips on [LiveAssistState.isPlaybackVisible] instead of
@@ -70,7 +73,7 @@ fun LiveAssistLayer(
     state.syncVisible(tools, guideRatio)
     LiveAssistLayer(
         state = state,
-        scopeBus = remember { LiveScopeSampleBus() },
+        scopeBus = remember { ScopeSampleBus() },
         status = status,
         focus = focus,
         modifier = modifier,
@@ -82,7 +85,7 @@ fun LiveAssistLayer(
 @Composable
 fun LiveAssistLayer(
     state: LiveAssistState,
-    scopeBus: LiveScopeSampleBus,
+    scopeBus: ScopeSampleBus,
     status: CameraStatus,
     focus: Pair<Float, Float>?,
     modifier: Modifier = Modifier,
@@ -163,8 +166,8 @@ fun LiveAssistLayer(
         }
         if (shown(LiveAssistTool.FALSE) && state.falseColorReference) {
             val portrait = canvas.height > canvas.width
-            MovableAssistPanel(LiveAssistTool.FALSE, ScopePanelSize.falseColorReference, 1.0,
-                state.centerFor(LiveAssistTool.FALSE, portrait), canvas, placement, AssistPoint(canvas.midX, canvas.midY),
+            MovableAssistPanel(LiveAssistTool.FALSE, MonitorScopePanelSize.falseColorReference, 1.0,
+                state.centerFor(LiveAssistTool.FALSE, portrait), canvas, placement, MonitorScopePoint(canvas.midX, canvas.midY),
                 enabled = !locked, onStore = { state.storeCenter(LiveAssistTool.FALSE, it, portrait) }, fillPlate = false,
                 onOpenOptions = onOpenOptions?.let { open -> { open(LiveAssistTool.FALSE, it) } }) {
                 FalseColorReferenceRuler(state, colorMode, Modifier.fillMaxSize())
@@ -243,42 +246,42 @@ private fun StackedScopePanel(
         when (tool) {
             LiveAssistTool.WAVE ->
                 ScopePanelSpec(
-                    ScopePanelSize.waveform,
+                    MonitorScopePanelSize.waveform,
                     state.waveScale,
                     state.centerFor(LiveAssistTool.WAVE, portrait),
                     { state.setScale(LiveAssistTool.WAVE, it) },
                 )
             LiveAssistTool.PARADE ->
                 ScopePanelSpec(
-                    ScopePanelSize.parade,
+                    MonitorScopePanelSize.parade,
                     state.paradeScale,
                     state.centerFor(LiveAssistTool.PARADE, portrait),
                     { state.setScale(LiveAssistTool.PARADE, it) },
                 )
             LiveAssistTool.VECTOR ->
                 ScopePanelSpec(
-                    ScopePanelSize.vectorscope,
+                    MonitorScopePanelSize.vectorscope,
                     state.vectorScale,
                     state.centerFor(LiveAssistTool.VECTOR, portrait),
                     { state.setScale(LiveAssistTool.VECTOR, it) },
                 )
             LiveAssistTool.HISTO ->
                 ScopePanelSpec(
-                    ScopePanelSize.histogram,
+                    MonitorScopePanelSize.histogram,
                     state.histoScale,
                     state.centerFor(LiveAssistTool.HISTO, portrait),
                     { state.setScale(LiveAssistTool.HISTO, it) },
                 )
             LiveAssistTool.LIGHTS ->
                 ScopePanelSpec(
-                    ScopePanelSize.trafficLights,
+                    MonitorScopePanelSize.trafficLights,
                     state.lightsScale,
                     state.centerFor(LiveAssistTool.LIGHTS, portrait),
                     { state.setScale(LiveAssistTool.LIGHTS, it) },
                 )
             LiveAssistTool.ND ->
                 ScopePanelSpec(
-                    ScopePanelSize.ndMeter,
+                    MonitorScopePanelSize.ndMeter,
                     state.ndScale,
                     state.centerFor(LiveAssistTool.ND, portrait),
                     { state.setScale(LiveAssistTool.ND, it) },
@@ -304,7 +307,7 @@ private fun StackedScopePanel(
             stored = stored,
             canvas = canvas,
             placementBounds = placementBounds,
-            defaultCenter = AssistPoint(canvas.midX, canvas.midY),
+            defaultCenter = MonitorScopePoint(canvas.midX, canvas.midY),
             enabled = !locked,
             onStore = { state.storeCenter(tool, it, portrait) },
             onScale = onScale,
@@ -338,7 +341,7 @@ private fun StackedScopePanel(
 }
 
 private data class ScopePanelSpec(
-    val base: AssistSize,
+    val base: MonitorScopeSize,
     val scale: Double,
     val stored: StoredCenter?,
     val onScale: (Double) -> Unit,

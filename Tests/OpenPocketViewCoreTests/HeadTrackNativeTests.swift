@@ -55,17 +55,13 @@ import Testing
         let lower = track.target(lookRightDeg: 0, lookUpDeg: -100)
         #expect(lower?.pitchDeg == -44)
         #expect(lower?.nativePitchDeg == -137)
-        for pitch in [-44.0, 70.0] {
-            let pose = GimbalWaypoint(yawDeg: 0, pitchDeg: pitch, zoom: 1, nativePitchDeg: -151)
-            #expect(Commands.gimbalTimedTarget(waypoint: pose, duration: 1) != nil)
-        }
         for pitch in [-44.1, 70.1] {
-            let pose = GimbalWaypoint.from(yawTenth: 0, pitchTenth: Int16((pitch * 10).rounded()),
-                zoom: 1, nativePitchTenth: -1510)!
-            #expect(pose.pitchDeg == pitch)
+            let pose = GimbalWaypoint(yawDeg: 0, pitchDeg: pitch, zoom: 1, nativePitchDeg: -151)
             #expect(track.center(pose: pose) == .waitingForGimbal)
-            #expect(Commands.gimbalTimedTarget(waypoint: pose, duration: 1) == nil)
-            var engine = GimbalMoveEngine()
+            var engine = GimbalMoveEngine(capabilities: MotionCapabilities(
+                axes: [.pan, .tilt, .zoom], frame: .handle, bounds: HeadTrack.Reach.bounds,
+                maxRateDegPerSec: nil, feedbackMaxAge: .milliseconds(300),
+                arrivalToleranceDeg: 0.15))
             let started = engine.start(program: GimbalProgram(a: origin, b: pose), live: origin)
             #expect(!started)
         }

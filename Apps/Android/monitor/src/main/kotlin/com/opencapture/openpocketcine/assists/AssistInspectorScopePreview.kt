@@ -23,6 +23,7 @@ import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.feed.ScopeAssistBundle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import com.opencapture.opencine.appkit.MonitorInspectorScopeDemand
 
 /** Reuses one existing latest-frame scope tap; previews never enable a monitor tool. */
 @Composable
@@ -35,7 +36,7 @@ internal fun AssistInspectorScopePreview(tool: LiveAssistTool, state: LiveAssist
     DisposableEffect(tool, lifecycle, playback) {
         fun update() {
             resumed = lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
-            if (resumed) state.inspectorScopeDemand = InspectorScopeDemand(owner, tool, playback)
+            if (resumed) state.inspectorScopeDemand = MonitorInspectorScopeDemand(owner, tool, playback)
             else if (state.inspectorScopeDemand?.owner === owner) state.inspectorScopeDemand = null
         }
         val observer = LifecycleEventObserver { _, _ -> update() }

@@ -155,7 +155,7 @@ final class FeedPresentationTests: XCTestCase {
     }
 
     func testPresentationJournalReportsSilenceAfterAWindowOfPicture() throws {
-        var metrics = FeedPresentationMetrics(startedAt: 0)
+        var metrics = MonitorPresentationMetrics(startedAt: 0)
         for tick in 1...25 { metrics.notePresented(at: Double(tick) / 25) }
         let rolling = try XCTUnwrap(metrics.drain(at: 1))
         XCTAssertEqual(rolling.gpuFramesPerSecond, 25, accuracy: 0.001)
@@ -166,7 +166,7 @@ final class FeedPresentationTests: XCTestCase {
     }
 
     func testPresentationJournalUsesActualElapsedWindowAndKeepsEarlierHitches() throws {
-        var metrics = FeedPresentationMetrics(startedAt: 0)
+        var metrics = MonitorPresentationMetrics(startedAt: 0)
         metrics.noteAcquire(milliseconds: 450)
         metrics.noteGPUCompletion(milliseconds: 180)
         for tick in 1...50 { metrics.notePresented(at: Double(tick) / 25) }
@@ -453,12 +453,12 @@ final class FeedPresentationTests: XCTestCase {
     func testBilinearPresentsAtSourceSizeAndOtherUpscalersKeepThePanel() {
         let panel = CGSize(width: 2796, height: 1290)
         let source = CGSize(width: 1280, height: 720)
-        for upscaler in [FeedUpscaler.off, .lanczos] {
+        for upscaler in [MonitorUpscaler.off, .lanczos] {
             XCTAssertEqual(
                 CIFeedView.presentDrawableSize(
                     source: source, panel: panel, upscaler: upscaler, hdr: false), source)
         }
-        for upscaler in [FeedUpscaler.spatial, .superResolution] {
+        for upscaler in [MonitorUpscaler.spatial, .superResolution] {
             XCTAssertEqual(
                 CIFeedView.presentDrawableSize(
                     source: source, panel: panel, upscaler: upscaler, hdr: false), panel)

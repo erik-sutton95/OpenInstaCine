@@ -2,6 +2,7 @@ import CoreImage
 import CoreVideo
 import MonitorPresentation
 import MonitorUI
+import OpenCineApple
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -79,7 +80,7 @@ final class MonitorVideoBackdropRenderer: @unchecked Sendable {
     private var admission = MonitorPreviewAdmission()
     private var nextAdmission: UInt64 = 0
     private var cached: CachedResult?  // lock-protected, one successful input only
-    private lazy var imageRenderer = AssistInspectorImageRenderer()
+    private lazy var imageRenderer = MonitorInspectorImageRenderer()
     private lazy var backdropRenderer = MonitorBackdropRenderer()
     private let operation: Operation?
     private let clock: @Sendable () -> UInt64

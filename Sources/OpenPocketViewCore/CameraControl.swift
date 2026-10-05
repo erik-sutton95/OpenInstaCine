@@ -107,22 +107,6 @@ public enum ShootingMode: UInt8, CaseIterable, Sendable {
     ]
 }
 
-/// Osmosis §14 / Mimo 2026-08-14 `0x02/0x8E` pids.
-/// Glamour is pid `0x0039` (blob). AF-C track is pid `0x003B`.
-public enum CameraParam: UInt16, Sendable {
-    case fov = 0x0009
-    case isoLimit = 0x000F
-    case audioChannel = 0x0020
-    /// Control Center Selfie Flip. Mimo GETs ~1 Hz (`00` off / `01` on).
-    /// Body switch only — no app SET. Timed Flip take `mimo-flip-timed-20260825-235315`.
-    case selfieFlip = 0x0038
-    case glamour = 0x0039
-    case focusTrack = 0x003B
-    /// Action 6 aperture strategy, one byte `ApertureStrategy`. Survey 2026-09-21.
-    case apertureStrategy = 0x0044
-    case vocalBoost = 0x004C
-}
-
 /// `0x02/0x8E` pid `0x000F` — Auto ISO **ceiling**, not `IsoIndex`.
 ///
 /// Osmosis §14 labeled SET `04` = 100–800, `05` = 100–1600. Pocket 4 Pro GET

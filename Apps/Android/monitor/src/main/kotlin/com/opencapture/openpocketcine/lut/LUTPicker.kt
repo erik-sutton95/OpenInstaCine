@@ -67,6 +67,7 @@ import com.opencapture.openpocketcine.feed.LutLookResolver
 import com.opencapture.openpocketcine.pairing.StartupColors
 import com.opencapture.openpocketcine.session.CameraCommands
 import java.io.File
+import com.opencapture.opencine.media.MonitorLUTExposureCompensation
 
 private enum class LutTab(val label: String) {
     CAMERA("Camera"),
@@ -536,12 +537,12 @@ internal fun LUTExposureCompensationBar(stops: Double, onChange: (Double) -> Uni
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Exposure", style = LiveType.ui(11f, FontWeight.Medium), color = LiveDesign.text)
             Spacer(Modifier.weight(1f))
-            Text(LutExposureCompensation.label(stops) + " EV", style = LiveType.ui(11f, FontWeight.Medium),
+            Text(MonitorLUTExposureCompensation.label(stops) + " EV", style = LiveType.ui(11f, FontWeight.Medium),
                 color = LiveDesign.muted)
         }
         com.opencapture.monitorui.MonitorSlider(stops.toFloat(), -3f..3f,
             Modifier.semantics { contentDescription = "Exposure compensation in stops" }) {
-            val next = LutExposureCompensation.snap(it.toDouble())
+            val next = MonitorLUTExposureCompensation.snap(it.toDouble())
             if (next != stops) onChange(next)
         }
     }

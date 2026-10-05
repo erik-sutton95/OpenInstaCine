@@ -8,7 +8,9 @@ import Testing
     private let b = GimbalWaypoint(yawDeg: 30, pitchDeg: 10, zoom: 3)
 
     @Test func engineRefusesPartialProgram() {
-        var engine = GimbalMoveEngine()
+        var engine = GimbalMoveEngine(capabilities: MotionCapabilities(
+            axes: [.pan, .tilt, .zoom], frame: .handle, bounds: HeadTrack.Reach.bounds,
+            maxRateDegPerSec: nil, feedbackMaxAge: .milliseconds(300), arrivalToleranceDeg: 0.15))
         let started = engine.start(program: GimbalProgram(a: a), live: a)
         #expect(!started)
     }
@@ -21,8 +23,6 @@ import Testing
     ])
     func unwrapYawCrossesTheRawWrapOnThePositiveArc(raw: Double, expected: Double) {
         #expect(GimbalWaypoint.unwrapYaw(raw) == expected)
-        let wp = GimbalWaypoint.from(yawTenth: Int16(raw * 10), pitchTenth: 0, zoom: 1)
-        #expect(wp?.yawDeg == expected)
     }
 
     @Test func lerpFromShortSideToSelfieNeverEntersTheGap() {

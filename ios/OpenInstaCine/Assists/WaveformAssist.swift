@@ -21,7 +21,7 @@ import UIKit
 /// No pinch-resize - OpenZCine scales only from the L-corner grip.
 enum WaveformAssist {
     static let panelID = "wave"
-    static let baseSize = ScopePanelSize.waveform
+    static let baseSize = MonitorScopePanelSize.waveform
     static let brightnessRange: ClosedRange<Int> = 0...200
 
     static let brightnessHelp =

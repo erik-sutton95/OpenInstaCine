@@ -110,7 +110,7 @@
 # ------------------------------------------------------------------
 - name: area:core
   color: 1d76db
-  description: Shared Swift core (Sources/OpenPocketViewCore, Sources/Monitor*)
+  description: Swift core (Sources/OpenPocketViewCore, Sources/OpenPocketCineAndroidFacade)
 
 - name: area:protocol
   color: 1d76db
@@ -184,7 +184,7 @@
 # gh label create "ready" --color "0e8a16" --description "Triaged and ready to pick up"
 # gh label create "roadmap" --color "5319e7" --description "Proposed product direction tracked in GitHub Discussions"
 #
-# gh label create "area:core" --color "1d76db" --description "Shared Swift core (Sources/OpenPocketViewCore, Sources/Monitor*)"
+# gh label create "area:core" --color "1d76db" --description "Swift core (Sources/OpenPocketViewCore, Sources/OpenPocketCineAndroidFacade)"
 # gh label create "area:protocol" --color "1d76db" --description "Insta360 protocol (BLE pairing, camera Wi-Fi, protobuf over TCP 6666)"
 # gh label create "area:ios" --color "1d76db" --description "iOS SwiftUI shell (ios/OpenInstaCine)"
 # gh label create "area:live-view" --color "1d76db" --description "Live view streaming, rendering, and related pipeline"

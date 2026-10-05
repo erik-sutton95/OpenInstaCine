@@ -189,7 +189,7 @@ struct AssistInspectorPreview: View {
                 VectorscopeOverlay()
             }
         case .trafficLights:
-            TrafficLightsMeterMini(reading: model.monitorSamples.displayBundle.traffic)
+            MonitorTrafficLightsMeter(reading: model.monitorSamples.displayBundle.traffic)
                 .frame(width: 88, height: 120)
         case .ndMeter:
             NDMeterChip(
@@ -211,7 +211,7 @@ struct AssistInspectorPreview: View {
         }
     }
 
-    private func audioPreview(levels: AudioMeterLevels, sensitivity: String?) -> some View {
+    private func audioPreview(levels: MonitorAudioMeterLevels, sensitivity: String?) -> some View {
         let options = AudioAssist.store.options
         return fittedScope(size: AudioAssist.panelSize(orientation: options.orientation)) {
             AudioMetersPanelMini(

@@ -23,7 +23,7 @@ internal fun LiveSystemChrome(model: AppModel, layout: LiveMonitorLayout,
         settings = model.chromeSectionMounts(PocketDispSection.RAIL_SETTINGS),
         media = model.chromeSectionMounts(PocketDispSection.RAIL_MEDIA),
         record = model.chromeSectionMounts(PocketDispSection.RAIL_RECORD),
-    ).resolved(uiLocked, model.session.control.isRecording, model.session.isMultiviewBorrowed)
+    ).resolved(uiLocked, model.session.control.isRecording, borrowed = false)
     // Keep collection in this bounded observation scope, away from native picture geometry.
     control
     fun decoration() = Modifier.monitorChromeEditStroke(editing != null, true)

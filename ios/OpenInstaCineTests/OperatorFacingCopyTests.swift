@@ -1,3 +1,4 @@
+import MonitorUI
 import OpenCineCore
 import OpenPocketViewCore
 import XCTest
@@ -43,7 +44,7 @@ final class OperatorFacingCopyTests: XCTestCase {
             ZebraAssist.unitsHelp,
             ZebraAssist.highlightHelp,
             ZebraAssist.midtoneHelp,
-            SettingsNumberField.doneTitle,
+            MonitorSettingsNumberField.doneTitle,
             PeakingAssist.sensitivityHelp,
             PeakingAssist.colorHelp,
             FalseColorAssist.scaleHelp,

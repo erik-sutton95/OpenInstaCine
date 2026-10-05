@@ -2,12 +2,12 @@ package com.opencapture.openpocketcine
 
 import com.opencapture.opencine.media.MonitorNDFilterRecommendation
 import com.opencapture.opencine.media.FrameRateSampler
-import com.opencapture.openpocketcine.lut.LutExposureCompensation
 import com.opencapture.openpocketcine.media.MediaLibraryQuery
 import com.opencapture.openpocketcine.session.CamFov
 import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import com.opencapture.opencine.media.MonitorLUTExposureCompensation
 
 /**
  * Operator readouts are a fixed notation, not prose: the decimal point is part of
@@ -41,8 +41,8 @@ class LocaleIndependentFormattingTest {
 
     @Test
     fun lutExposureLabelKeepsTheDecimalPoint() {
-        assertEquals("+1.5", underCommaLocale { LutExposureCompensation.label(1.5) })
-        assertEquals("−2.0", underCommaLocale { LutExposureCompensation.label(-2.0) })
+        assertEquals("+1.5", underCommaLocale { MonitorLUTExposureCompensation.label(1.5) })
+        assertEquals("−2.0", underCommaLocale { MonitorLUTExposureCompensation.label(-2.0) })
     }
 
     @Test

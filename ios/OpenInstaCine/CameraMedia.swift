@@ -250,16 +250,6 @@ extension CameraSession {
     }
     func shotColor(for file: MediaFile) -> ColorMode? { cameraMedia.shotColor(for: file.path, cameraID: mediaCameraID) }
     func rememberShotColor(_ color: ColorMode, for file: MediaFile) { cameraMedia.rememberShotColor(color, path: file.path, cameraID: mediaCameraID) }
-    func fetchOriginalShotColor(for file: MediaFile) async -> ColorMode? {
-        if let cached = shotColor(for: file) { return cached }
-        guard let gamma = mediaRecord(for: file)?.payload.source?.metadata?.gammaMode?.lowercased() else { return nil }
-        let mode: ColorMode?
-        if gamma.contains("log") { mode = .iLog }
-        else if gamma.contains("dolby") || gamma.contains("hdr") { mode = .dolbyVision }
-        else if gamma.contains("standard") || gamma.contains("vivid") { mode = .normal }
-        else { mode = nil }
-        if let mode { rememberShotColor(mode, for: file) }; return mode
-    }
     func remotePlaybackURL(for file: MediaFile) -> URL? {
         MediaHTTP.previewPaths(file).lazy.compactMap { MediaHTTP.pathURL(storage: 0, path: $0, route: self.profile.media) }.first
     }

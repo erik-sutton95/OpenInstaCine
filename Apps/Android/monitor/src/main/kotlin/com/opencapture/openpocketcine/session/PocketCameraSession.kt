@@ -107,9 +107,7 @@ import com.opencapture.opencine.media.LivePipelineCadence
  * source compatibility with the upstream shell.
  */
 class PocketCameraSession(
-    context: Context, borrowing: HevcDecoder? = null,
-    // No multicam budget in this app (one camera); the lease is accepted for the shared AppModel only.
-    @Suppress("UNUSED_PARAMETER") controlLease: MultiviewControlLease? = null,
+    context: Context,
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -126,8 +124,7 @@ class PocketCameraSession(
     @Volatile internal var debugVideoPacketAdmission: (() -> Boolean)? = null
     internal var debugCameraSetResult: ((Int, Boolean) -> Unit)? = null
     internal val pendingCameraSetCount: Int get() = 0
-    val isMultiviewBorrowed = borrowing != null
-    val decoder = borrowing ?: HevcDecoder(cadence, errorJournal = DiagnosticCenter::logDecoderError)
+    val decoder = HevcDecoder(cadence, errorJournal = DiagnosticCenter::logDecoderError)
     /** The Luna gimbal requests (`LunaMotionService`). Before `init`: its live handler starts the angle poll. */
     private val motion = LunaMotionService({ controls }, scope)
     // Timecode, iOS `noteFrameClock`: live frame stamps to time of day (`LunaFrameTimecode`), with
@@ -364,14 +361,12 @@ class PocketCameraSession(
                 }
             }
         }
-        if (borrowing == null) {
-            scope.launch(Dispatchers.Default) {
-                backend.frames.collect { frame ->
-                    noteFrameClock(frame.timestampMicros)
-                    videoPackets += 1
-                    accessUnits += 1
-                    if (decoder.decode(frame.annexB)) { framesEnqueued += 1; hasVideoFormat = true }
-                }
+        scope.launch(Dispatchers.Default) {
+            backend.frames.collect { frame ->
+                noteFrameClock(frame.timestampMicros)
+                videoPackets += 1
+                accessUnits += 1
+                if (decoder.decode(frame.annexB)) { framesEnqueued += 1; hasVideoFormat = true }
             }
         }
     }

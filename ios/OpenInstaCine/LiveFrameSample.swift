@@ -31,12 +31,6 @@ extension MonitorTransfer {
 }
 
 // Source adapters select measured calibration and interpretation for the shared native owner.
-typealias ScopePoint = OpenCineMedia.ScopePoint
-typealias ScopeSamples = OpenCineMedia.ScopeSamples
-typealias ScopeHistogramDisplay = OpenCineMedia.ScopeHistogramDisplay
-typealias ScopeAssistBundle = OpenCineMedia.ScopeAssistBundle
-typealias PocketScopeSampler = OpenCineMedia.ScopeSampler
-
 extension ScopeSampler {
     static func minInterval(activeScopeCount: Int,
         thermalState: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState) -> CFAbsoluteTime {
@@ -51,26 +45,9 @@ extension ScopeSampler {
         LiveFrameTap.copyBGRA8(buffer, maxWidth: maxWidth)
     }
 
-    /// Display cube for VECTOR when no operator LUT is armed.
-    static func monitorCube(for transfer: MonitorTransfer, effects: LiveImageEffects) -> CubeLUT? {
-        if let armed = ScopeMonitorLook.cube(from: effects) { return armed }
-        switch transfer {
-        case .ilog: return BundledLunaLUT.iLogToRec709
-        case .rec709, .hdr, .dlog, .dlog2, .dlogm: return nil
-        }
-    }
-
-}
-
-/// Operator LUT (armed in effects) as a scope-side cube.
-enum ScopeMonitorLook {
-    static func cube(from effects: LiveImageEffects) -> CubeLUT? {
-        OpenCineApple.MonitorAssistEngine.armedCube(effects.nativeImagePlan)
-    }
 }
 
 typealias ScopeExposureCeiling = OpenPocketViewCore.ScopeExposureCeiling
-typealias LiveFrameSampleBus = OpenCineApple.LiveFrameSampleBus
 
 extension LiveFrameSampleBus {
     var colorMode: ColorMode? { reportedTransfer.map(\.colorMode) }

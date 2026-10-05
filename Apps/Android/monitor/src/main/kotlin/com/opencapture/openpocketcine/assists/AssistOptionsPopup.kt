@@ -45,6 +45,7 @@ import com.opencapture.openpocketcine.lut.LUTSplitComparisonBar
 import com.opencapture.openpocketcine.pickerPanelGlass
 import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.settings.SettingsPalette
+import com.opencapture.monitorui.MonitorCrosshairGeometry
 
 private val CardShape = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
 
@@ -196,7 +197,7 @@ private fun AssistOptionsBody(tool: LiveAssistTool, state: LiveAssistState, colo
         LiveAssistTool.DESQ -> DesqueezeOptions(state)
         LiveAssistTool.GUIDES -> GuidesOptions(state)
         LiveAssistTool.GRID -> GridOptions(state)
-        LiveAssistTool.CROSS -> com.opencapture.monitorui.MonitorAssistHelp(CrosshairAssist.HELP)
+        LiveAssistTool.CROSS -> com.opencapture.monitorui.MonitorAssistHelp(MonitorCrosshairGeometry.HELP)
         LiveAssistTool.MIRROR -> MirrorOptions(state)
         LiveAssistTool.AUDIO -> com.opencapture.monitorui.MonitorAudioMenu(state.audioOrientation,
             state::updateAudioOrientation, state.audioShowDB, state::updateAudioShowDB, AudioAssist.HELP)
