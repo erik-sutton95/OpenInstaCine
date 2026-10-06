@@ -4,6 +4,7 @@
     import Insta360Protocol
     import MonitorPresentation
     import Network
+    import OpenCineCameraControls
     import OpenPocketViewCore
     import UIKit
 

@@ -1,4 +1,5 @@
 import Insta360Protocol
+import OpenCineCameraControls
 import OpenCineCore
 import OpenPocketViewCore
 import XCTest
