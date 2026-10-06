@@ -19,14 +19,8 @@ enum OperatorPrefs {
             recordConfirmation: "OpenInstaCine.RecordConfirmation",
             haptics: "OpenInstaCine.HapticsEnabled",
             cacheOriginals: "OpenInstaCine.CacheFullResolution"))
-    private static let lutKey = "OpenInstaCine.LastLUT"
-    private static let customLUTKey = "OpenInstaCine.LastCustomLUT"
-    private static let lutWasCustomKey = "OpenInstaCine.LastLUTWasCustom"
-    private static let lutSelectionKey = "OpenInstaCine.LUTSelection"
     private static let customRec709FileKey = "OpenInstaCine.CustomRec709File"
-    private static let customDLogFileKey = "OpenInstaCine.CustomDLogFile"
     private static let customDLog2FileKey = "OpenInstaCine.CustomDLog2File"
-    private static let selectedCustomFileKey = "OpenInstaCine.SelectedCustomLUTFile"
     private static let headTrackingKey = "OpenInstaCine.HeadTrackingEnabled"
     private static let gimbalStickSensitivityKey = "OpenInstaCine.GimbalStickSensitivity"
     private static let virtualJoystickInvertPanKey = "OpenInstaCine.VirtualJoystickInvertPan"
@@ -40,7 +34,6 @@ enum OperatorPrefs {
     private static let gimbalDoubleTapKey = "OpenInstaCine.GimbalDoubleTap"
     private static let cleanPinsKey = "OpenInstaCine.CleanViewPins.v1"
     private static let playbackAssistsKey = "OpenInstaCine.PlaybackAssists.v1"
-    private static let lastMonitorColorModeKey = "OpenInstaCine.LastMonitorColorMode"
     private static let portraitFeedAspectKey = "OpenInstaCine.PortraitFeedAspect"
     private static let nativeISOHopKey = "OpenInstaCine.NativeISOHop"
     private static let facePriorityExposureKey = "OpenInstaCine.FacePriorityExposure"
@@ -242,26 +235,6 @@ enum OperatorPrefs {
         set { UserDefaults.standard.set(newValue, forKey: nativeISOHopKey) }
     }
 
-    /// Last live `ColorMode` so Auto LUT can bind a cube from the offline library.
-    static var lastMonitorColorMode: ColorMode? {
-        get {
-            guard UserDefaults.standard.object(forKey: lastMonitorColorModeKey) != nil else {
-                return nil
-            }
-            return ColorMode(
-                rawValue: UInt8(
-                    truncatingIfNeeded: UserDefaults.standard.integer(
-                        forKey: lastMonitorColorModeKey)))
-        }
-        set {
-            if let newValue {
-                UserDefaults.standard.set(Int(newValue.rawValue), forKey: lastMonitorColorModeKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: lastMonitorColorModeKey)
-            }
-        }
-    }
-
     static var playbackVisibleAssistTools: Set<LiveAssistTool> {
         get {
             guard let raw = UserDefaults.standard.array(forKey: playbackAssistsKey) as? [String]
@@ -289,91 +262,17 @@ enum OperatorPrefs {
         }
     }
 
-    static var lastLUT: String {
-        get {
-            if lastLUTWasCustom, let file = lastCustomFileName {
-                return CustomLUTIndex.displayName(fileName: file)
-            }
-            return lastBuiltInLUT
-        }
-        set { UserDefaults.standard.set(newValue, forKey: lutKey) }
-    }
-
-    static var lastBuiltInLUT: String {
-        UserDefaults.standard.string(forKey: lutKey) ?? LUTSelection.auto.title
-    }
-
-    static var lastCustomFileName: String? {
-        get { UserDefaults.standard.string(forKey: customLUTKey) }
-        set { UserDefaults.standard.set(newValue, forKey: customLUTKey) }
-    }
-
-    static var lastLUTWasCustom: Bool {
-        get { UserDefaults.standard.bool(forKey: lutWasCustomKey) }
-        set { UserDefaults.standard.set(newValue, forKey: lutWasCustomKey) }
-    }
-
-    static var lutSelection: LUTSelection {
-        get {
-            if let raw = UserDefaults.standard.string(forKey: lutSelectionKey),
-                let value = LUTSelection(rawValue: raw)
-            {
-                return value
-            }
-            return .djiAuto
-        }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: lutSelectionKey) }
-    }
-
-    static func customFileName(for slot: CustomLUTSlot) -> String? {
-        UserDefaults.standard.string(forKey: customFileKey(slot))
-    }
-
-    static func setCustomFileName(_ fileName: String?, for slot: CustomLUTSlot) {
-        UserDefaults.standard.set(fileName, forKey: customFileKey(slot))
-    }
-
-    static var selectedCustomFileName: String? {
-        get {
-            let name = UserDefaults.standard.string(forKey: selectedCustomFileKey)
-            guard let name, CustomLUTIndex.isSafeFileName(name) else { return nil }
-            return name
-        }
-        set { UserDefaults.standard.set(newValue, forKey: selectedCustomFileKey) }
-    }
-
-    private static func customFileKey(_ slot: CustomLUTSlot) -> String {
-        switch slot {
-        case .rec709: customRec709FileKey
-        case .dLog: customDLogFileKey
-        case .dLog2: customDLog2FileKey
-        }
-    }
-
     @MainActor static func load(into state: LiveAssistState) {
-        migrateLegacyLUTIfNeeded(into: state)
-        var migrated = lutSelection.migratedToDJICatalog
+        LUTPreferences.app.migrateLegacySelectionIfNeeded(lutEnabled: state.lutEnabled)
+        var migrated = LUTPreferences.app.lutSelection.migratedToDJICatalog
         // This app bundles no DJI cubes: a stale locked DJI pick falls back to Auto.
-        if migrated.isDJI, !LUTSelection.djiCatalog(isPhotoLive: false).contains(migrated) {
-            migrated = .djiAuto
+        if migrated.isOfficial, !LUTSelection.djiCatalog(isPhotoLive: false).contains(migrated) {
+            migrated = .officialAuto
         }
-        if migrated != lutSelection { lutSelection = migrated }
+        if migrated != LUTPreferences.app.lutSelection {
+            LUTPreferences.app.lutSelection = migrated
+        }
         state.lutSelection = migrated
-    }
-
-    /// One-shot: old Built-in looks become Auto; a stored custom file becomes Custom D-Log.
-    @MainActor private static func migrateLegacyLUTIfNeeded(into state: LiveAssistState) {
-        guard UserDefaults.standard.object(forKey: lutSelectionKey) == nil else { return }
-        if lastLUTWasCustom, let file = lastCustomFileName,
-            CustomLUTIndex.isSafeFileName(file)
-        {
-            setCustomFileName(file, for: .dLog)
-            if state.lutEnabled {
-                UserDefaults.standard.set(LUTSelection.customDLog.rawValue, forKey: lutSelectionKey)
-                return
-            }
-        }
-        UserDefaults.standard.set(LUTSelection.djiAuto.rawValue, forKey: lutSelectionKey)
     }
 
     @MainActor static func encoded(_ state: LiveAssistState) -> Data? {
