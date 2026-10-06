@@ -1,6 +1,7 @@
 import CoreImage
 import Metal
 import OpenCineApple
+import OpenCineCameraControls
 import OpenPocketViewCore
 import XCTest
 
@@ -415,9 +416,9 @@ final class LUTAssistTests: XCTestCase {
         assist.syncLUT(to: .dLog, isPhoto: true)
         XCTAssertEqual(assist.lutSelection, .customDLog)
         XCTAssertEqual(assist.resolvedSource(), .off)
-        XCTAssertEqual(LUTSelection.djiCatalog(isPhotoLive: true), [.officialAuto])
-        XCTAssertEqual(LUTSelection.djiCatalog(isPhotoLive: false), [.officialAuto, .iLogRec709])
-        XCTAssertEqual(LUTAssist.photoRec709Caption, "Photo live view is Rec.709 — log conversions are off")
+        XCTAssertEqual(OfficialLUTs.app.catalog(true), [.officialAuto])
+        XCTAssertEqual(OfficialLUTs.app.catalog(false), [.officialAuto, .iLogRec709])
+        XCTAssertEqual(LUTPickerCopy.photoRec709Caption, "Photo live view is Rec.709 — log conversions are off")
     }
 
     func testPlaybackClipColorWinsWhileCameraStaysPhoto() {

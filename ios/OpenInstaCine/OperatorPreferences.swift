@@ -2,6 +2,7 @@ import Foundation
 import MonitorPresentation
 import MonitorUI
 import OpenCineAppKit
+import OpenCineCameraControls
 import OpenPocketViewCore
 import SwiftUI
 
@@ -266,7 +267,7 @@ enum OperatorPrefs {
         LUTPreferences.app.migrateLegacySelectionIfNeeded(lutEnabled: state.lutEnabled)
         var migrated = LUTPreferences.app.lutSelection.migratedToDJICatalog
         // This app bundles no DJI cubes: a stale locked DJI pick falls back to Auto.
-        if migrated.isOfficial, !LUTSelection.djiCatalog(isPhotoLive: false).contains(migrated) {
+        if migrated.isOfficial, !OfficialLUTs.app.catalog(false).contains(migrated) {
             migrated = .officialAuto
         }
         if migrated != LUTPreferences.app.lutSelection {

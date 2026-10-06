@@ -11,8 +11,6 @@ import SwiftUI
 enum LUTAssist {
     static let exposureTitle = "Exposure"
     static let exposureHelp = "Input stops before the cube. Pull 1–2 after ETTR."
-    /// Live Photo / Photo is Rec.709; do not label a stale D-Log conversion.
-    static let photoRec709Caption = "Photo live view is Rec.709 — log conversions are off"
 
     @ViewBuilder
     static func longPressMenu(assist: LiveAssistState) -> some View {
@@ -52,10 +50,13 @@ enum BundledLunaLUT {
 
 extension OfficialLUTs {
     /// The bundled I-Log cube. No Pocket or DJI cube ships with this app.
-    static let app = OfficialLUTs { source in
-        if case .iLogRec709 = source { return BundledLunaLUT.iLogToRec709 }
-        return nil
-    }
+    static let app = OfficialLUTs(
+        // Luna ships one official cube; the DJI cubes are not bundled in this app.
+        catalog: { isPhotoLive in isPhotoLive ? [.officialAuto] : [.officialAuto, .iLogRec709] },
+        cube: { source in
+            if case .iLogRec709 = source { return BundledLunaLUT.iLogToRec709 }
+            return nil
+        })
 }
 
 extension LUTPreferences {
@@ -70,4 +71,12 @@ extension CustomLUTStore {
             ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent("luts/custom", isDirectory: true),
         preferences: .app)
+}
+
+extension LUTPickerCopy {
+    static let app = LUTPickerCopy(
+        officialTab: "Insta360",
+        officialLockedCaption: "Official Insta360 Rec.709 cube",
+        officialCaption: "Official Insta360 looks for this color / camera",
+        customEmptyHint: "Imported looks land here. Auto stays on Insta360.")
 }
