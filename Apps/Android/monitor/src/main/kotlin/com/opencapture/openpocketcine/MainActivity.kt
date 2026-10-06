@@ -245,7 +245,8 @@ private fun OpenPocketCineApp(model: AppModel) {
         val radioOn by model.session.radioOn.collectAsState()
         AppShell(
             model.shell,
-            ShellBrand(MonitorConfiguration.identity.wordmark),
+            // Main's setup chip menu: Forget only, no Rename setup.
+            ShellBrand(MonitorConfiguration.identity.wordmark, renamesSetups = false),
             ShellActions(
                 diagnostics = { DiagnosticCenter.shareReport(context, model.session) },
                 reportProblem = { showProblemReport = true },

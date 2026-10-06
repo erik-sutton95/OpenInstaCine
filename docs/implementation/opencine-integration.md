@@ -260,12 +260,10 @@ Nothing below has run on hardware.
     recording.
 
 17. Cameras-page follow-up (iPhone and Android, physical check untested): press and hold
-    the Luna's Camera Wi-Fi chip, rename only that setup, relaunch, and reconnect without
-    another approval or password prompt. Clear the setup name and confirm the default label
-    returns. The empty first-pair and saved-camera screens show no Privacy or Terms links (as
-    on main); Settings opens both. An older build has no setup-name
-    field: installing it, editing the camera name, and upgrading again must keep the new
-    setup name, saved Wi-Fi, favorites and approval identity.
+    the Luna's Camera Wi-Fi chip: no Rename setup (as on main). The empty first-pair and
+    saved-camera screens show no Privacy or Terms links (as on main); Settings opens both.
+    Installing an older build, editing the camera name, and upgrading again must keep the
+    saved Wi-Fi, favorites and approval identity.
 
 Known limits: two Luna cameras at once cannot be tested (LunaWiFi joins one camera access point,
 192.168.42.x); the two-session gate is simulated only. Android reports no serial on this path,
