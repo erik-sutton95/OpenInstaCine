@@ -20,7 +20,7 @@ extension AppModel: GimbalGamepadHost {
     }
     var zoomReadout: Double { session.zoomReadout }
     var zoomMax: Double { session.zoomMax }
-    var zoomColorHopPending: Bool { session.zoomColorHopPending }
+    var zoomColorHopPending: Bool { false }
     func updateZoomPinch(magnification: Double) {
         session.updateZoomPinch(magnification: magnification)
     }
