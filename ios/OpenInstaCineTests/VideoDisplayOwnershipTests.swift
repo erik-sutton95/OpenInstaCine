@@ -3,6 +3,7 @@ import UIKit
 import XCTest
 import MetalKit
 import MonitorUI
+import OpenCineCameraControls
 import OpenCineMedia
 import OpenPocketViewCore
 import SwiftUI

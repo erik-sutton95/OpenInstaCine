@@ -48,7 +48,11 @@ enum LiveDesign {
 }
 
 /// The shared live chrome reads this app's palette.
-extension LiveDesign: LiveChromePalette {}
+extension LiveDesign: LiveChromePalette {
+    static func chromeColor(red: CGFloat, green: CGFloat, blue: CGFloat) -> Color {
+        LiveHDRDisplay.chromeColor(red: red, green: green, blue: blue)
+    }
+}
 
 typealias CloseButton = LiveCloseButton<LiveDesign>
 
