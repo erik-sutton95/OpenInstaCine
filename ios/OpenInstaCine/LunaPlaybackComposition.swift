@@ -75,9 +75,9 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
         -> MonitorPlaybackLook<LunaPlaybackLook>? {
         let file = record.payload.file, cameraID = mediaCameraID
         let clip: ColorMode?
-        if let original = localURL(for: file), let mode = ClipColorProfileIO.shotColor(at: original, path: file.path) {
+        if let original = localURL(for: file), let mode = ClipColorProfile.shotColor(at: original, path: file.path) {
             clip = mode
-        } else if let mode = ClipColorProfileIO.shotColor(at: item.url, path: item.sourceKey) {
+        } else if let mode = ClipColorProfile.shotColor(at: item.url, path: item.sourceKey) {
             clip = mode
         } else if let cached = shotColor(for: file) {
             clip = cached
