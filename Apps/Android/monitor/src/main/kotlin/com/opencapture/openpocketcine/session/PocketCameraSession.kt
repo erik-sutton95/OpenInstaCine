@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
+import com.opencapture.opencine.cameracontrols.CaptureLists
 import com.opencapture.opencine.motion.GimbalProgram
 import com.opencapture.opencine.motion.GimbalWaypoint
 import com.opencapture.opencine.motion.GimbalWaypointSlot
@@ -42,7 +43,6 @@ import com.opencapture.opencine.vocabulary.TrackingBox
 import com.opencapture.opencine.vocabulary.TrackingHud
 import com.opencapture.opencine.vocabulary.TrackingStartPolicy
 import com.opencapture.opencine.vocabulary.VideoFormat
-import com.opencapture.openpocketcine.CaptureLists
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.opencine.appkit.MonitorControlModel

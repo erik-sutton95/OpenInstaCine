@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.cameracontrols.CaptureLists
+import com.opencapture.opencine.cameracontrols.captureQuickFocusControl
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.opencine.vocabulary.FocusOption
@@ -208,16 +210,16 @@ class LunaShellMappingTest {
         val luna = m.profile
         val dji = CameraProfile.DJI
         repeat(2) {
-            assertTrue("TimeShift" in com.opencapture.openpocketcine.CaptureLists.shootingModeLabels(null, profile = luna))
-            assertTrue("HyperLapse" in com.opencapture.openpocketcine.CaptureLists.shootingModeLabels(null, profile = dji))
-            assertEquals(CameraCommands.SHOOT_HYPERLAPSE, com.opencapture.openpocketcine.CaptureLists.shootingModeRaw("TimeShift", null, luna))
-            assertNull(com.opencapture.openpocketcine.CaptureLists.shootingModeRaw("TimeShift", null, dji))
+            assertTrue("TimeShift" in com.opencapture.opencine.cameracontrols.CaptureLists.shootingModeLabels(null, profile = luna.labels))
+            assertTrue("HyperLapse" in com.opencapture.opencine.cameracontrols.CaptureLists.shootingModeLabels(null, profile = dji.labels))
+            assertEquals(CameraCommands.SHOOT_HYPERLAPSE, com.opencapture.opencine.cameracontrols.CaptureLists.shootingModeRaw("TimeShift", null, luna.labels))
+            assertNull(com.opencapture.opencine.cameracontrols.CaptureLists.shootingModeRaw("TimeShift", null, dji.labels))
             assertEquals("Standard", CameraCommands.colorLabel(CameraCommands.COLOR_NORMAL, profile = luna.labels))
             assertEquals("Normal", CameraCommands.colorLabel(CameraCommands.COLOR_NORMAL, profile = dji.labels))
             assertEquals("Roll Lock", GimbalMode.FOLLOW.label(luna.labels))
             assertEquals("Follow", GimbalMode.FOLLOW.label(dji.labels))
-            assertEquals(listOf("AF-S", "AF-C", "Showcase"), com.opencapture.openpocketcine.captureQuickFocusControl(CameraStatus(), luna.labels.focusLabels).options)
-            assertEquals(5, com.opencapture.openpocketcine.captureQuickFocusControl(CameraStatus(), dji.labels.focusLabels).options.size)
+            assertEquals(listOf("AF-S", "AF-C", "Showcase"), com.opencapture.opencine.cameracontrols.captureQuickFocusControl(CameraStatus(), luna.labels.focusLabels).options)
+            assertEquals(5, com.opencapture.opencine.cameracontrols.captureQuickFocusControl(CameraStatus(), dji.labels.focusLabels).options.size)
             assertEquals("http://192.168.42.1/DCIM/a.mp4", luna.media.pathUrlString(1, "/DCIM/a.mp4"))
             assertEquals("http://192.168.2.1/v2?storage=1&path=/DCIM/a.mp4", dji.media.pathUrlString(1, "/DCIM/a.mp4"))
         }
