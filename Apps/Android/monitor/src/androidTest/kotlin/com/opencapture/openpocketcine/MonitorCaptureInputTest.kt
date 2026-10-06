@@ -43,6 +43,7 @@ import com.opencapture.monitorui.MonitorQuickPreview
 import com.opencapture.monitorui.MonitorReadoutDismissBackdrop
 import com.opencapture.monitorui.MonitorReadoutRegions
 import com.opencapture.monitorui.monitorReadoutGesture
+import com.opencapture.opencine.cameracontrols.LiveSheet
 import com.opencapture.opencine.vocabulary.CameraStatus
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

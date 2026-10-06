@@ -14,6 +14,7 @@ import com.opencapture.opencine.insta360.shell.CameraShootingMode
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.CameraLabelProfile
 import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.ConnectionPhase
 import com.opencapture.opencine.vocabulary.EvComp
 import com.opencapture.opencine.vocabulary.FocusOption
 import com.opencapture.opencine.vocabulary.FocusTrackMode
@@ -26,6 +27,9 @@ import com.opencapture.opencine.vocabulary.VideoResolution
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.reflect.KMutableProperty0
+
+/** The shell stage as the vocabulary stage the shared live chrome reads: the two enums list the same stages by the same names. */
+internal fun com.opencapture.opencine.insta360.shell.ConnectionPhase.vocabularyPhase(): ConnectionPhase = ConnectionPhase.valueOf(name)
 
 /** Optimistic values the operator asked for, held until the camera reports them (iOS `LunaControlPins`). */
 /** ISO, shutter, white balance and record are not here: their pending state is the Core operation (CoreControl.kt). */

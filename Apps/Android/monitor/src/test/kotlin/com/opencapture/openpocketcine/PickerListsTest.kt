@@ -1,5 +1,7 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.cameracontrols.CaptureLists
+import com.opencapture.opencine.cameracontrols.captureQuickFocusControl
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.opencine.vocabulary.GamepadGimbalStick
@@ -7,6 +9,7 @@ import com.opencapture.opencine.vocabulary.GimbalDoubleTap
 import com.opencapture.opencine.vocabulary.GimbalMode
 import com.opencapture.opencine.vocabulary.GimbalRamp
 import com.opencapture.opencine.vocabulary.GimbalSpeed
+import com.opencapture.opencine.vocabulary.IsoLimit
 import com.opencapture.openpocketcine.session.LunaShellMapping
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,7 +39,7 @@ class PickerListsTest {
     @Test fun shootingModePicker() {
         assertEquals(
             list("Video|Photo|Timelapse|TimeShift|PureVideo|Slow Motion"),
-            CaptureLists.shootingModeLabels("Insta360 Luna Ultra", -1, luna),
+            CaptureLists.shootingModeLabels("Insta360 Luna Ultra", -1, luna.labels),
         )
     }
 
@@ -44,7 +47,7 @@ class PickerListsTest {
         val status = CameraStatus(availableColorModes = LunaShellMapping.colorModes)
         assertEquals(
             list("Standard|I-Log|Dolby Vision"),
-            CaptureLists.colorWheelLabels(status, "generic", "Insta360 Luna Ultra", luna),
+            CaptureLists.colorWheelLabels(status, "generic", "Insta360 Luna Ultra", luna.labels),
         )
     }
 
