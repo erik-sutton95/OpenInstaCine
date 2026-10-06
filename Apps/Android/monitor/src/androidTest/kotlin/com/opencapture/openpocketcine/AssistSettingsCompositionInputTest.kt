@@ -22,6 +22,7 @@ import com.opencapture.monitorui.MonitorAssistTool
 import com.opencapture.opencine.cameracontrols.OperatorAssistCard
 import com.opencapture.openpocketcine.assists.*
 import com.opencapture.opencine.cameracontrols.LiveZebra
+import com.opencapture.opencine.media.MonitorTransfer
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -66,7 +67,7 @@ class AssistSettingsCompositionInputTest {
                         activity.setContent {
                             Column(Modifier.fillMaxSize().padding(12.dp)
                                 .semantics { testTagsAsResourceId = true }) {
-                                OperatorAssistCard(tool, state, SettingsHelpCopy, AppAssistHost, 0)
+                                OperatorAssistCard(tool, state, SettingsHelpCopy, AppAssistHost, MonitorTransfer.DLOGM)
                             }
                         }
                     }
