@@ -86,6 +86,7 @@ import com.opencapture.opencine.cameracontrols.IsoSheetLogic
 import com.opencapture.opencine.cameracontrols.LiveSheet
 import com.opencapture.opencine.cameracontrols.applyCaptureFocusChoice
 import com.opencapture.opencine.cameracontrols.applyCaptureShootingMode
+import com.opencapture.opencine.cameracontrols.chromeClickable
 import com.opencapture.opencine.cameracontrols.isRecordingSetup
 import com.opencapture.opencine.cameracontrols.isTopAnchored
 import com.opencapture.opencine.vocabulary.ApertureStrategy

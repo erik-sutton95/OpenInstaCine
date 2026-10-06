@@ -1,8 +1,7 @@
 package com.opencapture.openpocketcine
 
-import com.opencapture.opencine.appkit.LocalOperatorHaptics
+import com.opencapture.opencine.cameracontrols.chromeClickable
 import com.opencapture.opencine.media.CameraLinkPhase
-import com.opencapture.monitorui.monitorChromeClickable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateOffsetAsState
 import androidx.compose.animation.core.snap
@@ -91,7 +90,6 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.opencapture.opencine.vocabulary.CameraCommands
@@ -111,30 +109,6 @@ val ChromeShape = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
 @Composable
 fun Modifier.monitorGlass(shape: Shape = ChromeShape): Modifier = liveChromeGlass(shape)
 
-/** iOS `CloseButton` on live picker / assist cards \u2014 34dp glass circle. */
-@Composable
-fun LivePopupCloseButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    size: Dp = 34.dp,
-) {
-    Box(
-        modifier
-            .size(size)
-            .glass(CircleShape)
-            .chromeClickable(onClick = onClick)
-            .semantics { contentDescription = "Close" },
-        contentAlignment = Alignment.Center,
-    ) {
-        OpcIcon(
-            icon = OpcIcon.X,
-            contentDescription = null,
-            tint = LiveDesign.text,
-            modifier = Modifier.size(size * 0.38f),
-        )
-    }
-}
-
 fun Modifier.liveModuleFrame(rect: ChromeRect): Modifier =
     offset(rect.x.dp, rect.y.dp).size(rect.width.dp, rect.height.dp)
 
@@ -147,14 +121,6 @@ fun Modifier.liveModuleFrame(rect: ChromeRect, alignment: Alignment): Modifier {
             else -> Alignment.CenterVertically
         }
     return liveModuleFrame(rect).wrapContentHeight(align = vertical, unbounded = true)
-}
-
-@Composable
-fun Modifier.chromeClickable(enabled: Boolean = true, onLongClick: (() -> Unit)? = null,
-    onClick: () -> Unit): Modifier {
-    val haptics = LocalOperatorHaptics.current
-    return this.monitorChromeClickable(
-        enabled, onLongClick, { haptics.selection() }, { haptics.longPress() }, onClick)
 }
 
 typealias LiveMonitorLayout = com.opencapture.monitorui.LiveMonitorLayout
@@ -468,4 +434,3 @@ fun LiveAutoExposureUnlockButton(modifier: Modifier = Modifier, onClick: () -> U
 fun SdCardGlyph(tint: Color, modifier: Modifier = Modifier) {
     OpcIcon(OpcIcon.CARD_SIM, null, modifier.size(14.dp), tint)
 }
-
