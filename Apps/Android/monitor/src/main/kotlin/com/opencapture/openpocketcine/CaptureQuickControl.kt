@@ -5,13 +5,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.opencapture.opencine.cameracontrols.CaptureLists
+import com.opencapture.opencine.cameracontrols.CaptureQuickLifetime
+import com.opencapture.opencine.cameracontrols.IsoSheetLogic
+import com.opencapture.opencine.cameracontrols.LiveSheet
+import com.opencapture.opencine.cameracontrols.applyCaptureFocusChoice
+import com.opencapture.opencine.cameracontrols.applyCaptureShootingMode
+import com.opencapture.opencine.cameracontrols.captureQuickFocusControl
+import com.opencapture.opencine.cameracontrols.commitCaptureQuickControl
+import com.opencapture.opencine.cameracontrols.recordingCategoryQuickControl
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.monitorui.MonitorQuickControl
 import com.opencapture.opencine.appkit.MonitorCaptureField
@@ -21,13 +28,9 @@ import com.opencapture.opencine.appkit.quickControl
 import com.opencapture.opencine.core.SettingKey
 import com.opencapture.opencine.vocabulary.ApertureStrategy
 import com.opencapture.opencine.vocabulary.CameraCommands
-import com.opencapture.opencine.vocabulary.CameraModel
 import com.opencapture.opencine.vocabulary.CameraStatus
-import com.opencapture.opencine.vocabulary.EvComp
-import com.opencapture.opencine.vocabulary.GamepadShutterSync
 import com.opencapture.opencine.vocabulary.ShutterAngle
 import com.opencapture.opencine.vocabulary.VideoFormat
-import com.opencapture.openpocketcine.session.CameraProfile
 
 /** Reuses the persistent picker's production choices and typed action methods. */
 internal fun captureQuickControl(sheet: LiveSheet, status: CameraStatus, model: AppModel,
@@ -79,7 +82,7 @@ internal fun captureQuickControl(sheet: LiveSheet, status: CameraStatus, model: 
         }
         LiveSheet.FORMAT, LiveSheet.COLOR, LiveSheet.MODE -> {
             val family = model.session.connectedCamera?.model?.family ?: "pocket"
-            recordingCategoryQuickControl(sheet, status, body, family, model.session.profile)?.let(::chrome)
+            recordingCategoryQuickControl(sheet, status, body, family, model.session.profile.labels)?.let(::chrome)
         }
     }
 }
@@ -103,65 +106,6 @@ internal fun captureReadoutLabel(sheet: LiveSheet, status: CameraStatus, model: 
     val field = model?.let { commonCaptureField(sheet, status, it) } ?: return nativeLabel
     return field.label ?: "--"
 }
-
-/** Same primary drum the persistent FORMAT / COLOR / MODE pickers use. */
-internal fun recordingCategoryQuickControl(
-    sheet: LiveSheet,
-    status: CameraStatus,
-    bodyName: String = "",
-    family: String = "pocket",
-    profile: CameraProfile = CameraProfile.DJI,
-): MonitorQuickControl? =
-    when (sheet) {
-        LiveSheet.FORMAT -> {
-            if (CameraCommands.isPhotoMode(status.shootingMode)) {
-                MonitorQuickControl(
-                    listOf(CaptureLists.PHOTO_FORMAT_READOUT),
-                    CaptureLists.PHOTO_FORMAT_READOUT,
-                    enabled = false,
-                    context = "photo:${status.shootingMode}",
-                )
-            } else {
-                val formatStatus = CaptureLists.withEffectiveVideoFormats(
-                    status, bodyName.takeIf { it.isNotEmpty() }?.let { CameraModel(it) },
-                )
-                val format = VideoFormat.current(formatStatus)
-                val aspect = format.resolution.aspect
-                val tab = CaptureLists.formatResolutions(formatStatus, aspect).indexOf(format.resolution).coerceAtLeast(0)
-                val options = CaptureLists.fpsDrumLabels(formatStatus, tab, aspect)
-                if (options.isEmpty()) null
-                else {
-                    val live = format.frameRate.drumLabel
-                    MonitorQuickControl(
-                        options, if (live in options) live else "",
-                        enabled = CaptureLists.formatPickerEditable(formatStatus),
-                        context = "${format.resolution.rawValue}:${status.shootingMode}:${options.joinToString()}",
-                    )
-                }
-            }
-        }
-        LiveSheet.COLOR -> {
-            if (CameraCommands.isPhotoMode(status.shootingMode)) null
-            else {
-                val options = CaptureLists.colorWheelLabels(status, family, bodyName, profile)
-                if (options.isEmpty()) null
-                else {
-                    val live = CameraCommands.colorLabel(status.colorMode, family, profile.labels)
-                    MonitorQuickControl(
-                        options, if (live in options) live else "",
-                        context = "$family:${options.joinToString()}:${status.isRecording}",
-                    )
-                }
-            }
-        }
-        LiveSheet.MODE -> {
-            val options = CaptureLists.shootingModeLabels(bodyName, status.shootingMode, profile)
-            val live = CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile.labels).orEmpty()
-            MonitorQuickControl(options, if (live in options) live else "", enabled = !status.isRecording,
-                context = "${status.shootingMode}:$bodyName:${status.isRecording}")
-        }
-        else -> null
-    }
 
 internal fun applyCaptureQuickControl(sheet: LiveSheet, value: String, status: CameraStatus,
     model: AppModel, context: Context) {
@@ -212,69 +156,15 @@ internal fun applyCaptureQuickControl(sheet: LiveSheet, value: String, status: C
         LiveSheet.COLOR -> CaptureLists.applyColorDrum(
             label = value, family = model.session.connectedCamera?.model?.family ?: "pocket",
             status = status, hopEnabled = model.nativeISOHopEnabled,
-            name = model.session.connectedCamera?.model?.name.orEmpty(), profile = model.session.profile,
+            name = model.session.connectedCamera?.model?.name.orEmpty(), profile = model.session.profile.labels,
         )?.let { model.setColorMode(it.colorMode) }
         LiveSheet.MODE -> applyCaptureShootingMode(value, model.session.status.value,
-            model.session.connectedCamera?.model?.name, model.session.profile, model::setShootingMode)
-    }
-}
-
-/** Shared full-picker and quick-release boundary: never change shooting mode during a take. */
-internal fun applyCaptureShootingMode(value: String, status: CameraStatus, bodyName: String?,
-    profile: CameraProfile = CameraProfile.DJI, send: (Int) -> Unit) {
-    if (status.isRecording) return
-    CaptureLists.shootingModeRaw(value, bodyName, profile)?.let(send)
-}
-
-internal fun captureQuickFocusControl(status: CameraStatus, labels: List<String> = CameraProfile.DJI.labels.focusLabels) =
-    MonitorQuickControl(
-    labels,
-    CaptureFocusChoices.selection(status, labels),
-    context = "${status.focusMode}:${status.focusTrack}",
-)
-
-/** One native option list for the persistent picker and the readout preview. */
-internal object CaptureFocusChoices {
-    /** [labels] is the session's focus list ([CameraProfile.focusLabels]), in drum order. */
-    fun selection(status: CameraStatus, labels: List<String>): String = when (status.focusMode) {
-        CameraCommands.FOCUS_SINGLE -> "AF-S"
-        CameraCommands.FOCUS_CONTINUOUS -> labels.getOrNull(status.focusTrack + 1)
-            ?.takeIf { status.focusTrack in 0..3 }.orEmpty()
-        else -> ""
-    }
-    fun track(label: String): Int? = when (label) {
-        "AF-C" -> 0
-        "Showcase" -> 1
-        "Lock" -> 2
-        "Priority" -> 3
-        else -> null
+            model.session.connectedCamera?.model?.name, model.session.profile.labels, model::setShootingMode)
     }
 }
 
 internal fun applyCaptureFocusChoice(label: String, status: CameraStatus, model: AppModel) {
-    applyCaptureFocusChoice(label, status, model.session.profile.labels.focusLabels, model::setFocusMode, model::setFocusTrack)
-}
-
-internal fun applyCaptureFocusChoice(label: String, status: CameraStatus, labels: List<String>,
-    setFocusMode: (Boolean) -> Unit, setFocusTrack: (Int) -> Unit) {
-    if (label !in labels || label == CaptureFocusChoices.selection(status, labels)) return
-    if (label == "AF-S") setFocusMode(false)
-    else CaptureFocusChoices.track(label)?.let { track ->
-        if (!CaptureLists.focusIsContinuous(status)) setFocusMode(true)
-        if (status.focusTrack != track) setFocusTrack(track)
-    }
-}
-
-/** A remount, lifecycle interruption, or connection phase transition invalidates every old pointer. */
-internal class CaptureQuickLifetime {
-    var active by mutableStateOf(false)
-        private set
-    var epoch by mutableLongStateOf(0L)
-        private set
-    fun update(active: Boolean) {
-        if (this.active != active) { this.active = active; invalidate() }
-    }
-    fun invalidate() { epoch++ }
+    applyCaptureFocusChoice(label, status, model::setFocusMode, model::setFocusTrack, model.session.profile.labels.focusLabels)
 }
 
 private data class CaptureQuickSource(
@@ -300,12 +190,6 @@ internal fun rememberCaptureQuickLifetime(model: AppModel?): CaptureQuickLifetim
     return lifetime
 }
 
-/** Last synchronous boundary before the existing setter; no delayed command can escape this check. */
-internal fun commitCaptureQuickControl(expected: MonitorQuickControl, current: MonitorQuickControl?,
-    value: String, enabled: Boolean, send: () -> Unit) {
-    if (enabled && expected == current && expected.enabled && value in expected.options && value != expected.selection) send()
-}
-
 internal fun releaseCaptureQuickControl(sheet: LiveSheet, expected: MonitorQuickControl, value: String,
     model: AppModel, context: Context, lifetime: CaptureQuickLifetime, enabled: Boolean) {
     val currentStatus = model.session.status.value
@@ -318,25 +202,4 @@ internal fun releaseCaptureQuickControl(sheet: LiveSheet, expected: MonitorQuick
             model.session.control.commit(choice, field)
         } else applyCaptureQuickControl(sheet, value, currentStatus, model, context)
     }
-}
-
-/** Angle HUD: preferred only when it maps to live 1/N, else the nearest live label. */
-internal fun captureShutterReadout(
-    status: CameraStatus,
-    shutterUsesAngle: Boolean,
-    preferredAngle: Double,
-): String {
-    if (status.expoMode == CameraCommands.EXPO_AUTO) {
-        return EvComp.fromRaw(status.evComp)?.label ?: "—"
-    }
-    if (shutterUsesAngle && !CameraCommands.isPhotoMode(status.shootingMode)) {
-        if (status.shutterDenom <= 0) return "—"
-        return GamepadShutterSync.angleLabel(
-            status.shutterDenom,
-            status.fps,
-            CaptureLists.shutterDenoms(status),
-            preferredAngle,
-        )
-    }
-    return if (status.shutterDenom > 0) CaptureLists.shutterLabel(status.shutterDenom) else "—"
 }

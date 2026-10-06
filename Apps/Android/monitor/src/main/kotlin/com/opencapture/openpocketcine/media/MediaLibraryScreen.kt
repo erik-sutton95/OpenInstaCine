@@ -2,6 +2,7 @@ package com.opencapture.openpocketcine.media
 
 import com.opencapture.monitorui.MonitorConfirmPopup
 import com.opencapture.opencine.appkit.*
+import com.opencapture.opencine.cameracontrols.chromeClickable
 import com.opencapture.opencine.media.MediaAssetID
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.monitorui.MonitorTab
@@ -75,7 +76,6 @@ import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.LocalMonitorGlass
 import com.opencapture.openpocketcine.LiveType
 import com.opencapture.openpocketcine.OpcIcon
-import com.opencapture.openpocketcine.chromeClickable
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.panelGlass
 import kotlinx.coroutines.launch

@@ -1,6 +1,11 @@
 package com.opencapture.openpocketcine
 
 import com.opencapture.opencine.appkit.readPhoneBatteryReadout
+import com.opencapture.opencine.cameracontrols.GamepadHost
+import com.opencapture.opencine.cameracontrols.GimbalChromeHost
+import com.opencapture.opencine.cameracontrols.GimbalGamepadDriver
+import com.opencapture.opencine.cameracontrols.LiveGimbalPanel
+import com.opencapture.opencine.motion.GimbalWaypointSlot
 import com.opencapture.opencine.runtime.MonitorHDRDisplay
 import android.content.Context
 import android.content.Intent
@@ -12,8 +17,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.GamepadOperatorAction
 import com.opencapture.opencine.vocabulary.GimbalDoubleTap
+import com.opencapture.opencine.vocabulary.GimbalMode
 import com.opencapture.opencine.vocabulary.GimbalRamp
+import com.opencapture.opencine.vocabulary.GimbalSpeed
 import com.opencapture.opencine.vocabulary.VideoFormat
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
@@ -34,6 +43,7 @@ import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.createLiveAssistState
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import com.opencapture.openpocketcine.session.PocketCameraSession
+import com.opencapture.openpocketcine.session.SHELL_WAYPOINT_WIDE_HFOV_DEG
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,7 +56,7 @@ import com.opencapture.monitorui.settings.MonitorSettingsTab
 
 class AppModel(
     context: Context,
-) {
+) : GamepadHost, GimbalChromeHost {
     private val appContext = context.applicationContext
     init {
         DiagnosticCenter.install(appContext)
@@ -99,7 +109,7 @@ class AppModel(
     var operatorSettingsTab by mutableStateOf(MonitorSettingsTab.LINK)
     var chromeEditorMode by mutableStateOf<PocketDispMode?>(null)
     var chromeEditorReturnMode by mutableStateOf<PocketDispMode?>(null)
-    var liveChromeInteractive by mutableStateOf(true)
+    override var liveChromeInteractive by mutableStateOf(true)
     var keepScreenAwake by mutableStateOf(OperatorPrefs.keepScreenAwake(appContext))
         private set
     var hdrDisplay by mutableStateOf(OperatorPrefs.hdrDisplay(appContext))
@@ -111,7 +121,7 @@ class AppModel(
         private set
     var recordConfirmationEnabled by mutableStateOf(OperatorPrefs.recordConfirmationEnabled(appContext))
         private set
-    var hapticsEnabled by mutableStateOf(OperatorPrefs.hapticsEnabled(appContext))
+    override var hapticsEnabled by mutableStateOf(OperatorPrefs.hapticsEnabled(appContext))
         private set
     var gimbalStickSensitivity by mutableIntStateOf(OperatorPrefs.gimbalStickSensitivity(appContext))
         private set
@@ -139,13 +149,13 @@ class AppModel(
                 ),
                 curve = virtualJoystickResponseCurve,
             )
-    var gimbalRamp by mutableStateOf(OperatorPrefs.gimbalRamp(appContext))
+    override var gimbalRamp by mutableStateOf(OperatorPrefs.gimbalRamp(appContext))
         private set
-    var gimbalDoubleTap by mutableStateOf(OperatorPrefs.gimbalDoubleTap(appContext))
+    override var gimbalDoubleTap by mutableStateOf(OperatorPrefs.gimbalDoubleTap(appContext))
         private set
-    var liveGimbalPanel by mutableStateOf(LiveGimbalPanel.NONE)
+    override var liveGimbalPanel by mutableStateOf(LiveGimbalPanel.NONE)
     /** Canvas-space centre of the programmed-move editor / Run pill. Null until first open or drag. */
-    var gimbalFloatCenter by mutableStateOf<Offset?>(null)
+    override var gimbalFloatCenter by mutableStateOf<Offset?>(null)
     var gimbalDebugCenter by mutableStateOf<Offset?>(null)
 
     init {
@@ -174,8 +184,8 @@ class AppModel(
     var phoneCharging by mutableStateOf(false)
         private set
     var uiLocked by mutableStateOf(false)
-    val gimbalGamepad = GimbalGamepadDriver()
-    var gamepadConnected by mutableStateOf(false)
+    val gimbalGamepad = GimbalGamepadDriver(OperatorPrefs::gimbalGamepadStick)
+    override var gamepadConnected by mutableStateOf(false)
 
     val currentDispMode: PocketDispMode
         get() = if (assistClean) PocketDispMode.CLEAN else PocketDispMode.LIVE
@@ -183,7 +193,7 @@ class AppModel(
     val dispChrome: PocketDispChrome
         get() = chrome(currentDispMode)
 
-    val isEditingChrome: Boolean
+    override val isEditingChrome: Boolean
         get() = chromeEditorMode != null
 
     fun chrome(mode: PocketDispMode): PocketDispChrome =
@@ -267,13 +277,13 @@ class AppModel(
         OperatorPrefs.setHapticsEnabled(appContext, value)
     }
 
-    fun updateGimbalDoubleTap(value: GimbalDoubleTap) {
+    override fun updateGimbalDoubleTap(value: GimbalDoubleTap) {
         gimbalDoubleTap = value
         OperatorPrefs.setGimbalDoubleTap(appContext, value)
         session.gimbalDoubleTap = value
     }
 
-    fun updateGimbalRamp(value: GimbalRamp) {
+    override fun updateGimbalRamp(value: GimbalRamp) {
         gimbalRamp = value
         OperatorPrefs.setGimbalRamp(appContext, value)
         session.gimbalRamp = value
@@ -452,17 +462,59 @@ class AppModel(
         )
     }
 
-    fun updateGimbalPadStick(x: Float, y: Float) {
+    override fun updateGimbalPadStick(x: Float, y: Float) {
         if (uiLocked) return
         session.updateGimbalStick(x, y, gimbalStickSensitivity, assist.mirrorsHorizontally)
     }
 
-    fun endGimbalStick() = session.endGimbalStick()
+    override fun endGimbalStick() = session.endGimbalStick()
 
     val isLive: Boolean
         get() = shell.state.value.monitor != null
 
-    fun canDriveGimbalPad(): Boolean =
+    // GimbalChromeHost (camera-controls): the gimbal chrome reads these host values and reaches the session through the rest.
+    override val mirrorsHorizontally get() = assist.mirrorsHorizontally
+    override val labelProfile get() = session.profile.labels
+    override val waypointWideHFovDeg get() = SHELL_WAYPOINT_WIDE_HFOV_DEG
+    override val connectedCameraId get() = session.connectedCamera?.id
+    override val phase get() = session.phase
+    override val phaseFlow get() = session.phaseFlow
+    override val gimbalMode get() = session.gimbalMode
+    override val gimbalSpeed get() = session.gimbalSpeed
+    override val gimbalProgram get() = session.gimbalProgram
+    override val gimbalMoveRunning get() = session.gimbalMoveRunning
+    override val gimbalMovePaused get() = session.gimbalMovePaused
+    override val gimbalMoveCountdown get() = session.gimbalMoveCountdown
+    override val gimbalPoseInvertPan get() = session.gimbalPoseInvertPan
+    override val chromeStatus get() = session.chromeStatus
+    override val canRunProgrammedMove get() = session.canRunProgrammedMove
+    override fun predictedGimbalWaypoint(nowSeconds: Double) = session.predictedGimbalWaypoint(nowSeconds)
+    override fun programmedZoomUnavailableReason(status: CameraStatus) = session.programmedZoomUnavailableReason(status)
+    override fun setGimbalMode(mode: GimbalMode) = session.setGimbalMode(mode)
+    override fun setGimbalSpeed(speed: GimbalSpeed) = session.setGimbalSpeed(speed)
+    override fun setGimbalWaypoint(slot: GimbalWaypointSlot) = session.setGimbalWaypoint(slot)
+    override fun clearGimbalWaypoint(slot: GimbalWaypointSlot) = session.clearGimbalWaypoint(slot)
+    override fun setGimbalLegDuration(ab: Double?, bc: Double?) = session.setGimbalLegDuration(ab, bc)
+    override fun setGimbalSmoothness(value: Double) = session.setGimbalSmoothness(value)
+    override fun setGimbalLoop(enabled: Boolean) = session.setGimbalLoop(enabled)
+    override fun clearGimbalProgram() = session.clearGimbalProgram()
+    override fun runProgrammedMove() = session.runProgrammedMove()
+    override fun restartProgrammedMove() = session.restartProgrammedMove()
+    override fun pauseProgrammedMove() = session.pauseProgrammedMove()
+    override fun resumeProgrammedMove() = session.resumeProgrammedMove()
+    override fun cancelProgrammedMove() = session.cancelProgrammedMove()
+
+    // GamepadHost (camera-controls): the gamepad driver reaches the session through these.
+    override val lastGimbalLimitContact get() = session.lastGimbalLimitContact
+    override val zoomReadout get() = session.zoomReadout.value
+    override val zoomColorHopPending get() = session.zoomColorHopPending
+    override fun presentControlNote(note: String) = session.presentControlNote(note)
+    override fun zoomMax() = session.zoomMax()
+    override fun updateZoomPinch(magnification: Double) = session.updateZoomPinch(magnification)
+    override fun endZoomPinch() = session.endZoomPinch()
+    override fun handleGamepadAction(action: GamepadOperatorAction) = session.handleGamepadAction(action)
+
+    override fun canDriveGimbalPad(): Boolean =
         isLive &&
             !uiLocked &&
             shell.state.value.cover == null &&

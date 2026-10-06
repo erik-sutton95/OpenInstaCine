@@ -1,5 +1,9 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.cameracontrols.CaptureLists
+import com.opencapture.opencine.cameracontrols.LiveSheet
+import com.opencapture.opencine.cameracontrols.headerLabel
+import com.opencapture.opencine.cameracontrols.subtitle
 import com.opencapture.opencine.vocabulary.ApertureStrategy
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.CameraModel
