@@ -195,6 +195,7 @@ class PocketCameraSession(
 
     init {
         control.onNote = { presentControlNote(it) }
+        control.noteFor = CorePresentation::note
         control.onChange = { _status.update(::projectControls) }
         control.onRecordFinished = { receipt ->
             val stopped = receipt.intent == CameraCommandIntent.StopRecording && receipt.stage == CommandStage.Confirmed
