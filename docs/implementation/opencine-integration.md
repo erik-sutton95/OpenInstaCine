@@ -164,10 +164,11 @@ never work), or already matched `main`. Copy that used an em dash on `main` now 
 comma (iPhone `main`'s punctuation for the same lines). Underneath:
 
 - Command path: ISO, shutter, white balance and record go through one OpenCineCore session per
-  camera. A change holds until the camera reports it. Android: a refused or unsent write says
-  "ISO was not applied by the camera." and one the camera does not take reverts silently
-  (restored to `main`). iPhone: a refused, unapplied or timed out write says so instead of
-  reverting silently (to be restored to `main`).
+  camera. A change holds until the camera reports it. A refused or unsent write says "ISO was
+  not applied by the camera." and one the camera does not take reverts silently, on both
+  platforms (restored to `main`; iPhone counts only those toward Link Health again). With no
+  timecode yet iPhone VoiceOver reads "Timecode not available" (kept fix, accessibility: `main`
+  read the "--:--:--" placeholder).
 - Session isolation: each connection owns its backend, labels, media route, zoom ceiling (iPhone
   readouts reach 15x and the Android zoom chip stops at 12x: already matched `main`) and learned
   picture EV calibration. Old v1 EV offsets seed the new per-camera keys and are never rewritten.
@@ -177,8 +178,8 @@ comma (iPhone `main`'s punctuation for the same lines). Underneath:
 - Capability-driven layout (SHELL-01): the live monitor shows what the connected Luna declares
   through OpenCine (`LunaCameraSession.layout`): gimbal and head tracking from its motion,
   host-derived timecode, no audio levels, no iris. The app keeps only clip delete, clip star and
-  the internet hop. Differences: the iPhone Clean view settings no longer offer an AUDIO pin
-  (Luna reports no audio levels; to be restored to `main`; Android `main` hid it too). With no
+  the internet hop. The iPhone Clean view settings offer the AUDIO pin, as on `main`
+  (restored to `main`; Android `main` hid it too, already matched). With no
   camera connected, iPhone Settings shows the gimbal, joystick, head-tracking, zoom chip and
   timecode rows (restored to `main`; Android lists Timecode and needs a camera for gimbal and
   zoom, as on `main`). No Multiview entry: the app qualifies no multicam budget.

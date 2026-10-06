@@ -452,9 +452,7 @@ struct SettingsRootView: View {
     }
 
     private var cleanPins: [MonitorDisplayToggle] {
-        LiveAssistTool.cleanPinCases.filter {
-            $0 != .audioMeters || OsmoMonitorPresentation.capabilities(model.session).audio
-        }.map { tool in
+        LiveAssistTool.cleanPinCases.map { tool in
             MonitorDisplayToggle(id: "clean.pin." + tool.rawValue,
                 title: tool.displaySettingsTitle,
                 isOn: model.assist.cleanViewPinnedTools.contains(tool),
