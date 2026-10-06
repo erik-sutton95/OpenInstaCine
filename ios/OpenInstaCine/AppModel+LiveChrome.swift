@@ -3,7 +3,7 @@ import MonitorUI
 import OpenCineAppKit
 import OpenCineCameraControls
 import OpenCineCameraVocabulary
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 typealias FieldMonitorStatusChrome = LiveStatusChrome<AppModel>

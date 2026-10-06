@@ -1,5 +1,5 @@
 import MonitorUI
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// Mimo's green (x) on the locked subject box.

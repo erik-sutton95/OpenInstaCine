@@ -16,10 +16,10 @@ One product version for both apps, two store counters.
 
 | Field | Source | Now |
 | --- | --- | --- |
-| Product version | iOS `MARKETING_VERSION` (`ios/Config/Version.xcconfig`) and Android `openpocketcine.versionName` (`Apps/Android/gradle.properties`) | `0.1.0` |
+| Product version | iOS `MARKETING_VERSION` (`ios/Config/Version.xcconfig`) and Android `openinstacine.versionName` (`Apps/Android/gradle.properties`) | `0.1.0` |
 | iOS build | Xcode Cloud counter | |
 | Android Play build | `ANDROID_VERSION_CODE_BASE` + `github.run_number` (`-PversionCode`) | |
-| Android sideload build | `openpocketcine.versionCode` (the floor) | `1` |
+| Android sideload build | `openinstacine.versionCode` (the floor) | `1` |
 
 Keep the two product versions equal. Bump them together only for a new train
 (`0.1.0` -> `0.2.0`), then tag `v0.2.0` on `main` (one tag for both platforms).
@@ -30,7 +30,7 @@ Keep the two product versions equal. Bump them together only for a new train
 For Android phones without Play. Only after the app is verified on a physical
 phone with a Luna Ultra.
 
-1. **Bump.** One `chore(android)` PR raises `openpocketcine.versionCode` by one
+1. **Bump.** One `chore(android)` PR raises `openinstacine.versionCode` by one
    (Android refuses to install over an equal code). Merge it.
 2. **Build** from that `main` commit with the sideload key
    `.local/android/press-release.jks` (store path, passwords and alias in

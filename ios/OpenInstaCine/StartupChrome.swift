@@ -1,7 +1,7 @@
 import MonitorUI
 import OpenCineAppKitApple
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 enum LiveDesign {

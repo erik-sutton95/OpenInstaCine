@@ -3,7 +3,7 @@ import OpenCineMedia
 import CoreImage
 import OpenCineApple
 import Metal
-import OpenPocketViewCore
+import OpenInstaViewCore
 import UIKit
 
 /// Compatibility names; picture and sample demand are owned by Media.

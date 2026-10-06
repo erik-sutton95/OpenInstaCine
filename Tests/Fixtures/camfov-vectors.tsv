@@ -1,6 +1,6 @@
 # Golden vectors for the zoom / FORMAT maths, shared by both shells.
 #
-# Swift owns `CamFov` and `VideoResolution` in `Sources/OpenPocketViewCore`;
+# Swift owns `CamFov` and `VideoResolution` in `Sources/OpenInstaViewCore`;
 # Kotlin re-implements them by hand in `Apps/Android/.../session`. Nothing links
 # the two, so they drift silently. This file is the one thing both test suites
 # read: `CamFovVectorTests` (Swift) and `CamFovVectorTest` (Kotlin) walk up to

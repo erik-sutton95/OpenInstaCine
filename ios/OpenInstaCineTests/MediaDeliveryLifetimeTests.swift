@@ -90,7 +90,7 @@ final class MediaDeliveryLifetimeTests: XCTestCase {
 }
 
 import MonitorUI
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import UIKit
 import Vision

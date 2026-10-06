@@ -1,6 +1,6 @@
 import CoreVideo
 import Foundation
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// Shared synthetic-buffer factories for the scope-pipeline tests.
 ///

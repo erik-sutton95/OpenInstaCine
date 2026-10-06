@@ -1,6 +1,6 @@
 import MonitorUI
 import OpenCineAppKit
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// A confirmation authorizes the capture state visible when it was opened. Its target is

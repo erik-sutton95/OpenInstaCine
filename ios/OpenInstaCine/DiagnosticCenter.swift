@@ -2,7 +2,7 @@ import Foundation
 import MetricKit
 import class OpenCineCore.LocalVPNNotice
 import enum OpenCineCore.LocalVPNProbe
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import UIKit
 import os

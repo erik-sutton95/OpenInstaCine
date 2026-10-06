@@ -1,6 +1,6 @@
 import MonitorUI
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 extension FalseColorLooks {

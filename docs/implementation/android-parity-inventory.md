@@ -44,7 +44,7 @@ Source references are relative to `/Users/eriksutton/Work/OpenPocketCine/`. The 
 4. `media/MediaSessionLink.kt` is not a generic media backend. It exposes `sendDuml`, raw `DumlFrame`, and reflects into `PocketCameraSession`'s private `datalink`. `MediaManifest` parses Pocket records and `MediaModels` includes DJI HTTP storage rules. Replace that dependency with list/download/thumbnail/delete capability methods, generic clip descriptors and progress. Keep its cache/player/chrome in shared ownership.
 5. `HevcDecoder.decode()` immediately rejects frames if `SwiftCore.isAvailable` is false; it calls JNI for NAL types, keyframe classification and CSD. A Kotlin Luna TCP client alone therefore cannot feed the existing decoder without the shared media JNI product or a consciously extracted decoder parser. Do not silently remove JNI and expect the screen to work.
 6. `FeedEffectsRenderPlanFactory` uses JNI for imported/creative LUT cubes, false-color paint/weight and assist scalars. `LutCatalog` validates imports through JNI. `ConformPreview` uses JNI in production with a Kotlin test fallback. These functions belong to shared monitor/media modules, not a required Osmo camera adapter.
-7. `SwiftCoreJNI.swift` hard-codes `Java_com_opencapture_openpocketcine_bridge_SwiftCore_*` exported names, and Kotlin loads `OpenPocketCineAndroid`. The Vulkan C++ JNI names similarly match the existing class package. Changing `applicationId` is safe; blindly renaming Kotlin package declarations without coordinated JNI exports breaks native loading. Preserve an internal compatibility package temporarily or rename both sides atomically.
+7. `SwiftCoreJNI.swift` hard-codes `Java_com_opencapture_openinstacine_monitor_bridge_SwiftCore_*` exported names, and Kotlin loads `OpenInstaCineAndroid`. The Vulkan C++ JNI names similarly match the existing class package. Changing `applicationId` is safe; blindly renaming Kotlin package declarations without coordinated JNI exports breaks native loading. Preserve an internal compatibility package temporarily or rename both sides atomically.
 8. `ANDROID.md` says the Swift facade owns the Android session, but current implementation keeps BLE/Wi-Fi/socket orchestration in Kotlin `PocketCameraSession`, `BleLink`, `CameraApJoiner` and `DatalinkDriver`. The Swift facade supplies pure wire/policy helpers. Build the new design from current source, not the older documentation claim.
 
 ## Buildable shared-library shape
@@ -124,7 +124,7 @@ With four available concurrent agents, run contracts/build locally while shell, 
 
 ## Complete production Kotlin file index
 
-All paths below are under `Apps/Android/app/src/main/kotlin/com/opencapture/openpocketcine/` in the baseline. Line counts describe the inspected working tree and are supplied for ownership planning.
+All paths below are under `Apps/Android/app/src/main/kotlin/com/opencapture/openinstacine/monitor/` in the baseline. Line counts describe the inspected working tree and are supplied for ownership planning.
 
 ### `root/` (23 files)
 
@@ -295,4 +295,4 @@ All paths below are under `Apps/Android/app/src/main/kotlin/com/opencapture/open
 | --- | ---: |
 | `SettingsComponents.kt` | 1,034 |
 
-The additional Kotlin API is `core-api/src/main/kotlin/com/opencapture/openpocketcine/core/CameraSession.kt` (28 lines). Swift JNI support is `Sources/OpenPocketCineAndroidFacade/{AndroidSessionWire,FeedEffectsWire,LUTLibraryWire,SwiftCoreJNI}.swift` plus `Sources/CJNI`. Native renderer ownership includes `app/src/main/cpp/{CMakeLists.txt,embed_spv.cmake,opc_vulkan.cpp,shaders/*}` and `app/src/main/assets/shaders/*`.
+The additional Kotlin API is `core-api/src/main/kotlin/com/opencapture/openinstacine/monitor/core/CameraSession.kt` (28 lines). Swift JNI support is `Sources/OpenInstaCineAndroidFacade/{AndroidSessionWire,FeedEffectsWire,LUTLibraryWire,SwiftCoreJNI}.swift` plus `Sources/CJNI`. Native renderer ownership includes `app/src/main/cpp/{CMakeLists.txt,embed_spv.cmake,opc_vulkan.cpp,shaders/*}` and `app/src/main/assets/shaders/*`.

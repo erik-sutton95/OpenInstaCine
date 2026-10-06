@@ -1,6 +1,6 @@
 import MonitorUI
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import OpenCineMedia
 import SwiftUI
 

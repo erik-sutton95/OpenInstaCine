@@ -88,7 +88,7 @@ with the shared Motion Control drawer.
 ## How Swift reaches Android
 
 The shared monitor core is Swift, cross-compiled for `aarch64-unknown-linux-android29`
-and loaded through JNI (`Sources/OpenPocketCineAndroidFacade`). The Luna link is
+and loaded through JNI (`Sources/OpenInstaCineAndroidFacade`). The Luna link is
 not: `insta360-luna` (OpenCine `Android/`) is a separate Kotlin implementation of UCD2
 framing, protobuf, GATT, JCA crypto and the network-bound socket. Its request
 bytes are pinned to the same captured fixtures as the Swift package
@@ -103,8 +103,8 @@ bytes are pinned to the same captured fixtures as the Swift package
 | OpenCine `insta360-shell` | Kotlin backend contract: discovery, lifecycle, state, capabilities, frames, optional camera controls (included build) |
 | OpenCine `insta360-luna` | Android GATT, crypto, Wi-Fi and TCP, UCD2 and Luna messages; `LunaIntegration` connects the shared flow to the backend (included build) |
 
-The internal `com.opencapture.openpocketcine` package, JNI symbols and the
-`OpenPocketCineAndroid` library name remain so the inherited decoder, LUT and
+The internal `com.opencapture.openinstacine.monitor` package, JNI symbols and the
+`OpenInstaCineAndroid` library name remain so the inherited decoder, LUT and
 assist calls load. Build recipes: [Setup](../../guides/setup/#android).
 
 ## Operator surface

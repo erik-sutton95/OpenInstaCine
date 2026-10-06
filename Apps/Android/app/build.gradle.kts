@@ -1,10 +1,10 @@
 plugins { alias(libs.plugins.android.application); alias(libs.plugins.kotlin.compose) }
 
 // One product version for iOS and Android (docs/RELEASE.md). Play CI stamps -PversionCode;
-// openpocketcine.versionCode in gradle.properties is the sideload floor. :monitor reads the same.
+// openinstacine.versionCode in gradle.properties is the sideload floor. :monitor reads the same.
 val resolvedVersionCode: Int =
-    (findProperty("versionCode") ?: property("openpocketcine.versionCode")).toString().toInt()
-val resolvedVersionName: String = property("openpocketcine.versionName").toString()
+    (findProperty("versionCode") ?: property("openinstacine.versionCode")).toString().toInt()
+val resolvedVersionName: String = property("openinstacine.versionName").toString()
 
 android {
  namespace = "com.opencapture.openinstacine"

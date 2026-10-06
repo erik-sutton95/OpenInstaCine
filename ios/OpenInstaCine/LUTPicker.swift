@@ -1,6 +1,6 @@
 import MonitorUI
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// The shared LUT picker on this app's session, copy and palette; the sheet form pins this

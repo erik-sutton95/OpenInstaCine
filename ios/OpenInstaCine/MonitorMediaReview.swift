@@ -5,7 +5,7 @@
     import MonitorUI
     import OpenCineCore
     import OpenCineMedia
-    import OpenPocketViewCore
+    import OpenInstaViewCore
     import SwiftUI
     import UIKit
 

@@ -1,7 +1,7 @@
 import AVFoundation
 import MonitorUI
 import OSLog
-import OpenPocketViewCore
+import OpenInstaViewCore
 import OpenCineApple
 import SwiftUI
 

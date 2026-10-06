@@ -1,5 +1,5 @@
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 typealias WatcherBrowseView = WatcherBrowse<AppModel>
 

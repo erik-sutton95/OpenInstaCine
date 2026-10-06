@@ -4,7 +4,7 @@ import OpenCineAppKit
 import OpenCineAppKitApple
 import OpenCineCameraControls
 import OpenCineCore
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// Live HEVC feed with OpenZCine landscape chrome. Video and chrome are **siblings**:

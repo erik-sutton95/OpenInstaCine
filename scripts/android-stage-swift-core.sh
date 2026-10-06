@@ -12,7 +12,7 @@ set -euo pipefail
 readonly SWIFT_VERSION="6.3.3"
 readonly DEFAULT_SWIFT_SDK="swift-6.3.3-RELEASE_android"
 readonly DEFAULT_TARGET="aarch64-unknown-linux-android29"
-readonly PRODUCT="OpenPocketCineAndroid"
+readonly PRODUCT="OpenInstaCineAndroid"
 
 usage() {
     cat <<'EOF'

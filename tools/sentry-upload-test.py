@@ -74,7 +74,7 @@ def make_empty_dsym(root: Path) -> Path:
 def make_so(root: Path) -> Path:
     lib = root / "arm64-v8a"
     lib.mkdir(parents=True)
-    (lib / "libOpenPocketViewCore.so").write_bytes(b"fake-elf")
+    (lib / "libOpenInstaViewCore.so").write_bytes(b"fake-elf")
     return root
 
 
@@ -349,7 +349,7 @@ class SentryUploadTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         logged = self.argv_text()
-        self.assertIn(str(native / "arm64-v8a" / "libOpenPocketViewCore.so"), logged)
+        self.assertIn(str(native / "arm64-v8a" / "libOpenInstaViewCore.so"), logged)
         self.assertIn("--wait", logged)
         self.assertNotIn("upload-proguard", logged)
 
@@ -453,8 +453,8 @@ class SentryUploadTests(unittest.TestCase):
         import zipfile
 
         with zipfile.ZipFile(zip_path, "w") as archive:
-            so = native / "arm64-v8a" / "libOpenPocketViewCore.so"
-            archive.write(so, arcname="arm64-v8a/libOpenPocketViewCore.so")
+            so = native / "arm64-v8a" / "libOpenInstaViewCore.so"
+            archive.write(so, arcname="arm64-v8a/libOpenInstaViewCore.so")
         env = self.enabled_env(SENTRY_PROJECT="openinstacine-android")
         result = run_upload(
             env,
@@ -463,7 +463,7 @@ class SentryUploadTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         logged = self.argv_text()
-        self.assertIn("libOpenPocketViewCore.so", logged)
+        self.assertIn("libOpenInstaViewCore.so", logged)
         self.assertIn("debug-files check --json", logged)
 
     def test_check_argv_is_dwarf_file_not_bundle(self) -> None:

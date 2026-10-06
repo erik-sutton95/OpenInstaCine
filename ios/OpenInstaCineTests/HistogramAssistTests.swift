@@ -1,7 +1,7 @@
 import MonitorUI
 import OpenCineCameraControls
 import OpenCineMedia
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import XCTest
 

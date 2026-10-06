@@ -1,6 +1,6 @@
 import AVFoundation
 import OpenCineApple
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// Stable native playback adapter; UI chrome is a sibling of this host.

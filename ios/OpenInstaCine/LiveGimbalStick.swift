@@ -1,6 +1,6 @@
 import CoreVideo
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// The shared on-feed stick and head-track dials, on this app's model and palette.
 typealias LiveGimbalStick = OpenCineCameraControls.LiveGimbalStick<AppModel, LiveDesign>

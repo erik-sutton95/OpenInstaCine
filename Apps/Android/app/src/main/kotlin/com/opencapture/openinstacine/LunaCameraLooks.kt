@@ -1,6 +1,6 @@
 package com.opencapture.openinstacine
 
-import com.opencapture.openpocketcine.feed.MonitorTransfer
+import com.opencapture.openinstacine.monitor.feed.MonitorTransfer
 import com.opencapture.opencine.vocabulary.LutCategory
 import com.opencapture.opencine.vocabulary.LutEntry
 

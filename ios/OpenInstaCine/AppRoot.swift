@@ -12,7 +12,7 @@ import OpenCineFrameIO
 import OpenCineMedia
 import OpenCineRelayApple
 import OpenCineWatch
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import UIKit
 

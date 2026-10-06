@@ -1,6 +1,6 @@
 import Insta360Apple
 import Insta360Protocol
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine

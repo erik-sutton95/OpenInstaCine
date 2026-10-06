@@ -2,7 +2,7 @@ import MonitorPresentation
 import MonitorUI
 import OpenCineAppKit
 import OpenCineFrameIO
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 struct MediaDeliveryOverlayState: Equatable, Sendable {

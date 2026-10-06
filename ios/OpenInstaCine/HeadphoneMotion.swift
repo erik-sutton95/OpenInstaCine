@@ -1,6 +1,6 @@
 import Foundation
 import OpenCineAppKitApple
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// The shared head-track bridge driving this app's camera session.
 extension AppModel: HeadTrackHost {

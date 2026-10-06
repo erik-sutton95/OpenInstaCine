@@ -1,6 +1,6 @@
 import MonitorPresentation
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import XCTest
 

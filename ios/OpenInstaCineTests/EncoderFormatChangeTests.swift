@@ -1,5 +1,5 @@
 import OpenCineApple
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine

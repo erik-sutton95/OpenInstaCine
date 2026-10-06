@@ -66,7 +66,7 @@ just testflight-notes      # check and print
 
 ## Versions
 
-`MARKETING_VERSION` equals Android `openpocketcine.versionName` (currently
+`MARKETING_VERSION` equals Android `openinstacine.versionName` (currently
 `0.1.0`). Testers see `0.1.0 (build)`. Bump only for a new train
 ([`RELEASE.md`](RELEASE.md)). `just ios-version`.
 

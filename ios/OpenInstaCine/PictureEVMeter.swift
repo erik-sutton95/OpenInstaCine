@@ -1,6 +1,6 @@
 import Foundation
 import OpenCineCore
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// What one learned offset assumes: one camera, one recording profile and transfer, one
 /// metering mode. A change of any of them reads (and learns) a different offset.
