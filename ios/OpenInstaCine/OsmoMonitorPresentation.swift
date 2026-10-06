@@ -22,12 +22,18 @@ enum OsmoMonitorPresentation {
     /// (`LunaCameraSession.layout`): gimbal and head tracking from its motion (GET_ANGLE is the
     /// pose), host-derived timecode, no audio levels, no iris. Only clip delete, clip star and
     /// the internet hop are the app's, until media and connection routes carry them (SHELL-02).
-    /// No session: the Core projection of nothing keeps the base. Simulator reviews open one
-    /// (`MonitorUIReview.prepare`), so screenshots show what a Luna operator sees.
+    /// No session: what this app has always offered before a camera connects (gimbal, zoom,
+    /// focus, head tracking, timecode), so Settings keeps those rows. Simulator reviews open a
+    /// session (`MonitorUIReview.prepare`), so screenshots show what a Luna operator sees.
     static func capabilities(_ session: CameraSession) -> MonitorLayoutCapabilities {
-        (session.coreSession as? LunaCameraSession)?.layout(base: appBase)
-            ?? MonitorLayoutCapabilities(CapabilitySnapshot(), base: appBase)
+        (session.coreSession as? LunaCameraSession)?.layout(base: appBase) ?? unconnected
     }
+
+    private static let unconnected: MonitorLayoutCapabilities = {
+        var layout = appBase
+        (layout.gimbal, layout.zoom, layout.focus, layout.headTracking, layout.timecode) = (true, true, true, true, true)
+        return layout
+    }()
 
     private static let appBase: MonitorLayoutCapabilities = {
         var base = MonitorLayoutCapabilities()

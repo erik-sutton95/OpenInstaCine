@@ -66,7 +66,7 @@ extension View {
     }
 }
 
-/// App copy around the shared pair page: the tips this app shows in the Luna pairing slot
+/// App copy around the pair wizard: the cards it shows while choosing a camera
 /// (a running Insta360 app holds the camera; `preCheck` and `scanEmptyHint` match Android word
 /// for word) and the Personal Hotspot join refusal.
 enum StartupConnectionCopy {
