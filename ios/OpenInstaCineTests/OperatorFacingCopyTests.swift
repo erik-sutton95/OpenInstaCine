@@ -49,7 +49,7 @@ final class OperatorFacingCopyTests: XCTestCase {
             MonitorSettingsNumberField.doneTitle,
             PeakingAssist.sensitivityHelp,
             PeakingAssist.colorHelp,
-            FalseColorAssist.scaleHelp,
+            FalseColorLooks.app.scaleHelp,
             FalseColorAssist.referenceHelp,
             WaveformAssist.brightnessHelp,
             ParadeAssist.brightnessHelp,

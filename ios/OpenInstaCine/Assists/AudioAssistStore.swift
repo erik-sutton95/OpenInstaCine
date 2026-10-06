@@ -57,9 +57,3 @@ extension MonitorScopePanelStore where Options == MonitorHistogramOptions {
         self.init(options: options, storage: .standard, key: "OpenInstaCine.HistogramAssist.v1")
     }
 }
-
-extension MonitorFalseColorReferencePositionStore {
-    convenience init(defaults: UserDefaults = .standard) {
-        self.init(storage: defaults, key: "OpenInstaCine.Assist.falseColorReference.positions.v1")
-    }
-}
