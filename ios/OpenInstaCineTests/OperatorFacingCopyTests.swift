@@ -1,5 +1,6 @@
 import MonitorUI
 import OpenCineAppKitApple
+import OpenCineCameraControls
 import OpenCineCore
 import OpenPocketViewCore
 import XCTest

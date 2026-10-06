@@ -1,6 +1,7 @@
 import MonitorPresentation
 import MonitorUI
 import OpenCineAppKit
+import OpenCineCameraControls
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -33,23 +34,6 @@ struct AppSettingsView: View {
 }
 
 // MARK: - Shared Operator Setup / Media chrome
-
-struct CloseButton: View {
-    var action: () -> Void
-    var size: CGFloat = 34
-
-    var body: some View {
-        Button(action: action) {
-            OpcIcon.x
-                .frame(width: size * 0.38, height: size * 0.38)
-                .foregroundStyle(LiveDesign.text)
-                .frame(width: size, height: size)
-                .glassCircle(interactive: true)
-        }
-        .buttonStyle(.monitorTapTarget)
-        .accessibilityLabel("Close")
-    }
-}
 
 struct SettingsSwitchInlineRow: View {
     let title: String
@@ -98,15 +82,7 @@ struct SettingsResetButton: View {
     }
 }
 
-enum OperatorSettingsHaptics {
-    @MainActor
-    static func selection(enabled: Bool) {
-        guard enabled else { return }
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.prepare()
-        generator.impactOccurred()
-    }
-}
+typealias OperatorSettingsHaptics = OpenCineCameraControls.OperatorSettingsHaptics
 
 struct SettingsRowCard<Content: View>: View {
     @Environment(AppModel.self) private var model
