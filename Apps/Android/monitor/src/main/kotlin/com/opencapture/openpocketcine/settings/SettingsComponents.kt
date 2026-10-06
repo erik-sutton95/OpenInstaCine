@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -37,24 +38,24 @@ internal fun Modifier.settingsClickable(role: Role, enabled: Boolean = true, onC
         onClick = onClick,
     )
 
-/** iOS `SettingsPalette` - zone-scoped stripe/peaking colours. */
+/** iOS `SettingsPalette` - zone-scoped stripe/peaking colours; each dot shows the colour its overlay paints. */
 object SettingsPalette {
     val highlight: List<MonitorSettingsColorDot> =
         listOf(
             MonitorSettingsColorDot("White", LiveDesign.text),
-            MonitorSettingsColorDot("Amber", LiveDesign.accent),
+            MonitorSettingsColorDot("Amber", LiveDesign.amber),
             MonitorSettingsColorDot("Red", LiveDesign.rec),
         )
     val midtone: List<MonitorSettingsColorDot> =
         listOf(
-            MonitorSettingsColorDot("Amber", LiveDesign.accent),
-            MonitorSettingsColorDot("Cyan", LiveDesign.info),
+            MonitorSettingsColorDot("Amber", LiveDesign.amber),
+            MonitorSettingsColorDot("Cyan", Color(0f, 0.85f, 0.9f)),
             MonitorSettingsColorDot("Green", LiveDesign.good),
         )
     val peaking: List<MonitorSettingsColorDot> =
         listOf(
             MonitorSettingsColorDot("White", LiveDesign.text),
-            MonitorSettingsColorDot("Blue", LiveDesign.info),
+            MonitorSettingsColorDot("Blue", Color(64f / 255f, 142f / 255f, 1f)),
             MonitorSettingsColorDot("Red", LiveDesign.rec),
             MonitorSettingsColorDot("Green", LiveDesign.good),
         )
