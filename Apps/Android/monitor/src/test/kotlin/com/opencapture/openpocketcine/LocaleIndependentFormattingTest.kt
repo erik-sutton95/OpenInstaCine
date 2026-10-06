@@ -2,8 +2,8 @@ package com.opencapture.openpocketcine
 
 import com.opencapture.opencine.media.MonitorNDFilterRecommendation
 import com.opencapture.opencine.media.FrameRateSampler
+import com.opencapture.opencine.vocabulary.CamFov
 import com.opencapture.openpocketcine.media.MediaLibraryQuery
-import com.opencapture.openpocketcine.session.CamFov
 import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals

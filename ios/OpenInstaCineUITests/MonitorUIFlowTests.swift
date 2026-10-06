@@ -1033,9 +1033,8 @@ final class MonitorUIFlowTests: XCTestCase {
                 app.staticTexts[expected[screen]!].firstMatch.waitForExistence(timeout: 10))
             if screen == "pair" {
                 XCTAssertTrue(
-                    app.staticTexts[
-                        "Before pairing, turn off DJI Frame Tap and force quit DJI Mimo."
-                    ].firstMatch.exists)
+                    // Insta's own pre-check (StartupChrome), on main too; the DJI line was Pocket's.
+                    app.staticTexts["Before pairing, force quit the Insta360 app."].firstMatch.exists)
             }
             capture(screen + "-portrait")
             rotate(.landscapeLeft)
@@ -1305,83 +1304,36 @@ final class MonitorUIFlowTests: XCTestCase {
         }
     }
 
-    func testMultiviewReusesStationNetworkWizard() {
+    /// One camera, no multicam budget: the cameras page offers no Multiview, on main and on the
+    /// integration. (The Pocket station-wizard test this replaced cannot run here.)
+    func testCamerasPageOffersNoMultiview() {
         app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "cameras"
         app.launch()
         for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
             rotate(orientation)
-            let multiview = app.buttons["cameras.multiview"]
-            XCTAssertTrue(multiview.waitForExistence(timeout: 10))
-            multiview.tap()
-            let wifi = app.buttons["multiview.setup.wifi"]
-            XCTAssertTrue(wifi.waitForExistence(timeout: 5))
-            XCTAssertTrue(app.buttons["multiview.setup.phoneHotspot"].isHittable)
-            capture("multiview-setup-choose-\(orientation.rawValue)")
-            wifi.tap()
-            let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-                .buttons["Allow While Using App"]
-            if allow.waitForExistence(timeout: 2) { allow.tap() }
-            XCTAssertTrue(
-                app.descendants(matching: .any)["multiview.setup.scanStatus"]
-                    .waitForExistence(timeout: 5))
-            let other = app.buttons["Other network…"]
-            XCTAssertTrue(other.isHittable, "Manual entry remains available during the scan")
-            XCTAssertLessThanOrEqual(other.frame.maxY, app.frame.maxY)
-            XCTAssertLessThan(app.frame.maxY - other.frame.maxY, 90)
-            other.tap()
-            let alert = app.alerts["Other network"]
-            alert.textFields.firstMatch.typeText("Test network")
-            alert.buttons["Next"].tap()
-            let password = app.secureTextFields["multiview.setup.password"]
-            XCTAssertTrue(password.waitForExistence(timeout: 5))
-            let connect = app.buttons["multiview.setup.connect"]
-            XCTAssertTrue(connect.isHittable)
-            XCTAssertLessThan(app.frame.maxY - connect.frame.maxY, 90)
-            if orientation != .portrait {
-                let summary = app.descendants(matching: .any)["multiview.setup.networkSummary"]
-                    .firstMatch
-                let field = app.descendants(matching: .any)["multiview.setup.password.field"]
-                    .firstMatch
-                XCTAssertEqual(summary.frame.minY, field.frame.minY, accuracy: 1)
-            }
-            capture("multiview-password-layout-\(orientation.rawValue)")
-            password.tap()
-            capture("multiview-password-focused-\(orientation.rawValue)")
-            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
-            XCTAssertLessThanOrEqual(connect.frame.maxY, app.keyboards.firstMatch.frame.minY + 1)
-            password.typeText("short")
-            XCTAssertFalse(app.buttons["multiview.setup.connect"].isEnabled)
-            app.buttons["Show password"].tap()
-            XCTAssertTrue(app.textFields["multiview.setup.password"].exists)
-            capture("multiview-setup-password-\(orientation.rawValue)")
-            app.navigationBars.buttons.element(boundBy: 0).tap()
-            app.navigationBars.buttons.element(boundBy: 0).tap()
-            app.buttons["multiview.setup.phoneHotspot"].tap()
-            XCTAssertTrue(
-                app.textFields["multiview.setup.hotspotName"].waitForExistence(timeout: 5))
-            capture("multiview-setup-hotspot-\(orientation.rawValue)")
-            app.navigationBars.buttons.element(boundBy: 0).tap()
-            app.navigationBars.buttons["Cancel"].tap()
-            XCTAssertTrue(multiview.waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["Your cameras"].firstMatch.waitForExistence(timeout: 10))
+            XCTAssertFalse(app.buttons["cameras.multiview"].exists)
+            XCTAssertFalse(app.descendants(matching: .any)["multiview.setup.wifi"].exists)
         }
     }
 
-    /// The simulator never has a hotspot, so a hotspot connect must ask first. Cancel
-    /// leaves the camera untouched.
-    func testHotspotConnectAsksToTurnOnPersonalHotspot() {
+    /// Luna joins only the camera's own Wi-Fi. A saved camera carrying a legacy hotspot setup
+    /// connects from that chip without a Personal Hotspot ask: main asked only for this review
+    /// data (no Insta camera could add a hotspot) and then joined the camera Wi-Fi anyway.
+    func testLegacyHotspotSetupConnectsWithoutAHotspotAsk() {
         app.launchEnvironment["OPV_UI_REVIEW_SCREEN"] = "cameras"
         app.launch()
         rotate(.portrait)
         let hotspot = app.buttons["cameras.setup.phoneHotspot"]
         XCTAssertTrue(hotspot.waitForExistence(timeout: 10))
         hotspot.tap()
-        let alert = app.alerts["Turn on Personal Hotspot"]
-        XCTAssertTrue(alert.waitForExistence(timeout: 5))
-        XCTAssertTrue(alert.buttons["Open Settings"].exists)
-        XCTAssertTrue(alert.buttons["Connect"].exists)
-        capture("hotspot-connect-prompt")
-        alert.buttons["Cancel"].tap()
-        XCTAssertFalse(app.staticTexts["CONNECTING"].exists)
+        let cancel = app.buttons["Cancel connecting to Studio camera"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["CONNECTING"].exists)
+        XCTAssertFalse(app.alerts["Turn on Personal Hotspot"].exists)
+        capture("hotspot-legacy-connect")
+        cancel.tap()
+        XCTAssertTrue(app.staticTexts["CONNECTING"].waitForNonExistence(timeout: 5))
     }
 
     func testConnectingCardShowsOneProgressLine() {
@@ -1390,10 +1342,12 @@ final class MonitorUIFlowTests: XCTestCase {
         app.launch()
         for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
             rotate(orientation)
-            let progress = app.descendants(matching: .any)
-                .matching(NSPredicate(format: "label BEGINSWITH 'Moving the camera to Studio-5G'"))
-                .firstMatch
-            XCTAssertTrue(progress.waitForExistence(timeout: 10))
+            // The Luna connect's camera Wi-Fi step. Main's review fixture alone went through the DJI
+            // adapter ("Moving the camera to Studio-5G"); a real Luna connect never did (e9d7dc8).
+            // Lines of text: the progress bar above the line carries the same label.
+            let lines = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Joining camera Wi-Fi'"))
+            XCTAssertTrue(lines.firstMatch.waitForExistence(timeout: 10))
+            XCTAssertEqual(lines.count, 1, "One progress line")
             XCTAssertTrue(app.buttons["Cancel connecting to Studio camera"].exists)
             capture("connecting-progress-\(orientation.rawValue)")
         }
@@ -1443,7 +1397,8 @@ final class MonitorUIFlowTests: XCTestCase {
     }
 
     private func mediaClipCenter(_ filename: String) -> XCUICoordinate {
-        app.otherElements["monitor.media.clip.UI-REVIEW/\(filename)"]
+        // A clip is identified by its page key, `<storage>:<path>` (`MediaFile.id`), on main too.
+        app.otherElements["monitor.media.clip.0:UI-REVIEW/\(filename)"]
             .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
     }
 

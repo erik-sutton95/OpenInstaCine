@@ -1,5 +1,6 @@
 package com.opencapture.openpocketcine.diagnostics
 
+import com.opencapture.opencine.vocabulary.PrivacyRedactor
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue

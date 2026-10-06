@@ -6,6 +6,7 @@ import com.opencapture.opencine.appkit.diagnostics.ManualProblemReportEnvelope
 import android.content.ClipData
 import android.content.ClipboardManager
 import com.opencapture.opencine.platform.LocalVPNProbe
+import com.opencapture.opencine.vocabulary.PrivacyRedactor
 import com.opencapture.openpocketcine.MonitorConfiguration
 import android.content.Context
 import android.content.Intent
@@ -18,7 +19,7 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.opencapture.opencine.media.DecoderErrorRecord
 import com.opencapture.openpocketcine.BuildConfig
-import com.opencapture.openpocketcine.pairing.DiscoveryPermissions
+import com.opencapture.opencine.appkit.DiscoveryPermissions
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import java.io.File
 import java.text.SimpleDateFormat

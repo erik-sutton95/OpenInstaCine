@@ -14,6 +14,7 @@ includeBuild("../../../OpenCine/Android") {
     dependencySubstitution {
         substitute(module("com.opencapture.opencine:core")).using(project(":core"))
         substitute(module("com.opencapture.opencine:media")).using(project(":media"))
+        substitute(module("com.opencapture.opencine:camera-vocabulary")).using(project(":camera-vocabulary"))
         substitute(module("com.opencapture.opencine:native-runtime")).using(project(":native-runtime"))
         substitute(module("com.opencapture.opencine:platform")).using(project(":platform"))
         substitute(module("com.opencapture.opencine:decoder")).using(project(":decoder"))

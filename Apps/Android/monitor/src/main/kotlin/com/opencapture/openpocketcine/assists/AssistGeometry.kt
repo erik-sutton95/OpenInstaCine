@@ -1,11 +1,10 @@
 package com.opencapture.openpocketcine.assists
 
+import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.openpocketcine.feed.fromColorMode
-
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeExposureCeiling
 import com.opencapture.opencine.media.ScopeClipSource
-import com.opencapture.openpocketcine.session.CameraStatus
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.round
@@ -340,10 +339,10 @@ object FalseColorReference {
     fun curveKeyLabel(colorMode: Int, rec709: Boolean = false): String =
         if (FalseColorBands.readsThroughLook(MonitorTransfer.fromColorMode(colorMode), rec709)) "709"
         else when (colorMode) {
-            com.opencapture.openpocketcine.session.CameraCommands.COLOR_HDR -> "HLG"
-            com.opencapture.openpocketcine.session.CameraCommands.COLOR_DLOG -> "D-Log"
-            com.opencapture.openpocketcine.session.CameraCommands.COLOR_DLOG_M -> "DLM ≈"
-            com.opencapture.openpocketcine.session.CameraCommands.COLOR_DLOG2 -> "D-Log2"
+            com.opencapture.opencine.vocabulary.CameraCommands.COLOR_HDR -> "HLG"
+            com.opencapture.opencine.vocabulary.CameraCommands.COLOR_DLOG -> "D-Log"
+            com.opencapture.opencine.vocabulary.CameraCommands.COLOR_DLOG_M -> "DLM ≈"
+            com.opencapture.opencine.vocabulary.CameraCommands.COLOR_DLOG2 -> "D-Log2"
             else -> if (MonitorTransfer.fromColorMode(colorMode) == MonitorTransfer.ILOG) "I-Log" else "709"
         }
 

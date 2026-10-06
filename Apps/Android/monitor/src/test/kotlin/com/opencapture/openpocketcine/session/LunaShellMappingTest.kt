@@ -1,5 +1,13 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.FocusOption
+import com.opencapture.opencine.vocabulary.GimbalMode
+import com.opencapture.opencine.vocabulary.GimbalSpeed
+import com.opencapture.opencine.vocabulary.VideoFormat
+import com.opencapture.opencine.vocabulary.VideoFrameRate
+import com.opencapture.opencine.vocabulary.VideoResolution
 import com.opencapture.openpocketcine.feed.fromColorMode
 
 import com.opencapture.opencine.insta360.shell.CameraColorProfile
@@ -79,19 +87,19 @@ class LunaShellMappingTest {
 
     @Test fun formatTableRoundTripsAndFirstValueWins() {
         val table = m.formatTable(formats)
-        assertEquals(211L, table[VideoFormat(VideoResolution.LUNA_8K, VideoFrameRate.FPS25)])
+        assertEquals(211L, table[VideoFormat(VideoResolution.P8K, VideoFrameRate.FPS25)])
         assertEquals(48L, table[VideoFormat(VideoResolution.P4K, VideoFrameRate.FPS25)])
         // 2688x1520 and 2720x1530 are both the shared 2.7K chip; the first listed wins.
         assertEquals(248L, table[VideoFormat(VideoResolution.P2_7K, VideoFrameRate.FPS24)])
         assertEquals(454L, table[VideoFormat(VideoResolution.P3K_9X16, VideoFrameRate.FPS25)])
-        assertEquals(439L, table[VideoFormat(VideoResolution.LUNA_4K_235, VideoFrameRate.FPS25)])
+        assertEquals(439L, table[VideoFormat(VideoResolution.P4K_235, VideoFrameRate.FPS25)])
         for ((format, raw) in table) {
             val source = formats.first { it.id == raw }
             assertEquals(format, m.videoFormat(source), "$raw")
         }
-        assertEquals("8K", VideoResolution.LUNA_8K.label)
-        assertEquals("4K 2.35:1", VideoResolution.LUNA_4K_235.label)
-        assertEquals("4K 9:16", VideoResolution.LUNA_4K_9X16.label)
+        assertEquals("8K", VideoResolution.P8K.label)
+        assertEquals("4K 2.35:1", VideoResolution.P4K_235.label)
+        assertEquals("4K 9:16", VideoResolution.P4K_9X16.label)
         assertEquals("3K 9:16", m.resolution(1728, 3072).label)
         assertEquals(m.unknownResolution, m.resolution(4000, 3000))
     }
@@ -137,7 +145,7 @@ class LunaShellMappingTest {
         // ISO, WB and the exposure mode are the Core session's (CorePresentationTest); these are readouts.
         assertEquals(400, s.iso)
         assertEquals("1/50", s.shutterLabel)
-        assertEquals(-1, com.opencapture.openpocketcine.EvComp.fromRaw(s.evComp)?.thirds)
+        assertEquals(-1, com.opencapture.opencine.vocabulary.EvComp.fromRaw(s.evComp)?.thirds)
         assertEquals("I-Log", s.colorLabel)
         assertEquals("4K · 25p", s.recFormatLabel)
         assertEquals(25, s.fps)
@@ -149,7 +157,8 @@ class LunaShellMappingTest {
         assertEquals("160", CameraCommands.isoLabel(CameraCommands.ISO_160))
         assertEquals(CameraCommands.ISO_160, CameraCommands.isoIndexFromValue(160))
         assertEquals(listOf("Normal", "I-Log", "Dolby Vision"), m.colorModes.map { CameraCommands.colorLabel(it) })
-        assertEquals(m.colorModes, CameraModel.colorModesFor("Insta360 Luna Ultra", "generic"))
+        // The Luna wheel is the session profile's host value, not a camera-name branch.
+        assertEquals(m.colorModes, m.profile.labels.colorModes)
         // Auto: ISO 0 and shutter 0 are the camera's choice, so no live readout.
         val auto = m.applySettings(readout.copy(videoExposure = CameraExposure(0, 0, 0.0), whiteBalanceKelvin = 0), s, pins, 0).first
         assertEquals(-1, auto.iso)
@@ -181,9 +190,9 @@ class LunaShellMappingTest {
 
     @Test fun lunaModeLabelsAndMediaAddressing() {
         val luna = m.profile
-        assertEquals("TimeShift", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_HYPERLAPSE, profile = luna))
-        assertEquals("PureVideo", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_SUPER_NIGHT, profile = luna))
-        assertEquals("Video", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_VIDEO, profile = luna))
+        assertEquals("TimeShift", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_HYPERLAPSE, profile = luna.labels))
+        assertEquals("PureVideo", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_SUPER_NIGHT, profile = luna.labels))
+        assertEquals("Video", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_VIDEO, profile = luna.labels))
         val path = "/storage_internal/DCIM/Camera01/VID_20260916_124229_002.mp4"
         assertEquals("http://192.168.42.1$path", luna.media.pathUrlString(0, path))
         assertEquals("20260916124229", MediaFile("/DCIM/Camera01/VID_20260916_124229_002.mp4", "").filenameTimestamp)
@@ -203,12 +212,12 @@ class LunaShellMappingTest {
             assertTrue("HyperLapse" in com.opencapture.openpocketcine.CaptureLists.shootingModeLabels(null, profile = dji))
             assertEquals(CameraCommands.SHOOT_HYPERLAPSE, com.opencapture.openpocketcine.CaptureLists.shootingModeRaw("TimeShift", null, luna))
             assertNull(com.opencapture.openpocketcine.CaptureLists.shootingModeRaw("TimeShift", null, dji))
-            assertEquals("Standard", CameraCommands.colorLabel(CameraCommands.COLOR_NORMAL, profile = luna))
-            assertEquals("Normal", CameraCommands.colorLabel(CameraCommands.COLOR_NORMAL, profile = dji))
-            assertEquals("Roll Lock", GimbalMode.FOLLOW.label(luna))
-            assertEquals("Follow", GimbalMode.FOLLOW.label(dji))
-            assertEquals(listOf("AF-S", "AF-C", "Showcase"), com.opencapture.openpocketcine.captureQuickFocusControl(CameraStatus(), luna.focusLabels).options)
-            assertEquals(5, com.opencapture.openpocketcine.captureQuickFocusControl(CameraStatus(), dji.focusLabels).options.size)
+            assertEquals("Standard", CameraCommands.colorLabel(CameraCommands.COLOR_NORMAL, profile = luna.labels))
+            assertEquals("Normal", CameraCommands.colorLabel(CameraCommands.COLOR_NORMAL, profile = dji.labels))
+            assertEquals("Roll Lock", GimbalMode.FOLLOW.label(luna.labels))
+            assertEquals("Follow", GimbalMode.FOLLOW.label(dji.labels))
+            assertEquals(listOf("AF-S", "AF-C", "Showcase"), com.opencapture.openpocketcine.captureQuickFocusControl(CameraStatus(), luna.labels.focusLabels).options)
+            assertEquals(5, com.opencapture.openpocketcine.captureQuickFocusControl(CameraStatus(), dji.labels.focusLabels).options.size)
             assertEquals("http://192.168.42.1/DCIM/a.mp4", luna.media.pathUrlString(1, "/DCIM/a.mp4"))
             assertEquals("http://192.168.2.1/v2?storage=1&path=/DCIM/a.mp4", dji.media.pathUrlString(1, "/DCIM/a.mp4"))
         }

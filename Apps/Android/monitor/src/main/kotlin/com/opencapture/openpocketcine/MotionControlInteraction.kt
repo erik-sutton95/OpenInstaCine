@@ -1,7 +1,7 @@
 package com.opencapture.openpocketcine
 
 import com.opencapture.opencine.motion.GimbalProgram
-import com.opencapture.openpocketcine.session.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraCommands
 import kotlin.math.round
 
 /**

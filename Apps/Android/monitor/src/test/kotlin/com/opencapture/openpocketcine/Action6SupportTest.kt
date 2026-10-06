@@ -1,14 +1,13 @@
 package com.opencapture.openpocketcine
 
-import com.opencapture.openpocketcine.session.ApertureStrategy
-import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.session.CameraModel
-import com.opencapture.openpocketcine.session.CameraStatus
+import com.opencapture.opencine.vocabulary.ApertureStrategy
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraModel
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.CaptureShutterPolicy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 /** Osmo Action 6 parity with the core (handbook `devices/action-6/`). */
 class Action6SupportTest {
@@ -16,34 +15,8 @@ class Action6SupportTest {
 
     private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
 
-    @Test fun modelJsonDefaultsFollowTheBody() {
-        val a6 = CameraModel.fromJson("""{"name":"$action6","family":"other"}""")
-        assertFalse(a6.sendsLiveViewPrepare)
-        assertTrue(a6.supportsAperture)
-        val pocket = CameraModel.fromJson("""{"name":"Osmo Pocket 4"}""")
-        assertTrue(pocket.sendsLiveViewPrepare)
-        assertFalse(pocket.supportsAperture)
-        val nano = CameraModel.fromJson("""{"name":"Osmo Nano","family":"nano","usesNanoLiveViewGate":true}""")
-        assertFalse(nano.sendsLiveViewPrepare)
-        // Facade keys win over the name fallback.
-        val wire = CameraModel.fromJson(
-            """{"name":"$action6","liveViewEnableReceiver":65,"sendsLiveViewPrepare":false,"supportsAperture":true,"supportsFocusMode":false,"supportsTapFocus":false}""",
-        )
-        assertEquals(0x41, wire.liveViewEnableReceiver)
-        assertFalse(wire.supportsFocusMode)
-        assertFalse(CaptureLists.supportsFocusModeOrDefault(wire))
-    }
-
-    @Test fun colorUsesTheNanoWireBytesWithoutEightBit() {
-        assertEquals(
-            listOf(CameraCommands.COLOR_NORMAL10, CameraCommands.COLOR_DLOG_M),
-            CameraModel.colorModesFor(action6, "other"),
-        )
-        assertEquals(0x3F, CameraCommands.wireColorMode(CameraCommands.COLOR_NORMAL10, action6, "other"))
-        assertEquals(0x3D, CameraCommands.wireColorMode(CameraCommands.COLOR_DLOG_M, action6, "other"))
-        assertEquals(CameraCommands.COLOR_NORMAL10, CameraCommands.parseColorMode(0x3F, action6, "other"))
-        assertEquals(CameraCommands.COLOR_DLOG_M, CameraCommands.parseColorMode(0x3D, action6, "other"))
-        assertEquals(listOf("Normal 10-bit", "D-Log M"), CaptureLists.colorWheelLabels(CameraStatus(), "other", action6))
+    @Test fun focusModeSupportFollowsTheModel() {
+        assertFalse(CaptureLists.supportsFocusModeOrDefault(CameraModel(action6, supportsFocusMode = false, supportsTapFocus = false)))
     }
 
     @Test fun captureBytes() {
@@ -56,32 +29,6 @@ class Action6SupportTest {
             CaptureShutterPolicy.CaptureKind.VIDEO_RECORD,
             CaptureShutterPolicy.captureKind(CameraCommands.SHOOT_TIMELAPSE, "Osmo Pocket 4"),
         )
-    }
-
-    @Test fun favoriteIsTheFifteenByteAction6Body() {
-        val on = CameraCommands.setMediaFavorite(0x12345678, true, counter = 9, cameraName = action6)
-        assertTrue(bytes(1, 1, 0x78, 0x56, 0x34, 0x12, 1, 0, 0, 0, 0, 1, 0, 0, 0).contentEquals(on))
-        val off = CameraCommands.setMediaFavorite(0x12345678, false, counter = 9, cameraName = action6)
-        assertEquals(0, off[1].toInt())
-        assertEquals(15, off.size)
-        assertEquals(15, CameraCommands.setMediaFavorite(1, true, 9).size) // Pocket keeps its layout
-    }
-
-    @Test fun apertureParsing() {
-        assertEquals(listOf(4, 2, 3), ApertureStrategy.parseCapability(bytes(1, 4, 0, 3, 4, 2, 3)))
-        assertEquals(listOf(1, 2, 3), ApertureStrategy.parseCapability(bytes(1, 6, 0, 3, 1, 2, 3, 3, 4)))
-        assertEquals(emptyList(), ApertureStrategy.parseCapability(bytes(1, 9, 0, 3, 1, 2, 3)))
-        assertEquals(ApertureStrategy.STARBURST, ApertureStrategy.parseState(bytes(1, 0, 0, 3)))
-        assertNull(ApertureStrategy.parseState(bytes(1, 0, 0, 9)))
-        val expo = ByteArray(23).also { it[7] = 0x04; it[13] = 0x22; it[14] = 0x01 }
-        assertEquals(290, ApertureStrategy.irisHundredths(expo))
-        assertNull(ApertureStrategy.irisHundredths(ByteArray(23)))
-        assertEquals("f/2.9", ApertureStrategy.fNumberLabel(290))
-
-        assertEquals("—", ApertureStrategy.tileValue(CameraStatus()))
-        // The JNI status JSON drops these fields; the session carries them over.
-        val reported = CameraStatus(availableApertureStrategies = listOf(4, 2, 3))
-        assertEquals(listOf(4, 2, 3), CameraStatus().carryingAperture(reported).availableApertureStrategies)
     }
 
     @Test fun apertureChoicesFallBackByModeUntilTheCapabilityLands() {

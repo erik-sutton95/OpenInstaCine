@@ -100,15 +100,23 @@ import android.os.SystemClock
 import com.opencapture.monitorui.MonitorQuickGestureOwner
 import com.opencapture.monitorui.monitorReadoutGesture
 import com.opencapture.opencine.core.LocalVPNFilter
-import com.opencapture.openpocketcine.session.SessionRecoveryCopy
 import com.opencapture.opencine.appkit.MonitorRecoveryOverlay
-import com.opencapture.openpocketcine.session.SessionRecoveryUi
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.createBitmap
+import com.opencapture.opencine.vocabulary.CamFov
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.CaptureShutterPolicy
+import com.opencapture.opencine.vocabulary.ControlHud
+import com.opencapture.opencine.vocabulary.FocusOverlay
+import com.opencapture.opencine.vocabulary.FocusResetPolicy
+import com.opencapture.opencine.vocabulary.LiveFeedFocusGesture
+import com.opencapture.opencine.vocabulary.SessionRecoveryCopy
+import com.opencapture.opencine.vocabulary.SessionRecoveryUi
+import com.opencapture.opencine.vocabulary.VideoResolution
 import com.opencapture.openpocketcine.assists.AssistLongPress
 import com.opencapture.openpocketcine.assists.AssistOptionsPopup
 import com.opencapture.openpocketcine.assists.LiveAssistLayer
@@ -129,16 +137,7 @@ import com.opencapture.openpocketcine.feed.appVulkanCrashGuard
 import com.opencapture.openpocketcine.feed.rememberLiveFeedEffectsPlan
 import com.opencapture.openpocketcine.media.MediaLibraryScreen
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
-import com.opencapture.openpocketcine.session.CamFov
-import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.session.CameraStatus
-import com.opencapture.openpocketcine.session.ControlHud
-import com.opencapture.openpocketcine.session.FocusOverlay
-import com.opencapture.openpocketcine.session.FocusResetPolicy
-import com.opencapture.openpocketcine.session.LiveFeedFocusGesture
 import com.opencapture.openpocketcine.session.LiveFaceDetector
-import com.opencapture.openpocketcine.session.TrackingBox
-import com.opencapture.openpocketcine.session.VideoResolution
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -1317,7 +1316,6 @@ internal fun LandscapeChrome(
     val cover = model.liveCover()
     val captureOpen = sheet != null || captureQuickActive
     val editing = model.chromeEditorMode
-    // Media browsing is not adapted to shared Wi-Fi; a borrowed Multiview tile hides it.
     val showsRecord = model.chromeSectionMounts(PocketDispSection.RAIL_RECORD) || status.isRecording
     val showsAssist = model.chromeSectionMounts(PocketDispSection.TOOL_BAR) &&
         cover == null && assist.configureTool == null
@@ -1507,12 +1505,12 @@ private fun LiveTopDeck(
         if (model.chromeSectionMounts(PocketDispSection.COLOR) &&
             CaptureShutterPolicy.showsColorReadout(status.shootingMode)
         ) {
-            Text(CameraCommands.colorLabel(status.colorMode, family, model.session.profile), style = LiveType.ui(topFont, FontWeight.Medium), maxLines = 1,
+            Text(CameraCommands.colorLabel(status.colorMode, family, model.session.profile.labels), style = LiveType.ui(topFont, FontWeight.Medium), maxLines = 1,
                 modifier = chipMod(PocketDispSection.COLOR, LiveSheet.COLOR).topCapture(LiveSheet.COLOR))
         }
         }, mode = {
         if (model.chromeSectionMounts(PocketDispSection.FORMAT)) {
-            Text(CameraCommands.shootingModeLabel(status.shootingMode, model.session.connectedCamera?.model?.name, model.session.profile) ?: "\u2014",
+            Text(CameraCommands.shootingModeLabel(status.shootingMode, model.session.connectedCamera?.model?.name, model.session.profile.labels) ?: "\u2014",
                 color = LiveDesign.accent, style = LiveType.ui(topFont, FontWeight.Medium), maxLines = 1,
                 modifier = Modifier.reportChromeFrame { onPickerFrame(LiveSheet.MODE, it) }.topCapture(LiveSheet.MODE))
         }        })

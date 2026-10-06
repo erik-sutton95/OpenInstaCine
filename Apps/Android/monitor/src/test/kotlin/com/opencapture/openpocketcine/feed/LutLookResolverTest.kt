@@ -1,9 +1,9 @@
 package com.opencapture.openpocketcine.feed
 
+import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.openpocketcine.lut.LutCatalog
 import com.opencapture.openpocketcine.lut.LutCategory
 import com.opencapture.openpocketcine.lut.LutEntry
-import com.opencapture.openpocketcine.session.CameraCommands
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

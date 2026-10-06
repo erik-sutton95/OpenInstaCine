@@ -2,7 +2,7 @@ package com.opencapture.openpocketcine.feed
 
 import com.opencapture.opencine.media.MonitorTransfer.Companion as MonitorTransferCompanion
 
-import com.opencapture.openpocketcine.session.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraCommands
 
 typealias MonitorTransfer = com.opencapture.opencine.media.MonitorTransfer
 

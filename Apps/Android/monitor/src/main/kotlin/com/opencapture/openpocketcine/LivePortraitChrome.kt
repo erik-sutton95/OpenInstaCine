@@ -7,7 +7,6 @@ import com.opencapture.monitorui.portraitAssistToolbar
 import com.opencapture.monitorui.livePortraitReadoutFrame
 import com.opencapture.monitorui.LivePortraitMetrics
 import com.opencapture.opencine.appkit.statusPresentation
-
 import com.opencapture.monitorui.MonitorExposureReadout
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorMaterial
@@ -72,13 +71,15 @@ import com.opencapture.monitorui.MonitorQuickGestureOwner
 import com.opencapture.monitorui.monitorReadoutGesture
 import com.opencapture.monitorui.monitorPickerPassthrough
 import com.opencapture.monitorui.monitorScrollFade
+import com.opencapture.opencine.vocabulary.ApertureStrategy
+import com.opencapture.opencine.vocabulary.CamFov
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.CaptureShutterPolicy
+import com.opencapture.opencine.vocabulary.EvComp
 import com.opencapture.openpocketcine.assists.AssistToolGlyph
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistTool
-import com.opencapture.openpocketcine.session.ApertureStrategy
-import com.opencapture.openpocketcine.session.CamFov
-import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.session.CameraStatus
 import kotlin.math.max
 import kotlin.math.min
 
@@ -387,7 +388,7 @@ internal fun LivePortraitStatus(model: AppModel, layout: LiveMonitorLayout, stat
                 val setupIsMode = CaptureShutterPolicy.portraitSetupOpensMode(status.shootingMode)
                 val setupValue = CaptureShutterPolicy.portraitSetupLabel(status)
                 val setupCaption = CaptureShutterPolicy.portraitSetupCaption(
-                    status, model.session.connectedCamera?.model?.family ?: "pocket", model.session.profile)
+                    status, model.session.connectedCamera?.model?.family ?: "pocket", model.session.profile.labels)
                 val setupTint =
                     if (sheet == setupSheet || recOwner.active == setupSheet.name) LiveDesign.accent else LiveDesign.text
                 // iOS: the format sits on the timecode line at its size; the color hangs smaller below.

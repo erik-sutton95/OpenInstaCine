@@ -3,7 +3,6 @@ package com.opencapture.openpocketcine
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.opencine.media.CameraLinkPhase
 import com.opencapture.monitorui.monitorChromeClickable
-
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateOffsetAsState
 import androidx.compose.animation.core.snap
@@ -12,7 +11,6 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -67,7 +65,6 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
-import com.opencapture.openpocketcine.session.CameraCommands
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -97,6 +94,8 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CaptureShutterPolicy
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -229,7 +228,7 @@ object LiveViewLink {
     }
 }
 
-/** The native Lock tile surface also hosts Multiview's Exit action. */
+/** The native Lock tile surface. */
 @Composable
 internal fun MonitorChromeButton(
     icon: OpcIcon, label: String, modifier: Modifier = Modifier,

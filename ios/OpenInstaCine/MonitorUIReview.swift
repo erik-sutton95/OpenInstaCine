@@ -1,5 +1,6 @@
 #if targetEnvironment(simulator)
     import Foundation
+    import MonitorPresentation
     import Insta360Apple
     import Insta360Protocol
     import OpenCineCore
@@ -94,6 +95,8 @@
             model.assist.mirror = false
             model.assist.configureTool = nil
             model.assist.clean = false
+            // The palette ranks tools by persisted use: start every review from the first-run order.
+            model.assistToolUsage = MonitorToolUsage()
             WaveformAssist.store.options = .default
             ParadeAssist.store.options = .default
             HistogramAssist.store.options = .default

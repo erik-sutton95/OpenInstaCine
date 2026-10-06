@@ -3,9 +3,9 @@ package com.opencapture.openpocketcine.media
 import android.content.Context
 import com.opencapture.opencine.appkit.*
 import com.opencapture.opencine.media.*
+import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.openpocketcine.lut.ClipColorProfile
 import com.opencapture.openpocketcine.feed.fromColorMode
-import com.opencapture.openpocketcine.session.CameraCommands
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

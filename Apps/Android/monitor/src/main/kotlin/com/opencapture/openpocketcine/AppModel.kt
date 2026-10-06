@@ -11,6 +11,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.GimbalDoubleTap
+import com.opencapture.opencine.vocabulary.GimbalRamp
+import com.opencapture.opencine.vocabulary.VideoFormat
 import com.opencapture.openpocketcine.bridge.SwiftCore
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.opencine.appkit.AppIntegration
@@ -29,11 +33,7 @@ import com.opencapture.openpocketcine.pairing.LocalPairingCallouts
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.createLiveAssistState
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
-import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.session.GimbalDoubleTap
-import com.opencapture.openpocketcine.session.GimbalRamp
 import com.opencapture.openpocketcine.session.PocketCameraSession
-import com.opencapture.openpocketcine.session.VideoFormat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -521,13 +521,6 @@ class AppModel(
         shell.state.value.monitor?.session?.closeNow(SessionCloseReason.REQUESTED)
         session.close()
     }
-
-    /** The tile's LUT choice travels into and out of its borrowed Live View. */
-    fun setBorrowedLut(enabled: Boolean) {
-        if (assist.lutOn != enabled) assist.toggle(com.opencapture.openpocketcine.assists.LiveAssistTool.LUT)
-    }
-
-    fun borrowedLutEnabled(): Boolean = assist.lutOn
 
     companion object {
         /** The records every earlier build reads, kept mirrored (SHELL-02 D11). */

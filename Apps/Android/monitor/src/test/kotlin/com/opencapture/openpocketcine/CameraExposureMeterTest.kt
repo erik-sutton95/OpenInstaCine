@@ -1,8 +1,8 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistTool
-import com.opencapture.openpocketcine.session.CameraStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -48,17 +48,6 @@ class CameraExposureMeterTest {
             assertEquals("Camera exposure meter, unavailable", meter.accessibilityLabel)
         }
         assertEquals("—", CameraExposureMeter(CameraStatus(evComp = 0x10).meteredEv).label)
-    }
-
-    @Test fun statusWirePreservesTheReportedValueSeparately() {
-        val status = CameraStatus(evComp = 0x10, meteredEv = 0x0E)
-        val restored = CameraStatus.fromJson(status.toJson())
-        assertEquals(0x0E, restored.meteredEv)
-        assertEquals(0x10, restored.evComp)
-        assertEquals(0x0E, CameraStatus().preservingExtras(restored).meteredEv)
-        assertEquals(-1, CameraStatus.fromJson("""{"evComp":16}""").meteredEv)
-        assertEquals(-1, CameraStatus.fromJson("""{"meteredEv":255}""").meteredEv)
-        assertEquals(-1, CameraStatus().meteredEv)
     }
 
     @Test fun fixedGaugeUsesFeedLeftEdgeAndUpwardPreferredCenterInDispOneOnly() {

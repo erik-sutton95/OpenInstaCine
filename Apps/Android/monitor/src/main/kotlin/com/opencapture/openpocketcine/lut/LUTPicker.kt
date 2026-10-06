@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.openpocketcine.AppModel
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.LiveType
@@ -65,7 +66,6 @@ import com.opencapture.openpocketcine.OpcIcon
 import com.opencapture.openpocketcine.chromeClickable
 import com.opencapture.openpocketcine.feed.LutLookResolver
 import com.opencapture.openpocketcine.pairing.StartupColors
-import com.opencapture.openpocketcine.session.CameraCommands
 import java.io.File
 import com.opencapture.opencine.media.MonitorLUTExposureCompensation
 
