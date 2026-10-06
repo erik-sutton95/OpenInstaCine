@@ -166,9 +166,10 @@ comma (iPhone `main`'s punctuation for the same lines). Underneath:
 - Command path: ISO, shutter, white balance and record go through one OpenCineCore session per
   camera. A change holds until the camera reports it. A refused or unsent write says "ISO was
   not applied by the camera." and one the camera does not take reverts silently, on both
-  platforms (restored to `main`; iPhone counts only those toward Link Health again). With no
-  timecode yet iPhone VoiceOver reads "Timecode not available" (kept fix, accessibility: `main`
-  read the "--:--:--" placeholder).
+  platforms (restored to `main`; iPhone counts only those toward Link Health again). A write
+  held back after the camera state changed keeps the shared copy (kept fix: wrong-camera guard).
+  With no timecode yet iPhone VoiceOver reads "Timecode not available" (kept fix, accessibility:
+  `main` read the "--:--:--" placeholder).
 - Session isolation: each connection owns its backend, labels, media route, zoom ceiling (iPhone
   readouts reach 15x and the Android zoom chip stops at 12x: already matched `main`) and learned
   picture EV calibration. Old v1 EV offsets seed the new per-camera keys and are never rewritten.
@@ -231,7 +232,8 @@ Nothing below has run on hardware.
    pair, settings, live and media screens. Mode, colour and gimbal names are Luna names
    (TimeShift, Standard, Roll Lock).
 3. ISO Auto, 400, 800 confirms in under 4 s; shutter then ISO quickly (and the reverse) neither
-   reverts; a manual ISO the camera drops shows "not applied".
+   reverts; a manual ISO the camera refuses says "ISO ... was not applied by the camera."; one it
+   accepts but does not apply reverts silently, as on `main`.
 4. WB Kelvin confirms within 6 s; WB Auto confirms; AE Lock and AWB Lock work.
 5. Record start and stop: the lamp waits for capture status; stop with file save under 10 s;
    start on the camera button, then app Record sends Stop; a fresh connect before capture status
@@ -255,7 +257,8 @@ Nothing below has run on hardware.
     thermal state after 20 min against `opencine/integration` without this branch.
 14. SHELL-01 (iPhone and Android, against `opencine/integration` without `opencine/shell-01`):
     the joystick, gimbal sheet, motion overlay and head tracking (iPhone) appear and move the
-    head; no AUDIO tile, assist, meter or Clean view pin anywhere live; the live timecode runs
+    head; no AUDIO tile, assist or meter anywhere live (the iPhone Clean view settings still
+    offer the AUDIO pin, Android's do not, both as on `main`); the live timecode runs
     time of day and matches the camera clock after connect; zoom chip and FOCUS tile as before,
     no APERTURE; record start and stop from the record button with and without confirmation.
 
