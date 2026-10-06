@@ -484,7 +484,7 @@ internal fun AssistRows(model: AppModel, statusColorMode: Int, onOpenLut: () -> 
         SettingsSwitchInlineRow("Enabled", isOn = assist.desqueeze, showTopDivider = false) {
             assist.toggle(LiveAssistTool.DESQ)
         }
-        com.opencapture.openpocketcine.assists.DesqueezeOptions(assist)
+        com.opencapture.opencine.cameracontrols.DesqueezeOptions(assist)
     }
 
     com.opencapture.monitorui.settings.MonitorLookSettings(
