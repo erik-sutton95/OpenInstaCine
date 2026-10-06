@@ -1,3 +1,4 @@
+import OpenCineAppKitApple
 import OpenCineMedia
 import CoreImage
 import OpenCineApple
@@ -58,10 +59,10 @@ extension LiveImageEffects {
 final class CIFeedView: OpenCineApple.MonitorPictureHost {
     init(frame: CGRect = .zero) {
         super.init(frame: frame, options: { screen in
-            LiveHDRDisplay.refreshGain(screen: screen)
+            LiveHDRDisplay.app.refreshGain(screen: screen)
             return OpenCineApple.MonitorPresentationOptions(
                 upscaler: FeedUpscaleSwitch.rendererReadsUpscaler,
-                hdr: LiveHDRDisplay.isEnabled, hdrGain: LiveHDRDisplay.presentGain,
+                hdr: LiveHDRDisplay.app.isEnabled, hdrGain: LiveHDRDisplay.app.presentGain,
                 previewSuperResolutionInput: FeedUpscaleSwitch.presentsSuperResolutionInput)
         }, logSubsystem: "com.opencapture.openinstacine")
         #if DEBUG
