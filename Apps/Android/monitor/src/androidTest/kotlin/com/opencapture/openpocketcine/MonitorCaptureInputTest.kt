@@ -53,6 +53,7 @@ import kotlin.test.assertTrue
 import org.junit.Test
 import org.junit.Before
 import org.junit.runner.RunWith
+import com.opencapture.monitorui.MonitorIcon
 
 /** Reuses the existing native activity/instrumentation harness; no Compose test dependency. */
 @RunWith(AndroidJUnit4::class)
@@ -453,11 +454,11 @@ private fun NavigationFixture(model: AppModel, probe: NavigationProbe, layoutPro
                         lock = {}, record = {}, display = {},
                         settings = { enabled -> AuxCircleButton(enabled = enabled,
                             onClick = { model.shell.open(ShellModel.Cover.SETTINGS) }) {
-                            OpcIcon(OpcIcon.SETTINGS, "Settings", Modifier.fillMaxSize(), it)
+                            MonitorIcon(MonitorIcon.SETTINGS, "Settings", Modifier.fillMaxSize(), it)
                         } },
                         media = { enabled -> AuxCircleButton(enabled = enabled,
                             onClick = { model.shell.open(ShellModel.Cover.MEDIA) }) {
-                            OpcIcon(OpcIcon.FILM, "Media", Modifier.fillMaxSize(), it)
+                            MonitorIcon(MonitorIcon.FILM, "Media", Modifier.fillMaxSize(), it)
                         } })
                 }
             }, panels = {

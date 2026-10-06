@@ -16,12 +16,12 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.opencapture.openpocketcine.assists.AssistOptionsPopup
-import com.opencapture.openpocketcine.assists.CrushClipCompensation
+import com.opencapture.opencine.media.MonitorCrushClipCompensation
 import com.opencapture.openpocketcine.assists.LiveAssistState
-import com.opencapture.openpocketcine.assists.LiveAssistTool
-import com.opencapture.openpocketcine.assists.PeakingColor
-import com.opencapture.openpocketcine.assists.WaveformMode
-import com.opencapture.openpocketcine.assists.ZebraUnit
+import com.opencapture.monitorui.MonitorAssistTool
+import com.opencapture.opencine.media.MonitorPeakingColor
+import com.opencapture.monitorui.MonitorWaveformMode
+import com.opencapture.monitorui.MonitorZebraUnit
 import com.opencapture.monitorui.MonitorAudioOrientation
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -35,9 +35,9 @@ class ScopeTuningInputTest {
     @Test fun waveformSelectionBrightnessAndGuideInputReachTheirCurrentBindings() {
         val state = LiveAssistState()
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
-            val fixture = mount(scenario, LiveAssistTool.WAVE, state)
+            val fixture = mount(scenario, MonitorAssistTool.WAVE, state)
             tap(node(fixture) { it.text?.toString() == "Luma" })
-            scenario.onActivity { assertEquals(WaveformMode.LUMA, state.waveMode) }
+            scenario.onActivity { assertEquals(MonitorWaveformMode.LUMA, state.waveMode) }
             val slider = node(fixture) { it.rangeInfo != null }
             assertTrue(slider.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id,
                 Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 150f) }))
@@ -57,22 +57,22 @@ class ScopeTuningInputTest {
         var persists = 0
         val state = LiveAssistState(onPersist = { persists++ })
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
-            var fixture = mount(scenario, LiveAssistTool.PEAK, state)
+            var fixture = mount(scenario, MonitorAssistTool.PEAK, state)
             val red = node(fixture) { it.contentDescription?.toString() == "Red" }
             val bounds = Rect().also(red::getBoundsInScreen)
             var density = 1f
             scenario.onActivity { density = it.resources.displayMetrics.density }
             assertTrue(bounds.width() >= 44 * density - 1 && bounds.height() >= 44 * density - 1)
             tap(red)
-            scenario.onActivity { assertEquals(PeakingColor.RED, state.peakingColor) }
+            scenario.onActivity { assertEquals(MonitorPeakingColor.RED, state.peakingColor) }
             val beforeSameColor = persists
             tap(node(fixture) { it.contentDescription?.toString() == "Red" })
             scenario.onActivity { assertEquals(beforeSameColor, persists) }
-            fixture = mount(scenario, LiveAssistTool.HISTO, state)
+            fixture = mount(scenario, MonitorAssistTool.HISTO, state)
             val half = node(fixture) { it.contentDescription?.toString() == "0.5" }
             assertEquals("0.5", half.contentDescription.toString(), "Speak the full value, not its fraction glyph")
             tap(half)
-            scenario.onActivity { assertEquals(CrushClipCompensation.HALF, state.crushClipCompensation) }
+            scenario.onActivity { assertEquals(MonitorCrushClipCompensation.HALF, state.crushClipCompensation) }
             val beforeSameFraction = persists
             tap(node(fixture) { it.contentDescription?.toString() == "0.5" })
             scenario.onActivity { assertEquals(beforeSameFraction, persists) }
@@ -82,11 +82,11 @@ class ScopeTuningInputTest {
     @Test fun zebraUnitChangesOnlyItsDisplayAxisAndDisabledZoneRejectsInput() {
         val state = LiveAssistState()
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
-            val fixture = mount(scenario, LiveAssistTool.ZEBRA, state)
+            val fixture = mount(scenario, MonitorAssistTool.ZEBRA, state)
             val original = state.zebraHighlightIRE
             tap(node(fixture) { it.text?.toString() == "0-255" })
             scenario.onActivity {
-                assertEquals(ZebraUnit.NATIVE, state.zebraUnit)
+                assertEquals(MonitorZebraUnit.NATIVE, state.zebraUnit)
                 assertEquals(original, state.zebraHighlightIRE, "Changing display units must retain the stored threshold")
             }
             var threshold = node(fixture) { it.contentDescription?.toString() == "Highlight threshold" }
@@ -96,7 +96,7 @@ class ScopeTuningInputTest {
             settle()
             scenario.onActivity { assertEquals(100.0, state.zebraHighlightIRE, 0.0001) }
             tap(node(fixture) { it.text?.toString() == "IRE" })
-            scenario.onActivity { assertEquals(ZebraUnit.IRE, state.zebraUnit) }
+            scenario.onActivity { assertEquals(MonitorZebraUnit.IRE, state.zebraUnit) }
             threshold = node(fixture) { it.contentDescription?.toString() == "Highlight threshold" && it.rangeInfo?.max == 100f }
             assertEquals(100f, threshold.rangeInfo.max)
             tap(node(fixture) { it.contentDescription?.toString() == "Highlight" })
@@ -116,7 +116,7 @@ class ScopeTuningInputTest {
         var persists = 0
         val state = LiveAssistState(onPersist = { persists++ })
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
-            val fixture = mount(scenario, LiveAssistTool.AUDIO, state)
+            val fixture = mount(scenario, MonitorAssistTool.AUDIO, state)
             tap(node(fixture) { it.text?.toString() == "Horizontal" })
             scenario.onActivity { assertEquals(MonitorAudioOrientation.HORIZONTAL, state.audioOrientation) }
             val beforeDB = persists
@@ -125,7 +125,7 @@ class ScopeTuningInputTest {
         }
     }
 
-    private fun mount(scenario: ActivityScenario<BackdropRenderActivity>, tool: LiveAssistTool,
+    private fun mount(scenario: ActivityScenario<BackdropRenderActivity>, tool: MonitorAssistTool,
         state: LiveAssistState): String {
         val identity = "scope-tuning-${UUID.randomUUID()}"
         scenario.onActivity { activity ->

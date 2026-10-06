@@ -60,7 +60,7 @@ import androidx.core.content.FileProvider
 import com.opencapture.opencine.cameracontrols.chromeClickable
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.LiveType
-import com.opencapture.openpocketcine.OpcIcon
+import com.opencapture.monitorui.MonitorIcon
 import com.opencapture.opencine.appkit.MonitorDeliveryCompletion
 import com.opencapture.opencine.appkit.MonitorDeliveryModel
 import kotlinx.coroutines.CoroutineScope
@@ -242,7 +242,7 @@ fun MediaDeliveryPopup(
             },
             modifier = Modifier.navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp)
                 .widthIn(max = 620.dp).fillMaxWidth(),
-            destinationIcon = { OpcIcon(OpcIcon.SHARE, null, Modifier.size(18.dp), LiveDesign.text) }
+            destinationIcon = { MonitorIcon(MonitorIcon.SHARE, null, Modifier.size(18.dp), LiveDesign.text) }
         )
     }
     }
@@ -258,7 +258,7 @@ fun MediaDeliveryProgressOverlay(
         value = MonitorMediaDeliveryProgressValue(state.statusLine, state.batchLine, state.overallFraction, state.isPreparing),
         onCancel = onCancel,
         modifier = modifier.widthIn(max = 420.dp),
-        destinationIcon = { OpcIcon(OpcIcon.SHARE, null, Modifier.size(13.dp), LiveDesign.accent) }
+        destinationIcon = { MonitorIcon(MonitorIcon.SHARE, null, Modifier.size(13.dp), LiveDesign.accent) }
     )
 }
 
