@@ -56,7 +56,7 @@ struct LinkExperience: View {
         .sheet(item: $diagnostics) { payload in DiagnosticActivityShareView(items: [payload.url]) }
         .sheet(isPresented: $showProblemReport) { ProblemReportView().environment(model) }
         .onChange(of: model.session.phase) { _, phase in
-            if phase == .openingDatalink { LocalVPNProbe.noteIfActive() }
+            if phase == .openingDatalink { LocalVPNNotice.app.noteIfActive() }
         }
         .onChange(of: scenePhase) { _, phase in
             // Back from Settings after Bluetooth was off or not allowed: look again.

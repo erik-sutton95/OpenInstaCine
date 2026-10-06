@@ -7,6 +7,7 @@ import MonitorUI
 import Observation
 import OpenCineAppKit
 import OpenCineCameraControls
+import class OpenCineCore.LocalVPNNotice
 import struct OpenCineCore.CameraSessionID
 import struct OpenCineCore.CameraValuePin
 import OpenCineMedia
@@ -490,7 +491,7 @@ final class CameraSession {
     private func prepareConnection(to camera: FoundCamera, preserveMonitor: Bool) -> Int {
         AppDiagnostics.reporting.setCameraSessionActive(true)
         connectGeneration += 1
-        LocalVPNProbe.noteIfActive()
+        LocalVPNNotice.app.noteIfActive()
         backend.stopScan()
         scanTask?.cancel()
         runTask?.cancel()

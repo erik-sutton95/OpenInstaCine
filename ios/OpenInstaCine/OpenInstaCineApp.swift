@@ -1,15 +1,16 @@
 import MonitorUI
+import OpenCineAppKit
 import SwiftUI
 
 @main
 struct OpenInstaCineApp: App {
     init() {
         #if DEBUG
-            ReliabilityReportingVerification.prepareIfRequested()
+            AppDiagnostics.verification.prepareIfRequested()
         #endif
         AppDiagnostics.reporting.install()
         #if DEBUG
-            ReliabilityReportingVerification.runIfRequested()
+            AppDiagnostics.verification.runIfRequested()
         #endif
         OpenInstaCineBrand.apply()
         MonitorTheme.prepareResources()
