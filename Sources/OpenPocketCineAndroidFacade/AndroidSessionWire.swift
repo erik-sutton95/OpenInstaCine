@@ -46,17 +46,17 @@ public enum AndroidSessionWire {
     /// Probe + labels for playback conform preview. Request keys: `nominalFrameRate`,
     /// `minFrameDurationSeconds`, `listedRate`, optional `targetRate` / `sourceSeconds`.
     public static func conformPreviewJSON(_ request: String) -> String {
-        let source = ConformPreview.probe(
+        let source = MonitorConformPreview.probe(
             nominalFrameRate: jsonOptionalNumber(request, key: "nominalFrameRate"),
             minFrameDurationSeconds: jsonOptionalNumber(request, key: "minFrameDurationSeconds"),
             listedRate: jsonOptionalNumber(request, key: "listedRate"))
-        let availability = ConformPreview.availability(for: source)
+        let availability = MonitorConformPreview.availability(for: source)
         var dict: [String: Any] = [
             "isVariableFrameRate": source.isVariableFrameRate,
             "isAlreadyConformed": source.isAlreadyConformed,
-            "audioLabel": ConformPreview.audioLabel,
-            "conformFloor": NSNumber(value: ConformPreview.conformFloor),
-            "targetRates": ConformPreview.targetRates.map { NSNumber(value: $0) },
+            "audioLabel": MonitorConformPreview.audioLabel,
+            "conformFloor": NSNumber(value: MonitorConformPreview.conformFloor),
+            "targetRates": MonitorConformPreview.targetRates.map { NSNumber(value: $0) },
             "availability": availabilityName(availability),
             "targets": availability.targets.map { NSNumber(value: $0) },
         ]
@@ -65,20 +65,20 @@ public enum AndroidSessionWire {
         }
         if let capture = source.captureRate {
             dict["captureRate"] = NSNumber(value: capture)
-            dict["menuHeader"] = ConformPreview.menuHeader(captureRate: capture)
-            dict["rateLabel"] = ConformPreview.rateLabel(capture)
+            dict["menuHeader"] = MonitorConformPreview.menuHeader(captureRate: capture)
+            dict["rateLabel"] = MonitorConformPreview.rateLabel(capture)
             dict["targetLabels"] = availability.targets.map {
-                ConformPreview.targetLabel(captureRate: capture, targetRate: $0)
+                MonitorConformPreview.targetLabel(captureRate: capture, targetRate: $0)
             }
             if let target = jsonOptionalNumber(request, key: "targetRate") {
-                let speed = ConformPreview.speed(captureRate: capture, targetRate: target)
+                let speed = MonitorConformPreview.speed(captureRate: capture, targetRate: target)
                 dict["speed"] = NSNumber(value: speed)
-                dict["targetLabel"] = ConformPreview.targetLabel(
+                dict["targetLabel"] = MonitorConformPreview.targetLabel(
                     captureRate: capture, targetRate: target)
-                dict["label"] = ConformPreview.label(captureRate: capture, targetRate: target)
+                dict["label"] = MonitorConformPreview.label(captureRate: capture, targetRate: target)
                 if let seconds = jsonOptionalNumber(request, key: "sourceSeconds") {
                     dict["conformedDuration"] = NSNumber(
-                        value: ConformPreview.conformedDuration(
+                        value: MonitorConformPreview.conformedDuration(
                             sourceSeconds: seconds, speed: speed))
                 }
             }
@@ -309,7 +309,7 @@ public enum AndroidSessionWire {
         bytes.map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func availabilityName(_ availability: ConformPreview.Availability) -> String {
+    private static func availabilityName(_ availability: MonitorConformPreview.Availability) -> String {
         switch availability {
         case .available: "available"
         case .unknownRate: "unknownRate"
