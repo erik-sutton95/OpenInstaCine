@@ -22,7 +22,7 @@ import com.opencapture.opencine.insta360.shell.CameraRecordFormat
 import com.opencapture.opencine.insta360.shell.CameraShootingMode
 import com.opencapture.opencine.insta360.shell.CameraStorage
 import com.opencapture.openpocketcine.feed.MonitorTransfer
-import com.opencapture.openpocketcine.media.MediaFile
+import com.opencapture.opencine.vocabulary.MediaFile
 import kotlin.test.*
 import org.junit.Test
 

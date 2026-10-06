@@ -22,6 +22,7 @@ import com.opencapture.opencine.core.ControlEpoch
 import com.opencapture.opencine.media.*
 import com.opencapture.monitorui.MonitorMediaLayout
 import com.opencapture.openpocketcine.media.*
+import com.opencapture.opencine.vocabulary.MediaFile
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.UUID

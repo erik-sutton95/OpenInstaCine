@@ -99,6 +99,8 @@ import com.opencapture.opencine.media.MonitorAudioMeterChannel
 import com.opencapture.opencine.media.MonitorAudioMeterLevels
 import com.opencapture.monitorui.MonitorPlaybackGestureConfig
 import com.opencapture.monitorui.MonitorPlaybackZoom
+import com.opencapture.opencine.vocabulary.MediaFile
+import com.opencapture.opencine.vocabulary.MediaClipFormatting
 
 @Composable
 fun MediaPhotoViewer(
