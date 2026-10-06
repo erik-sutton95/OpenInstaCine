@@ -79,14 +79,14 @@ import com.opencapture.openpocketcine.LiveType
 import com.opencapture.openpocketcine.LocalMonitorGlass
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.openpocketcine.MonitorGlass
-import com.opencapture.openpocketcine.OpcIcon
+import com.opencapture.monitorui.MonitorIcon
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.assists.AssistOptionsPopup
 import com.opencapture.opencine.cameracontrols.AssistAudioOverlay
 import com.opencapture.openpocketcine.assists.AssistRect
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistLayer
-import com.opencapture.openpocketcine.assists.LiveAssistTool
+import com.opencapture.monitorui.MonitorAssistTool
 import com.opencapture.opencine.cameracontrols.MirrorAssist
 import com.opencapture.openpocketcine.feed.rememberLiveFeedEffectsPlan
 import com.opencapture.opencine.vocabulary.PlaybackLutColor
@@ -238,7 +238,7 @@ fun MediaPhotoViewer(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                MediaCircleIconButton(OpcIcon.X, "Back to media", onClose)
+                MediaCircleIconButton(MonitorIcon.X, "Back to media", onClose)
                 Text(
                     file.filename,
                     color = LiveDesign.text,
@@ -248,9 +248,9 @@ fun MediaPhotoViewer(
                     modifier = Modifier.weight(1f),
                 )
                 if (controller.canDelete(file)) {
-                    MediaCircleIconButton(OpcIcon.TRASH, "Delete photo", { confirmDelete = true })
+                    MediaCircleIconButton(MonitorIcon.TRASH, "Delete photo", { confirmDelete = true })
                 }
-                MediaCircleIconButton(OpcIcon.SHARE, "Share photo", { onDeliver(file) })
+                MediaCircleIconButton(MonitorIcon.SHARE, "Share photo", { onDeliver(file) })
             }
             Spacer(Modifier.weight(1f))
             Box(
@@ -261,13 +261,13 @@ fun MediaPhotoViewer(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     com.opencapture.opencine.cameracontrols.AssistToolCell(
-                        tool = LiveAssistTool.DESQ,
-                        isOn = assist.isPlaybackVisible(LiveAssistTool.DESQ), enabled = true,
-                        onClick = { assist.togglePlayback(LiveAssistTool.DESQ) },
+                        tool = MonitorAssistTool.DESQ,
+                        isOn = assist.isPlaybackVisible(MonitorAssistTool.DESQ), enabled = true,
+                        onClick = { assist.togglePlayback(MonitorAssistTool.DESQ) },
                         onLongClick = { showDesqueezeOptions = true },
                     )
                     MediaCircleIconButton(
-                        OpcIcon.STAR,
+                        MonitorIcon.STAR,
                         if (favorite) "Remove from favorites" else "Add to favorites",
                         { controller.toggleFavorite(file) },
                         filled = favorite,
@@ -281,7 +281,7 @@ fun MediaPhotoViewer(
             Popup(alignment = Alignment.Center, onDismissRequest = { showDesqueezeOptions = false },
                 properties = PopupProperties(focusable = true)) {
                 val popupWindow = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
-                AssistOptionsPopup(LiveAssistTool.DESQ, assist, onDismiss = { showDesqueezeOptions = false },
+                AssistOptionsPopup(MonitorAssistTool.DESQ, assist, onDismiss = { showDesqueezeOptions = false },
                     playback = true,
                     maxHeightDp = with(photoDensity) { popupWindow.height.toDp().value * 0.8f })
             }
@@ -326,7 +326,7 @@ fun MediaPlayerScreen(
     val activeRecord = controller.record(active)
     val favorite = activeRecord?.favorite ?: active.isStarred
     val progress = activeRecord?.let { libraryState.progress[it.asset.id] }
-    val audioMetersOn = assist.isPlaybackVisible(LiveAssistTool.AUDIO)
+    val audioMetersOn = assist.isPlaybackVisible(MonitorAssistTool.AUDIO)
     val meterBox = remember { AudioLevelTapBox() }
     val meterSink = remember { PlaybackPcmBufferSink(meterBox) }
     val meterSampler = remember { com.opencapture.opencine.runtime.MonitorAudioMeterSampler(meterBox) }
@@ -495,7 +495,7 @@ fun MediaPlayerScreen(
         com.opencapture.monitorui.LocalMonitorBackdropSurround provides LiveDesign.feedWell) {
         MonitorPlaybackScreen(presentation, actions, backHandler = { handleBack -> BackHandler(onBack = handleBack) },
             picture = { geometry ->
-                val mirrorOn = assist.isPlaybackVisible(LiveAssistTool.MIRROR)
+                val mirrorOn = assist.isPlaybackVisible(MonitorAssistTool.MIRROR)
                 PlaybackFeedView(native = native, scopeBus = model.scopeBus, preview = model.inspectorPreview,
                     backdrop = backdrop, plan = effectsPlan,
                     mirrored = MirrorAssist.feedScaleX(mirrorOn && assist.mirrorHorizontal) < 0f,
@@ -541,5 +541,5 @@ private fun PlaybackAudioMetersOverlay(
     val placement = AssistRect(edge, edge, (canvas.width - 2 * edge).coerceAtLeast(1f),
         (canvas.height - 2 * edge).coerceAtLeast(1f))
     AssistAudioOverlay(state, left.asReading(), right.asReading(), bounds, placement,
-        onOpenOptions = { state.configureTool = LiveAssistTool.AUDIO })
+        onOpenOptions = { state.configureTool = MonitorAssistTool.AUDIO })
 }

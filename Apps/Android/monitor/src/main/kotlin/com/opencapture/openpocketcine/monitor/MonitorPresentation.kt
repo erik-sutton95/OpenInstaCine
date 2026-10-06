@@ -7,7 +7,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.opencapture.opencine.cameracontrols.reportChromeFrame
 import com.opencapture.openpocketcine.ChromeRect
-import com.opencapture.openpocketcine.OpcIcon
+import com.opencapture.monitorui.MonitorIcon
 import com.opencapture.monitorui.MonitorValue
 
 /** Adapter boundary for canvas frame reporting; shared rendering owns the layout. */

@@ -17,7 +17,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.opencapture.openpocketcine.LiveDesign
-import com.opencapture.openpocketcine.OpcIcon
+import com.opencapture.monitorui.MonitorIcon
 import com.opencapture.openpocketcine.panelGlass
 import com.opencapture.monitorui.settings.MonitorSettingsColorDot
 
@@ -72,8 +72,8 @@ fun PanelCloseButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
             .semantics { contentDescription = "Close" },
         contentAlignment = Alignment.Center,
     ) {
-        OpcIcon(
-            icon = OpcIcon.X,
+        MonitorIcon(
+            icon = MonitorIcon.X,
             contentDescription = null,
             tint = LiveDesign.text,
             modifier = Modifier.size(13.dp),

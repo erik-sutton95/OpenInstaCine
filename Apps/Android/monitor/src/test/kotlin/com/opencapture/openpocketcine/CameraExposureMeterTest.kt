@@ -2,7 +2,7 @@ package com.opencapture.openpocketcine
 
 import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.openpocketcine.assists.LiveAssistState
-import com.opencapture.openpocketcine.assists.LiveAssistTool
+import com.opencapture.monitorui.MonitorAssistTool
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -117,23 +117,23 @@ class CameraExposureMeterTest {
         var saved: String? = null
         val state = LiveAssistState(encoded = """{"tools":[]}""", onPersist = { saved = it })
         assertFalse(state.evMeter)
-        state.toggle(LiveAssistTool.EV)
+        state.toggle(MonitorAssistTool.EV)
         assertTrue(state.evMeter)
-        assertTrue(state.isVisible(LiveAssistTool.EV))
+        assertTrue(state.isVisible(MonitorAssistTool.EV))
         val restored = LiveAssistState(encoded = saved)
         assertTrue(restored.evMeter)
         restored.clean = true
-        assertFalse(restored.isVisible(LiveAssistTool.EV))
-        restored.togglePin(LiveAssistTool.EV)
-        assertFalse(restored.isVisible(LiveAssistTool.EV))
+        assertFalse(restored.isVisible(MonitorAssistTool.EV))
+        restored.togglePin(MonitorAssistTool.EV)
+        assertFalse(restored.isVisible(MonitorAssistTool.EV))
         restored.clean = false
-        assertTrue(restored.isVisible(LiveAssistTool.EV))
-        assertFalse(LiveAssistTool.EV in state.scopeStack)
-        assertFalse(LiveAssistTool.EV in LiveAssistState.stackableScopeTools)
-        assertFalse(LiveAssistTool.EV in LiveAssistState.processedPlaybackTools)
-        assertFalse(LiveAssistTool.EV in LiveAssistState.lookOverlayTools)
+        assertTrue(restored.isVisible(MonitorAssistTool.EV))
+        assertFalse(MonitorAssistTool.EV in state.scopeStack)
+        assertFalse(MonitorAssistTool.EV in LiveAssistState.stackableScopeTools)
+        assertFalse(MonitorAssistTool.EV in LiveAssistState.processedPlaybackTools)
+        assertFalse(MonitorAssistTool.EV in LiveAssistState.lookOverlayTools)
         assertNull(state.inspectorScopeDemand)
-        state.toggle(LiveAssistTool.EV)
+        state.toggle(MonitorAssistTool.EV)
         assertFalse(LiveAssistState(encoded = saved).evMeter)
     }
 
@@ -143,16 +143,16 @@ class CameraExposureMeterTest {
             pinnedNames = setOf("EV"),
             playbackNames = setOf("EV"),
         )
-        assertEquals(LiveAssistTool.EV, LiveAssistTool.fromPersisted("EV"))
+        assertEquals(MonitorAssistTool.EV, MonitorAssistTool.fromPersisted("EV"))
         assertTrue(state.evMeter)
         assertTrue(state.pinned.isEmpty())
         assertTrue(state.playbackVisibleTools.isEmpty())
-        state.togglePlayback(LiveAssistTool.EV)
+        state.togglePlayback(MonitorAssistTool.EV)
         assertTrue(state.playbackVisibleTools.isEmpty())
-        assertTrue(LiveAssistTool.EV in LiveAssistTool.toolbarCases)
-        assertTrue(LiveAssistTool.EV in LiveAssistTool.settingsCases)
-        assertFalse(LiveAssistTool.EV in LiveAssistTool.cleanPinCases)
-        assertFalse(LiveAssistTool.EV in LiveAssistTool.playbackToolbarCases)
+        assertTrue(MonitorAssistTool.EV in MonitorAssistTool.toolbarCases)
+        assertTrue(MonitorAssistTool.EV in MonitorAssistTool.settingsCases)
+        assertFalse(MonitorAssistTool.EV in MonitorAssistTool.cleanPinCases)
+        assertFalse(MonitorAssistTool.EV in MonitorAssistTool.playbackToolbarCases)
         assertFalse(state.encoded().contains("evScale"))
         assertFalse(state.encoded().contains("evCenter"))
         assertFalse(CleanPinTool.entries.any { it.key == "EV" })
