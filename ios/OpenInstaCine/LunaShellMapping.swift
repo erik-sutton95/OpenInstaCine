@@ -1,6 +1,7 @@
 import Foundation
 import Insta360Apple
 import Insta360Protocol
+import OpenCineCameraControls
 import OpenCineCore
 import OpenPocketViewCore
 
