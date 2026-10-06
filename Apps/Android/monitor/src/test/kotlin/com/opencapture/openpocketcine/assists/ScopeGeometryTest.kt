@@ -15,6 +15,16 @@ import com.opencapture.monitorui.MonitorScopePoint
 import com.opencapture.monitorui.MonitorScopeSize
 import com.opencapture.monitorui.MonitorScopePanelSize
 import com.opencapture.monitorui.MonitorScopePanelMath
+import com.opencapture.opencine.cameracontrols.audioOverlayChannels
+import com.opencapture.opencine.cameracontrols.audioMetersLeftRight
+import com.opencapture.opencine.cameracontrols.ZebraEditor
+import com.opencapture.opencine.cameracontrols.WaveformAxis
+import com.opencapture.opencine.cameracontrols.WaveformAssist
+import com.opencapture.opencine.cameracontrols.ParadeAssist
+import com.opencapture.opencine.cameracontrols.HistogramAssist
+import com.opencapture.opencine.cameracontrols.FalseColorReference
+import com.opencapture.opencine.cameracontrols.FalseColorBands
+import com.opencapture.opencine.cameracontrols.AudioAssist
 
 class ScopeGeometryTest {
     /** Swift `falseColorClip(.limits)` + `falseColorBands(.limits)` clip edge, probed 2026-09-29. */

@@ -1,7 +1,7 @@
 package com.opencapture.openpocketcine.session
 
 import com.opencapture.opencine.vocabulary.CameraLabelProfile
-import com.opencapture.openpocketcine.media.MediaRoute
+import com.opencapture.opencine.vocabulary.MediaRoute
 
 /**
  * Per-integration vocabulary and media addressing for one camera session (STATE-01). Replaces the
@@ -11,7 +11,7 @@ import com.opencapture.openpocketcine.media.MediaRoute
  */
 data class CameraProfile(
     val labels: CameraLabelProfile = CameraLabelProfile.standard,
-    val media: MediaRoute = MediaRoute.DJI,
+    val media: MediaRoute = MediaRoute.CAMERA_SOFT_AP,
 ) {
     companion object {
         val DJI = CameraProfile()

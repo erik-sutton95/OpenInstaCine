@@ -7,6 +7,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import com.opencapture.opencine.vocabulary.MediaRoute
+import com.opencapture.opencine.vocabulary.MediaLibraryQuery
+import com.opencapture.opencine.vocabulary.MediaHTTP
+import com.opencapture.opencine.vocabulary.MediaFile
+import com.opencapture.opencine.vocabulary.MediaCacheGrade
+import com.opencapture.opencine.cameracontrols.MediaOperatorCopy
+import com.opencapture.opencine.cameracontrols.MediaLibraryCopy
+import com.opencapture.opencine.cameracontrols.MediaClipPresentation
 
 class MediaLibraryTest {
     @Test
@@ -64,12 +72,12 @@ class MediaLibraryTest {
                 singleSdStorage = false,
             ),
         )
-        val thumb = MediaRoute.DJI.pathUrlString(storage, file.thumbPath)
+        val thumb = MediaRoute.CAMERA_SOFT_AP.pathUrlString(storage, file.thumbPath)
         assertEquals(
             "http://192.168.2.1/v2?storage=1&path=MISC/THM/DJI_001/DJI_20260814125250_0034_D.scr",
             thumb,
         )
-        val original = MediaRoute.DJI.pathUrlString(storage, file.path)
+        val original = MediaRoute.CAMERA_SOFT_AP.pathUrlString(storage, file.path)
         assertTrue(original.contains("DCIM/DJI_001/DJI_20260814125250_0034_D.MP4"))
         assertTrue(MediaHTTP.previewPaths(file).any { it.endsWith(".LRF") })
         val proxy = MediaHTTP.previewPaths(file).first()
@@ -89,7 +97,7 @@ class MediaLibraryTest {
         assertEquals(MediaCacheGrade.PROXY, MediaCacheGrade.resolve(false, true))
         assertEquals(MediaCacheGrade.NONE, MediaCacheGrade.resolve(false, false))
         assertTrue(MediaCacheGrade.PROXY.isProxyOnly)
-        assertTrue(MediaRoute.DJI.pathUrl(storage, file.thumbPath).encodedPath == "/v2")
+        assertTrue(MediaRoute.CAMERA_SOFT_AP.pathUrl(storage, file.thumbPath).encodedPath == "/v2")
     }
 
     @Test

@@ -164,7 +164,7 @@ internal object LunaShellMapping {
             focusLabels = focusOptions.map { it.chip },
             colorModes = colorModes,
         ),
-        media = com.opencapture.openpocketcine.media.MediaRoute(host = "192.168.42.1", directPath = true),
+        media = com.opencapture.opencine.vocabulary.MediaRoute(host = "192.168.42.1", directPath = true),
     )
 
     fun focusOption(mode: CameraFocusMode): FocusOption = when (mode) {

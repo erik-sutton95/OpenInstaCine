@@ -5,12 +5,16 @@ import com.opencapture.opencine.appkit.*
 import com.opencapture.opencine.media.*
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.openpocketcine.lut.ClipColorProfile
-import com.opencapture.openpocketcine.feed.fromColorMode
+import com.opencapture.opencine.vocabulary.fromColorMode
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
+import com.opencapture.opencine.vocabulary.MediaHTTP
+import com.opencapture.opencine.vocabulary.MediaFile
+import com.opencapture.opencine.vocabulary.MediaCacheGrade
+import com.opencapture.opencine.cameracontrols.MediaOperatorCopy
 
 /** Source look/OS playback adapters only; the gallery consumes the common library directly. */
 data class LunaPlaybackLook(val colorMode: Int?, val file: MediaFile)

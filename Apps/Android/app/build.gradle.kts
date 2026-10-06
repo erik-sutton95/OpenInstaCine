@@ -46,4 +46,4 @@ android {
  kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 }
 afterEvaluate { tasks.matching { it.name.startsWith("check") && it.name.endsWith("AarMetadata") }.configureEach { enabled = false } }
-dependencies { implementation(project(":monitor")); implementation(libs.opencine.insta360.luna); implementation(libs.kotlinx.coroutines.android) }
+dependencies { implementation(project(":monitor")); implementation(libs.opencine.insta360.luna); implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT"); implementation(libs.kotlinx.coroutines.android) }

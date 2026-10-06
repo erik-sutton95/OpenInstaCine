@@ -5,6 +5,9 @@ import android.content.SharedPreferences
 import com.opencapture.openpocketcine.OperatorPrefs
 import org.json.JSONObject
 import java.io.File
+import com.opencapture.opencine.vocabulary.MediaHTTP
+import com.opencapture.opencine.vocabulary.MediaFile
+import com.opencapture.opencine.vocabulary.MediaCacheGrade
 
 class MediaCache(
     private val filesDir: File,

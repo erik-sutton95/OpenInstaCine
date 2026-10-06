@@ -1,10 +1,18 @@
 package com.opencapture.openpocketcine
 
+import androidx.compose.runtime.Composable
+import com.opencapture.opencine.appkit.MonitorCaptureField
+import com.opencapture.opencine.appkit.MonitorCapturePreferences
+import com.opencapture.opencine.appkit.captureField
 import com.opencapture.opencine.appkit.readPhoneBatteryReadout
+import com.opencapture.opencine.cameracontrols.CaptureRefresh
+import com.opencapture.opencine.cameracontrols.CaptureSheetHost
+import com.opencapture.opencine.cameracontrols.CaptureWheelState
 import com.opencapture.opencine.cameracontrols.GamepadHost
 import com.opencapture.opencine.cameracontrols.GimbalChromeHost
 import com.opencapture.opencine.cameracontrols.GimbalGamepadDriver
 import com.opencapture.opencine.cameracontrols.LiveGimbalPanel
+import com.opencapture.opencine.cameracontrols.LiveSheet
 import com.opencapture.opencine.motion.GimbalWaypointSlot
 import com.opencapture.opencine.runtime.MonitorHDRDisplay
 import android.content.Context
@@ -18,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.CaptureSetting
 import com.opencapture.opencine.vocabulary.GamepadOperatorAction
 import com.opencapture.opencine.vocabulary.GimbalDoubleTap
 import com.opencapture.opencine.vocabulary.GimbalMode
@@ -53,10 +62,11 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import com.opencapture.monitorui.settings.MonitorSettingsTab
+import com.opencapture.opencine.cameracontrols.PortraitFeedAspect
 
 class AppModel(
     context: Context,
-) : GamepadHost, GimbalChromeHost {
+) : GamepadHost, GimbalChromeHost, CaptureSheetHost {
     private val appContext = context.applicationContext
     init {
         DiagnosticCenter.install(appContext)
@@ -471,6 +481,24 @@ class AppModel(
 
     val isLive: Boolean
         get() = shell.state.value.monitor != null
+
+    // CaptureSheetHost (camera-controls): the capture sheets read these values and commit through one typed entry.
+    override val camera get() = session.connectedCamera?.model
+    override fun captureField(sheet: LiveSheet, expoMode: Int): MonitorCaptureField? =
+        captureSettingKey(sheet)?.let { session.control.captureField(it) }
+    @Composable override fun captureSessionState(status: CameraStatus) = observedCaptureSessionState(status)
+    override val capturePreferences get() = MonitorCapturePreferences(nativeISOHopEnabled,
+        facePriorityExposureEnabled, shutterUsesAngle, OperatorPrefs.shutterAngleDegrees(appContext))
+    override fun updateCapturePreferences(value: MonitorCapturePreferences) {
+        if (value.nativeIsoHop != nativeISOHopEnabled) updateNativeISOHopEnabled(value.nativeIsoHop)
+        if (value.facePriorityExposure != facePriorityExposureEnabled) updateFacePriorityExposureEnabled(value.facePriorityExposure)
+        if (value.shutterUsesAngle != shutterUsesAngle) updateShutterUsesAngle(value.shutterUsesAngle)
+    }
+    override fun commit(setting: CaptureSetting, field: MonitorCaptureField?, status: CameraStatus) =
+        routeCaptureSetting(setting, field, status)
+    override suspend fun refresh(what: CaptureRefresh) = refreshForCaptureSheet(what)
+    @Composable override fun CommonDrum(sheet: LiveSheet, status: CameraStatus, field: MonitorCaptureField?,
+        enabled: Boolean, wheel: CaptureWheelState) = InstaCommonDrum(sheet, status, field, enabled, wheel)
 
     // GimbalChromeHost (camera-controls): the gimbal chrome reads these host values and reaches the session through the rest.
     override val mirrorsHorizontally get() = assist.mirrorsHorizontally

@@ -21,6 +21,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.opencapture.monitorui.MonitorAssistTool
 import com.opencapture.monitorui.settings.MonitorViewAssistSettings
 import com.opencapture.openpocketcine.assists.*
+import com.opencapture.opencine.cameracontrols.LiveZebra
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

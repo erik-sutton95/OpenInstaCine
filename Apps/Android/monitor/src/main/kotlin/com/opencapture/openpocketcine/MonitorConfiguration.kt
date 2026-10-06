@@ -2,8 +2,8 @@ package com.opencapture.openpocketcine
 
 import android.content.Context
 import com.opencapture.opencine.insta360.shell.CameraBackend
-import com.opencapture.openpocketcine.lut.LutCatalog
-import com.opencapture.openpocketcine.lut.LutEntry
+import com.opencapture.opencine.vocabulary.LutCatalog
+import com.opencapture.opencine.vocabulary.LutEntry
 
 /** App identity the shell shows. App-owned (not part of the Insta360 shell contract). */
 data class BrandIdentity(val appName: String, val wordmark: String, val accentArgb: Long, val cameraFamily: String, val sourceUrl: String? = null, val supportUrl: String? = null, val issueUrl: String? = null, val featureUrl: String? = null, val sourceLabel: String? = null)

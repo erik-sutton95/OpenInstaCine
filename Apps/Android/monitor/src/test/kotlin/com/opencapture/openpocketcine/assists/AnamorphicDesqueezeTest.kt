@@ -12,6 +12,7 @@ import com.opencapture.opencine.media.MonitorDesqueezeDirection
 import com.opencapture.monitorui.MonitorGridGeometry
 import com.opencapture.monitorui.MonitorGuideGeometry
 import com.opencapture.monitorui.MonitorPlaybackZoom
+import com.opencapture.opencine.cameracontrols.AnamorphicDesqueeze
 
 class AnamorphicDesqueezeTest {
     @Test

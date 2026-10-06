@@ -1,7 +1,7 @@
 package com.opencapture.openpocketcine.media
 
-import com.opencapture.openpocketcine.feed.fromColorMode
-import com.opencapture.openpocketcine.feed.inferred
+import com.opencapture.opencine.vocabulary.fromColorMode
+import com.opencapture.opencine.vocabulary.inferred
 
 import android.app.ActivityManager
 import android.graphics.Bitmap
@@ -31,7 +31,7 @@ import com.opencapture.openpocketcine.MonitorGlass
 import com.opencapture.openpocketcine.feed.FeedEffectsRenderPlan
 import com.opencapture.openpocketcine.feed.MonitorTransfer
 import com.opencapture.openpocketcine.feed.ScopeAssistBundle
-import com.opencapture.openpocketcine.feed.ScopeExposureCeiling
+import com.opencapture.opencine.vocabulary.ScopeExposureCeiling
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.max

@@ -17,6 +17,7 @@ import org.json.JSONObject
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import kotlin.test.*
+import com.opencapture.opencine.vocabulary.MediaFile
 
 class LunaMediaCatalogCodecTest {
     private fun file(starred: Boolean = false, storage: Int = 0) = MediaFile(

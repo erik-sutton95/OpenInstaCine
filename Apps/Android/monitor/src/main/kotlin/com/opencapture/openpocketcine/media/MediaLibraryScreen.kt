@@ -79,6 +79,15 @@ import com.opencapture.openpocketcine.OpcIcon
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.openpocketcine.panelGlass
 import kotlinx.coroutines.launch
+import com.opencapture.opencine.vocabulary.MediaLibraryTab
+import com.opencapture.opencine.vocabulary.MediaLibrarySort
+import com.opencapture.opencine.vocabulary.MediaLibraryQuery
+import com.opencapture.opencine.vocabulary.MediaKind
+import com.opencapture.opencine.vocabulary.MediaFile
+import com.opencapture.opencine.cameracontrols.MediaThumbnailSize
+import com.opencapture.opencine.cameracontrols.MediaLibraryCopy
+import com.opencapture.opencine.cameracontrols.MediaClipPresentation
+import com.opencapture.opencine.cameracontrols.MediaBrowserLayout
 
 internal fun mediaColorOptions(
     colors: Iterable<String?>,

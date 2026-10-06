@@ -9,6 +9,9 @@ import org.json.JSONObject
 import org.json.JSONArray
 import java.util.Base64
 import java.util.Locale
+import com.opencapture.opencine.vocabulary.MediaKind
+import com.opencapture.opencine.vocabulary.MediaHTTP
+import com.opencapture.opencine.vocabulary.MediaFile
 
 /** Immutable source facts alongside the unchanged legacy index record. */
 data class LunaMediaLibraryPayload(val file: MediaFile, val source: CameraMediaItem?)
