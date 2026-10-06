@@ -23,7 +23,7 @@ final class CaptureListTests: XCTestCase {
     func testIsoWheelUsesCamcapAndStarsBaseForTransfer() {
         var dlog2 = CameraStatus()
         dlog2.colorMode = .dLog2
-        dlog2.availableIsoIndices = CamCapIso.parseIndices(Self.isoDLog2)
+        dlog2.availableIsoIndices = Self.isoDLog2
         XCTAssertEqual(
             CaptureLists.isoDrumLabels(from: dlog2),
             ["100", "200", "400", "800", "1600", "3200"])
@@ -34,7 +34,7 @@ final class CaptureListTests: XCTestCase {
 
         var dlog = CameraStatus()
         dlog.colorMode = .dLog
-        dlog.availableIsoIndices = CamCapIso.parseIndices(Self.isoDLog)
+        dlog.availableIsoIndices = Self.isoDLog
         XCTAssertEqual(
             CaptureLists.isoDrumLabels(from: dlog),
             dlog.availableIsoIndices.filter { $0 != .auto }.map(\.label))
@@ -177,10 +177,8 @@ final class CaptureListTests: XCTestCase {
         XCTAssertEqual(ShutterAngle.nearestLabel(denom: 48, fps: 24), "180°")
     }
 
-    private static let isoDLog2: [UInt8] = [
-        0x01, 0x08, 0x00, 0x00, 0x06, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-    ]
-    private static let isoDLog: [UInt8] = [
-        0x01, 0x08, 0x00, 0x00, 0x06, 0x00, 0x05, 0x06, 0x07, 0x08, 0x09,
-    ]
+    /// The camera's D-Log2 ISO list (`camcap_iso` indices `03…08`; decode tested in OpenCine).
+    private static let isoDLog2: [IsoIndex] = [.iso100, .iso200, .iso400, .iso800, .iso1600, .iso3200]
+    /// The camera's D-Log ISO list (`camcap_iso` indices `00 05…09`).
+    private static let isoDLog: [IsoIndex] = [.auto, .iso400, .iso800, .iso1600, .iso3200, .iso6400]
 }

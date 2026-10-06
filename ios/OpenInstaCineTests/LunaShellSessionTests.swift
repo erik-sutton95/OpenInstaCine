@@ -76,9 +76,9 @@ final class SessionIsolationTests: XCTestCase {
         XCTAssertTrue(condition(), "timed out")
     }
 
-    private static let otherProfile = CameraProfile(
+    private static let otherProfile = CameraLabelProfile(
         shootingModeLabels: [.hyperLapse: "Hyper"], colorModeLabels: [.normal: "Neutral"],
-        gimbalModeLabels: [.fpv: "FPV-X"], media: MediaHTTP.Route(host: "10.0.0.9", addressing: .djiV2))
+        gimbalModeLabels: [.fpv: "FPV-X"], media: MediaHTTP.Route(host: "10.0.0.9", addressing: .storageQuery))
 
     func testTwoSessionsRunConcurrentlyWithoutCrossover() async throws {
         let suite = "SessionIsolationTests"

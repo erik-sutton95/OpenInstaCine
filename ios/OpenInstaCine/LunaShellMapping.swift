@@ -32,7 +32,7 @@ enum LunaShellMapping {
     static let zoomChips: [Double] = [1, 2, 3, 6, 15]
 
     /// Luna names and media addressing for a session: every file at its own path on the camera AP.
-    static let profile = CameraProfile(
+    static let profile = CameraLabelProfile(
         shootingModeLabels: shootingModeLabels, colorModeLabels: [.normal: "Standard"],
         gimbalModeLabels: gimbalModeLabels,
         media: MediaHTTP.Route(host: "192.168.42.1", addressing: .directPath))
@@ -126,13 +126,13 @@ enum LunaShellMapping {
         case (2688...2720, false): return .p2_7K
         case (2688...2720, true): return .p2_7K_9x16
         case (2880...3072, true): return .p3K_9x16
-        case (3840, false) where height < 2000: return .luna4K_235
-        case (7680, false) where height < 4000: return .luna8K_235
-        case (2880...3072, false): return .luna3K
+        case (3840, false) where height < 2000: return .p4K_235
+        case (7680, false) where height < 4000: return .p8K_235
+        case (2880...3072, false): return .p3K
         case (3840, false): return .p4K
-        case (3840, true): return .luna4K_9x16
-        case (5120...5760, false): return .luna6K
-        case (7680, false): return .luna8K
+        case (3840, true): return .p4K_9x16
+        case (5120...5760, false): return .p6K
+        case (7680, false): return .p8K
         default: return unknownResolution
         }
     }
