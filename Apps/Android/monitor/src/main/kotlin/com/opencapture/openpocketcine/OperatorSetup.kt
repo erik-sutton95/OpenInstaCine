@@ -4,6 +4,7 @@ import com.opencapture.opencine.appkit.diagnostics.ManualProblemReportDelivery
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.GamepadGimbalStick
 import com.opencapture.openpocketcine.diagnostics.AppDiagnostics
+import com.opencapture.openpocketcine.session.vocabularyPhase
 import com.opencapture.opencine.vocabulary.fromColorMode
 import com.opencapture.monitorui.MonitorTab
 import com.opencapture.monitorui.monitorScrollFade
@@ -118,6 +119,11 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import com.opencapture.monitorui.settings.MonitorSettingsTab
 import com.opencapture.opencine.runtime.MonitorGlesUpscaler
+import com.opencapture.opencine.cameracontrols.formatCacheSize
+import com.opencapture.opencine.cameracontrols.formatAppVersion
+import com.opencapture.opencine.cameracontrols.connectionPhaseLabel
+import com.opencapture.opencine.cameracontrols.OperatorLinkHealth
+import com.opencapture.opencine.cameracontrols.CleanPinTool
 
 object SettingsHelpCopy {
     const val CURRENT_TRANSPORT =
@@ -222,78 +228,6 @@ object OpenPocketCineLinks {
     const val TERMS = "https://opencapture.org/openinstacine/terms"
 }
 
-internal object OperatorLinkHealth {
-    const val TARGET_FPS = 25.0
-
-    fun bars(
-        isLive: Boolean,
-        videoPackets: Int,
-        hasVideoFormat: Boolean,
-        measuredFps: Double = -1.0,
-    ): Int {
-        if (!isLive) return 0
-        if (measuredFps > 0.0) {
-            val score = ((measuredFps / TARGET_FPS) * 100.0).coerceIn(0.0, 100.0)
-            val rounded = kotlin.math.round(score).toInt()
-            if (rounded <= 0) return 1
-            return ((rounded + 24) / 25).coerceIn(1, 4)
-        }
-        return when {
-            hasVideoFormat && videoPackets > 0 -> 4
-            videoPackets >= 400 -> 4
-            videoPackets >= 120 -> 3
-            videoPackets >= 1 -> 2
-            else -> 1
-        }
-    }
-
-    fun score(bars: Int): Int = MonitorLinkHealth.score(bars)
-
-    fun caption(isLive: Boolean, bars: Int): String {
-        if (!isLive) return "No live path."
-        if (bars <= 0) return "Waiting for the link."
-        return when (MonitorLinkHealth.band(score(bars))) {
-            MonitorLinkHealth.Band.STABLE -> "Link is clean. · Stable"
-            MonitorLinkHealth.Band.WATCH -> "Some loss on the link. · Watch"
-            MonitorLinkHealth.Band.POOR -> "Link is weak. · Poor"
-        }
-    }
-
-    fun compactFps(incoming: String): String {
-        val compact = if (incoming.endsWith(".00")) incoming.dropLast(3) else incoming
-        return compact.ifEmpty { "\u2014" }
-    }
-
-    fun formatMeasuredFps(fps: Double): String {
-        if (fps <= 0.0) return ""
-        val rounded = kotlin.math.round(fps)
-        return if (kotlin.math.abs(fps - rounded) < 0.05) {
-            rounded.toInt().toString()
-        } else {
-            String.format(Locale.US, "%.2f", fps)
-        }
-    }
-
-    fun fpsChipLabel(
-        isLive: Boolean,
-        recovering: Boolean,
-        measuredFps: Double,
-        phase: ConnectionPhase,
-    ): String {
-        if (phase == ConnectionPhase.FAILED) return "FAIL"
-        if (recovering) return "RECOV"
-        if (measuredFps > 0.0) return compactFps(formatMeasuredFps(measuredFps))
-        return if (!isLive && phase == ConnectionPhase.IDLE) "\u2014" else "LINK"
-    }
-
-    fun liveTileDetail(
-        isLive: Boolean,
-        cameraName: String,
-        fpsLabel: String,
-        phaseLabel: String,
-    ): String = if (isLive) "$cameraName · BLE + Wi-Fi · $fpsLabel FPS" else phaseLabel
-}
-
 internal object OperatorMediaCache {
     fun candidates(context: Context): List<File> =
         listOf(
@@ -324,20 +258,6 @@ internal object OperatorMediaCache {
     }
 }
 
-internal fun formatCacheSize(bytes: Long): String {
-    if (bytes <= 0L) return "Empty"
-    val units = arrayOf("B", "KB", "MB", "GB", "TB")
-    var value = bytes.toDouble()
-    var unit = 0
-    while (value >= 1024.0 && unit < units.lastIndex) {
-        value /= 1024.0
-        unit++
-    }
-    return if (unit == 0) "$bytes B" else String.format(Locale.US, "%.1f %s", value, units[unit])
-}
-
-internal fun formatAppVersion(versionName: String, versionCode: Long): String = "$versionName ($versionCode)"
-
 internal fun lutLookLabel(
     selection: String,
     enabled: Boolean = true,
@@ -361,40 +281,6 @@ internal fun toggledCleanPins(current: Set<String>, toolKey: String): Set<String
     if (!next.add(toolKey)) next.remove(toolKey)
     return OperatorPrefs.resolvedCleanPins(next)
 }
-
-internal enum class CleanPinTool(val key: String, val title: String) {
-    LUT("LUT", "LUT"),
-    PEAKING("PEAK", "Peaking"),
-    FALSE_COLOR("FALSE", "False Color"),
-    ZEBRA("ZEBRA", "Zebra"),
-    WAVEFORM("WAVE", "Waveform"),
-    PARADE("PARADE", "Parade"),
-    HISTOGRAM("HISTO", "Histogram"),
-    VECTORSCOPE("VECTOR", "Vectorscope"),
-    TRAFFIC_LIGHTS("LIGHTS", "Traffic Lights"),
-    ND("ND", "ND Suggestion"),
-    GUIDES("GUIDES", "Guides"),
-    GRID("GRID", "Grid"),
-    CROSSHAIR("CROSS", "Crosshair"),
-    DESQUEEZE("DESQ", "Anamorphic Desqueeze"),
-    MIRROR("MIRROR", "Mirror"),
-    AUDIO("AUDIO", "Audio Levels"),
-}
-
-internal fun connectionPhaseLabel(phase: ConnectionPhase, failure: String?): String =
-    when (phase) {
-        ConnectionPhase.IDLE -> "Idle"
-        ConnectionPhase.SCANNING -> "Scanning for camera…"
-        ConnectionPhase.CONNECTING_GATT -> "Connecting (Bluetooth)…"
-        ConnectionPhase.PAIRING -> "Pairing…"
-        ConnectionPhase.AWAITING_APPROVAL -> "Approve on the camera screen"
-        ConnectionPhase.READING_WIFI_CREDS -> "Reading Wi-Fi credentials…"
-        ConnectionPhase.JOINING_WIFI -> "Joining camera Wi-Fi…"
-        ConnectionPhase.OPENING_DATALINK -> "Opening datalink…"
-        ConnectionPhase.LIVE -> "Connected"
-        ConnectionPhase.FAILED ->
-            if (failure.isNullOrBlank()) "Failed" else "Failed: $failure"
-    }
 
 internal fun resetDispChrome(model: AppModel, mode: PocketDispMode) {
     val defaults =
@@ -446,7 +332,7 @@ fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {
             model.session.hasVideoFormat,
             measuredFps,
         )
-    val phaseLabel = connectionPhaseLabel(phase, failure)
+    val phaseLabel = connectionPhaseLabel(phase.vocabularyPhase(), failure)
     val view = LocalView.current
     var legalKind by remember { mutableStateOf<LegalKind?>(null) }
     var confirmClearCache by remember { mutableStateOf(false) }

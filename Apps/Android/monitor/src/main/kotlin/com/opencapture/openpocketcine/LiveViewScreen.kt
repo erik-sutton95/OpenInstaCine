@@ -168,6 +168,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import com.opencapture.monitorui.LiveChromeMetrics
+import com.opencapture.opencine.cameracontrols.PortraitFeedAspect
 
 @Composable
 fun LiveViewScreen(model: AppModel) {

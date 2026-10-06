@@ -1,6 +1,6 @@
 package com.opencapture.openpocketcine
 
-import com.opencapture.opencine.insta360.shell.ConnectionPhase
+import com.opencapture.opencine.vocabulary.ConnectionPhase
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.GamepadGimbalStick
 import kotlin.test.Test
@@ -9,6 +9,11 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.json.JSONObject
 import com.opencapture.opencine.runtime.MonitorGlesUpscaler
+import com.opencapture.opencine.cameracontrols.formatCacheSize
+import com.opencapture.opencine.cameracontrols.formatAppVersion
+import com.opencapture.opencine.cameracontrols.connectionPhaseLabel
+import com.opencapture.opencine.cameracontrols.OperatorLinkHealth
+import com.opencapture.opencine.cameracontrols.CleanPinTool
 
 class OperatorSetupContractTest {
     @Test
