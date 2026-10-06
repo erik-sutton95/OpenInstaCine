@@ -156,11 +156,6 @@ final class CameraSession {
     }
     var controlNote: String?
     var isLocked = false
-    var isMultiviewBorrowed: Bool { false }
-    /// Luna has no Multiview; kept so the shared shell compiles unchanged.
-    private(set) var isMultiviewControlsOnly = false
-    @ObservationIgnored var multiviewControlAdmission: (() -> Bool)?
-    var multiviewPose: GimbalStickMapping { GimbalStickMapping() }
 
     /// ISO, shutter, white balance and record: the shared monitor controls, bound by the shell
     /// to the connected camera's common session (CameraSessionCore.swift).
@@ -325,7 +320,6 @@ final class CameraSession {
     @ObservationIgnored var zoomWriteTask: Task<Void, Never>?
     var zoomPin: CameraValuePin<Double>?
     var zoomOptimistic: Double? { zoomPin?.expected }
-    var zoomColorHopPending: Bool { false }
     /// Highest zoom the body accepts (fw 1.1.15 raised this; see LunaShellMapping).
     @ObservationIgnored var zoomCeiling = LunaShellMapping.defaultZoomCeiling
     var isFormatPinActive: Bool { pins.format != nil }
@@ -342,7 +336,6 @@ final class CameraSession {
         mediaStorage: MonitorMediaCacheStorage? = nil,
         controlsOnly: Bool = false
     ) {
-        isMultiviewControlsOnly = controlsOnly
         ownsBackend = sharedDecoder == nil && !controlsOnly
         self.profile = profile
         self.cameraMedia = cameraMedia ?? CameraMedia(storage: mediaStorage)

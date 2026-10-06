@@ -102,7 +102,6 @@ final class AppModel {
         logPrefix: "OpenInstaCine")
     @ObservationIgnored let watchRelay = WatchRelay()
     @ObservationIgnored private var watchRelayActivated = false
-    var multiviewExit: (() -> Void)?
     /// Live view-space X flip: TT180 extra-mirror XOR MIRROR assist.
     var livePictureViewFlip: Bool {
         GimbalStick.liveViewFlip(
@@ -455,7 +454,6 @@ final class AppModel {
 
     /// Connect shows the monitor — never leftover Operator Setup, Media, or Edit view.
     func setShareThisFeed(_ on: Bool) {
-        guard !session.isMultiviewBorrowed else { return }
         shareThisFeed = on
         OperatorPrefs.shareThisFeed = on
         if on {
@@ -470,7 +468,7 @@ final class AppModel {
     }
 
     func startRelayHost() {
-        guard isLive, shareThisFeed, !session.isMultiviewBorrowed else { return }
+        guard isLive, shareThisFeed else { return }
         WatcherRelayKeychain.app.hostPasscode = sharePasscode
         let name = UIDevice.current.name
         let camera = session.connectedCamera?.name ?? ""

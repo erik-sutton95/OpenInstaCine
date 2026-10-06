@@ -732,7 +732,7 @@ struct LiveViewScreen: View {
         if model.chromeSectionMounts(.railSettings) || recording {
             frames.append(layout.settings)
         }
-        if model.chromeSectionMounts(.railMedia), !model.session.isMultiviewBorrowed {
+        if model.chromeSectionMounts(.railMedia) {
             frames.append(layout.media)
         }
         return frames
