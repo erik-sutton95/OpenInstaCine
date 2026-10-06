@@ -1,6 +1,10 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.appkit.MonitorControlModel
 import com.opencapture.opencine.core.CameraSnapshot
+import com.opencapture.opencine.core.CommandFailure
+import com.opencapture.opencine.core.CommandRejection
+import com.opencapture.opencine.core.CommandStage
 import com.opencapture.opencine.core.ISOValue
 import com.opencapture.opencine.core.RecordingState
 import com.opencapture.opencine.core.SettingKey
@@ -53,5 +57,19 @@ internal object CorePresentation {
             else -> next.copy(wbMode = CameraCommands.WB_AUTO, wbTint = 0)
         }
         return next.copy(isRecording = snapshot.recording.value == RecordingState.RECORDING)
+    }
+
+    /**
+     * Main's control copy (`sendControl`): a request that failed said "X was not applied by the
+     * camera."; a write the camera took but did not show reverted silently. A stale camera state
+     * (a kept wrong-camera guard) and not being connected keep the shared copy.
+     */
+    fun note(stage: CommandStage, label: String): String? {
+        val shared = MonitorControlModel.note(stage, label) ?: return null
+        return when (stage) {
+            CommandStage.TimedOut, CommandStage.Failed(CommandFailure.NOT_APPLIED) -> null
+            CommandStage.Rejected(CommandRejection.StaleEpoch), CommandStage.Rejected(CommandRejection.StaleCapabilities) -> shared
+            else -> if (shared == MonitorControlModel.CONNECT_FIRST) shared else "$label was not applied by the camera."
+        }
     }
 }

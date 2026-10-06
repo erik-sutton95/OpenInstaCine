@@ -197,9 +197,16 @@ final class MonitorUIFlowTests: XCTestCase {
         let falseColor = app.staticTexts.matching(
             NSPredicate(format: "identifier == %@ AND label == %@",
                 "monitor.settings.card.title", "False Color")).firstMatch
+        let evMeter = app.staticTexts.matching(
+            NSPredicate(format: "identifier == %@ AND label == %@",
+                "monitor.settings.card.title", "EV Meter")).firstMatch
         if app.frame.width > 700 {
-            XCTAssertGreaterThan(zebra.frame.minX, falseColor.frame.maxX + 16,
-                "The assist group must span the page so its own landscape columns can fit")
+            // main: the tool cards stay in one column, with EV Meter and LUT beside them.
+            XCTAssertEqual(zebra.frame.minX, falseColor.frame.minX, accuracy: 1,
+                "Zebra sits in False Color's column")
+            XCTAssertGreaterThan(zebra.frame.minY, falseColor.frame.maxY)
+            XCTAssertGreaterThan(evMeter.frame.minX, falseColor.frame.maxX,
+                "EV Meter sits beside the tool column")
         }
         for _ in 0..<6 where !zebra.isHittable {
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.8))

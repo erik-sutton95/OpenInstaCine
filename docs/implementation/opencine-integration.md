@@ -164,8 +164,10 @@ never work), or already matched `main`. Copy that used an em dash on `main` now 
 comma (iPhone `main`'s punctuation for the same lines). Underneath:
 
 - Command path: ISO, shutter, white balance and record go through one OpenCineCore session per
-  camera. A change shows as confirmed only after the camera reports it; a refused, unapplied or
-  timed out write says so instead of reverting silently.
+  camera. A change holds until the camera reports it. Android: a refused or unsent write says
+  "ISO was not applied by the camera." and one the camera does not take reverts silently
+  (restored to `main`). iPhone: a refused, unapplied or timed out write says so instead of
+  reverting silently (to be restored to `main`).
 - Session isolation: each connection owns its backend, labels, media route, zoom ceiling (iPhone
   readouts reach 15x and the Android zoom chip stops at 12x: already matched `main`) and learned
   picture EV calibration. Old v1 EV offsets seed the new per-camera keys and are never rewritten.
@@ -175,11 +177,11 @@ comma (iPhone `main`'s punctuation for the same lines). Underneath:
 - Capability-driven layout (SHELL-01): the live monitor shows what the connected Luna declares
   through OpenCine (`LunaCameraSession.layout`): gimbal and head tracking from its motion,
   host-derived timecode, no audio levels, no iris. The app keeps only clip delete, clip star and
-  the internet hop. Differences: the Clean view settings no longer offer an AUDIO pin (Luna
-  reports no audio levels). With no camera connected, iPhone Settings shows the gimbal,
-  joystick, head-tracking, zoom chip and timecode rows (restored to `main`; Android lists
-  Timecode and needs a camera for gimbal and zoom, as on `main`). No Multiview entry: the app
-  qualifies no multicam budget.
+  the internet hop. Differences: the iPhone Clean view settings no longer offer an AUDIO pin
+  (Luna reports no audio levels; to be restored to `main`; Android `main` hid it too). With no
+  camera connected, iPhone Settings shows the gimbal, joystick, head-tracking, zoom chip and
+  timecode rows (restored to `main`; Android lists Timecode and needs a camera for gimbal and
+  zoom, as on `main`). No Multiview entry: the app qualifies no multicam budget.
 - Shared connection flow (SHELL-02): the cameras page, the pair page, connect progress and
   failures come from OpenCine's app shell (`OpenCineAppKit` `CamerasScreen` / `PairScreen` /
   `CamerasModel`, Android `:appkit`) over the Luna integration (`LunaIntegration`, which connects
@@ -204,6 +206,19 @@ comma (iPhone `main`'s punctuation for the same lines). Underneath:
   over the camera's own Wi-Fi without `main`'s "Turn on Personal Hotspot" prompt (no Insta
   camera could add a hotspot setup on `main`, and Luna joined its own Wi-Fi after the prompt
   anyway; only the simulator review data reached it).
+- Operator Setup (Android) comes from OpenCine's `camera-controls` (`OperatorSetupScreen`; the
+  app supplies its copy, stores and pages). View Assist and Display show `main`'s rows (restored
+  to `main`). System > App Information reads "Charcoal" and "Insta360 / BLE + Wi-Fi" with iPhone
+  `main`'s help (kept fix: Android `main` showed the DJI fork's "DJI Black" and DUML copy).
+  Clean view pins, System buttons and the zebra threshold sliders have screen-reader names, and
+  the System buttons take touches across 48 dp around the unchanged capsule (kept fix,
+  accessibility).
+- Operator Setup (iPhone) uses OpenCine's settings page. Display shows `main`'s rows (caption,
+  Edit view, one switch per item, then the pins), Sharing's "Show Wi-Fi code" link is yellow
+  again (the move drew it white) and landscape View Assist keeps the tools in one column with EV
+  Meter and LUT beside them (restored to `main`).
+- Android colour dots in the zebra and peaking options show the colour each overlay paints (kept
+  fix: "Amber", "Cyan" and peaking "Blue" drew the app's yellow accent; iPhone already did).
 
 ## Physical device checklist (Luna Ultra, iOS and Android)
 

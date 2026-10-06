@@ -4,6 +4,7 @@ import com.opencapture.opencine.core.CameraSessionID
 import com.opencapture.opencine.core.CameraSnapshot
 import com.opencapture.opencine.appkit.MonitorControlModel
 import com.opencapture.opencine.core.CommandFailure
+import com.opencapture.opencine.core.CommandRejection
 import com.opencapture.opencine.core.CommandStage
 import com.opencapture.opencine.core.ISOValue
 import com.opencapture.opencine.core.MonotonicInstant
@@ -84,10 +85,28 @@ class CorePresentationTest {
         )
     }
 
-    /** The operator copy this app has always shown, now from the shared control model. */
+    /** The shared default copy; this app keeps main's instead (below). */
     @Test fun onlyAConfirmationIsSilent() {
         assertNull(MonitorControlModel.note(CommandStage.Confirmed, "ISO 400"))
         assertEquals("ISO 400 was not applied by the camera.", MonitorControlModel.note(CommandStage.Failed(CommandFailure.NOT_APPLIED), "ISO 400"))
         assertEquals("The camera did not confirm WB 3200K.", MonitorControlModel.note(CommandStage.TimedOut, "WB 3200K"))
+    }
+
+    /** Main: a failed request said "X was not applied by the camera."; an unapplied write reverted silently. */
+    @Test fun writesKeepMainsNotes() {
+        val notApplied = "ISO 800 was not applied by the camera."
+        assertNull(CorePresentation.note(CommandStage.Confirmed, "ISO 800"))
+        assertNull(CorePresentation.note(CommandStage.Failed(CommandFailure.NOT_APPLIED), "ISO 800"))
+        assertNull(CorePresentation.note(CommandStage.TimedOut, "ISO 800"))
+        assertNull(CorePresentation.note(CommandStage.Failed(CommandFailure.SUPERSEDED), "ISO 800"))
+        assertEquals(notApplied, CorePresentation.note(CommandStage.Rejected(CommandRejection.CameraRefused), "ISO 800"))
+        assertEquals(notApplied, CorePresentation.note(CommandStage.OutcomeUnknown, "ISO 800"))
+        assertEquals(notApplied, CorePresentation.note(CommandStage.Failed(CommandFailure.NOT_SENT), "ISO 800"))
+        assertEquals("Stop was not applied by the camera.", CorePresentation.note(CommandStage.OutcomeUnknown, "Stop"))
+        assertEquals(MonitorControlModel.CONNECT_FIRST, CorePresentation.note(CommandStage.Rejected(CommandRejection.NotConnected), "ISO 800"))
+        assertEquals(
+            "ISO 800 was not sent: the camera state changed. Try again.",
+            CorePresentation.note(CommandStage.Rejected(CommandRejection.StaleEpoch), "ISO 800"),
+        )
     }
 }
