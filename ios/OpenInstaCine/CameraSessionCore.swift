@@ -14,11 +14,28 @@ extension CameraSession {
     /// The common session of the camera on the monitor, if any.
     var coreSession: (any OpenCineCore.CameraSession)? { control.session }
 
+    static let notApplied = " was not applied by the camera."
+
+    /// Main's control copy (`sendControl`): a request that failed said "X was not applied by the
+    /// camera."; a write the camera took but did not show reverted silently. A stale camera state
+    /// (a kept wrong-camera guard) and not being connected keep the shared copy.
+    static func controlNote(for stage: CommandStage, _ label: String) -> String? {
+        guard let shared = MonitorControlModel.note(for: stage, label) else { return nil }
+        switch stage {
+        case .timedOut, .failed(.notApplied): return nil
+        case .rejected(.staleEpoch), .rejected(.staleCapabilities): return shared
+        default: return shared == MonitorControlModel.connectFirst ? shared : label + notApplied
+        }
+    }
+
     /// Notes, the media refresh after a confirmed stop, and the status projection.
     func adoptControl() {
+        control.noteFor = CameraSession.controlNote(for:_:)
         control.onNote = { [weak self] note in
             self?.controlNote = note
-            self?.noteCommandFailure()
+            // Link Health counted a request the camera did not take, as main did; never "connect
+            // first" or a stale camera state.
+            if note.hasSuffix(CameraSession.notApplied) { self?.noteCommandFailure() }
         }
         control.onRecordFinished = { [weak self] receipt in
             guard receipt.intent == .stopRecording, receipt.stage == .confirmed else { return }

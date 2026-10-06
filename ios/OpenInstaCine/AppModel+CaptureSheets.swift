@@ -43,6 +43,8 @@ extension AppModel: CaptureSheetHost {
 
     var cameraStatus: CameraStatus { session.status }
     var displayStatus: CameraStatus { session.status }
+    /// main showed an ISO, shutter or white balance request at once.
+    var captureStripShowsPendingEdits: Bool { true }
     var connectedBody: CameraModel? { session.connectedCamera?.model }
     var sessionPhaseLabel: String { session.phase.label }
     var bodyFamily: CameraBodyFamily { session.bodyFamily }
