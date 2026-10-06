@@ -443,7 +443,9 @@ final class LiveFrameSampleTests: XCTestCase {
         XCTAssertEqual(MonitorTransfer.resolved(nil, colorMode: nil), .rec709)
         XCTAssertEqual(MonitorTransfer.resolved(nil, colorMode: .dLog2), .dlog2)
         XCTAssertEqual(MonitorTransfer.resolved(.dlog, colorMode: .normal), .dlog, "status wins")
-        for transfer in MonitorTransfer.allCases {
+        // The Nikon curves are shared curves, not DJI wire modes: no ColorMode to round-trip.
+        let noWireMode: Set<MonitorTransfer> = [.srgb, .nlog, .log3G10]
+        for transfer in MonitorTransfer.allCases where !noWireMode.contains(transfer) {
             XCTAssertEqual(MonitorTransfer(transfer.colorMode), transfer, "wire round trip")
         }
     }
