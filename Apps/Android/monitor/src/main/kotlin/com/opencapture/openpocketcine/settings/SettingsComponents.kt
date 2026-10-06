@@ -53,10 +53,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import com.opencapture.openpocketcine.assists.FalseColorReference
+import com.opencapture.opencine.cameracontrols.FalseColorReference
 import com.opencapture.openpocketcine.assists.FalseColorScale
 import com.opencapture.openpocketcine.feed.MonitorTransfer
-import com.opencapture.openpocketcine.feed.ScopeExposureCeiling
+import com.opencapture.opencine.vocabulary.ScopeExposureCeiling
 import com.opencapture.opencine.media.ScopeClipSource
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset

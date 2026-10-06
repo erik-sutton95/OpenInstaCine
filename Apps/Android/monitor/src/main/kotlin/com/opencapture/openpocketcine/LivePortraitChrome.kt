@@ -91,7 +91,7 @@ import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.opencine.vocabulary.CaptureShutterPolicy
 import com.opencapture.opencine.vocabulary.EvComp
-import com.opencapture.openpocketcine.assists.AssistToolGlyph
+import com.opencapture.opencine.cameracontrols.AssistToolGlyph
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistTool
 import kotlin.math.max
@@ -151,7 +151,8 @@ fun LivePortraitChrome(
                     .alpha(if (uiLocked) 0.4f else 1f)
                     .monitorChromeEditStroke(editing != null, true),
             ) {
-                com.opencapture.openpocketcine.assists.MonitorAssistCluster(
+                com.opencapture.opencine.cameracontrols.MonitorAssistCluster(
+                    prefs = OperatorPrefs,
                     portrait = true, locked = uiLocked || !chromeInteractive,
                     isOn = assist::isOn, onToggle = { assist.toggle(it) }, onLongPress = onAssistLongPress,
                     showsAudio = model.showsAudio(status),

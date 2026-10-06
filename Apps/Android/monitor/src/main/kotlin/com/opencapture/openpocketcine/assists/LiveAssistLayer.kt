@@ -46,6 +46,16 @@ import com.opencapture.monitorui.MonitorScopePoint
 import com.opencapture.monitorui.MonitorScopeSize
 import com.opencapture.monitorui.MonitorScopePanelSize
 import com.opencapture.opencine.runtime.ScopeSampleBus
+import com.opencapture.opencine.cameracontrols.audioOverlayChannels
+import com.opencapture.opencine.cameracontrols.WaveformPanel
+import com.opencapture.opencine.cameracontrols.VectorscopePanel
+import com.opencapture.opencine.cameracontrols.TrafficLightsPanel
+import com.opencapture.opencine.cameracontrols.ParadePanel
+import com.opencapture.opencine.cameracontrols.NDMeterPanel
+import com.opencapture.opencine.cameracontrols.MovableAssistPanel
+import com.opencapture.opencine.cameracontrols.HistogramPanel
+import com.opencapture.opencine.cameracontrols.FalseColorReference
+import com.opencapture.opencine.cameracontrols.AssistAudioOverlay
 
 /**
  * Feed-aligned assist overlays. LUT / PEAK / FALSE / ZEBRA paint through the

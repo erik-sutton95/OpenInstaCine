@@ -46,6 +46,14 @@ import com.opencapture.opencine.cameracontrols.LUTSplitComparisonBar
 import com.opencapture.openpocketcine.pickerPanelGlass
 import com.opencapture.openpocketcine.settings.SettingsPalette
 import com.opencapture.monitorui.MonitorCrosshairGeometry
+import com.opencapture.opencine.cameracontrols.ZebraEditor
+import com.opencapture.opencine.cameracontrols.NDAssist
+import com.opencapture.opencine.cameracontrols.MirrorAssist
+import com.opencapture.opencine.cameracontrols.HistogramAssist
+import com.opencapture.opencine.cameracontrols.AudioAssist
+import com.opencapture.opencine.cameracontrols.AssistToolGlyph
+import com.opencapture.opencine.cameracontrols.AssistInspectorScopePreview
+import com.opencapture.opencine.cameracontrols.AnamorphicDesqueeze
 
 private val CardShape = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
 
@@ -320,7 +328,7 @@ private fun NdOptions(state: LiveAssistState) {
     val haptics = LocalOperatorHaptics.current
     com.opencapture.monitorui.MonitorNDMenu(state.ndNotation, {
         haptics.selection(); state.ndNotation = it; state.persist()
-    }, NDAssist.NOTATION_TITLE, NDAssist.NOTATION_HELP, NDAssist.HELP)
+    }, NDAssist.NOTATION_TITLE, NDAssist.NOTATION_HELP, ND_HELP)
 }
 
 @Composable
@@ -361,3 +369,7 @@ internal fun DesqueezeOptions(state: LiveAssistState) {
         onSelect = { if (it == null) state.selectCustomDesqueeze() else state.selectDesqueezePreset(it) },
         onFactor = state::updateDesqueezeFactor, onDirection = state::updateDesqueezeDirection)
 }
+
+/** This app's ND help copy, as on its main (the shared [NDAssist.HELP] uses hyphens). */
+private const val ND_HELP =
+    "Meters the live picture against middle gray and suggests a screw-on ND \u2014 stops and ND number \u2014 to balance it. The app cannot set a filter."

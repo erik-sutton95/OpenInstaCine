@@ -33,6 +33,7 @@ import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.monitorLayout
 import com.opencapture.openpocketcine.LiveType
+import com.opencapture.opencine.cameracontrols.AssistToolGlyph
 
 /** Assist options ride the shared inspector frame; preview work stays in AssistOptionsPopup. */
 @Composable
