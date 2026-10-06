@@ -5,6 +5,7 @@ import Metal
 import OpenPocketViewCore
 import XCTest
 import OpenCineAppKit
+import OpenCineCameraControls
 import OpenCineApple
 import OpenCineMedia
 import MonitorPresentation
@@ -717,7 +718,7 @@ final class LiveAssistStateOwnershipTests: XCTestCase {
         let legacy = try XCTUnwrap(Data(base64Encoded: "eyJjcnVzaENsaXBDb21wZW5zYXRpb24iOjAsImRlc3F1ZWV6ZUN1c3RvbSI6dHJ1ZSwiZGVzcXVlZXplQ3VzdG9tRmFjdG9yIjoxLjcxLCJkZXNxdWVlemVGYWN0b3IiOjEuNzEsImRlc3F1ZWV6ZUhvcml6b250YWwiOnRydWUsImZhbHNlQ29sb3JSZWM3MDkiOnRydWUsImZhbHNlQ29sb3JSZWZlcmVuY2UiOnRydWUsImZhbHNlQ29sb3JTY2FsZSI6IkNpbmVTdG9wIiwiZ3JpZERpYWdvbmFsIjpmYWxzZSwiZ3JpZFBoaSI6ZmFsc2UsImdyaWRUaGlyZHMiOnRydWUsImd1aWRlQXNwZWN0IjoiMi4zOToxIiwiZ3VpZGVGYW1pbHkiOiJGaWxtIiwiZ3VpZGVNYXNrIjpmYWxzZSwibHV0QXJtZWQiOnRydWUsImx1dEV4cG9zdXJlU3RvcHMiOi0xLjUsIm1pcnJvckhvcml6b250YWwiOmZhbHNlLCJtaXJyb3JWZXJ0aWNhbCI6dHJ1ZSwicGVha2luZ0NvbG9yIjoiUmVkIiwicGVha2luZ1NlbnNpdGl2aXR5IjoiTWVkIiwic2VsZWN0ZWRHdWlkZXMiOlsiMi4zOToxIl0sInNwbGl0Q29tcGFyaXNvbiI6ZmFsc2UsInNwbGl0VmVydGljYWwiOnRydWUsInRvb2xzIjpbIkxVVCIsIlBFQUsiLCJXQVZFIiwiR1VJREVTIiwiTUlSUk9SIiwiUExBWSJdLCJ6ZWJyYUhpZ2hsaWdodCI6dHJ1ZSwiemVicmFIaWdobGlnaHRDb2xvciI6IldoaXRlIiwiemVicmFIaWdobGlnaHRJUkUiOjk5LCJ6ZWJyYU1pZHRvbmUiOnRydWUsInplYnJhTWlkdG9uZUNvbG9yIjoiQW1iZXIiLCJ6ZWJyYU1pZHRvbmVJUkUiOjU1fQ=="))
         let canonicalLegacy = try canonical(legacy)
         storage.set(legacy, forKey: keys.assist)
-        let restored = LiveAssistState(looks: AppMonitorLooks(), storage: storage, keys: keys,
+        let restored = LiveAssistState(looks: MonitorLUTLooks(), storage: storage, keys: keys,
             cleanPinCases: LiveAssistTool.cleanPinCases)
         XCTAssertEqual(storage.data(forKey: keys.assist), legacy, "Opening must not rewrite the historical blob")
         XCTAssertEqual(try canonical(XCTUnwrap(restored.encodedSnapshot())), canonicalLegacy)
@@ -739,7 +740,7 @@ final class LiveAssistStateOwnershipTests: XCTestCase {
         json["tools"] = ["PLAY", "MAG", "UNKNOWN"]
         let legacy = try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
         storage.set(legacy, forKey: keys.assist)
-        let state = LiveAssistState(looks: AppMonitorLooks(), storage: storage, keys: keys,
+        let state = LiveAssistState(looks: MonitorLUTLooks(), storage: storage, keys: keys,
             cleanPinCases: LiveAssistTool.cleanPinCases)
         XCTAssertEqual(storage.data(forKey: keys.assist), legacy)
         XCTAssertTrue(state.instantReview && state.desqueezeCustom && state.mirrorHorizontal)

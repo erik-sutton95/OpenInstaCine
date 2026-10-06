@@ -88,7 +88,7 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
             else { clip = nil }
         } else { clip = nil }
         guard let color = PlaybackLUTColor.resolve(clip: clip, live: status.colorMode,
-            last: OperatorPrefs.lastMonitorColorMode ?? previousColor) else { return nil }
+            last: LUTPreferences.app.lastMonitorColorMode ?? previousColor) else { return nil }
         return .init(transfer: MonitorTransfer(color), source: .init(color: color, shotColor: clip,
             family: bodyFamily, cameraName: connectedCamera?.model.name, file: file, cameraID: cameraID))
     }

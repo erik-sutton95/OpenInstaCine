@@ -49,6 +49,8 @@ enum LiveDesign {
 
 /// The shared live chrome reads this app's palette.
 extension LiveDesign: LiveChromePalette {
+    static var destructive: Color { StartupColors.destructive }
+
     static func chromeColor(red: CGFloat, green: CGFloat, blue: CGFloat) -> Color {
         LiveHDRDisplay.chromeColor(red: red, green: green, blue: blue)
     }
