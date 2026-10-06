@@ -95,6 +95,21 @@ class BuildIdentityTests(unittest.TestCase):
         relative = Path(os.path.relpath(nested))
         self.assertEqual(module.identity(nested, "android", "Debug"), module.identity(relative, "android", "Debug"))
 
+    def test_stage_script_changes_android_identity_only(self):
+        shared = self.root / "OpenCine"
+        nested = self.root / "app"
+        subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
+        (nested / "Sources").mkdir()
+        (nested / "Sources/Core.swift").write_text("let value = 1\n")
+        subprocess.run(["git", "init", "--quiet", str(shared)], check=True)
+        (shared / "scripts").mkdir()
+        (shared / "scripts/android-stage-swift-core.sh").write_text("echo 1\n")
+        ios = module.identity(nested, "ios", "Debug")
+        android = module.identity(nested, "android", "Debug")
+        (shared / "scripts/android-stage-swift-core.sh").write_text("echo 2\n")
+        self.assertEqual(ios, module.identity(nested, "ios", "Debug"))
+        self.assertNotEqual(android, module.identity(nested, "android", "Debug"))
+
     def test_sibling_core_package_changes_both_identities(self):
         core = self.root / "OpenCine"
         nested = self.root / "app"
