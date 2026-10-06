@@ -5,6 +5,14 @@ import Testing
 
 @Suite
 struct FeedEffectsWireTests {
+    /// The JNI color mode code is the stored raw value Insta main sent; it still names the curve.
+    @Test
+    func colorModeCodesFromMainKeepTheirTransfer() {
+        #expect(FeedEffectsWire.monitorTransfer(colorModeCode: 0xE2) == .ilog)
+        #expect(FeedEffectsWire.monitorTransfer(colorModeCode: 0xE5) == .rec709)
+        #expect(FeedEffectsWire.monitorTransfer(colorModeCode: Int(ColorMode.dLog2.rawValue)) == .dlog2)
+    }
+
     @Test
     func assistScalarsMapDLog2HighlightToTheClipShelf() {
         let scalars = FeedEffectsWire.assistScalars(
