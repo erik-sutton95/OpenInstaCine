@@ -15,6 +15,9 @@ import com.opencapture.opencine.media.WaveformIre
 import com.opencapture.opencine.media.ScopeTrafficLights
 import com.opencapture.opencine.media.LiveColorScience
 import com.opencapture.opencine.media.ScopeSampler
+import com.opencapture.opencine.vocabulary.inferred
+import com.opencapture.opencine.vocabulary.fromColorMode
+import com.opencapture.opencine.vocabulary.COLOR_DLOG_M
 
 class FeedUpscaleTest {
     @Test

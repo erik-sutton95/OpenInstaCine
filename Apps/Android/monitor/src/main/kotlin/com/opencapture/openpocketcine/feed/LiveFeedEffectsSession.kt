@@ -7,6 +7,7 @@ import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.opencine.runtime.GlesPresentationOptions
 import com.opencapture.opencine.runtime.InspectorPreviewPipeline
 import com.opencapture.opencine.runtime.ScopeSampleBus
+import com.opencapture.opencine.vocabulary.inferred
 
 /** Source configuration and the existing third-party GL backend remain in the app. */
 internal class LiveFeedEffectsSession(context: Context, scopeBus: ScopeSampleBus,

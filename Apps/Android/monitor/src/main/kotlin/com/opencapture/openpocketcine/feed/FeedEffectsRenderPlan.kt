@@ -7,12 +7,15 @@ import com.opencapture.openpocketcine.assists.FalseColorScale
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.LiveAssistTool
 import com.opencapture.openpocketcine.bridge.SwiftCore
-import com.opencapture.openpocketcine.lut.LutCatalog
+import com.opencapture.opencine.vocabulary.LutCatalog
 import java.io.File
 import java.util.LinkedHashMap
 import com.opencapture.opencine.media.MonitorLUTCube
 import com.opencapture.opencine.media.ScopeTapPolicy
 import com.opencapture.opencine.media.MonitorLUTExposureCompensation
+import com.opencapture.opencine.vocabulary.fromColorMode
+import com.opencapture.opencine.vocabulary.LutLookSource
+import com.opencapture.opencine.vocabulary.LutLookResolver
 
 private const val TAG = "OpcFeedFx"
 

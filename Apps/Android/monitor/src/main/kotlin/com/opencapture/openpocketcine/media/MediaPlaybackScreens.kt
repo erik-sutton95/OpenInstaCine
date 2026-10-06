@@ -14,7 +14,7 @@ import com.opencapture.opencine.media.MonitorConformPreview as ConformPreview
 import com.opencapture.opencine.media.MonitorPlaybackLookTiming
 import com.opencapture.opencine.appkit.MonitorMediaPlaybackModel
 
-import com.opencapture.openpocketcine.feed.colorMode
+import com.opencapture.opencine.vocabulary.colorMode
 
 import com.opencapture.monitorui.LocalMonitorBackdrops
 import com.opencapture.monitorui.monitorBackdropSource
@@ -89,7 +89,7 @@ import com.opencapture.openpocketcine.assists.LiveAssistLayer
 import com.opencapture.openpocketcine.assists.LiveAssistTool
 import com.opencapture.openpocketcine.assists.MirrorAssist
 import com.opencapture.openpocketcine.feed.rememberLiveFeedEffectsPlan
-import com.opencapture.openpocketcine.lut.PlaybackLutColor
+import com.opencapture.opencine.vocabulary.PlaybackLutColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
