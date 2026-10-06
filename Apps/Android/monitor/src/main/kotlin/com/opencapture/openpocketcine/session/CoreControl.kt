@@ -7,6 +7,8 @@ import com.opencapture.opencine.core.SettingKey
 import com.opencapture.opencine.core.SettingValue
 import com.opencapture.opencine.core.ShutterValue
 import com.opencapture.opencine.core.WhiteBalanceValue
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraStatus
 import kotlin.math.roundToInt
 
 /**

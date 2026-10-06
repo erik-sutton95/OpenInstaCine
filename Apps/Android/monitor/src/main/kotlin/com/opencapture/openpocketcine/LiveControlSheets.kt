@@ -2,7 +2,6 @@ package com.opencapture.openpocketcine
 
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.opencine.appkit.captureField
-
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -80,16 +79,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.opencapture.opencine.vocabulary.ApertureStrategy
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraModel
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.CaptureShutterPolicy
+import com.opencapture.opencine.vocabulary.EvComp
+import com.opencapture.opencine.vocabulary.ShutterAngle
+import com.opencapture.opencine.vocabulary.VideoAspect
+import com.opencapture.opencine.vocabulary.VideoFormat
+import com.opencapture.opencine.vocabulary.VideoFrameRate
+import com.opencapture.opencine.vocabulary.VideoResolution
 import com.opencapture.openpocketcine.assists.AssistLongPress
-import com.opencapture.openpocketcine.session.ApertureStrategy
-import com.opencapture.openpocketcine.session.CameraCommands
-import com.opencapture.openpocketcine.session.CameraModel
 import com.opencapture.openpocketcine.session.CameraProfile
-import com.opencapture.openpocketcine.session.CameraStatus
-import com.opencapture.openpocketcine.session.VideoAspect
-import com.opencapture.openpocketcine.session.VideoFormat
-import com.opencapture.openpocketcine.session.VideoFrameRate
-import com.opencapture.openpocketcine.session.VideoResolution
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
@@ -213,7 +215,7 @@ private fun RecordingSetupPanel(
                 val bodyName = model.session.connectedCamera?.model?.name
                 val profile = model.session.profile
                 val labels = CaptureLists.shootingModeLabels(bodyName, status.shootingMode, profile)
-                CaptureDrumWheel(labels, CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile).orEmpty()
+                CaptureDrumWheel(labels, CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile.labels).orEmpty()
                     .takeIf { it in labels }.orEmpty(),
                     interactive = enabled && !status.isRecording) { label ->
                     applyCaptureShootingMode(label, model.session.status.value,
@@ -377,7 +379,7 @@ private fun LiveControlSheetContent(
 
     fun reseatColor() {
         val labels = CaptureLists.colorWheelLabels(status, bodyFamily, bodyName, profile)
-        val live = CameraCommands.colorLabel(status.colorMode, bodyFamily, profile)
+        val live = CameraCommands.colorLabel(status.colorMode, bodyFamily, profile.labels)
         val next = if (live in labels) live else labels.firstOrNull().orEmpty()
         drumSelection = next
         lastApplied = next
@@ -402,7 +404,7 @@ private fun LiveControlSheetContent(
             LiveSheet.FORMAT -> reseatResolution()
             LiveSheet.COLOR -> reseatColor()
             LiveSheet.MODE -> {
-                val live = CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile).orEmpty()
+                val live = CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile.labels).orEmpty()
                 val labels = CaptureLists.shootingModeLabels(bodyName, status.shootingMode, profile)
                 drumSelection = if (live in labels) live else ""
                 lastApplied = drumSelection
@@ -768,7 +770,7 @@ private fun LiveControlSheetContent(
                     if (CaptureLists.supportsFocusModeOrDefault(model.session.connectedCamera?.model)) {
                         FocusBody(
                             status = status,
-                            labels = profile.focusLabels,
+                            labels = profile.labels.focusLabels,
                             enabled = enabled,
                             onSelect = { applyCaptureFocusChoice(it, status, model) },
                         )
@@ -822,7 +824,7 @@ private fun LiveControlSheetContent(
                     val labels = CaptureLists.shootingModeLabels(bodyName, status.shootingMode, profile)
                     CaptureDrumWheel(
                         options = labels,
-                        selection = CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile).orEmpty()
+                        selection = CameraCommands.shootingModeLabel(status.shootingMode, bodyName, profile.labels).orEmpty()
                             .takeIf { it in labels }.orEmpty(),
                         interactive = enabled && !status.isRecording,
                         onSelect = {
@@ -1887,8 +1889,9 @@ object CaptureLists {
     }
 
     fun colorWheelOrder(name: String, family: String, profile: CameraProfile = CameraProfile.DJI): List<Pair<Int, String>> {
-        val codes = CameraModel.colorModesFor(name, family)
-        return codes.map { it to CameraCommands.colorLabel(it, family, profile) }
+        // The session's own wheel when it has one (the Luna profile), else the body's DJI list.
+        val codes = profile.labels.colorModes ?: CameraModel.colorModesFor(name, family)
+        return codes.map { it to CameraCommands.colorLabel(it, family, profile.labels) }
     }
 
     fun colorWheel(
@@ -1907,9 +1910,9 @@ object CaptureLists {
     fun shootingModeLabels(name: String?, shootingMode: Int = -1, profile: CameraProfile = CameraProfile.DJI): List<String> {
         val labels =
             CameraCommands.shootingModeCarousel(name).map {
-                CameraCommands.shootingModeLabel(it, name, profile).orEmpty()
+                CameraCommands.shootingModeLabel(it, name, profile.labels).orEmpty()
             }
-        val live = CameraCommands.shootingModeLabel(shootingMode, name, profile) ?: return labels
+        val live = CameraCommands.shootingModeLabel(shootingMode, name, profile.labels) ?: return labels
         if (shootingMode != CameraCommands.SHOOT_LIVE_PHOTO || live in labels) return labels
         val photoIdx = labels.indexOf("Photo")
         return if (photoIdx >= 0) {
@@ -1922,7 +1925,7 @@ object CaptureLists {
     fun shootingModeRaw(label: String, name: String?, profile: CameraProfile = CameraProfile.DJI): Int? {
         if (label == "Live Photo") return null
         val modes = CameraCommands.shootingModeCarousel(name)
-        val labels = modes.map { CameraCommands.shootingModeLabel(it, name, profile).orEmpty() }
+        val labels = modes.map { CameraCommands.shootingModeLabel(it, name, profile.labels).orEmpty() }
         val index = labels.indexOf(label)
         if (index < 0) return null
         return modes.getOrNull(index)

@@ -1,6 +1,8 @@
 package com.opencapture.openpocketcine.session
 
 import com.opencapture.opencine.core.CameraValuePin
+import com.opencapture.opencine.vocabulary.GimbalMode
+import com.opencapture.opencine.vocabulary.GimbalSpeed
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

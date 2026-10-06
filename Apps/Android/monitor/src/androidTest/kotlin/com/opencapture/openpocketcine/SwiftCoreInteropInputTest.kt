@@ -1,8 +1,8 @@
 package com.opencapture.openpocketcine
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.openpocketcine.bridge.SwiftCore
-import com.opencapture.openpocketcine.session.CameraCommands
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull

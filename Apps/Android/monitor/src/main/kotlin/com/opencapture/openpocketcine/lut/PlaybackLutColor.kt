@@ -1,7 +1,7 @@
 package com.opencapture.openpocketcine.lut
 
+import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.openpocketcine.feed.colorMode
-import com.opencapture.openpocketcine.session.CameraCommands
 
 /**
  * iOS `PlaybackLUTColor`. `nclx` is Rec.709 even for D-Log2; the shot profile

@@ -1,7 +1,7 @@
 package com.opencapture.openpocketcine.assists
 
+import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.openpocketcine.feed.fromColorMode
-
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorMaterial
 import androidx.compose.foundation.Canvas
@@ -37,12 +37,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.opencapture.openpocketcine.ChromeRect
 import com.opencapture.openpocketcine.LiveDesign
-
 import com.opencapture.openpocketcine.feed.GpuOverlayBus
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.opencapture.openpocketcine.feed.MonitorTransfer
-import com.opencapture.openpocketcine.session.CameraStatus
 import kotlin.math.roundToInt
 import com.opencapture.monitorui.MonitorScopePoint
 import com.opencapture.monitorui.MonitorScopeSize
@@ -91,8 +89,8 @@ fun LiveAssistLayer(
     modifier: Modifier = Modifier,
     locked: Boolean = false,
     playback: Boolean = false,
-    tracking: com.opencapture.openpocketcine.session.TrackingHud =
-        com.opencapture.openpocketcine.session.TrackingHud(),
+    tracking: com.opencapture.opencine.vocabulary.TrackingHud =
+        com.opencapture.opencine.vocabulary.TrackingHud(),
     showTapFocusBox: Boolean = true,
     /** AE lock: the focus box turns yellow with an `AE-L` tag. */
     aeLocked: Boolean = false,

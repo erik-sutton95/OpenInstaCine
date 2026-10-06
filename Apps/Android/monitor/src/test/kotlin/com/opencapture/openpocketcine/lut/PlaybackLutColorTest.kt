@@ -1,7 +1,7 @@
 package com.opencapture.openpocketcine.lut
 
+import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.openpocketcine.feed.MonitorTransfer
-import com.opencapture.openpocketcine.session.CameraCommands
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

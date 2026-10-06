@@ -6,6 +6,11 @@ import com.opencapture.monitorui.MonitorMotionDismissBackdrop
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntOffset
 import com.opencapture.opencine.motion.GimbalWaypointOverlay
+import com.opencapture.opencine.vocabulary.GimbalDoubleTap
+import com.opencapture.opencine.vocabulary.GimbalHudCopy
+import com.opencapture.opencine.vocabulary.GimbalMode
+import com.opencapture.opencine.vocabulary.GimbalRamp
+import com.opencapture.opencine.vocabulary.GimbalSpeed
 import com.opencapture.openpocketcine.session.project
 import kotlin.math.roundToInt
 import com.opencapture.monitorui.MonitorMaterial
@@ -86,13 +91,8 @@ import com.opencapture.monitorui.MonitorPalette
 import com.opencapture.monitorui.MonitorSwitchGraphic
 import com.opencapture.monitorui.MonitorValueDrum
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
-import com.opencapture.openpocketcine.session.GimbalHudCopy
-import com.opencapture.openpocketcine.session.GimbalMode
 import com.opencapture.opencine.motion.GimbalProgramCurve
 import com.opencapture.opencine.motion.GimbalProgram
-import com.opencapture.openpocketcine.session.GimbalDoubleTap
-import com.opencapture.openpocketcine.session.GimbalRamp
-import com.opencapture.openpocketcine.session.GimbalSpeed
 import com.opencapture.opencine.motion.GimbalWaypointSlot
 import kotlin.math.max
 import kotlin.math.min
@@ -203,12 +203,12 @@ fun LiveGimbalSheetHost(
                     when (selectedTab) {
                         GimbalSettingsTab.MODE ->
                             MonitorValueDrum(
-                                GimbalMode.pickerOrder.map { it.label(model.session.profile) }, mode.label(model.session.profile),
+                                GimbalMode.pickerOrder.map { it.label(model.session.profile.labels) }, mode.label(model.session.profile.labels),
                                 interactive = canApply,
                                 onDetent = { haptics.confirm() },
                             ) { label ->
                                 applyIfCurrent {
-                                    GimbalMode.pickerOrder.firstOrNull { it.label(model.session.profile) == label }
+                                    GimbalMode.pickerOrder.firstOrNull { it.label(model.session.profile.labels) == label }
                                         ?.let(model.session::setGimbalMode)
                                 }
                             }

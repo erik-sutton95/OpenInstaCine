@@ -84,7 +84,7 @@ internal fun mediaColorOptions(
     colors: Iterable<String?>,
     profile: com.opencapture.openpocketcine.session.CameraProfile,
 ): List<Pair<Int, String>> = colors.mapNotNull { it?.toIntOrNull() }.toSet().sorted().mapNotNull { mode ->
-    val label = com.opencapture.openpocketcine.session.CameraCommands.colorLabel(mode, profile = profile)
+    val label = com.opencapture.opencine.vocabulary.CameraCommands.colorLabel(mode, profile = profile.labels)
     if (label == "\u2014") null else mode to label
 }
 

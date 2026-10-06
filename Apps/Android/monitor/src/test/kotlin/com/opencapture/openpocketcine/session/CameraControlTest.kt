@@ -1,9 +1,17 @@
 package com.opencapture.openpocketcine.session
 
-import com.opencapture.opencine.core.CameraValuePin
-import com.opencapture.openpocketcine.ShutterAngle
 import com.opencapture.opencine.media.ExtraMirrorHold
 import com.opencapture.opencine.media.FeedPresentPolicy
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraModel
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.ControlHud
+import com.opencapture.opencine.vocabulary.FormatPin
+import com.opencapture.opencine.vocabulary.ShutterAngle
+import com.opencapture.opencine.vocabulary.VideoAspect
+import com.opencapture.opencine.vocabulary.VideoFormat
+import com.opencapture.opencine.vocabulary.VideoFrameRate
+import com.opencapture.opencine.vocabulary.VideoResolution
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -99,105 +107,6 @@ class CameraControlTest {
     }
 
     @Test
-    fun camcapVideoFormatKeepsNano27KAnd4by3() {
-        val blob =
-            byteArrayOf(
-                0x01, 0x07, 0x00, 0x02,
-                0x2D, 0x01, 0x00,
-                0x67, 0x05, 0x00,
-            )
-        val formats = CameraCommands.parseVideoFormats(blob)
-        assertEquals(2, formats.size)
-        assertTrue(formats.contains(VideoFormat(VideoResolution.P2_7K, VideoFrameRate.FPS24)))
-        assertTrue(formats.contains(VideoFormat(VideoResolution.P4K_4X3, VideoFrameRate.FPS50)))
-        assertEquals(
-            listOf(VideoAspect.SIXTEEN_NINE, VideoAspect.FOUR_THREE),
-            VideoFormat.aspects(formats, null),
-        )
-        assertEquals(
-            listOf(VideoResolution.P1080, VideoResolution.P4K),
-            VideoFormat.resolutions(emptyList(), VideoResolution.P4K),
-        )
-    }
-
-    @Test
-    fun zoomPinAndColorModesFollowTheBody() {
-        val pro = CameraModel(name = "Osmo Pocket 4 Pro", family = "pocket")
-        val pocket4 = CameraModel(name = "Osmo Pocket 4", family = "pocket")
-        val pocket3 = CameraModel(name = "Osmo Pocket 3", family = "pocket")
-        // activeZoomStops, ceilingNote, stopWithinCycle and pocket3ZoomMax are
-        // covered row by row in camfov-vectors.tsv (CamFovVectorTest).
-        // The chip rides the same pin as every other control, with
-        // CamFov::matches standing in for equality.
-        fun held(ask: Double, live: Double?, ageMs: Long): Double? =
-            CameraValuePin.reconcile(
-                CameraValuePin(ask, CameraValuePin.SETTLE_MS),
-                live,
-                ageMs,
-                CamFov::matches,
-            ).first
-        // Fresh ask: the chip holds the target through the round trip.
-        assertEquals(3.0, held(3.0, 1.0, 0L))
-        assertEquals(3.0, held(3.0, null, 0L))
-        // Body confirmed — the pin has done its job, live takes over.
-        assertNull(held(3.0, 3.0, 0L))
-        assertNull(held(3.0, 2.97, 0L))
-        // Body clamped, or moved the lens on its own (a FORMAT change resets to
-        // 1×). It never reports 3×, so only the deadline can free the chip.
-        assertNull(held(3.0, 1.0, CameraValuePin.SETTLE_MS))
-        assertNull(held(4.0, 2.0, 5_000L))
-        assertNull(held(3.0, null, 5_000L))
-        // A pin that outlived its ask must not win the readout.
-        assertEquals(1.0, CamFov.readout(live = 1.0, preview = null, fallback = 3.0))
-        assertEquals(
-            listOf(
-                CameraCommands.COLOR_NORMAL,
-                CameraCommands.COLOR_HDR,
-                CameraCommands.COLOR_DLOG,
-                CameraCommands.COLOR_DLOG2,
-            ),
-            CameraModel.colorModesFor(pro.name, "pocket"),
-        )
-        assertEquals(
-            listOf(
-                CameraCommands.COLOR_NORMAL,
-                CameraCommands.COLOR_HDR,
-                CameraCommands.COLOR_DLOG,
-            ),
-            CameraModel.colorModesFor(pocket4.name, "pocket"),
-        )
-        assertEquals(
-            listOf(
-                CameraCommands.COLOR_NORMAL,
-                CameraCommands.COLOR_HDR,
-                CameraCommands.COLOR_DLOG_M,
-            ),
-            CameraModel.colorModesFor(pocket3.name, "pocket"),
-        )
-        assertTrue(CameraCommands.COLOR_DLOG2 !in CameraModel.colorModesFor(pocket3.name, "pocket"))
-        assertTrue(CameraCommands.COLOR_DLOG !in CameraModel.colorModesFor(pocket3.name, "pocket"))
-        assertTrue(
-            CameraCommands.COLOR_DLOG2 in CameraModel.colorModesFor("OsmoPocket4P-ABCD", "pocket"),
-        )
-        assertTrue(
-            CameraCommands.COLOR_DLOG2 !in CameraModel.colorModesFor("OsmoPocket4-ABCD", "pocket"),
-        )
-        assertEquals(
-            listOf(
-                CameraCommands.COLOR_NORMAL,
-                CameraCommands.COLOR_HDR,
-                CameraCommands.COLOR_DLOG_M,
-            ),
-            CameraModel.colorModesFor("OsmoPocket3-ABCD", "pocket"),
-        )
-        val fromJson =
-            CameraModel.fromJson(
-                """{"name":"OsmoPocket4P-ABCD","family":"pocket","zoomStops":[1,3,6,12]}""",
-            )
-        assertEquals(listOf(1.0, 3.0, 6.0, 12.0), fromJson.zoomStops)
-    }
-
-    @Test
     fun formatPinHoldsOptimisticUntilSubscribeMatches() {
         val expected = VideoFormat(VideoResolution.P4K, VideoFrameRate.FPS25)
         val pin = FormatPin(expected, deadlineElapsedRealtime = 2_000L)
@@ -242,53 +151,6 @@ class CameraControlTest {
     }
 
     @Test
-    fun statusJsonRoundTripsHudFields() {
-        val src =
-            CameraStatus(
-                iso = 400,
-                shutterDenom = 50,
-                fps = 24,
-                expoMode = CameraCommands.EXPO_MANUAL,
-                isoIndex = 0x05,
-                colorMode = CameraCommands.COLOR_DLOG,
-                resolutionCode = CameraCommands.RES_4K,
-                fpsIndex = 1,
-                wbMode = CameraCommands.WB_CUSTOM,
-                wbKelvin = 5600,
-                wbTint = -5,
-                focusMode = CameraCommands.FOCUS_CONTINUOUS,
-                audioChannel = CameraCommands.AUDIO_STEREO,
-                vocalBoost = 1,
-                audioDspBlob = "c0041a0500" + "00".repeat(21),
-                audioDspAt2 = CameraCommands.WIND_ON,
-            )
-        val decoded = CameraStatus.fromJson(src.toJson())
-        assertEquals(400, decoded.iso)
-        assertEquals(50, decoded.shutterDenom)
-        assertEquals(24, decoded.fps)
-        assertEquals(CameraCommands.EXPO_MANUAL, decoded.expoMode)
-        assertEquals(0x05, decoded.isoIndex)
-        assertEquals(CameraCommands.COLOR_DLOG, decoded.colorMode)
-        assertEquals(CameraCommands.RES_4K, decoded.resolutionCode)
-        assertEquals(5600, decoded.wbKelvin)
-        assertEquals(-5, decoded.wbTint)
-        assertEquals(CameraCommands.FOCUS_CONTINUOUS, decoded.focusMode)
-        assertEquals(CameraCommands.AUDIO_STEREO, decoded.audioChannel)
-        assertEquals(1, decoded.vocalBoost)
-        assertEquals(1, decoded.windNr)
-        assertTrue(decoded.audioDspBlob.startsWith("c0041a"))
-        val selfie = CameraStatus(gimbalFace = CameraCommands.GIMBAL_FACE_SELFIE)
-        assertEquals(
-            CameraCommands.GIMBAL_FACE_SELFIE,
-            CameraStatus.fromJson(selfie.toJson()).gimbalFace,
-        )
-        assertEquals(
-            CameraCommands.GIMBAL_FACE_UNKNOWN,
-            CameraStatus.fromJson("{}").gimbalFace,
-        )
-    }
-
-    @Test
     fun extraMirrorHoldsThreePresentsThenCommits() {
         assertTrue(FeedPresentPolicy.shouldHoldPictureAcrossMirror(1, 0.04))
         assertTrue(FeedPresentPolicy.shouldHoldPictureAcrossMirror(3, 0.12))
@@ -308,28 +170,6 @@ class CameraControlTest {
     }
 
     @Test
-    fun expoModeWireExtraAndWaitKeyMatchIos() {
-        assertEquals("auto", CameraCommands.expoWireExtra(CameraCommands.EXPO_AUTO))
-        assertEquals("manual", CameraCommands.expoWireExtra(CameraCommands.EXPO_MANUAL))
-        assertEquals(null, CameraCommands.expoWireExtra(-1))
-    }
-
-    @Test
-    fun camcapShutterTwentyFivePDiffersFromSixtyP() {
-        val p25 = CameraCommands.parseShutterDenoms(hex(SHUTTER_25P))
-        val p60 = CameraCommands.parseShutterDenoms(hex(SHUTTER_60P))
-        assertTrue(p25.contains(25))
-        assertTrue(p25.contains(50))
-        assertTrue(p60.contains(50))
-        assertTrue(!p60.contains(25))
-        assertTrue(p25 != p60)
-        val wheel = CameraCommands.shutterWheelDenoms(p60, 48)
-        assertEquals(p60, wheel)
-        assertTrue(!wheel.contains(48))
-        assertTrue(!wheel.contains(13))
-    }
-
-    @Test
     fun emptyShutterCapUsesDocumentedVideoLadder() {
         val wheel = CameraCommands.shutterWheelDenoms(emptyList(), 60)
         assertTrue(wheel.contains(60))
@@ -341,190 +181,6 @@ class CameraControlTest {
         val withOdd = CameraCommands.shutterWheelDenoms(emptyList(), 80)
         assertTrue(withOdd.contains(80))
         assertTrue(withOdd.contains(100))
-    }
-
-    @Test
-    fun dLogStars400AndDLog2Stars1600() {
-        val dlog2 = CameraCommands.parseIsoIndices(hex("0108000006030405060708"))
-        assertEquals(listOf(0x03, 0x04, 0x05, 0x06, 0x07, 0x08), dlog2)
-        assertEquals("400", CameraCommands.baseIsoLabel(CameraCommands.COLOR_DLOG))
-        assertEquals("1600", CameraCommands.baseIsoLabel(CameraCommands.COLOR_DLOG2))
-        assertEquals(null, CameraCommands.baseIsoLabel(CameraCommands.COLOR_NORMAL))
-        assertEquals(null, CameraCommands.baseIsoLabel(CameraCommands.COLOR_HDR))
-        assertEquals(null, CameraCommands.baseIsoLabel(-1))
-        assertTrue(dlog2.contains(0x05))
-        assertTrue(dlog2.contains(0x07))
-        assertEquals("400", CameraCommands.isoLabel(0x05))
-        assertEquals("1600", CameraCommands.isoLabel(0x07))
-        val withJunk = CameraCommands.parseIsoIndices(hex("0109000007030405060708ff"))
-        assertEquals(listOf(0x03, 0x04, 0x05, 0x06, 0x07, 0x08), withJunk)
-        assertTrue(!withJunk.contains(0xFF))
-        val autoOnly = CameraCommands.parseIsoIndices(hex("010300000100"))
-        assertEquals(listOf(0x00), autoOnly)
-        assertEquals("400", CameraCommands.markedIsoLabel(CameraCommands.COLOR_DLOG_M))
-        assertEquals(null, CameraCommands.baseIsoLabel(CameraCommands.COLOR_DLOG_M))
-        assertEquals(
-            CameraCommands.COLOR_DLOG,
-            CameraCommands.colorModeForZoom(3.0, CameraCommands.COLOR_DLOG2),
-        )
-        assertEquals(
-            CameraCommands.COLOR_DLOG,
-            CameraCommands.colorModeForZoom(1.1, CameraCommands.COLOR_DLOG2),
-        )
-        assertEquals(null, CameraCommands.colorModeForZoom(1.0, CameraCommands.COLOR_DLOG2))
-        assertEquals(null, CameraCommands.colorModeForZoom(3.0, CameraCommands.COLOR_DLOG))
-        assertTrue(CameraCommands.shouldRestoreDLog2(1.0))
-        assertTrue(!CameraCommands.shouldRestoreDLog2(2.9))
-        assertTrue(!CameraCommands.shouldRestoreDLog2(3.0))
-    }
-
-    @Test
-    fun colorModeWireBytesMatchIos() {
-        // The byte the core packs for `CMD_SET_COLOR_MODE`, per body.
-        val cases = listOf(
-            Triple(CameraCommands.COLOR_NORMAL, "", 0x3F),
-            Triple(CameraCommands.COLOR_HDR, "", 0x3C),
-            Triple(CameraCommands.COLOR_DLOG, "", 0x17),
-            Triple(CameraCommands.COLOR_DLOG2, "", 0x41),
-            Triple(CameraCommands.COLOR_NORMAL10, "", 0x3D),
-            Triple(CameraCommands.COLOR_DLOG_M, "", 0x00),
-            Triple(CameraCommands.COLOR_NORMAL, "Osmo Pocket 3", 0x00),
-            Triple(CameraCommands.COLOR_DLOG_M, "Osmo Pocket 3", 0x3D),
-            Triple(CameraCommands.COLOR_HDR, "Osmo Pocket 3", 0x3C),
-            Triple(CameraCommands.COLOR_NORMAL, "Xtra Muse", 0x00),
-            Triple(CameraCommands.COLOR_NORMAL, "Osmo Pocket 4", 0x3F),
-            Triple(CameraCommands.COLOR_NORMAL, "Osmo Nano", 0x00),
-            Triple(CameraCommands.COLOR_NORMAL10, "Osmo Nano", 0x3F),
-            Triple(CameraCommands.COLOR_DLOG_M, "Osmo Nano", 0x3D),
-        )
-        for ((mode, body, wire) in cases) {
-            assertEquals(wire, CameraCommands.wireColorMode(mode, body), "mode $mode on '$body'")
-        }
-    }
-
-    @Test
-    fun statusJsonRoundTripsParityFields() {
-        val src =
-            CameraStatus(
-                evComp = 0x10,
-                isoLimit = 0x07,
-                availableColorModes = listOf(0x3F, 0x3C),
-                focusX = 0.25,
-                focusY = 0.75,
-                hasCameraFocusPoint = true,
-                focusTrack = 2,
-                zoomLens = 217,
-                zoomFactor = 1.0,
-                glamourEnabled = false,
-                selfieFlip = true,
-                windNr = 1,
-                directionalAudio = 0,
-                audioMetersLeft = -12.0,
-                audioMetersRight = -14.0,
-                audioPeakLeft = -6.0,
-                audioPeakRight = -8.0,
-            )
-        val json = src.toJson()
-        assertTrue(json.contains("\"windNR\":"))
-        assertTrue(json.contains("\"evComp\":16"))
-        val decoded = CameraStatus.fromJson(json)
-        assertEquals(0x10, decoded.evComp)
-        assertEquals(0x07, decoded.isoLimit)
-        assertEquals(listOf(0x3F, 0x3C), decoded.availableColorModes)
-        assertEquals(0.25, decoded.focusX, 1e-6)
-        assertEquals(0.75, decoded.focusY, 1e-6)
-        assertEquals(true, decoded.hasCameraFocusPoint)
-        assertEquals(2, decoded.focusTrack)
-        assertEquals(217, decoded.zoomLens)
-        assertEquals(1.0, decoded.zoomFactor ?: 0.0, 1e-6)
-        assertEquals(false as Boolean?, decoded.glamourEnabled)
-        assertEquals(true as Boolean?, decoded.selfieFlip)
-        assertEquals(1, decoded.windNr)
-        assertEquals(0, decoded.directionalAudio)
-        assertEquals(-12.0, decoded.audioMetersLeft, 1e-6)
-        assertEquals(-14.0, decoded.audioMetersRight, 1e-6)
-        assertEquals(-6.0, decoded.audioPeakLeft, 1e-6)
-        assertEquals(-8.0, decoded.audioPeakRight, 1e-6)
-    }
-
-    @Test
-    fun statusJsonParsesCoreWindAndDirectionalRaws() {
-        val json =
-            """{"windNR":26,"directionalAudio":218,"evComp":16,"zoomLens":651,"zoomFactor":3.0,"glamourEnabled":true}"""
-        val decoded = CameraStatus.fromJson(json)
-        assertEquals(1, decoded.windNr)
-        assertEquals(0, decoded.directionalAudio)
-        assertEquals(0x10, decoded.evComp)
-        assertEquals(651, decoded.zoomLens)
-        assertEquals(3.0, decoded.zoomFactor ?: 0.0, 1e-6)
-        assertEquals(true as Boolean?, decoded.glamourEnabled)
-    }
-
-    @Test
-    fun cameraModelJsonUsesPocketDefaults() {
-        val parsed =
-            CameraModel.fromJson(
-                """{"name":"Osmo Pocket 4","datalinkPort":9004,"tcpPoke":true,"wpa3":false,"verified":true,"isDrone":false,"pairingToken":"osmo"}""",
-            )
-        assertEquals("pocket", parsed.family)
-        assertEquals(8, parsed.liveViewEnableReceiver)
-        assertEquals(false, parsed.usesNanoLiveViewGate)
-        assertEquals(true, parsed.supportsTapFocus)
-        assertEquals(true, parsed.supportsFocusMode)
-        assertEquals(true, parsed.usesCapturedLiveEnable)
-        assertEquals(false, parsed.needsFirstPictureFormatPoke)
-    }
-
-    @Test
-    fun cameraModelJsonParsesNanoFields() {
-        val parsed =
-            CameraModel.fromJson(
-                """{"name":"Osmo Nano","family":"nano","liveViewEnableReceiver":65,"usesNanoLiveViewGate":true,"supportsTapFocus":false,"supportsFocusMode":false,"usesCapturedLiveEnable":true}""",
-            )
-        assertEquals("nano", parsed.family)
-        assertEquals(65, parsed.liveViewEnableReceiver)
-        assertEquals(true, parsed.usesNanoLiveViewGate)
-        assertEquals(false, parsed.supportsTapFocus)
-        assertEquals(false, parsed.supportsFocusMode)
-        assertEquals(false, parsed.needsFirstPictureFormatPoke)
-    }
-
-    @Test
-    fun cameraModelJsonReadsPortableBodyCapabilities() {
-        val pro = CameraModel.fromJson("""{"name":"Osmo Pocket 4 Pro","hasGimbal":true,"supportsZoom":true}""")
-        assertEquals(true, pro.hasGimbal)
-        assertEquals(true, pro.supportsZoom)
-        val nano = CameraModel.fromJson("""{"name":"Osmo Nano","family":"nano","hasGimbal":false,"supportsZoom":false}""")
-        assertEquals(false, nano.hasGimbal)
-        assertEquals(false, nano.supportsZoom)
-        // Missing keys fail closed rather than re-deriving from family.
-        val legacy = CameraModel.fromJson("""{"name":"Osmo Pocket 4","family":"pocket"}""")
-        assertEquals(false, legacy.hasGimbal)
-        assertEquals(false, legacy.supportsZoom)
-    }
-
-    @Test
-    fun cameraModelJsonParsesPocket3FormatPoke() {
-        val parsed =
-            CameraModel.fromJson(
-                """{"name":"Osmo Pocket 3","family":"pocket","needsFirstPictureFormatPoke":true}""",
-            )
-        assertEquals(true, parsed.needsFirstPictureFormatPoke)
-        val byName =
-            CameraModel.fromJson(
-                """{"name":"OsmoPocket3-AAAA","family":"pocket"}""",
-            )
-        assertEquals(true, byName.needsFirstPictureFormatPoke)
-        assertEquals(true, CameraModel.looksLikePocket3("Osmo Pocket 3"))
-        assertEquals(false, CameraModel.looksLikePocket3("Osmo Pocket 4"))
-        assertEquals(50, CameraModel.isoAutoRangeFloorFor("Osmo Pocket 3"))
-        assertEquals(50, CameraModel.isoAutoRangeFloorFor("OsmoPocket3-AAAA"))
-        assertEquals(50, CameraModel.isoAutoRangeFloorFor("Xtra Muse"))
-        assertEquals(50, CameraModel.isoAutoRangeFloorFor("Osmo Pocket 4"))
-        assertEquals(100, CameraModel.isoAutoRangeFloorFor("Osmo Pocket 4 Pro"))
-        assertEquals(100, CameraModel.isoAutoRangeFloorFor("OsmoPocket4P-AAAA"))
-        assertEquals(100, CameraModel.isoAutoRangeFloorFor("DJI Osmo camera"))
-        assertEquals(50, parsed.isoAutoRangeFloor)
     }
 
     @Test

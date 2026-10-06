@@ -1,7 +1,6 @@
 package com.opencapture.openpocketcine.session
 
 import com.opencapture.opencine.core.CameraValuePin
-import com.opencapture.openpocketcine.EvComp
 import com.opencapture.opencine.core.CameraTimecode
 import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
 import com.opencapture.opencine.insta360.luna.LunaSubjectTracking
@@ -12,6 +11,18 @@ import com.opencapture.opencine.insta360.shell.CameraGimbalSpeed
 import com.opencapture.opencine.insta360.shell.CameraReadout
 import com.opencapture.opencine.insta360.shell.CameraRecordFormat
 import com.opencapture.opencine.insta360.shell.CameraShootingMode
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraLabelProfile
+import com.opencapture.opencine.vocabulary.CameraStatus
+import com.opencapture.opencine.vocabulary.EvComp
+import com.opencapture.opencine.vocabulary.FocusOption
+import com.opencapture.opencine.vocabulary.FocusTrackMode
+import com.opencapture.opencine.vocabulary.GimbalMode
+import com.opencapture.opencine.vocabulary.GimbalSpeed
+import com.opencapture.opencine.vocabulary.TrackingBox
+import com.opencapture.opencine.vocabulary.VideoFormat
+import com.opencapture.opencine.vocabulary.VideoFrameRate
+import com.opencapture.opencine.vocabulary.VideoResolution
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.reflect.KMutableProperty0
@@ -142,10 +153,13 @@ internal object LunaShellMapping {
 
     /** Luna vocabulary for the shared screens, and media served at its own path on the camera AP. */
     val profile = CameraProfile(
-        shootingModeLabels = shootingModeLabels,
-        colorLabels = mapOf(CameraCommands.COLOR_NORMAL to "Standard"),
-        gimbalLabels = gimbalModeLabels,
-        focusLabels = focusOptions.map { it.chip },
+        labels = CameraLabelProfile(
+            shootingModeLabels = shootingModeLabels,
+            colorModeLabels = mapOf(CameraCommands.COLOR_NORMAL to "Standard"),
+            gimbalModeLabels = gimbalModeLabels,
+            focusLabels = focusOptions.map { it.chip },
+            colorModes = colorModes,
+        ),
         media = com.opencapture.openpocketcine.media.MediaRoute(host = "192.168.42.1", directPath = true),
     )
 
@@ -194,13 +208,13 @@ internal object LunaShellMapping {
             long in 2688..2720 && !portrait -> VideoResolution.P2_7K
             long in 2688..2720 -> VideoResolution.P2_7K_9X16
             long in 2880..3072 && portrait -> VideoResolution.P3K_9X16
-            long == 3840 && !portrait && height < 2000 -> VideoResolution.LUNA_4K_235
-            long == 7680 && !portrait && height < 4000 -> VideoResolution.LUNA_8K_235
-            long in 2880..3072 -> VideoResolution.LUNA_3K
+            long == 3840 && !portrait && height < 2000 -> VideoResolution.P4K_235
+            long == 7680 && !portrait && height < 4000 -> VideoResolution.P8K_235
+            long in 2880..3072 -> VideoResolution.P3K
             long == 3840 && !portrait -> VideoResolution.P4K
-            long == 3840 -> VideoResolution.LUNA_4K_9X16
-            long in 5120..5760 && !portrait -> VideoResolution.LUNA_6K
-            long == 7680 && !portrait -> VideoResolution.LUNA_8K
+            long == 3840 -> VideoResolution.P4K_9X16
+            long in 5120..5760 && !portrait -> VideoResolution.P6K
+            long == 7680 && !portrait -> VideoResolution.P8K
             else -> unknownResolution
         }
     }

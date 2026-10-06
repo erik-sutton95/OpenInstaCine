@@ -8,7 +8,8 @@ import com.opencapture.opencine.insta360.luna.LunaMediaCatalogRecord
 import com.opencapture.opencine.insta360.luna.LunaMediaCatalogRecordSource
 import com.opencapture.opencine.insta360.shell.CameraMediaItem
 import com.opencapture.opencine.media.*
-import com.opencapture.openpocketcine.session.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraLabelProfile
 import com.opencapture.openpocketcine.session.CameraProfile
 import kotlinx.coroutines.test.runTest
 import org.json.JSONArray
@@ -47,7 +48,7 @@ class LunaMediaCatalogCodecTest {
             val index = bytes(stored.keys.toList())
             val records = codec.decode(index)
             assertEquals(unknown.toString(), records.single { stored[it.payload.file] == unknown }.facts.color)
-            val profile = CameraProfile(colorLabels = mapOf(CameraCommands.COLOR_NORMAL to "Standard", custom to "Custom log"))
+            val profile = CameraProfile(CameraLabelProfile(colorModeLabels = mapOf(CameraCommands.COLOR_NORMAL to "Standard", custom to "Custom log")))
             val facts = records.map { it.facts.color }
             assertEquals(listOf(CameraCommands.COLOR_NORMAL to "Standard", custom to "Custom log",
                 CameraCommands.COLOR_ILOG to "I-Log"), mediaColorOptions(facts + facts + listOf(null, "unknown"), profile))

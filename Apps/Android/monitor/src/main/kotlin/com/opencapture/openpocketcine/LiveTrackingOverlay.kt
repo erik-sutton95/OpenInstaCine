@@ -10,10 +10,10 @@ import com.opencapture.monitorui.MonitorRect
 import com.opencapture.monitorui.MonitorTrackingBracketValue
 import com.opencapture.monitorui.MonitorTrackingLayer
 import com.opencapture.monitorui.MonitorTrackingRect
-import com.opencapture.openpocketcine.session.FocusOverlay
-import com.opencapture.openpocketcine.session.LiveTrackingChrome
-import com.opencapture.openpocketcine.session.TrackingBox
-import com.opencapture.openpocketcine.session.TrackingHud
+import com.opencapture.opencine.vocabulary.FocusOverlay
+import com.opencapture.opencine.vocabulary.LiveTrackingChrome
+import com.opencapture.opencine.vocabulary.TrackingBox
+import com.opencapture.opencine.vocabulary.TrackingHud
 
 @Composable
 fun LiveFocusTrackingLayer(hud: TrackingHud, focus: Pair<Float, Float>?, mirrored: Boolean,

@@ -28,7 +28,7 @@ import com.opencapture.monitorui.settings.MonitorJoystickSettings
 import com.opencapture.monitorui.settings.MonitorMotionChoiceSetting
 import com.opencapture.monitorui.settings.MonitorMotionIntegerSetting
 import com.opencapture.monitorui.settings.MonitorMotionToggleSetting
-import com.opencapture.openpocketcine.session.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraCommands
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Test

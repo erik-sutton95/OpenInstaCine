@@ -1,5 +1,8 @@
 package com.opencapture.openpocketcine.session
 
+import com.opencapture.opencine.vocabulary.CamFov
+import com.opencapture.opencine.vocabulary.CameraModel
+import com.opencapture.opencine.vocabulary.VideoResolution
 import java.io.File
 import kotlin.math.abs
 import kotlin.test.Test
