@@ -1,8 +1,8 @@
 # Portable Luna protocol
 
-`Adapters/Insta360Protocol` is a standalone Swift 6 package exporting the
-`Insta360Protocol` library. It imports only Foundation, supports the Apple app's
-macOS 13 / iOS 16 deployment floor, and contains no Bluetooth, network, decoder,
+`Insta360Protocol` is a Foundation-only library in the sibling OpenCine package
+(`../OpenCine/Sources/Insta360Protocol`). It uses the OpenCine deployment floor
+(macOS 13, iOS 17) and contains no Bluetooth, network, decoder,
 UI, filesystem, subprocess or cryptographic implementation. The Apple adapter
 supplies transport and CryptoKit. The monitor engine does not import Luna wire
 types.
@@ -279,11 +279,11 @@ wall-clock time. Media bytes are not retained or recorded by this package.
 Run from the project root:
 
 ```sh
-swift test --package-path Adapters/Insta360Protocol
-swift test -c release --package-path Adapters/Insta360Protocol
+swift test --package-path ../OpenCine --filter Insta360ProtocolTests
+swift test -c release --package-path ../OpenCine --filter Insta360ProtocolTests
 ```
 
-The 40 XCTest cases cover official-app control, status, notification and
+The 51 XCTest cases cover official-app control, status, notification and
 media fixtures (`LunaControlTests.swift`), plus captured request/greeting/live-start bytes, an
 independent checksum vector and bit-round reference, every split point and
 bytewise input, coalescing, corruption resynchronization, oversized headers,
