@@ -34,26 +34,6 @@ extension MonitorAssistState where Looks == MonitorLUTLooks {
 
 typealias FeedAlignedAssists = FeedAssistMarks<AppModel>
 
-private func feedRect(_ box: TrackingBox, in feed: CGRect) -> CGRect {
-    CGRect(
-        x: feed.minX + box.x * feed.width,
-        y: feed.minY + box.y * feed.height,
-        width: max(1, box.width * feed.width),
-        height: max(1, box.height * feed.height)
-    )
-}
-
-enum LiveTrackingChrome {
-    static let cancelSize = MonitorTrackingGeometry.cancelSize
-    static let cancelHitSize = MonitorTrackingGeometry.cancelHitSize
-    static func cornerRadius(for rect: CGRect) -> CGFloat { MonitorTrackingGeometry.cornerRadius(for: rect) }
-    static func cancelRect(box: TrackingBox, feed: CGRect, mirrored: Bool, flippedVertically: Bool = false) -> CGRect {
-        MonitorTrackingGeometry.cancelRect(for: feedRect(box.flipped(horizontal: mirrored, vertical: flippedVertically), in: feed))
-    }
-    static func bracketArm(along length: CGFloat) -> CGFloat { MonitorTrackingGeometry.bracketArm(along: length) }
-    static func bracketPath(in size: CGSize) -> Path { MonitorTrackingGeometry.bracketPath(in: size) }
-}
-
 /// Camera attitude sampling stays in the source adapter; shared UI receives resolved values.
 enum LevelAssist {
     static let refresh: TimeInterval = 0.1
