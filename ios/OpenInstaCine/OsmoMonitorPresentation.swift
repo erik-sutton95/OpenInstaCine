@@ -2,6 +2,7 @@ import Foundation
 import Insta360Apple
 import MonitorPresentation
 import MonitorUI
+import OpenCineCameraControls
 import OpenCineCore
 import OpenPocketViewCore
 import SwiftUI
