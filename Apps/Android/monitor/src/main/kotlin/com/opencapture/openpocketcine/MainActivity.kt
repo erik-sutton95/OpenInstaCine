@@ -75,12 +75,14 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.opencapture.opencine.appkit.AppShell
+import com.opencapture.opencine.appkit.PairingWizard
+import com.opencapture.opencine.insta360.shell.ConnectionPhase
+import com.opencapture.opencine.platform.LocalVPNProbe
 import com.opencapture.opencine.appkit.ShellActions
 import com.opencapture.opencine.appkit.ShellBrand
 import com.opencapture.opencine.appkit.ShellModel
 import com.opencapture.openpocketcine.diagnostics.ManualProblemReportDialog
 import com.opencapture.opencine.appkit.DiscoveryPermissions
-import com.opencapture.openpocketcine.pairing.LocalPairingCallouts
 import com.opencapture.openpocketcine.pairing.PairingCallouts
 import com.opencapture.opencine.appkit.PermissionGate
 import com.opencapture.openpocketcine.pairing.rememberPermissionGate
@@ -238,20 +240,41 @@ private fun OpenPocketCineApp(model: AppModel) {
     }
 
     Box(Modifier.fillMaxSize().startupBackdrop()) {
-        CompositionLocalProvider(LocalPairingCallouts provides { PairingCallouts(model, discovery) { requestBluetoothOn() } }) {
-            AppShell(
-                model.shell,
-                ShellBrand(MonitorConfiguration.identity.wordmark),
-                ShellActions(
-                    diagnostics = { DiagnosticCenter.shareReport(context, model.session) },
-                    reportProblem = { showProblemReport = true },
+        val cameras by model.cameras.state.collectAsState()
+        val phase by model.session.phaseFlow.collectAsState()
+        val radioOn by model.session.radioOn.collectAsState()
+        AppShell(
+            model.shell,
+            ShellBrand(MonitorConfiguration.identity.wordmark),
+            ShellActions(
+                diagnostics = { DiagnosticCenter.shareReport(context, model.session) },
+                reportProblem = { showProblemReport = true },
+                // Pair on a nearby card connects it at once, on the pair page.
+                pair = {
+                    model.shell.beginPairing()
+                    cameras.nearby.firstOrNull { it.id == model.cameras.state.value.selection }?.let(model.cameras::connect)
+                },
+            ),
+            // Temporary (SHELL-03 I-1): the existing monitor, which draws Settings and Media over itself.
+            monitor = { LiveViewScreen(model) },
+            page = { cover -> ShellPage(model, cover) },
+            pageFrame = { route, content -> HomeFrame(model, pairing = route == ShellModel.Route.PAIR, content) },
+            pairingFlow = pairingWizard(
+                label = PairingWizard.phaseLabel(
+                    when {
+                        cameras.attempts.isEmpty() -> ConnectionPhase.SCANNING
+                        phase == ConnectionPhase.IDLE -> ConnectionPhase.CONNECTING_GATT
+                        else -> phase
+                    },
                 ),
-                // Temporary (SHELL-03 I-1): the existing monitor, which draws Settings and Media over itself.
-                monitor = { LiveViewScreen(model) },
-                page = { cover -> ShellPage(model, cover) },
-                pageFrame = { route, content -> HomeFrame(model, pairing = route == ShellModel.Route.PAIR, content) },
-            )
-        }
+                joinedNetwork = model.session.joinedSSID, vpnActive = LocalVPNProbe.isActive(context),
+                granted = discovery.granted, needsSettings = discovery.needsSettings, radioOn = radioOn,
+            ).flow(
+                model.cameras, onDone = model.shell::endPairing, rescan = model.session::startScan,
+                onBlocker = { if (!discovery.granted) discovery.request() else requestBluetoothOn() },
+                content = { PairingCallouts(model, discovery) { requestBluetoothOn() } },
+            ),
+        )
         MonitorConfiguration.identity.sourceLabel?.let { label ->
             if (showLive) Text(label, color = BrandColors.accent, style = LiveType.mono(10f), modifier = Modifier.align(Alignment.TopCenter).background(BrandColors.background).padding(horizontal = 8.dp, vertical = 3.dp))
         }
@@ -286,6 +309,37 @@ private fun OpenPocketCineApp(model: AppModel) {
         }
     }
 }
+
+/**
+ * The pair wizard in OpenInstaCine's words (the Android pair page it has always shown): the Luna
+ * pages, and Nearby devices or Bluetooth as the primary action while discovery cannot run.
+ */
+internal fun pairingWizard(
+    label: String,
+    joinedNetwork: String?,
+    vpnActive: Boolean,
+    granted: Boolean,
+    needsSettings: Boolean,
+    radioOn: Boolean,
+) = PairingWizard(
+    bodies = listOf(
+        "Turn the Luna on and keep this phone nearby. It shows up by the last characters of its serial number.",
+        "If the camera asks to allow this phone, tap Allow on its screen. First-time pairing can wait up to 90 seconds.",
+        "We read the camera's Wi-Fi over Bluetooth, then join it for you.",
+        "Exposure, LUTs and scopes go live as soon as the video link is up.",
+    ),
+    approveLines = listOf("Look for an Approve / pairing prompt", "Tap it on the camera screen"),
+    joinLines = listOf("Leave the camera on. It brings up its own Wi-Fi", "On 5.8 GHz that can take about a minute; we keep trying"),
+    label = label,
+    joinedNetwork = joinedNetwork,
+    vpnActive = vpnActive,
+    blocker = when {
+        !granted && needsSettings -> "Open Settings"
+        !granted -> "Allow ${DiscoveryPermissions.settingsName(DiscoveryPermissions.discovery()).lowercase()}"
+        !radioOn -> "Turn Bluetooth on"
+        else -> null
+    },
+)
 
 private fun beginDiscovery(model: AppModel, onBluetoothOff: () -> Unit = {}) {
     model.session.startScan()
@@ -329,8 +383,10 @@ private fun HomeFrame(model: AppModel, pairing: Boolean, content: @Composable ()
             top = if (pairing) 0.dp else 8.dp,
         )) {
             if (pairing) {
+                // As the pair page always did: Back stops a connect and leaves the page.
                 BackHandler(enabled = state.attempts.isNotEmpty() || state.saved.isNotEmpty()) {
-                    if (state.attempts.isNotEmpty()) model.cameras.cancelAll() else model.shell.endPairing()
+                    model.cameras.cancelAll()
+                    model.shell.endPairing()
                 }
             }
             content()

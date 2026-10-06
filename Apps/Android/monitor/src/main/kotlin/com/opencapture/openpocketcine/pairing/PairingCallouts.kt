@@ -23,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,13 +39,10 @@ import com.opencapture.openpocketcine.AppModel
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
 import kotlinx.coroutines.delay
 
-/** The Luna entry's pairing slot: the activity provides the callouts, which need its permission gate. */
-val LocalPairingCallouts = staticCompositionLocalOf<@Composable () -> Unit> { {} }
-
 /**
- * What the pair page shows while choosing a camera, beyond the shared page: the Swift core,
- * Bluetooth, permission and Location fixes with their actions, then the vendor-app precheck or,
- * after 20 s without a camera, the still-looking tip.
+ * The pair wizard's content: the Swift core, Bluetooth, permission and Location fixes with their
+ * actions, then, while choosing a camera, the vendor-app precheck or, after 20 s without a
+ * camera, the still-looking tip.
  */
 @Composable
 fun PairingCallouts(model: AppModel, discovery: PermissionGate, onEnableBluetooth: () -> Unit) {
@@ -64,7 +60,9 @@ fun PairingCallouts(model: AppModel, discovery: PermissionGate, onEnableBluetoot
             }
         }
     }
-    val waitingForCamera = phase == ConnectionPhase.SCANNING && radioOn && permissionsGranted && !locationOff &&
+    // The tips belong to choosing a camera, as on the pair page this app has always shown.
+    val choosing = state.attempts.isEmpty()
+    val waitingForCamera = choosing && phase == ConnectionPhase.SCANNING && radioOn && permissionsGranted && !locationOff &&
         state.nearby.isEmpty()
     var slowScan by remember { mutableStateOf(false) }
     LaunchedEffect(waitingForCamera) {
@@ -118,7 +116,7 @@ fun PairingCallouts(model: AppModel, discovery: PermissionGate, onEnableBluetoot
         }
         if (slowScan && waitingForCamera) {
             PairingCallout(title = "Still looking", body = StartupConnectionCopy.STILL_LOOKING, icon = MonitorIcon.RADIO)
-        } else {
+        } else if (choosing) {
             PairingCallout(title = "Before you pair", body = StartupConnectionCopy.PAIRING_PRECHECK, icon = MonitorIcon.TRIANGLE_ALERT)
         }
     }
