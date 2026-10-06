@@ -97,7 +97,7 @@ final class AppMonitorLooks: MonitorLookProvider {
         case .official, .dji:
             // No Pocket or DJI cube ships with this app.
             return nil
-        case .lunaILog:
+        case .iLogRec709:
             return BundledLunaLUT.iLogToRec709
         case .creative(let look):
             return look.cube()

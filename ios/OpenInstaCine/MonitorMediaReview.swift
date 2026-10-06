@@ -309,6 +309,9 @@
                         cacheError = error.localizedDescription
                     }
                 #endif
+                // The shared playback owner admits player actions only while the library
+                // browses, which the real Media page starts on open (MediaLibraryStub).
+                model.session.beginMediaBrowse()
                 if MonitorUIReview.screen == "media-list" { layout = .list }
                 if MonitorUIReview.screen == "media-selection" {
                     selected = [MonitorMediaReview.file(0).id, MonitorMediaReview.file(2).id]

@@ -245,8 +245,6 @@ private fun OpenPocketCineApp(model: AppModel) {
                 ShellActions(
                     diagnostics = { DiagnosticCenter.shareReport(context, model.session) },
                     reportProblem = { showProblemReport = true },
-                    privacy = { model.legal = LegalKind.PRIVACY },
-                    terms = { model.legal = LegalKind.TERMS },
                 ),
                 // Temporary (SHELL-03 I-1): the existing monitor, which draws Settings and Media over itself.
                 monitor = { LiveViewScreen(model) },

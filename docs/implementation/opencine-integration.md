@@ -195,7 +195,10 @@ Nothing is meant to look different. Underneath:
   label; iOS now offers Open Settings when Bluetooth is off or not allowed; one undecodable saved
   record no longer empties the list on the next save; Android forget also drops the camera's
   saved Wi-Fi (as iOS always did); iOS "on the camera network" now tests the Luna's
-  192.168.42.x (Pocket's 192.168.2.x test never matched).
+  192.168.42.x (Pocket's 192.168.2.x test never matched); a saved camera that still carries a
+  hotspot setup connects from that chip over the camera's own Wi-Fi without main's "Turn on
+  Personal Hotspot" prompt (no Insta camera could add a hotspot setup on main, and Luna joined
+  its own Wi-Fi after the prompt anyway; only the simulator review data reached it).
 
 ## Physical device checklist (Luna Ultra, iOS and Android)
 
@@ -259,8 +262,8 @@ Nothing below has run on hardware.
 17. Cameras-page follow-up (iPhone and Android, physical check untested): press and hold
     the Luna's Camera Wi-Fi chip, rename only that setup, relaunch, and reconnect without
     another approval or password prompt. Clear the setup name and confirm the default label
-    returns. Open Privacy and Terms from both an empty first-pair screen and the saved-camera
-    screen; close each and confirm the same page remains. An older build has no setup-name
+    returns. The empty first-pair and saved-camera screens show no Privacy or Terms links (as
+    on main); Settings opens both. An older build has no setup-name
     field: installing it, editing the camera name, and upgrading again must keep the new
     setup name, saved Wi-Fi, favorites and approval identity.
 

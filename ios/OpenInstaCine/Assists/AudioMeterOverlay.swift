@@ -24,7 +24,7 @@ struct LiveAudioMeterOverlay: View {
 
     var body: some View {
         AudioMeterOverlay(
-            levels: model.session.status.audioMeters,
+            levels: model.session.status.audioMeters ?? .silent,
             sensitivity: model.session.status.audioChannel?.label,
             bounds: bounds, chromeClearance: chromeClearance,
             hapticsEnabled: model.hapticsEnabled,

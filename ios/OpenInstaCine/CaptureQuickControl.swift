@@ -117,7 +117,7 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
         supportsFocusMode: Bool = false, facePriorityExposureEnabled: Bool = false,
         shutterUsesAngle: Bool = false, shutterAngleDegrees: Double = 180, aeLocked: Bool = false,
         awbLocked: Bool = false, offersAwbLock: Bool = false,
-        profile: OpenPocketViewCore.CameraProfile = LunaShellMapping.profile
+        profile: CameraLabelProfile = LunaShellMapping.profile
     ) -> Self? {
         switch sheet {
         case .iso:
@@ -234,7 +234,7 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
     }
 
     private static func colorSnapshot(
-        status: CameraStatus, cameraModel: CameraModel?, profile: OpenPocketViewCore.CameraProfile
+        status: CameraStatus, cameraModel: CameraModel?, profile: CameraLabelProfile
     ) -> Self? {
         let family = cameraModel?.family ?? .other
         let modes =
@@ -252,7 +252,7 @@ struct CaptureQuickSnapshot: Hashable, Sendable {
     }
 
     private static func shootingModeSnapshot(
-        status: CameraStatus, cameraModel: CameraModel?, profile: OpenPocketViewCore.CameraProfile
+        status: CameraStatus, cameraModel: CameraModel?, profile: CameraLabelProfile
     ) -> Self {
         let options = CaptureLists.operatorShootingModes(from: status, model: cameraModel).map {
             $0.label(for: cameraModel, in: profile)

@@ -1,6 +1,7 @@
 import MonitorPresentation
 import MonitorUI
 import OpenCineApple
+import OpenCineRelayApple
 import OpenPocketViewCore
 import SwiftUI
 import UIKit
@@ -126,7 +127,7 @@ struct SettingsRootView: View {
             }
         }
         .sheet(isPresented: $showWatcherWiFiCode) {
-            WatcherWiFiCodeView().environment(model)
+            WatcherWiFiCodeSheet().environment(model)
         }
         .sheet(isPresented: $showLUTPicker) {
             LUTPicker(assist: model.assist)
@@ -232,7 +233,7 @@ struct SettingsRootView: View {
                     controlRequests: SettingsHelpCopy.controlRequests,
                     priority: SettingsHelpCopy.broadcastPriority),
                 showWiFiCode: { showWatcherWiFiCode = true },
-                passcodeChanged: { WatcherRelayKeychain.hostPasscode = $0 },
+                passcodeChanged: { WatcherRelayKeychain.app.hostPasscode = $0 },
                 feedback: { OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled) })
         } else {
             SettingsRowCard {
