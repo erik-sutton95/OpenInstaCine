@@ -439,6 +439,17 @@ final class LUTAssistTests: XCTestCase {
         XCTAssertEqual(assist.lutSelection, .djiAuto)
     }
 
+    /// Values Insta main wrote still load: the LUT raw value and the color mode byte did not change
+    /// when the cases moved to OpenCine's vocabulary under capability names.
+    func testValuesStoredByMainStillLoad() {
+        UserDefaults.standard.set("lunaILog", forKey: "OpenInstaCine.LUTSelection")
+        UserDefaults.standard.set(0xE2, forKey: "OpenInstaCine.LastMonitorColorMode")
+        XCTAssertEqual(OperatorPrefs.lutSelection, .iLogRec709)
+        XCTAssertEqual(OperatorPrefs.lastMonitorColorMode, .iLog)
+        OperatorPrefs.lutSelection = .iLogRec709
+        XCTAssertEqual(UserDefaults.standard.string(forKey: "OpenInstaCine.LUTSelection"), "lunaILog")
+    }
+
     func testPhotoDoesNotMutateSavedLUTPrefs() {
         let assist = LiveAssistState()
         assist.selectLUT(.iLogRec709)

@@ -1,4 +1,5 @@
 import MonitorUI
+import OpenCineCameraControls
 import OpenPocketViewCore
 import SwiftUI
 
@@ -45,6 +46,11 @@ enum LiveDesign {
     static let cornerRadius = MonitorTheme.radius
     static let controlHeight: CGFloat = 58
 }
+
+/// The shared live chrome reads this app's palette.
+extension LiveDesign: LiveChromePalette {}
+
+typealias CloseButton = LiveCloseButton<LiveDesign>
 
 extension View {
     /// Compositor-owned Field Monitor material; no application-side frame copy.
