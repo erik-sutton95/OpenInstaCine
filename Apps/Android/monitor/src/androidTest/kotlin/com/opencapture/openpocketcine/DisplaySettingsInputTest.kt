@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.opencapture.opencine.cameracontrols.OperatorDisplayRows
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -58,7 +59,7 @@ class DisplaySettingsInputTest {
                         activity.setContent {
                             Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(12.dp)
                                 .semantics { testTagsAsResourceId = true }) {
-                                DisplayRows(fresh, isLive = false)
+                                OperatorDisplayRows(fresh, fresh.operatorSetupState(), operatorSetupApp(fresh), isLive = false)
                             }
                         }
                     }
