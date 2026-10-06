@@ -1,5 +1,5 @@
 import OpenCineAppKit
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// The shared report form on this app's reporting, support address, accent and privacy page.

@@ -1,7 +1,7 @@
 import CoreVideo
 import Metal
 import MonitorUI
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine

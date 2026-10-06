@@ -1,6 +1,6 @@
 import Foundation
 import OpenCineFrameIO
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 struct FrameioProjectListing: Equatable, Sendable {
     var accountID: String

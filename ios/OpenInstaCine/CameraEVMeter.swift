@@ -1,5 +1,5 @@
 import MonitorUI
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// Fixed camera telemetry chrome. It has no assist state, gestures or pixel sampling.

@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import OpenCineApple
 import OpenCineFrameIO
-import OpenPocketViewCore
+import OpenInstaViewCore
 import Photos
 import SwiftUI
 import UIKit

@@ -1,6 +1,6 @@
 import AVFoundation
 import CoreImage
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine

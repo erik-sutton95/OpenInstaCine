@@ -1,6 +1,6 @@
 import Foundation
 import OpenCineAppKit
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// Structured expo lines for the agent loop: os.Logger + a capped Documents journal
 /// (OpenCine's `DiagnosticJournal`). Pull `Documents/control-live.log` from the

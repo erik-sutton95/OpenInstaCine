@@ -1,7 +1,7 @@
 import CoreImage
 import Foundation
 import OpenCineApple
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// App-owned output location and source curve adapter for the shared native exporter.
 enum MediaLUT {

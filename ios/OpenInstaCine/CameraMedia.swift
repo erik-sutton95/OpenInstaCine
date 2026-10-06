@@ -2,7 +2,7 @@ import Foundation
 import Insta360Protocol
 import OpenCineAppKit
 import OpenCineMedia
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// Operator-facing media notes. Never name a sister app or another camera brand.
 enum MediaOperatorCopy {

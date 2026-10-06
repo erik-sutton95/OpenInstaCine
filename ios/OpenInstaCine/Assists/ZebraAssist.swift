@@ -1,6 +1,6 @@
 import MonitorUI
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// The zebra menu over the monitored source's transfer and its live ceiling (STATE-01: never a

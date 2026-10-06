@@ -38,10 +38,10 @@ sharing support. Simulator rendering and automated checks do not qualify physica
 
 | Owner / location | Responsibility and current dependencies |
 | --- | --- |
-| `ios/OpenInstaCine` | iOS app: app-owned code on the shared OpenCine shell (`OpenCineAppKit`), no longer synced from OpenPocketCine, plus Luna presentation adapters (`CameraSession*.swift`, `LunaShellMapping.swift`, `OpenInstaCineBrand.swift`, assets). `OpenInstaCineBrand.apply()` sets `MonitorTheme.accentRGB = 0xFFCF00` before any view is built. Links `OpenPocketViewCore`, `OpenCineAppKit`, `Insta360Protocol`, `Insta360Apple` and OpenCineUI `MonitorUI` / `MonitorPresentation` |
+| `ios/OpenInstaCine` | iOS app: app-owned code on the shared OpenCine shell (`OpenCineAppKit`), no longer synced from OpenPocketCine, plus Luna presentation adapters (`CameraSession*.swift`, `LunaShellMapping.swift`, `OpenInstaCineBrand.swift`, assets). `OpenInstaCineBrand.apply()` sets `MonitorTheme.accentRGB = 0xFFCF00` before any view is built. Links `OpenInstaViewCore`, `OpenCineAppKit`, `Insta360Protocol`, `Insta360Apple` and OpenCineUI `MonitorUI` / `MonitorPresentation` |
 | OpenCineUI `MonitorUI`, `MonitorPresentation` | Shared SwiftUI design system (theme, Sora, Lucide/assist icons, canvas, pages, controls) and Foundation-only presentation/layout policy. Part of the OpenCine platform repository, a sibling checkout at `../OpenCine` that `ios/project.yml` names as a path package (candidate until a versioned release). No camera, vendor or app dependency. Its tests run in OpenCine |
-| `ios/OpenInstaCineWatch` | watchOS remote over WatchConnectivity; depends on `OpenPocketViewCore` |
-| `Sources/OpenPocketViewCore` | Portable core, forked from OpenPocketCine and OpenInstaCine-owned since RELEASE-01 (no longer synced; upstream's copy depends on OpenCineDJI), with Luna hooks (I-Log, Luna resolutions, `.lrv` proxy, per-session `CameraProfile`): color science, LUTs, media manifest, saved cameras, plus the inherited Osmo models and DUML codecs |
+| `ios/OpenInstaCineWatch` | watchOS remote over WatchConnectivity; depends on `OpenInstaViewCore` |
+| `Sources/OpenInstaViewCore` | Portable core, forked from OpenPocketCine and OpenInstaCine-owned since RELEASE-01 (no longer synced; upstream's copy depends on OpenCineDJI), with Luna hooks (I-Log, Luna resolutions, `.lrv` proxy, per-session `CameraProfile`): color science, LUTs, media manifest, saved cameras, plus the inherited Osmo models and DUML codecs |
 | OpenCine `Sources/Insta360Protocol` | OpenCine package product for UCD2, bounded reassembly/checksum, protobuf, scheme-3 envelopes and verified Luna read/live commands. Foundation only, no network/BLE/crypto implementation |
 | OpenCine `Sources/Insta360Apple` | CoreBluetooth, CryptoKit, Keychain, hotspot join, Network.framework TCP and Luna session lifetime. `LunaCameraSession` implements OpenCineCore `CameraSession` for ISO, shutter, white balance and record (settle and readback included). An OpenCine package product linked by `ios/project.yml`; depends on `Insta360Protocol`, `CKcp`, OpenCineCore, OpenCineMotion and OpenCineMedia |
 | `Apps/Android/app` | Thin branded activity, app manifest and DEBUG replay selection. Installs the brand identity (accent `0xFFFFCF00`) and Luna backend factory through `MonitorConfiguration` |
@@ -49,14 +49,14 @@ sharing support. Simulator rendering and automated checks do not qualify physica
 | OpenCineUI `Android/monitor-ui` | Compose design language (theme with brand-assigned `MonitorPalette.accent`, Sora, icons, page scaffolds). Coordinate `com.opencapture.opencine:monitor-ui`, substituted from the included build `../../../OpenCine/Android` (named `opencine`) in `Apps/Android/settings.gradle.kts` |
 | OpenCineInsta360 `Android/insta360-shell` | Kotlin/JVM backend discovery/lifecycle/state/capability/frame contract (was `Apps/Android/core-api`). Uses coroutines/flows; no Compose or Android platform types. Recording, ISO, shutter and WB are not on `CameraControls`: a `CoreSessionSource` backend opens an OpenCineCore `CameraSession` for them. Coordinate `com.opencapture.opencine:insta360-shell` |
 | OpenCineInsta360 `Android/insta360-luna` | Android GATT, JCA cryptography, Wi-Fi/network-bound socket lifecycle and a Kotlin UCD2 implementation; `LunaCameraSession` is the OpenCineCore session (port of the Apple one). Was `Apps/Android/luna-adapter`. Both come from the same included build `../../../OpenCine/Android` (named `opencine`), which also builds OpenCineCore `:core` |
-| `Sources/OpenPocketCineAndroidFacade` | Swift JNI exports, using OpenCine `OpenCineJNISupport`. Dynamic product `OpenPocketCineAndroid` imports `OpenPocketViewCore` |
+| `Sources/OpenInstaCineAndroidFacade` | Swift JNI exports, using OpenCine `OpenCineJNISupport`. Dynamic product `OpenInstaCineAndroid` imports `OpenInstaViewCore` |
 
 ```mermaid
 flowchart TD
     Apple[iOS app] --> UI[OpenCineUI MonitorUI]
     UI --> Presentation[OpenCineUI MonitorPresentation]
     Apple --> LunaApple[Insta360Apple adapter]
-    Apple --> Core[OpenPocketViewCore]
+    Apple --> Core[OpenInstaViewCore]
     LunaApple --> OCCore[OpenCineCore]
     LunaApple --> Protocol[Insta360Protocol]
     Android[Android app] --> Monitor[Compose shell :monitor]
@@ -169,8 +169,8 @@ until that is lifted and qualified on hardware.
    Metal, CoreVideo, Android renderers, native media storage and delivery
    services remain platform implementations. The complete delivery queue has
    not been moved into Foundation-only code.
-4. **JNI compatibility:** The old `com.opencapture.openpocketcine` internal
-   package, JNI symbols and `OpenPocketCineAndroid` library name remain so the
+4. **JNI compatibility:** The old `com.opencapture.openinstacine.monitor` internal
+   package, JNI symbols and `OpenInstaCineAndroid` library name remain so the
    inherited decoder/LUT/assist calls load correctly. The installed brand app
    ID is `com.opencapture.openinstacine`. Rename both sides together later.
 5. **Profiles/assets:** Some inherited color/profile catalog machinery and DJI

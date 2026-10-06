@@ -3,7 +3,7 @@ import Insta360Apple
 import Insta360Protocol
 import OpenCineAppKit
 import OpenCineMedia
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// The common library owns catalog/workflows; this preservation value keeps the actual source
 /// metadata beside the unchanged legacy index record for source look and playback adapters.

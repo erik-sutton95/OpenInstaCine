@@ -1,6 +1,6 @@
 import Foundation
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import OpenCineApple
 

@@ -3,7 +3,7 @@ import MonitorUI
 import OpenCineApple
 import OpenCineCameraControls
 import OpenCineRelayApple
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import UIKit
 

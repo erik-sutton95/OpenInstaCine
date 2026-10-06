@@ -2,7 +2,7 @@ import CoreImage
 import CoreVideo
 import Foundation
 import Observation
-import OpenPocketViewCore
+import OpenInstaViewCore
 import OpenCineMedia
 import OpenCineApple
 import os
@@ -49,7 +49,7 @@ extension ScopeSampler {
 
 }
 
-typealias ScopeExposureCeiling = OpenPocketViewCore.ScopeExposureCeiling
+typealias ScopeExposureCeiling = OpenInstaViewCore.ScopeExposureCeiling
 
 extension LiveFrameSampleBus {
     var colorMode: ColorMode? { reportedTransfer.map(\.colorMode) }

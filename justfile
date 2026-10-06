@@ -120,7 +120,7 @@ ios-version:
     @sed -n 's/^MARKETING_VERSION = /Version: /p; s/^CURRENT_PROJECT_VERSION = /Build: /p' ios/Config/Version.xcconfig
 
 android-version:
-    @sed -n 's/^openpocketcine.versionName=/Version: /p; s/^openpocketcine.versionCode=/Build: /p' Apps/Android/gradle.properties
+    @sed -n 's/^openinstacine.versionName=/Version: /p; s/^openinstacine.versionCode=/Build: /p' Apps/Android/gradle.properties
 
 # Refresh ios/Package.resolved after changing packages in ios/project.yml; commit the result.
 ios-resolve: ios-generate
@@ -149,7 +149,7 @@ android-sideload n:
       ANDROID_KEY_ALIAS="$KEY_ALIAS" ANDROID_KEY_PASSWORD="$KEY_PASSWORD"
     export SENTRY_DSN_ANDROID="${SENTRY_DSN_ANDROID:-$(sed -n 's/^SENTRY_DSN_ANDROID=//p' .local/reliability.properties)}"
     [[ -n "$SENTRY_DSN_ANDROID" ]] || { echo "SENTRY_DSN_ANDROID is unset" >&2; exit 1; }
-    version="$(sed -n 's/^openpocketcine.versionName=//p' Apps/Android/gradle.properties)"
+    version="$(sed -n 's/^openinstacine.versionName=//p' Apps/Android/gradle.properties)"
     (cd Apps/Android && JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk}" ./gradlew assembleRelease)
     mkdir -p .local/apk
     cp Apps/Android/app/build/outputs/apk/release/app-release.apk ".local/apk/OpenInstaCine-$version-{{n}}-sideload.apk"

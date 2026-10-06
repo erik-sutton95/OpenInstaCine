@@ -5,7 +5,7 @@
     import Insta360Protocol
     import OpenCineCameraControls
     import OpenCineCore
-    import OpenPocketViewCore
+    import OpenInstaViewCore
     import UIKit
 
     /// Deterministic simulator-only presentation fixture. Opt-in environment values

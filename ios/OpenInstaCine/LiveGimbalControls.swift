@@ -1,6 +1,6 @@
 import Foundation
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// The shared gimbal sheet, motion control panel and button, on this app's model and palette.
 typealias LiveGimbalButton = OpenCineCameraControls.LiveGimbalButton<AppModel, LiveDesign>

@@ -13,10 +13,10 @@ packages:
   Sentry:
     url: https://github.com/getsentry/sentry-cocoa
     exactVersion: 9.24.0
-  OpenPocketViewCore:
+  OpenInstaViewCore:
     path: ..
   # The OpenCine platform package: common camera contracts (OpenCineCore), portable media math
-  # (OpenCineMedia, also re-exported by OpenPocketViewCore, whose Package.swift names the same
+  # (OpenCineMedia, also re-exported by OpenInstaViewCore, whose Package.swift names the same
   # ../OpenCine checkout), shared UI 2.0 (MonitorUI, MonitorPresentation) and the Insta360 Luna
   # integration (Insta360Protocol, Insta360Apple). Candidate: a sibling checkout of OpenCine next
   # to this repository, pinned in opencine-pins.txt. Switch to url + exactVersion once it is
@@ -37,8 +37,8 @@ targets:
     dependencies:
       - package: Sentry
         product: Sentry
-      - package: OpenPocketViewCore
-        product: OpenPocketViewCore
+      - package: OpenInstaViewCore
+        product: OpenInstaViewCore
       - package: OpenCine
         product: OpenCineMedia
       - package: OpenCine
@@ -143,8 +143,8 @@ targets:
       - OpenInstaCineTests
     dependencies:
       - target: OpenInstaCine
-      - package: OpenPocketViewCore
-        product: OpenPocketViewCore
+      - package: OpenInstaViewCore
+        product: OpenInstaViewCore
       - package: OpenCine
         product: OpenCineMedia
       - package: OpenCine
@@ -183,8 +183,8 @@ targets:
     sources:
       - OpenInstaCineWatch
     dependencies:
-      - package: OpenPocketViewCore
-        product: OpenPocketViewCore
+      - package: OpenInstaViewCore
+        product: OpenInstaViewCore
       # The wrist monitor and its WatchConnectivity client (OpenCineWatch).
       - package: OpenCine
         product: OpenCineWatch

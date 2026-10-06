@@ -1,6 +1,6 @@
 import AVFoundation
 import MonitorPresentation
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine

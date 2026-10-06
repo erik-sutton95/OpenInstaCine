@@ -1,5 +1,5 @@
 import MonitorUI
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import XCTest
 

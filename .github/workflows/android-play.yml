@@ -38,8 +38,8 @@ on:
     branches: [main]
     paths:
       - "Apps/Android/**"
-      - "Sources/OpenPocketViewCore/**"
-      - "Sources/OpenPocketCineAndroidFacade/**"
+      - "Sources/OpenInstaViewCore/**"
+      - "Sources/OpenInstaCineAndroidFacade/**"
       - "Package.swift"
       - "opencine-pins.txt"
       - "scripts/android-*.sh"
@@ -158,7 +158,7 @@ jobs:
           base="${{ vars.ANDROID_VERSION_CODE_BASE }}"
           base="${base:-0}"
           echo "VERSION_CODE=$((base + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "VERSION_NAME=$(sed -n 's/^openpocketcine.versionName=//p' Apps/Android/gradle.properties)" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=$(sed -n 's/^openinstacine.versionName=//p' Apps/Android/gradle.properties)" >> "$GITHUB_ENV"
 
       - name: Require Sentry Android DSN
         # Presence only. Invalid DSN shape is handled in Apps/Android Gradle/SDK.

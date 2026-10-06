@@ -12,11 +12,11 @@ val repositoryRoot = rootProject.projectDir.parentFile.parentFile
 val stageSwiftCoreScript = repositoryRoot.resolve("scripts/android-stage-swift-core.sh")
 
 val resolvedVersionCode: Int =
-    (findProperty("versionCode") ?: property("openpocketcine.versionCode")).toString().toInt()
-val resolvedVersionName: String = property("openpocketcine.versionName").toString()
+    (findProperty("versionCode") ?: property("openinstacine.versionCode")).toString().toInt()
+val resolvedVersionName: String = property("openinstacine.versionName").toString()
 
 android {
-    namespace = "com.opencapture.openpocketcine"
+    namespace = "com.opencapture.openinstacine.monitor"
     compileSdk = 36
 
     defaultConfig {

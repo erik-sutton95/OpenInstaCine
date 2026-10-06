@@ -1,0 +1,186 @@
+package com.opencapture.openinstacine.monitor.assists
+
+import com.opencapture.openinstacine.monitor.ChromeRect
+import com.opencapture.openinstacine.monitor.OperatorPrefs
+import com.opencapture.opencine.media.PlaybackVideoLayout
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import com.opencapture.opencine.media.MonitorDesqueezePreset
+import com.opencapture.opencine.media.MonitorDesqueezeDirection
+import com.opencapture.monitorui.MonitorGridGeometry
+import com.opencapture.monitorui.MonitorGuideGeometry
+import com.opencapture.monitorui.MonitorPlaybackZoom
+import com.opencapture.opencine.cameracontrols.AnamorphicDesqueeze
+import com.opencapture.monitorui.MonitorAssistTool
+
+class AnamorphicDesqueezeTest {
+    @Test
+    fun requestedPresetsAndDefaultKeepExistingMonitorsUnchanged() {
+        assertEquals(listOf(1.1, 1.2, 1.33, 1.5, 1.6, 1.8, 2.0), MonitorDesqueezePreset.entries.map { it.factor })
+        val state = LiveAssistState()
+        assertFalse(state.desqueeze)
+        assertFalse(state.desqueezeCustom)
+        assertTrue(MonitorAssistTool.DESQ in state.pinned)
+        assertEquals(1.33, state.desqueezeFactor)
+        assertEquals(16f / 9f, state.presentedAspect(16f / 9f))
+        assertEquals(MonitorDesqueezeDirection.HORIZONTAL, state.desqueezeDirection)
+        assertEquals("DE-SQ", MonitorAssistTool.DESQ.chipLabel)
+        assertEquals(MonitorAssistTool.DESQ, MonitorAssistTool.fromPersisted("DE-SQ"))
+        assertEquals(MonitorAssistTool.DESQ, MonitorAssistTool.fromPersisted("DESQ"))
+        assertTrue(MonitorAssistTool.DESQ in MonitorAssistTool.settingsCases)
+        assertTrue(MonitorAssistTool.DESQ in MonitorAssistTool.playbackToolbarCases)
+        assertTrue(MonitorAssistTool.DESQ in MonitorAssistTool.cleanPinCases)
+    }
+
+    @Test
+    fun customRetainsItsOwnSelectionAndValueAcrossPresetsAndRestoration() {
+        val state = LiveAssistState()
+        state.updateDesqueezeFactor(1.499)
+        assertEquals(1.50, state.desqueezeFactor)
+        assertTrue(state.desqueezeCustom)
+        state.selectDesqueezePreset(MonitorDesqueezePreset.X200)
+        assertEquals(2.0, state.desqueezeFactor)
+        state.selectCustomDesqueeze()
+        assertEquals(1.5, state.desqueezeFactor)
+        state.updateDesqueezeDirection(MonitorDesqueezeDirection.VERTICAL)
+        state.toggle(MonitorAssistTool.DESQ)
+        val restored = LiveAssistState(state.encoded())
+        assertTrue(restored.desqueeze)
+        assertTrue(restored.desqueezeCustom)
+        assertEquals(1.5, restored.desqueezeFactor)
+        assertEquals(MonitorDesqueezePreset.X200, restored.desqueezePreset)
+        assertEquals(MonitorDesqueezeDirection.VERTICAL, restored.desqueezeDirection)
+    }
+
+    @Test
+    fun hundredthStepsClampAndRejectNonfiniteValuesBeforePersistence() {
+        assertEquals(1.01, AnamorphicDesqueeze.snap(1.005))
+        assertEquals(1.34, AnamorphicDesqueeze.snap(1.335))
+        assertEquals(1.0, AnamorphicDesqueeze.snap(-10.0))
+        assertEquals(2.0, AnamorphicDesqueeze.snap(50.0))
+        for (raw in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            val state = LiveAssistState()
+            state.updateDesqueezeFactor(raw)
+            assertEquals(1.33, LiveAssistState(state.encoded()).desqueezeCustomFactor)
+        }
+        for (hundredths in 100..200) {
+            assertEquals(hundredths / 100.0, AnamorphicDesqueeze.snap(hundredths / 100.0))
+        }
+    }
+
+    @Test
+    fun invalidPreferencesAndPreFeaturePreferencesFallBackSafely() {
+        val state = LiveAssistState("""{"tools":["DESQ"],"desqueezePreset":"broken","desqueezeDirection":"broken","desqueezeCustom":true,"desqueezeCustomFactor":"NaN"}""")
+        assertTrue(state.desqueeze)
+        assertEquals(1.33, state.desqueezeFactor)
+        assertEquals(MonitorDesqueezeDirection.HORIZONTAL, state.desqueezeDirection)
+        val old = LiveAssistState("""{"tools":["GRID"]}""")
+        assertFalse(old.desqueeze)
+        assertEquals(1.33, old.desqueezeFactor)
+        assertTrue(old.grid)
+    }
+
+    @Test
+    fun liveCleanPinsAndPlaybackEnableAreIndependentAndDoNotRequestProcessing() {
+        var playbackSaved = emptySet<String>()
+        var pinsSaved = emptySet<String>()
+        val state = LiveAssistState(pinnedNames = setOf("LUT"), onPersistPlayback = { playbackSaved = it }, onPersistPins = { pinsSaved = it })
+        state.toggle(MonitorAssistTool.DESQ)
+        state.clean = true
+        assertEquals(16f / 9f, state.presentedAspect(16f / 9f))
+        state.togglePin(MonitorAssistTool.DESQ)
+        assertTrue("DESQ" in pinsSaved)
+        assertTrue(state.presentedAspect(16f / 9f) > 16f / 9f)
+        assertEquals(16f / 9f, state.presentedAspect(16f / 9f, playback = true))
+        state.togglePlayback(MonitorAssistTool.DESQ)
+        assertEquals(setOf("DESQ"), playbackSaved)
+        state.toggle(MonitorAssistTool.DESQ)
+        assertTrue(state.presentedAspect(16f / 9f, playback = true) > 16f / 9f)
+    }
+
+    @Test
+    fun previewForcesCorrectionWithoutEnablingLiveOrPlayback() {
+        val state = LiveAssistState()
+        assertEquals(16f / 9f * 1.33f, state.presentedAspect(16f / 9f, preview = true))
+        assertFalse(state.desqueeze)
+        assertFalse(state.isPlaybackVisible(MonitorAssistTool.DESQ))
+    }
+
+    @Test
+    fun horizontalWidensAndVerticalTallensFullImageWithinPortraitAndLandscapeWells() {
+        for (direction in MonitorDesqueezeDirection.entries) {
+            for (source in listOf(16f / 9f, 4f / 3f, 9f / 16f)) {
+                for (well in listOf(ChromeRect(10f, 20f, 1600f, 900f), ChromeRect(10f, 20f, 400f, 800f))) {
+                    val state = LiveAssistState()
+                    state.selectDesqueezePreset(MonitorDesqueezePreset.X200)
+                    state.updateDesqueezeDirection(direction)
+                    state.toggle(MonitorAssistTool.DESQ)
+                    state.togglePlayback(MonitorAssistTool.DESQ)
+                    val aspect = state.presentedAspect(source)
+                    assertEquals(if (direction == MonitorDesqueezeDirection.HORIZONTAL) source * 2 else source / 2, aspect)
+                    val live = well.fittedContent(aspect)
+                    val playback = PlaybackVideoLayout.aspectFitRect(
+                        PlaybackVideoLayout.Size(state.presentedAspect(source, playback = true), 1f),
+                        PlaybackVideoLayout.Rect(well.x, well.y, well.width, well.height),
+                    )
+                    assertEquals(live.width, playback.width, 0.001f)
+                    assertEquals(live.height, playback.height, 0.001f)
+                    assertEquals(well.midX, live.midX, 0.001f)
+                    assertEquals(well.midY, live.midY, 0.001f)
+                    assertTrue(live.width <= well.width + .001f && live.height <= well.height + .001f)
+                    assertEquals(aspect, live.width / live.height, 0.001f)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun gridGuideAndPanBoundsFollowCorrectedPresentation() {
+        val state = LiveAssistState()
+        state.togglePlayback(MonitorAssistTool.DESQ)
+        state.selectDesqueezePreset(MonitorDesqueezePreset.X200)
+        val content = AssistRect(0f, 0f, 1600f, 900f).fittedContent(state.presentedAspect(16f / 9f, playback = true))
+        assertEquals(AssistRect(0f, 225f, 1600f, 450f), content)
+        val grid = MonitorGridGeometry.segments(content, thirds = true, phi = false, diagonal = false)
+        assertTrue(grid.all { content.contains(it.from.x, it.from.y) && content.contains(it.to.x, it.to.y) })
+        val guide = MonitorGuideGeometry.rectForRatio(content, 2.39f)
+        assertEquals(content.midX, guide.midX, .001f)
+        assertEquals(content.midY, guide.midY, .001f)
+        var zoom = MonitorPlaybackZoom().pinchChanged(2f, .5f, .5f, content.width, content.height)
+            .endGesture(content.width, content.height)
+        zoom = zoom.panChanged(10000f, 10000f).endGesture(content.width, content.height)
+        assertEquals(800f, zoom.offsetX)
+        assertEquals(225f, zoom.offsetY)
+    }
+    @Test
+    fun squareCaptureGuidesExcludeSourcePaddingAfterHorizontalCorrection() {
+        val state = LiveAssistState()
+        state.selectDesqueezePreset(MonitorDesqueezePreset.X200)
+        state.toggle(MonitorAssistTool.DESQ)
+        val raster = ChromeRect(0f, 0f, 1600f, 900f).fittedContent(state.presentedAspect(16f / 9f))
+        val recorded = raster.fittedContent(state.presentedAspect(1f))
+        assertEquals(ChromeRect(0f, 225f, 1600f, 450f), raster)
+        assertEquals(ChromeRect(350f, 225f, 900f, 450f), recorded)
+        assertEquals(raster.midX, recorded.midX)
+        assertEquals(raster.midY, recorded.midY)
+    }
+
+    @Test
+    fun explicitlyEmptyPinsRemainEmptyAcrossSavingAndRestoration() {
+        var saved: Set<String>? = null
+        val state = LiveAssistState(pinnedNames = setOf("DESQ"), onPersistPins = { saved = it })
+        state.toggle(MonitorAssistTool.DESQ)
+        state.togglePin(MonitorAssistTool.DESQ)
+        assertEquals(emptySet(), saved)
+        val restored = LiveAssistState(state.encoded(), pinnedNames = OperatorPrefs.resolvedCleanPins(saved))
+        restored.clean = true
+        assertTrue(restored.desqueeze)
+        assertTrue(restored.pinned.isEmpty())
+        assertEquals(16f / 9f, restored.presentedAspect(16f / 9f))
+        val fresh = LiveAssistState(pinnedNames = OperatorPrefs.resolvedCleanPins(null))
+        assertTrue(MonitorAssistTool.DESQ in fresh.pinned)
+    }
+
+}

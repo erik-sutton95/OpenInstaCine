@@ -3,7 +3,7 @@ import Insta360Apple
 import Insta360Protocol
 import OpenCineCameraControls
 import OpenCineCore
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// Optimistic values the operator just asked for, held until the camera reports
 /// them or the settle window runs out (same `CameraValuePin` rule as the Osmo shell).

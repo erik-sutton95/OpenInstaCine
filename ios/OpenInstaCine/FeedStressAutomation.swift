@@ -2,7 +2,7 @@ import CoreFoundation
 import Darwin
 import Foundation
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import UIKit
 import os
 

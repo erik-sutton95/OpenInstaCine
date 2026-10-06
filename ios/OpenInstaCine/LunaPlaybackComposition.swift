@@ -1,7 +1,7 @@
 import Foundation
 import OpenCineAppKit
 import OpenCineMedia
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// Camera/profile facts kept out of the shared item/load owner.
 struct LunaPlaybackLook: Equatable, Sendable {

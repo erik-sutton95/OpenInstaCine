@@ -3,7 +3,7 @@ import MonitorUI
 import OpenCineAppKit
 import OpenCineCameraControls
 import OpenCineCore
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// The app root on the shared shell (SHELL-03): `AppShell` shows the cameras or pair page, or
@@ -110,7 +110,7 @@ extension AppModel {
     /// Main's live label: the scan while choosing, then the session's phase (a connect starts at
     /// the Bluetooth link; the simulator review's scripted camera never moves the session).
     private var liveLabel: String {
-        typealias Phase = OpenPocketViewCore.ConnectionPhase
+        typealias Phase = OpenInstaViewCore.ConnectionPhase
         if cameras.attempts.isEmpty { return Phase.scanning.label }
         return session.phase == .idle ? Phase.connectingGatt.label : session.phase.label
     }

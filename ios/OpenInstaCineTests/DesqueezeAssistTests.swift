@@ -1,7 +1,7 @@
 import CoreImage
 import MonitorPresentation
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine

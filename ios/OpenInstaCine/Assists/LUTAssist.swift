@@ -1,6 +1,6 @@
 import Foundation
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// LUT long-press body: Insta360 / Creative / Custom, then exposure and 50/50.

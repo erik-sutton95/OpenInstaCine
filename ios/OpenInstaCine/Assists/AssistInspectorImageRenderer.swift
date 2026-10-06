@@ -2,7 +2,7 @@ import CoreVideo
 import Foundation
 import OpenCineApple
 import OpenCineMedia
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// The app supplies source-qualified look curves; the native owner retains admission and CI work.
 extension MonitorInspectorImageRenderer {

@@ -5,9 +5,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import com.opencapture.openpocketcine.BrandIdentity
-import com.opencapture.openpocketcine.MonitorConfiguration
-import com.opencapture.openpocketcine.ShellReview
+import com.opencapture.openinstacine.monitor.BrandIdentity
+import com.opencapture.openinstacine.monitor.MonitorConfiguration
+import com.opencapture.openinstacine.monitor.ShellReview
 
 /**
  * Debug only, SIMULATED (SHELL-03 review): the real app root over the local replay backend (no
@@ -15,7 +15,7 @@ import com.opencapture.openpocketcine.ShellReview
  * step live|settings|back|media|close` drives the shell; each step logs `ShellReview` with the
  * monitor host counts.
  */
-class ShellReviewActivity : com.opencapture.openpocketcine.MainActivity() {
+class ShellReviewActivity : com.opencapture.openinstacine.monitor.MainActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val brand = BrandIdentity("OpenInstaCine", "OPENINSTACINE", 0xFFFFCF00, "Insta360 Luna Ultra", sourceLabel = "SIMULATED · NOT A LIVE CAMERA")
         MonitorConfiguration.install(brand, cameraLooks = LunaCameraLooks.entries) { LocalReplayBackend(it) }

@@ -2,7 +2,7 @@ import MonitorPresentation
 import OpenCineAppKit
 import OpenCineCameraControls
 import OpenCineCore
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 typealias LiveCapturePickerHost = CaptureSheetPickerHost<AppModel>
