@@ -166,6 +166,7 @@ val stageSwiftCore =
                     "Sources/OpenCineCore/**",
                     "Sources/OpenCineJNISupport/**",
                     "Sources/OpenCineJNI/**",
+                    "scripts/android-stage-swift-core.sh",
                 )
             },
             stageSwiftCoreScript,

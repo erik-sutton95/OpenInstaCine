@@ -56,7 +56,7 @@ A local `just ios-run` with automatic signing registers both.
 `scripts/ios-release-notes-check.sh` enforces the format: either `New features`
 with 1 to 4 bullets, or `New and changed` / `Fixes` / `What to test`; no free
 text, no commit titles, no implementation jargon, 2000 characters, 200 per
-bullet (caps in `scripts/tester-notes-limits.sh`). Each pull request that changes
+bullet (caps in `../OpenCine/scripts/tester-notes-limits.sh`). Each pull request that changes
 the iOS app replaces the file with that build's window (CI enforces it):
 
 ```bash

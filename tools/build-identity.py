@@ -40,6 +40,7 @@ SIBLING_PACKAGES = {
             "OpenCine",
             [
                 "Package.swift",
+                "scripts/android-stage-swift-core.sh",
                 "Sources/OpenCineCore",
                 "Sources/OpenCineMedia",
                 "Sources/OpenCineMotion",
