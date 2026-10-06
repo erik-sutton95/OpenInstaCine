@@ -740,7 +740,7 @@ struct MediaPlayerView: View {
         }
         if model.assist.isPlaybackVisible(.audioMeters) {
             AudioMeterOverlay(
-                levels: playbackAudioLevels, sensitivity: nil,
+                stores: .app, levels: playbackAudioLevels, sensitivity: nil,
                 bounds: canvas, chromeClearance: clearance,
                 hapticsEnabled: model.hapticsEnabled,
                 onConfigure: { presentPlaybackAssistOptions(.audioMeters) })
@@ -749,6 +749,7 @@ struct MediaPlayerView: View {
             let transfer =
                 model.monitorTransfer ?? MonitorTransfer(model.assist.monitorColorMode ?? .normal)
             FalseColorReferenceOverlay(
+                stores: .app, looks: .app,
                 scale: model.assist.falseColorScale,
                 transfer: transfer,
                 rec709: model.assist.falseColorRec709,

@@ -1,4 +1,5 @@
 import Foundation
+import OpenCineCameraControls
 import OpenPocketViewCore
 import SwiftUI
 import OpenCineApple
@@ -79,16 +80,6 @@ final class PocketFalseColorMap: @unchecked Sendable {
 extension FalseColorScaleKind {
     var transitionWidth: Double { liveScale.edgeSoftness }
 
-    /// OpenZCine `FalseColorReference.scaleLabel`.
-    var referenceScaleLabel: String {
-        switch self {
-        case .sceneStops: "CineStop"
-        case .stops: "Video"
-        case .ire: "IRE"
-        case .limits: "Limits"
-        }
-    }
-
     /// OpenZCine `FalseColorScale.legendStops` — painted zones in operator order.
     /// Labels come from ``FalseColorAssist/legendLabels(scale:)`` so WAVE-axis
     /// copy can differ from ``LiveColorScience`` without rewriting the mapper.
@@ -127,6 +118,7 @@ struct FalseColorReferenceChrome: View {
 
     var body: some View {
         FalseColorAssist.referenceDisplay(
-            scale: scale, colorMode: colorMode, rec709: rec709, clipByte: clipByte)
+            scale: scale, colorMode: colorMode, rec709: rec709, clipByte: clipByte,
+            looks: .app)
     }
 }
