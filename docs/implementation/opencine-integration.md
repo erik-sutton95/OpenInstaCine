@@ -213,6 +213,12 @@ comma (iPhone `main`'s punctuation for the same lines). Underneath:
   Clean view pins, System buttons and the zebra threshold sliders have screen-reader names, and
   the System buttons take touches across 48 dp around the unchanged capsule (kept fix,
   accessibility).
+- Operator Setup (iPhone) uses OpenCine's settings page. Display shows `main`'s rows (caption,
+  Edit view, one switch per item, then the pins), Sharing's "Show Wi-Fi code" link is yellow
+  again (the move drew it white) and landscape View Assist keeps the tools in one column with EV
+  Meter and LUT beside them (restored to `main`).
+- Android colour dots in the zebra and peaking options show the colour each overlay paints (kept
+  fix: "Amber", "Cyan" and peaking "Blue" drew the app's yellow accent; iPhone already did).
 
 ## Physical device checklist (Luna Ultra, iOS and Android)
 
