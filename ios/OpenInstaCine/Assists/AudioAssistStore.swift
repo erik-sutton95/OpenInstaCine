@@ -1,5 +1,6 @@
 import OpenCineAppKit
 import MonitorPresentation
+import OpenCineCameraControls
 import OpenPocketViewCore
 import MonitorUI
 import SwiftUI
@@ -36,82 +37,66 @@ extension AudioAssist {
             y: min(max(minY, point.y), max(minY, movement.maxY - size.height / 2)))
     }
 
-    @MainActor static var store: MonitorAudioPreferenceStore { MonitorAudioPreferenceStore.shared }
+    @MainActor static var store: MonitorAudioPreferenceStore { AssistPanelStores.app.audio }
 }
 
-// The app selects its storage domain and keeps each pre-existing namespace.
-@MainActor private enum InstaAssistStores {
-    static let waveform = MonitorScopePanelStore<MonitorWaveformOptions>(storage: .standard, key: "OpenInstaCine.WaveformAssist.v1")
-    static let parade = MonitorScopePanelStore<MonitorParadeOptions>(storage: .standard, key: "OpenInstaCine.ParadeAssist.v1")
-    static let vectorscope = MonitorScopePanelStore<MonitorVectorscopeOptions>(storage: .standard, key: "OpenInstaCine.VectorscopeAssist.v1")
-    static let histogram = MonitorScopePanelStore<MonitorHistogramOptions>(storage: .standard, key: "OpenInstaCine.HistogramAssist.v1")
-    static let audio = MonitorAudioPreferenceStore(storage: .standard, key: "OpenInstaCine.Assist.audio.v1")
-    static let reference = MonitorFalseColorReferencePositionStore(storage: .standard, key: "OpenInstaCine.Assist.falseColorReference.positions.v1")
-    static let nd = MonitorNDPreferenceStore(storage: .standard, key: "OpenInstaCine.Assist.ndMeter.v1")
-    static let lights = MonitorTrafficLightsPreferenceStore(storage: .standard,
-        key: "OpenInstaCine.Assist.trafficLights.v1", histogram: histogram)
+extension AssistPanelStores {
+    /// This app's assist panel settings, under its pre-existing key namespace.
+    static let app = AssistPanelStores(storage: .standard, namespace: "OpenInstaCine")
+}
+
+extension WaveformAssist {
+    @MainActor static var store: MonitorScopePanelStore<MonitorWaveformOptions> { AssistPanelStores.app.waveform }
+}
+
+extension ParadeAssist {
+    @MainActor static var store: MonitorScopePanelStore<MonitorParadeOptions> { AssistPanelStores.app.parade }
+}
+
+extension VectorscopeAssist {
+    @MainActor static var store: MonitorScopePanelStore<MonitorVectorscopeOptions> { AssistPanelStores.app.vectorscope }
+}
+
+extension HistogramAssist {
+    @MainActor static var store: MonitorScopePanelStore<MonitorHistogramOptions> { AssistPanelStores.app.histogram }
+}
+
+extension TrafficLightsAssist {
+    @MainActor static var store: MonitorTrafficLightsPreferenceStore { AssistPanelStores.app.trafficLights }
 }
 
 extension MonitorScopePanelStore where Options == MonitorWaveformOptions {
-    static var shared: MonitorScopePanelStore<MonitorWaveformOptions> { InstaAssistStores.waveform }
     convenience init(options: MonitorWaveformOptions = .default) {
         self.init(options: options, storage: .standard, key: "OpenInstaCine.WaveformAssist.v1")
-    }
-    static func load() -> MonitorWaveformOptions {
-        load(storage: .standard, key: "OpenInstaCine.WaveformAssist.v1")
     }
 }
 
 extension MonitorScopePanelStore where Options == MonitorParadeOptions {
-    static var shared: MonitorScopePanelStore<MonitorParadeOptions> { InstaAssistStores.parade }
     convenience init(options: MonitorParadeOptions = .default) {
         self.init(options: options, storage: .standard, key: "OpenInstaCine.ParadeAssist.v1")
-    }
-    static func load() -> MonitorParadeOptions {
-        load(storage: .standard, key: "OpenInstaCine.ParadeAssist.v1")
     }
 }
 
 extension MonitorScopePanelStore where Options == MonitorVectorscopeOptions {
-    static var shared: MonitorScopePanelStore<MonitorVectorscopeOptions> { InstaAssistStores.vectorscope }
     convenience init(options: MonitorVectorscopeOptions = .default) {
         self.init(options: options, storage: .standard, key: "OpenInstaCine.VectorscopeAssist.v1")
-    }
-    static func load() -> MonitorVectorscopeOptions {
-        load(storage: .standard, key: "OpenInstaCine.VectorscopeAssist.v1")
     }
 }
 
 extension MonitorScopePanelStore where Options == MonitorHistogramOptions {
-    static var shared: MonitorScopePanelStore<MonitorHistogramOptions> { InstaAssistStores.histogram }
     convenience init(options: MonitorHistogramOptions = .default) {
         self.init(options: options, storage: .standard, key: "OpenInstaCine.HistogramAssist.v1")
-    }
-    static func load() -> MonitorHistogramOptions {
-        load(storage: .standard, key: "OpenInstaCine.HistogramAssist.v1")
     }
 }
 
 extension MonitorAudioPreferenceStore {
-    static var shared: MonitorAudioPreferenceStore { InstaAssistStores.audio }
     convenience init(defaults: UserDefaults = .standard, key: String = "OpenInstaCine.Assist.audio.v1") {
         self.init(storage: defaults, key: key)
     }
 }
+
 extension MonitorFalseColorReferencePositionStore {
-    static var shared: MonitorFalseColorReferencePositionStore { InstaAssistStores.reference }
     convenience init(defaults: UserDefaults = .standard) {
         self.init(storage: defaults, key: "OpenInstaCine.Assist.falseColorReference.positions.v1")
-    }
-}
-extension MonitorNDPreferenceStore {
-    static var shared: MonitorNDPreferenceStore { InstaAssistStores.nd }
-    convenience init() { self.init(storage: .standard, key: "OpenInstaCine.Assist.ndMeter.v1") }
-}
-extension MonitorTrafficLightsPreferenceStore {
-    static var shared: MonitorTrafficLightsPreferenceStore { InstaAssistStores.lights }
-    convenience init() {
-        self.init(storage: .standard, key: "OpenInstaCine.Assist.trafficLights.v1",
-            histogram: HistogramAssist.store)
     }
 }

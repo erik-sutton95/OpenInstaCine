@@ -3,6 +3,7 @@
     import MonitorPresentation
     import Insta360Apple
     import Insta360Protocol
+    import OpenCineCameraControls
     import OpenCineCore
     import OpenPocketViewCore
     import UIKit
@@ -112,7 +113,7 @@
             HistogramAssist.store.options = .default
             VectorscopeAssist.store.options = .default
             AudioAssist.store.options = .init()
-            FalseColorReferencePositionStore.shared.positions = FalseColorReferencePositions()
+            AssistPanelStores.app.reference.positions = FalseColorReferencePositions()
             WaveformAssist.store.sessionCenter = nil
             WaveformAssist.store.sessionCenterPortrait = nil
             ParadeAssist.store.sessionCenter = nil
