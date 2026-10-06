@@ -17,6 +17,8 @@ extension MonitorTransfer {
         case .dlogm: .dLogM
         case .dlog2: .dLog2
         case .ilog: .iLog
+        // ponytail: no DJI wire mode carries the Nikon curves; Insta never selects them.
+        case .srgb, .nlog, .log3G10: .normal
         }
     }
 
