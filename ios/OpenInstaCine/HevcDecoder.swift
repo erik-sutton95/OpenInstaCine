@@ -4,7 +4,7 @@ import CoreVideo
 import Foundation
 import OpenCineApple
 import OpenCineMedia
-import OpenPocketViewCore
+import OpenInstaViewCore
 import VideoToolbox
 import os
 

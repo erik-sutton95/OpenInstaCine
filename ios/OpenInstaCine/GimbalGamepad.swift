@@ -1,6 +1,6 @@
 import Foundation
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// The shared gamepad bridge on this app's model.
 typealias GimbalGamepadBridge = OpenCineCameraControls.GimbalGamepadBridge<AppModel>

@@ -1,5 +1,5 @@
 import MonitorUI
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// Storefront identity for the shared monitor engine. Applied once at launch,
 /// before any view is built.

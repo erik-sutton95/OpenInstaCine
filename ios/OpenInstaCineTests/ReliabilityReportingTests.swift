@@ -1,6 +1,6 @@
 import Foundation
 import OpenCineAppKit
-import OpenPocketViewCore
+import OpenInstaViewCore
 import Sentry
 import XCTest
 

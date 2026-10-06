@@ -3,7 +3,7 @@ import CoreVideo
 import MonitorPresentation
 import MonitorUI
 import OpenCineApple
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import UIKit
 

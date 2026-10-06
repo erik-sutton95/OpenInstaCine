@@ -1,5 +1,5 @@
 import Foundation
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// A camera seen in a scan (kept from the removed DJI BLE link, which declared it).
 struct FoundCamera: Identifiable, Sendable {

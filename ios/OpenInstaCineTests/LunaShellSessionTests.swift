@@ -3,7 +3,7 @@ import Insta360AppleTestSupport
 import Insta360Protocol
 import OpenCineCore
 import OpenCineMedia
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine

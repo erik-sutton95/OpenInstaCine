@@ -2,7 +2,7 @@ import MonitorPresentation
 import MonitorUI
 import OpenCineApple
 import OpenCineFrameIO
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 struct MediaDeliveryPopupOverlay: View {

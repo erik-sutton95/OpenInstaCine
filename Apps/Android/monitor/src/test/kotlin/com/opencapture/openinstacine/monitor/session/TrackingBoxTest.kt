@@ -1,0 +1,219 @@
+package com.opencapture.openinstacine.monitor.session
+
+import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.FaceAFPolicy
+import com.opencapture.opencine.vocabulary.FaceStructurePolicy
+import com.opencapture.opencine.vocabulary.FaceTrackHold
+import com.opencapture.opencine.vocabulary.FaceTrackTap
+import com.opencapture.opencine.vocabulary.FocusOverlay
+import com.opencapture.opencine.vocabulary.FocusOverlayPolicy
+import com.opencapture.opencine.vocabulary.FocusResetPolicy
+import com.opencapture.opencine.vocabulary.LiveFeedFocusGesture
+import com.opencapture.opencine.vocabulary.LiveTrackingChrome
+import com.opencapture.opencine.vocabulary.TrackingBox
+import com.opencapture.opencine.vocabulary.TrackingStartPolicy
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class TrackingBoxTest {
+
+    @Test
+    fun overlayAndTapPoliciesMatchIos() {
+        val search = TrackingBox(0.2, 0.2, 0.4, 0.4)
+        val face = TrackingBox(0.31, 0.21, 0.18, 0.26)
+        assertTrue(FocusOverlayPolicy.resolve(false, search, null) is FocusOverlay.Search)
+        assertTrue(FocusOverlayPolicy.resolve(true, search, null) is FocusOverlay.Subject)
+        assertTrue(
+            FaceAFPolicy.resolve(
+                CameraCommands.FOCUS_CONTINUOUS, false, null, null, face,
+            ) is FocusOverlay.Face,
+        )
+        assertTrue(
+            FaceAFPolicy.resolve(
+                CameraCommands.FOCUS_SINGLE, false, null, null, face,
+            ) is FocusOverlay.Focus,
+        )
+        assertTrue(FaceAFPolicy.wantsFaceAF(CameraCommands.FOCUS_CONTINUOUS, true))
+        assertTrue(!FaceAFPolicy.wantsFaceAF(CameraCommands.FOCUS_CONTINUOUS, false))
+        assertTrue(!FaceAFPolicy.wantsFaceAF(CameraCommands.FOCUS_SINGLE, true))
+        assertTrue(
+            FaceAFPolicy.wantsFaceDetect(
+                CameraCommands.FOCUS_SINGLE,
+                armed = true,
+                facePriority = true,
+                expoAuto = true,
+            ),
+        )
+        assertTrue(
+            !FaceAFPolicy.wantsFaceDetect(
+                CameraCommands.FOCUS_SINGLE,
+                armed = true,
+                facePriority = true,
+                expoAuto = false,
+            ),
+        )
+        assertTrue(FaceAFPolicy.shouldHoldTapBox(0.4))
+        assertTrue(FaceAFPolicy.shouldHoldTapBox(2.4))
+        assertTrue(!FaceAFPolicy.shouldHoldTapBox(2.5))
+        assertTrue(!FaceAFPolicy.shouldHoldTapBox(null))
+        val overlay = FocusOverlay.Face(face)
+        assertEquals(FaceTrackTap.trackingBox(face), FaceTrackTap.boxIfTapped(overlay, 0.40, 0.34))
+        assertNull(FaceTrackTap.boxIfTapped(FocusOverlay.Focus, 0.40, 0.34))
+        assertNull(FaceTrackTap.boxIfTapped(overlay, 0.10, 0.10))
+        assertTrue(!FocusResetPolicy.isAvailable(0.50, 0.50, tracking = false))
+        assertTrue(FocusResetPolicy.isAvailable(0.55, 0.50, tracking = false))
+        assertTrue(FocusResetPolicy.isAvailable(0.50, 0.50, tracking = true))
+        assertTrue(search.isTooSmall.not())
+        assertTrue(TrackingBox(0.4, 0.4, 0.05, 0.05).isTooSmall)
+    }
+
+    @Test
+    fun feedGestureClassifyMatchesIos() {
+        assertEquals(LiveFeedFocusGesture.Kind.TAP, LiveFeedFocusGesture.classify(4f, -3f))
+        assertEquals(LiveFeedFocusGesture.Kind.TAP, LiveFeedFocusGesture.classify(0f, 0f))
+        assertNull(LiveFeedFocusGesture.classify(30f, 8f))
+        assertEquals(
+            LiveFeedFocusGesture.Kind.TRACK,
+            LiveFeedFocusGesture.classify(30f, 8f, armed = true),
+        )
+        assertEquals(
+            LiveFeedFocusGesture.Kind.TAP,
+            LiveFeedFocusGesture.classify(4f, 3f, armed = true),
+        )
+        assertEquals(LiveFeedFocusGesture.Kind.DISP_CLEAN, LiveFeedFocusGesture.classify(0f, 45f))
+        assertEquals(LiveFeedFocusGesture.Kind.DISP_LIVE, LiveFeedFocusGesture.classify(0f, -45f))
+        assertNull(LiveFeedFocusGesture.classify(4f, -3f, pinched = true))
+        assertEquals(
+            LiveFeedFocusGesture.Kind.AE_LOCK,
+            LiveFeedFocusGesture.classify(4f, 3f, armed = true, aeLockHeld = true),
+        )
+        assertEquals(
+            LiveFeedFocusGesture.Kind.TRACK,
+            LiveFeedFocusGesture.classify(30f, 8f, armed = true, aeLockHeld = true),
+        )
+    }
+
+    @Test
+    fun pressOnTheFocusBoxHitsItWithAFingersMargin() {
+        // iOS `testPressOnTheFocusBoxHitsItWithAFingersMargin`: box side 63, reach 31.5 + 14.
+        fun hits(x: Float, y: Float, focus: Pair<Float, Float>, mirrored: Boolean, flipV: Boolean = false) =
+            LiveFeedFocusGesture.hitsFocusBox(x, y, focus, 800f, 450f, mirrored, flipV)
+        val focus = 0.25f to 0.5f // (200, 225) in the well
+        assertTrue(hits(200f, 225f, focus, mirrored = false))
+        assertTrue(hits(245f, 180f, focus, mirrored = false))
+        assertTrue(!hits(247f, 225f, focus, mirrored = false))
+        // Mirrored preview: the box is drawn at 1 - x.
+        assertTrue(hits(600f, 225f, focus, mirrored = true))
+        assertTrue(!hits(200f, 225f, focus, mirrored = true))
+        assertTrue(hits(200f, 450f - 100f, 0.25f to 100f / 450f, mirrored = false, flipV = true))
+    }
+
+    @Test
+    fun faceHoldSurvivesBriefMissAndDropsAfterTimeout() {
+        val locked = TrackingBox(0.40, 0.30, 0.20, 0.25)
+        assertTrue(!FaceTrackHold.shouldDrop(0.15))
+        assertTrue(FaceTrackHold.shouldDrop(0.22))
+        val nearby = TrackingBox(0.44, 0.32, 0.18, 0.24)
+        assertTrue(FaceTrackHold.shouldAccept(nearby, locked, 0.10))
+        val far = TrackingBox(0.05, 0.70, 0.18, 0.22)
+        assertTrue(!FaceTrackHold.shouldAccept(far, locked, 0.10))
+        assertTrue(FaceTrackHold.shouldAccept(far, locked, 0.25))
+        assertTrue(FaceTrackHold.shouldAccept(far, null, 0.0))
+        assertTrue(!FaceTrackHold.shouldDrop(0.12, sceneMoving = true))
+        assertTrue(FaceTrackHold.shouldDrop(0.18, sceneMoving = true))
+        assertTrue(!FaceTrackHold.shouldDrop(0.18))
+        assertTrue(FaceTrackHold.isSceneMoving(0.0))
+        assertTrue(FaceTrackHold.isSceneMoving(0.29))
+        assertTrue(!FaceTrackHold.isSceneMoving(0.30))
+        assertTrue(!FaceTrackHold.isSceneMoving(null))
+        assertTrue(FaceTrackHold.secondsSinceHit(null, 1_000L).isInfinite())
+        assertEquals(0.22, FaceTrackHold.secondsSinceHit(1_000L, 1_220L), 0.001)
+        val from = TrackingBox(0.40, 0.30, 0.20, 0.25)
+        val tall = TrackingBox(0.40, 0.22, 0.14, 0.28)
+        val eased = FaceTrackHold.follow(from, tall, 1.0 / 25.0, sceneMoving = false)
+        assertEquals(0.197, eased.width, 0.01)
+        assertTrue(kotlin.math.abs(eased.width - from.width) < kotlin.math.abs(eased.width - tall.width))
+    }
+
+    @Test
+    fun faceStructureNeedsEyesNotAnOval() {
+        assertTrue(FaceStructurePolicy.hasFaceLandmarks(0.30, 0.70, hasNose = false))
+        assertTrue(!FaceStructurePolicy.hasFaceLandmarks(0.48, 0.52, hasNose = false))
+        assertTrue(FaceStructurePolicy.hasFaceLandmarks(0.35, null, hasNose = true))
+        assertTrue(!FaceStructurePolicy.hasFaceLandmarks(null, null, hasNose = false))
+        assertTrue(!FaceStructurePolicy.hasFaceLandmarks(null, null, hasNose = true))
+    }
+
+    @Test
+    fun cancelSitsOnTopRightCornerOfTrackingBox() {
+        val box = TrackingBox(0.20, 0.20, 0.40, 0.40)
+        val feedW = 640f
+        val feedH = 360f
+        val cancel = LiveTrackingChrome.cancelRect(box, feedW, feedH, mirrored = false)
+        val subjectRight = (0.20f + 0.40f) * feedW
+        val subjectTop = 0.20f * feedH
+        assertEquals(LiveTrackingChrome.CANCEL_HIT_SIZE, cancel.width, 0.05f)
+        assertEquals(LiveTrackingChrome.CANCEL_HIT_SIZE, cancel.height, 0.05f)
+        assertEquals(subjectRight, cancel.midX, 0.5f)
+        assertEquals(subjectTop, cancel.midY, 0.5f)
+        val mirrored = LiveTrackingChrome.cancelRect(box, feedW, feedH, mirrored = true)
+        val mirroredRight = ((1.0 - 0.20 - 0.40).toFloat() + 0.40f) * feedW
+        assertEquals(mirroredRight, mirrored.midX, 0.5f)
+        assertEquals(subjectTop, mirrored.midY, 0.5f)
+    }
+
+    @Test
+    fun imageRectMapsToNormalizedTopLeftBox() {
+        val box = TrackingBox.fromImageRect(160, 90, 320, 270, 640, 360)!!
+        assertEquals(0.25, box.x, 1e-9)
+        assertEquals(0.25, box.y, 1e-9)
+        assertEquals(0.25, box.width, 1e-9)
+        assertEquals(0.50, box.height, 1e-9)
+        assertNull(TrackingBox.fromImageRect(0, 0, 4, 4, 640, 360))
+        assertNull(TrackingBox.fromImageRect(0, 0, 10, 10, 4, 4))
+    }
+
+    @Test
+    fun overlayMirrorsCameraSpaceFaceOntoDisplayedPicture() {
+        // Face on the right in identity/camera space. TT180/MIRROR shows it on
+        // the left; the overlay must mirror too or the bracket sits opposite.
+        val camera = TrackingBox.fromCenter(0.75, 0.40, 0.20, 0.28)
+        val drawn = camera.mirrored()
+        assertEquals(1.0 - camera.centerX, drawn.centerX, 1e-9)
+        assertEquals(camera.centerY, drawn.centerY, 1e-9)
+        assertTrue(drawn.centerX < 0.5)
+        assertTrue(camera.centerX > 0.5)
+    }
+
+    @Test
+    fun verticalFlipMapsBoxesAndCancelThroughTheUnderslungPicture() {
+        val camera = TrackingBox(0.1, 0.2, 0.3, 0.4)
+        val v = camera.flipped(horizontal = false, vertical = true)
+        assertEquals(0.1, v.x, 1e-9)
+        assertEquals(0.4, v.y, 1e-9)
+        val both = camera.flipped(horizontal = true, vertical = true)
+        assertEquals(0.6, both.x, 1e-9)
+        assertEquals(0.4, both.y, 1e-9)
+        val back = both.flipped(horizontal = true, vertical = true)
+        assertEquals(camera.x, back.x, 1e-9)
+        assertEquals(camera.y, back.y, 1e-9)
+        // Cancel sits on the drawn top-right corner: y follows the flipped top edge.
+        val cancel = LiveTrackingChrome.cancelRect(camera, 100f, 100f, mirrored = false, flippedVertically = true)
+        assertEquals(40f - LiveTrackingChrome.CANCEL_HIT_SIZE / 2f, cancel.y, 1e-3f)
+    }
+
+    @Test
+    fun freshTrackIgnoresTheCameraPreviousSubject() {
+        val obj = TrackingBox.fromCenter(0.7, 0.5, 0.14, 0.25)
+        val face = TrackingBox.fromCenter(0.2, 0.3, 0.1, 0.15)
+        val lock = TrackingBox.fromCenter(0.72, 0.52, 0.1, 0.2)
+        assertFalse(TrackingStartPolicy.accepts(face, obj, 0.3))
+        assertTrue(TrackingStartPolicy.accepts(lock, obj, 0.3))
+        // After the settle window the camera's subject is trusted wherever it is.
+        assertTrue(TrackingStartPolicy.accepts(face, obj, 2.0))
+        assertTrue(TrackingStartPolicy.accepts(face, null, null))
+    }
+}

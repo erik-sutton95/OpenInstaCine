@@ -1,7 +1,7 @@
 import AVFoundation
 import MonitorUI
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// Pocket monitor tools around a remote source. Never opens a camera session.

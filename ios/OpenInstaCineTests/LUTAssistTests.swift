@@ -2,7 +2,7 @@ import CoreImage
 import Metal
 import OpenCineApple
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine

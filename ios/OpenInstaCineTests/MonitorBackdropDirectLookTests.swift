@@ -2,7 +2,7 @@ import CoreImage
 import CoreVideo
 import MonitorPresentation
 import OpenCineApple
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import MonitorUI

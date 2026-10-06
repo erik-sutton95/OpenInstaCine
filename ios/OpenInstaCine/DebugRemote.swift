@@ -5,7 +5,7 @@
     import MonitorPresentation
     import Network
     import OpenCineCameraControls
-    import OpenPocketViewCore
+    import OpenInstaViewCore
     import UIKit
 
     /// DEBUG-only remote control for on-device testing without XCUITest.

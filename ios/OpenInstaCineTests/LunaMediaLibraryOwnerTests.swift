@@ -2,7 +2,7 @@ import Foundation
 import OpenCineCore
 import OpenCineAppKit
 import OpenCineMedia
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 @testable import OpenInstaCine
 

@@ -1,7 +1,7 @@
 import Foundation
 import OpenCineAppKit
 import OpenCineCore
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// The app's typed adapters onto the shared monitor controls (`MonitorControlModel`, SHELL-03).
 ///

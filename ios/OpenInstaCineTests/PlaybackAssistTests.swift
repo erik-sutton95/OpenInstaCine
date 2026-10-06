@@ -2,7 +2,7 @@ import AVFoundation
 import CoreImage
 import CoreVideo
 import Metal
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 import OpenCineAppKit
 import OpenCineCameraControls

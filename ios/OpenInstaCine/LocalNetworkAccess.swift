@@ -1,6 +1,6 @@
 import Foundation
 import Network
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// iOS Local Network privacy (TN3179). There is no API to read or request it: the
 /// first local-network operation shows the system prompt, and a denial surfaces only

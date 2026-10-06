@@ -3,7 +3,7 @@ import Foundation
 import Insta360Apple
 import Insta360Protocol
 import OpenCineCore
-import OpenPocketViewCore
+import OpenInstaViewCore
 
 /// The operator's held gimbal stick; `LunaMotionService` streams its MOVEs.
 struct LunaStickStream {
@@ -237,7 +237,7 @@ extension CameraSession {
 
     // MARK: - Focus mode and metering
 
-    func setFocusMode(_ mode: OpenPocketViewCore.FocusMode) {
+    func setFocusMode(_ mode: OpenInstaViewCore.FocusMode) {
         setFocusOption(mode == .single ? .single : .continuousDefault)
     }
 

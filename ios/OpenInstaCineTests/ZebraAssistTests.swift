@@ -1,6 +1,6 @@
 import CoreImage
 import OpenCineApple
-import OpenPocketViewCore
+import OpenInstaViewCore
 import OpenCineCameraControls
 import XCTest
 

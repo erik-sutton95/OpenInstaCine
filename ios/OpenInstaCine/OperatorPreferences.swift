@@ -3,7 +3,7 @@ import MonitorPresentation
 import MonitorUI
 import OpenCineAppKit
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 enum OperatorPrefs {

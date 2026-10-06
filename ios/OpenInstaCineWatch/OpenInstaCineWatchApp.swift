@@ -1,5 +1,5 @@
 import OpenCineWatch
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// OpenInstaCine watchOS companion. Mirrors the iPhone monitor on the wrist: a 16:9

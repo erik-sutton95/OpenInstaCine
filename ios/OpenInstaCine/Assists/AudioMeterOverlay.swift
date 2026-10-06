@@ -1,5 +1,5 @@
 import OpenCineCameraControls
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// Keeps frequent audio observations inside the meter, not the scope host.

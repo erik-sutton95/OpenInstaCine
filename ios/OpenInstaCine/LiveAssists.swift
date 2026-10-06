@@ -4,7 +4,7 @@ import OpenCineAppKit
 import OpenCineCameraControls
 import OpenCineMedia
 import Observation
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import UIKit
 

@@ -1,0 +1,128 @@
+package com.opencapture.openinstacine.monitor.media
+
+import android.content.Context
+import android.content.SharedPreferences
+import com.opencapture.openinstacine.monitor.OperatorPrefs
+import org.json.JSONObject
+import java.io.File
+import com.opencapture.opencine.vocabulary.MediaHTTP
+import com.opencapture.opencine.vocabulary.MediaFile
+import com.opencapture.opencine.vocabulary.MediaCacheGrade
+
+class MediaCache(
+    private val filesDir: File,
+    private val prefs: SharedPreferences,
+) {
+    private var colorMapCameraId: String? = null
+    private var colorMapCache: JSONObject? = null
+    fun cacheRoot(cameraId: String): File =
+        File(filesDir, "OpenPocketCine/media/$cameraId")
+
+    fun thumbnailFile(cameraId: String, file: MediaFile): File =
+        File(File(cacheRoot(cameraId), "thumbs"), cacheName(file.thumbPath) + ".jpg")
+
+    fun fileCache(cameraId: String, file: MediaFile): File =
+        File(File(cacheRoot(cameraId), "files"), cacheName(file.path))
+
+    fun playbackCache(cameraId: String, file: MediaFile, path: String): File {
+        if (path == file.path) return fileCache(cameraId, file)
+        return File(File(cacheRoot(cameraId), "play"), MediaHTTP.playbackCacheFileName(path))
+    }
+
+    fun catalogFile(cameraId: String): File = File(cacheRoot(cameraId), "index.json")
+
+    fun existingFile(file: File): File? {
+        if (!file.isFile || file.length() <= 0L) return null
+        return file
+    }
+
+    fun isDownloaded(file: MediaFile, cameraId: String): Boolean {
+        val onDisk = existingFile(fileCache(cameraId, file)) ?: return false
+        return isCompleteDownload(onDisk.length(), file.sizeBytes)
+    }
+
+    fun localPlaybackFile(file: MediaFile, cameraId: String): File? {
+        localProxyFile(file, cameraId)?.let { return it }
+        if (isDownloaded(file, cameraId)) return fileCache(cameraId, file)
+        return null
+    }
+
+    /** 720p LRF/XRF sidecar, never the 4K original. */
+    fun localProxyFile(file: MediaFile, cameraId: String): File? {
+        for (path in MediaHTTP.proxyPaths(file)) {
+            existingFile(playbackCache(cameraId, file, path))?.let { return it }
+        }
+        return null
+    }
+
+    fun isAvailableOffline(file: MediaFile, cameraId: String): Boolean =
+        localPlaybackFile(file, cameraId) != null
+
+    fun cacheGrade(file: MediaFile, cameraId: String): MediaCacheGrade =
+        MediaCacheGrade.resolve(
+            hasOriginal = isDownloaded(file, cameraId),
+            hasProxy = localProxyFile(file, cameraId) != null,
+        )
+
+    fun colorStoreFile(cameraId: String): File = File(cacheRoot(cameraId), "color.json")
+
+    fun shotColor(path: String, cameraId: String, context: Context? = null): Int {
+        migrateLegacyShotColors(cameraId, context)
+        val map = loadColorMap(cameraId)
+        return map.optInt(path, -1)
+    }
+
+    fun rememberShotColor(path: String, colorMode: Int, cameraId: String) {
+        if (colorMode < 0) return
+        val map = loadColorMap(cameraId)
+        map.put(path, colorMode)
+        persistColorMap(map, cameraId)
+    }
+
+    private fun loadColorMap(cameraId: String): JSONObject {
+        if (colorMapCameraId == cameraId) colorMapCache?.let { return it }
+        val dest = colorStoreFile(cameraId)
+        val map =
+            if (!dest.isFile) JSONObject()
+            else runCatching { JSONObject(dest.readText()) }.getOrDefault(JSONObject())
+        colorMapCameraId = cameraId
+        colorMapCache = map
+        return map
+    }
+
+    private fun persistColorMap(map: JSONObject, cameraId: String) {
+        colorMapCameraId = cameraId
+        colorMapCache = map
+        val dest = colorStoreFile(cameraId)
+        dest.parentFile?.mkdirs()
+        dest.writeText(map.toString())
+    }
+
+    private fun migrateLegacyShotColors(cameraId: String, context: Context?) {
+        val ctx = context ?: return
+        val raw = OperatorPrefs.legacyClipShotColorJson(ctx) ?: return
+        val map = loadColorMap(cameraId)
+        val keys = raw.keys()
+        while (keys.hasNext()) {
+            val path = keys.next()
+            if (!map.has(path)) map.put(path, raw.optInt(path, -1))
+        }
+        persistColorMap(map, cameraId)
+        OperatorPrefs.clearLegacyClipShotColor(ctx)
+    }
+
+    companion object {
+        private const val LAST_CAMERA_KEY = "opc.media.lastCameraID"
+
+        fun favoritesKey(cameraId: String): String = "opc.media.fav.$cameraId"
+
+        fun cacheName(path: String): String = path.replace("/", "_")
+
+        /** Complete only at the expected length (OpenZCine cache contract). */
+        fun isCompleteDownload(onDisk: Long, sizeBytes: Long): Boolean {
+            if (onDisk <= 0L) return false
+            if (sizeBytes <= 0L) return true
+            return onDisk == sizeBytes
+        }
+    }
+}

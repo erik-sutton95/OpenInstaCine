@@ -10,16 +10,16 @@ import PackageDescription
 // Shared UI (MonitorPresentation, MonitorUI) comes from the OpenCine package,
 // consumed by ios/project.yml, not from this manifest.
 let package = Package(
-    name: "OpenPocketViewCore",
+    name: "OpenInstaViewCore",
     // macOS 13: OpenCine's minimum (host `swift test` only; no macOS app ships).
     platforms: [.iOS(.v17), .macOS(.v13), .watchOS(.v10)],
     products: [
-        .library(name: "OpenPocketViewCore", targets: ["OpenPocketViewCore"]),
+        .library(name: "OpenInstaViewCore", targets: ["OpenInstaViewCore"]),
         // JNI facade consumed by the Android app (`just android-core`). The JNI
         // shims are `#if os(Android)`-gated; on Darwin only the wire helpers
         // compile, so iOS/macOS behavior is unchanged.
         .library(
-            name: "OpenPocketCineAndroid", type: .dynamic, targets: ["OpenPocketCineAndroidFacade"]),
+            name: "OpenInstaCineAndroid", type: .dynamic, targets: ["OpenInstaCineAndroidFacade"]),
     ],
     dependencies: [
         // Portable media math (OpenCineMedia), shared gimbal motion (OpenCineMotion) and the
@@ -29,7 +29,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "OpenPocketViewCore",
+            name: "OpenInstaViewCore",
             dependencies: [
                 .product(name: "OpenCineCore", package: "OpenCine"),
                 .product(name: "OpenCineMedia", package: "OpenCine"),
@@ -42,21 +42,21 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "OpenPocketViewCoreTests",
+            name: "OpenInstaViewCoreTests",
             // Insta360Apple: the shell reach is checked against what the Luna integration declares.
-            dependencies: ["OpenPocketViewCore", .product(name: "Insta360Apple", package: "OpenCine")]
+            dependencies: ["OpenInstaViewCore", .product(name: "Insta360Apple", package: "OpenCine")]
         ),
         .target(
-            name: "OpenPocketCineAndroidFacade",
+            name: "OpenInstaCineAndroidFacade",
             dependencies: [
-                "OpenPocketViewCore",
+                "OpenInstaViewCore",
                 .product(name: "OpenCineCameraVocabulary", package: "OpenCine"),
                 .product(name: "OpenCineJNISupport", package: "OpenCine"),
             ]
         ),
         .testTarget(
-            name: "OpenPocketCineAndroidFacadeTests",
-            dependencies: ["OpenPocketCineAndroidFacade", "OpenPocketViewCore"]
+            name: "OpenInstaCineAndroidFacadeTests",
+            dependencies: ["OpenInstaCineAndroidFacade", "OpenInstaViewCore"]
         ),
     ]
 )

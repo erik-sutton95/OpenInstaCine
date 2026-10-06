@@ -1,7 +1,7 @@
 import AVFoundation
 import OpenCineAppKitApple
 import OpenCineApple
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import UIKit
 

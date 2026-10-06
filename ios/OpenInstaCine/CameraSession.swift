@@ -11,7 +11,7 @@ import class OpenCineCore.LocalVPNNotice
 import struct OpenCineCore.CameraSessionID
 import struct OpenCineCore.CameraValuePin
 import OpenCineMedia
-import OpenPocketViewCore
+import OpenInstaViewCore
 import UIKit
 import os
 

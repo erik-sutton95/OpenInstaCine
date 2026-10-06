@@ -4,7 +4,7 @@ import MonitorPresentation
 import MonitorUI
 import OpenCineCameraControls
 import OpenCineCore
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// Capability translation for the Luna adapter (type name kept from the shared shell so
