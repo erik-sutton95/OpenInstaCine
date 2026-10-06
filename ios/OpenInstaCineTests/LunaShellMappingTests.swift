@@ -19,6 +19,33 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertEqual(fourK25.value, 48)
     }
 
+    /// ISO steps exactly as on Insta main, which always sorted the list by value. The shared
+    /// stepping sorts only when 160 is listed; Insta's lists are ascending, so both agree.
+    func testIsoSteppingMatchesMain() {
+        func mainStepped(from current: IsoIndex, stops: Int, available: [IsoIndex]) -> IsoIndex? {
+            let list = available.filter { $0 != .auto && ($0 != .iso160 || current == .iso160) }
+                .sorted { ($0.isoValue ?? 0) < ($1.isoValue ?? 0) }
+            guard current != .auto, let index = list.firstIndex(of: current) else { return nil }
+            let next = index + stops
+            guard list.indices.contains(next), next != index else { return nil }
+            return list[next]
+        }
+        let lists = [
+            LunaShellMapping.isoIndices, ColorMode.iLog.isoIndices, ColorMode.dolbyVision.isoIndices,
+            ColorMode.normal.isoIndices, LunaShellMapping.isoIndices.filter { $0 != .iso160 },
+        ]
+        for available in lists {
+            for current in IsoIndex.allCases {
+                for stops in [-2, -1, 1, 2] {
+                    XCTAssertEqual(
+                        IsoIndex.stepped(from: current, stops: stops, available: available),
+                        mainStepped(from: current, stops: stops, available: available),
+                        "\(current) \(stops) in \(available)")
+                }
+            }
+        }
+    }
+
     func testColorAndModeRoundTrip() {
         for luna in [LunaColorMode.standard, .iLog, .dolbyVision] {
             XCTAssertEqual(
