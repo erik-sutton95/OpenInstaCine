@@ -209,18 +209,7 @@ struct SettingsRootView: View {
     // MARK: - Sharing
 
     @ViewBuilder private var sharingRows: some View {
-        if model.session.isMultiviewBorrowed {
-            SettingsRowCard {
-                MonitorSettingsInlineRow(
-                    title: "Sharing unavailable in Multiview",
-                    help:
-                        "Connect to one camera from Your cameras to share its feed with watchers.",
-                    showTopDivider: false
-                ) {
-                    EmptyView()
-                }
-            }
-        } else if model.isLive {
+        if model.isLive {
             let priorities = ["Quality", "High", "Medium", "Steady"]
             MonitorFeedSharingSettings(
                 sharing: Binding(get: { model.shareThisFeed }, set: model.setShareThisFeed),
