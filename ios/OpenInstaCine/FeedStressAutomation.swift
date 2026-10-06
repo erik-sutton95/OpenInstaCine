@@ -16,6 +16,12 @@ enum FeedStressAutomation {
 
     static var isEnabled: Bool { enabled }
 
+    /// Debug stress log token. A Luna session records `live` or `none`.
+    /// The seam does not reconnect a saved camera.
+    static func reconnectRecord(phaseIsLive: Bool) -> String {
+        phaseIsLive ? "live" : "none"
+    }
+
     static var injectionDidActivate: Bool {
         #if DEBUG
             return FeedStressRuntime.shared.injectionDidActivate
@@ -528,7 +534,7 @@ enum FeedStressAutomation {
                 return "unknown"
             }()
             captureBaselineIfNeeded()
-            reconnectPocket4ProIfNeeded()
+            recordReconnect()
             lock.withLock { state in
                 state.recording = recording
                 if family != "unknown" { state.cameraFamily = family }
@@ -552,31 +558,12 @@ enum FeedStressAutomation {
         }
 
         @MainActor
-        private func reconnectPocket4ProIfNeeded() {
+        private func recordReconnect() {
             guard !reconnectAttempted else { return }
             guard let model = AppModelDiagnosticsAnchor.model else { return }
-            if model.session.phase == .live {
-                reconnectAttempted = true
-                lock.withLock { $0.reconnect = "live" }
-                return
-            }
-            let matches = model.savedCameras.filter {
-                Self.isPocket4Pro(model: $0.model, modelId: $0.extras["modelId"])
-            }
-            if matches.count != 1 {
-                reconnectAttempted = true
-                lock.withLock { $0.reconnect = matches.isEmpty ? "none" : "ambiguous" }
-                return
-            }
             reconnectAttempted = true
-            lock.withLock { $0.reconnect = "requested" }
-            model.reconnect(matches[0])
-        }
-
-        private static func isPocket4Pro(model: String, modelId: String?) -> Bool {
-            if modelId == "34" { return true }
-            let name = model.lowercased().replacingOccurrences(of: " ", with: "")
-            return name.contains("pocket4p") || name.contains("4pro")
+            let record = FeedStressAutomation.reconnectRecord(phaseIsLive: model.session.phase == .live)
+            lock.withLock { $0.reconnect = record }
         }
 
         @MainActor
