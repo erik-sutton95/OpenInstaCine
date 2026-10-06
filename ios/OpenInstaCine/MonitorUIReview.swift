@@ -3,6 +3,7 @@
     import MonitorPresentation
     import Insta360Apple
     import Insta360Protocol
+    import OpenCineCameraControls
     import OpenCineCore
     import OpenPocketViewCore
     import UIKit
@@ -25,6 +26,16 @@
 
         /// The shared cameras model's inputs for a review: a scripted Luna backend and a private
         /// defaults domain holding the two saved cameras as the shipping app stored them.
+        /// Media favorites persist per camera. Every review starts with none, so a review that
+        /// favorites a clip cannot take "Add favorite" away from the next one. Runs before the
+        /// session builds its library, which reads them once.
+        static func resetMediaFavorites() {
+            for key in UserDefaults.standard.dictionaryRepresentation().keys
+            where key.hasPrefix("opc.media.fav.") {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+
         static func cameras() -> (any LunaConnectPort, UserDefaults) {
             // Installed-build reviews use the existing store without reseeding it.
             if ProcessInfo.processInfo.environment["OPV_UI_REVIEW_STORED_CAMERAS"] == "1" {
@@ -102,7 +113,7 @@
             HistogramAssist.store.options = .default
             VectorscopeAssist.store.options = .default
             AudioAssist.store.options = .init()
-            FalseColorReferencePositionStore.shared.positions = FalseColorReferencePositions()
+            AssistPanelStores.app.reference.positions = FalseColorReferencePositions()
             WaveformAssist.store.sessionCenter = nil
             WaveformAssist.store.sessionCenterPortrait = nil
             ParadeAssist.store.sessionCenter = nil

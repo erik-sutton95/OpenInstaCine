@@ -3,6 +3,7 @@ import CoreImage
 import CoreVideo
 import MonitorUI
 import OpenCineApple
+import OpenCineCameraControls
 import OpenPocketViewCore
 import XCTest
 
