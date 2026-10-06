@@ -1116,6 +1116,10 @@ final class MonitorUIFlowTests: XCTestCase {
         clean.tap()
         let changedClean = originalClean == "On" ? "Off" : "On"
         XCTAssertEqual(clean.value as? String, changedClean)
+        // main offers every clean view pin, AUDIO included, whatever the camera declares.
+        let audioPin = app.buttons["monitor.settings.display.toggle.clean.pin.AUDIO"]
+        for _ in 0..<12 where !audioPin.isHittable { app.swipeUp() }
+        XCTAssertTrue(audioPin.isHittable, "Clean view offers the AUDIO pin")
         capture("SIMULATED-common-display-clean-controls")
         app.terminate()
         app.launch()
