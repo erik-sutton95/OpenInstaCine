@@ -37,6 +37,9 @@ final class AppModel {
     var discoveryFailure: ConnectionFailure?
 
     init(session: CameraSession? = nil) {
+        #if targetEnvironment(simulator)
+            if session == nil, MonitorUIReview.isActive { MonitorUIReview.resetMediaFavorites() }
+        #endif
         let mediaStorage = MonitorMediaCacheStorage()
         let session = session ?? CameraSession(backend: Self.makeBackend(), mediaStorage: mediaStorage)
         self.session = session
