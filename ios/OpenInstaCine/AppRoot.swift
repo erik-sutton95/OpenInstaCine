@@ -32,8 +32,8 @@ final class AppModel {
     let shell: ShellModel
     /// The shared common controls of the camera on the monitor.
     var control: MonitorControlModel { shell.control }
-    /// Why Bluetooth discovery is not running (off or not allowed); the pair page's Luna slot
-    /// shows it with Open Settings.
+    /// Why Bluetooth discovery is not running (off or not allowed); the pair wizard shows it as
+    /// its failure.
     var discoveryFailure: ConnectionFailure?
 
     init(session: CameraSession? = nil) {
@@ -50,7 +50,7 @@ final class AppModel {
         #endif
         integration = LunaIntegration(port: port)
         cameras = CamerasModel(
-            integrations: [AppIntegration(integration, slots: IntegrationSlots(pairing: { AnyView(LunaPairingTips()) }))],
+            integrations: [AppIntegration(integration, slots: IntegrationSlots(nearbyCard: Self.nearbyCard))],
             store: Self.camerasStore(defaults))
         shell = ShellModel(cameras: cameras, control: session.control)
         integration.onDiscoveryFailure = { [weak self] in self?.discoveryFailure = $0 }
@@ -60,6 +60,11 @@ final class AppModel {
             self.assist.inspectorSceneActive = active
             if active { self.session.noteSceneBecameActive() } else { self.session.noteSceneBecameInactive() }
         }
+    }
+
+    /// A nearby Luna as the cameras page and pair page have always shown it.
+    static func nearbyCard(_ camera: NearbyCamera) -> NearbyCardCopy {
+        NearbyCardCopy(name: camera.name, subtitle: "Insta360 · nearby", status: "Needs approval on the camera")
     }
 
     /// The saved cameras: the shared document `OpenInstaCine.Cameras`, merged on every launch with

@@ -39,6 +39,8 @@ import com.opencapture.opencine.appkit.AppIntegration
 import com.opencapture.opencine.appkit.BodyRecordsV0
 import com.opencapture.opencine.appkit.CamerasModel
 import com.opencapture.opencine.appkit.IntegrationSlots
+import com.opencapture.opencine.appkit.NearbyCardCopy
+import com.opencapture.opencine.core.NearbyCamera
 import com.opencapture.opencine.appkit.SavedCamerasStore
 import com.opencapture.opencine.appkit.ShellModel
 import com.opencapture.opencine.appkit.StoredString
@@ -47,7 +49,6 @@ import com.opencapture.opencine.core.SavedCamera
 import com.opencapture.opencine.core.SessionCloseReason
 import com.opencapture.opencine.insta360.luna.LunaFailures
 import com.opencapture.opencine.insta360.luna.LunaIntegration
-import com.opencapture.openpocketcine.pairing.LocalPairingCallouts
 import com.opencapture.openpocketcine.assists.LiveAssistState
 import com.opencapture.openpocketcine.assists.createLiveAssistState
 import com.opencapture.openpocketcine.diagnostics.DiagnosticCenter
@@ -87,12 +88,12 @@ class AppModel(
 
     /**
      * Cameras and pairing through the shared OpenCine flow (SHELL-02): the Luna integration over
-     * the session's port, its pairing callouts from the activity. No integration for a backend that
+     * the session's port, with its nearby cards in this app's words. No integration for a backend that
      * is not a Luna port (the debug local replay starts itself on the first scan).
      */
     val cameras = CamerasModel(
         listOfNotNull(
-            session.lunaPort?.let { AppIntegration(LunaIntegration(it), IntegrationSlots(pairing = { LocalPairingCallouts.current() })) },
+            session.lunaPort?.let { AppIntegration(LunaIntegration(it), IntegrationSlots(nearbyCard = Companion::nearbyCard)) },
         ),
         camerasStore(
             appContext.getSharedPreferences("openpocketcine.cameras", Context.MODE_PRIVATE).stored("document"),
@@ -611,5 +612,8 @@ class AppModel(
             document,
             SavedCamerasStore.Legacy(legacy, BodyRecordsV0(LunaFailures.INTEGRATION, BodyRecordsV0.Dates.EPOCH_MILLISECONDS), LEGACY_CAMERAS),
         )
+
+        /** A nearby Luna in this app's words (the iPhone app's subtitle, the status it has always shown). */
+        fun nearbyCard(camera: NearbyCamera) = NearbyCardCopy(camera.name, "Insta360 · nearby", "Needs approval on the camera")
     }
 }

@@ -157,14 +157,18 @@ The script has since been retired (see RELEASE-01 below).
 
 ## What changes for users
 
-Nothing is meant to look different. Underneath:
+Nothing is meant to look different. The parity lane (2026-10-06) checked every difference below
+against `main` (35b6f33b). Each is marked: restored to `main`, kept fix (`main`'s behavior was a
+defect: data loss, security or privacy, a wrong-camera or blind action, or a check that could
+never work), or already matched `main`. Copy that used an em dash on `main` now uses a period or
+comma (iPhone `main`'s punctuation for the same lines). Underneath:
 
 - Command path: ISO, shutter, white balance and record go through one OpenCineCore session per
   camera. A change shows as confirmed only after the camera reports it; a refused, unapplied or
   timed out write says so instead of reverting silently.
-- Session isolation: each connection owns its backend, labels, media route, zoom ceiling (15x
-  on Luna, previously clamped to 12x in readouts) and learned picture EV calibration. Old v1 EV
-  offsets seed the new per-camera keys and are never rewritten.
+- Session isolation: each connection owns its backend, labels, media route, zoom ceiling (iPhone
+  readouts reach 15x and the Android zoom chip stops at 12x: already matched `main`) and learned
+  picture EV calibration. Old v1 EV offsets seed the new per-camera keys and are never rewritten.
 - Shared UI and media: theme, Sora, icons and page layouts come from OpenCineUI; LUT, I-Log
   curve, scope and false-colour math come from OpenCineMedia. Screenshots matched before and
   after on the simulator.
@@ -172,10 +176,10 @@ Nothing is meant to look different. Underneath:
   through OpenCine (`LunaCameraSession.layout`): gimbal and head tracking from its motion,
   host-derived timecode, no audio levels, no iris. The app keeps only clip delete, clip star and
   the internet hop. Differences: the Clean view settings no longer offer an AUDIO pin (Luna
-  reports no audio levels); with no camera connected, Settings shows no gimbal, joystick,
-  head-tracking, zoom chip or timecode rows on iPhone (nothing is declared yet; Android already
-  behaved this way). No
-  Multiview entry: the app qualifies no multicam budget.
+  reports no audio levels). With no camera connected, iPhone Settings shows the gimbal,
+  joystick, head-tracking, zoom chip and timecode rows (restored to `main`; Android lists
+  Timecode and needs a camera for gimbal and zoom, as on `main`). No Multiview entry: the app
+  qualifies no multicam budget.
 - Shared connection flow (SHELL-02): the cameras page, the pair page, connect progress and
   failures come from OpenCine's app shell (`OpenCineAppKit` `CamerasScreen` / `PairScreen` /
   `CamerasModel`, Android `:appkit`) over the Luna integration (`LunaIntegration`, which connects
@@ -183,22 +187,23 @@ Nothing is meant to look different. Underneath:
   `OpenInstaCine.Cameras`, Android prefs `openpocketcine.cameras`/`document`) merged on every
   launch with the old records (`OpenInstaCine.SavedCameras`, `openpocketcine.saved-cameras`/
   `records-json`), which stay mirrored so an older build still reads current cameras. Keychain,
-  Keystore, approval identity, media and EV keys are untouched. Visible differences: the pair
-  page rail is "Find your camera" then the four connect-card steps (was four Luna pages), with the
-  step name as title, one instruction card per prompt and no per-step Luna body text, check list
-  or VPN banner during an attempt (the pre-check, still-looking and VPN tips and a Bluetooth
-  problem show while choosing); Pair on a nearby card opens the pair page with it selected
-  (Continue starts it); a nearby card reads "Ready to pair" with "Luna Ultra · nearby" on iOS
-  (was "Insta360 · nearby") and "Insta360 Luna Ultra · nearby" on Android (was "Pocket · ...");
-  Android's offline card copy is the shared "Not found. Power it on to reconnect"; the
-  connecting card's caption is the prompt ("Tap Join when iOS asks...") instead of the phase
-  label; iOS now offers Open Settings when Bluetooth is off or not allowed; one undecodable saved
-  record no longer empties the list on the next save; Android forget also drops the camera's
-  saved Wi-Fi (as iOS always did); iOS "on the camera network" now tests the Luna's
-  192.168.42.x (Pocket's 192.168.2.x test never matched); a saved camera that still carries a
-  hotspot setup connects from that chip over the camera's own Wi-Fi without main's "Turn on
-  Personal Hotspot" prompt (no Insta camera could add a hotspot setup on main, and Luna joined
-  its own Wi-Fi after the prompt anyway; only the simulator review data reached it).
+  Keystore, approval identity, media and EV keys are untouched. The pages look and read as on
+  `main` (restored): the four Luna pair pages (find, approve, join camera Wi-Fi, open the video
+  link) with their bodies, instruction cards, check list, live phase label and failure banner;
+  Pair on a nearby card connects it at once; a nearby card reads "Insta360 · nearby" and "Needs
+  approval on the camera" (Android `main` showed the DJI fork's "Pocket · ..." family name; it
+  now uses iPhone `main`'s words: kept fix); the connecting card's Wi-Fi caption is the phase
+  label; Bluetooth off or not ready says so with Try again, and a missing Bluetooth permission
+  offers Open Settings, in `main`'s words; a setup chip's menu has no Rename setup. Android's
+  offline card reads "Not found. Power it on to reconnect" (iPhone `main`'s words; Android
+  `main` used an em dash). Kept fixes: one undecodable saved record no longer empties the list
+  on the next save (data loss); Android Forget also drops the camera's saved Wi-Fi, as iOS always
+  did (privacy); iOS "on the camera network" now tests the Luna's 192.168.42.x (`main`'s
+  192.168.2.x test never matched, so "Leave camera Wi-Fi?" never appeared before Frame.io).
+  Accepted earlier: a saved camera that still carries a hotspot setup connects from that chip
+  over the camera's own Wi-Fi without `main`'s "Turn on Personal Hotspot" prompt (no Insta
+  camera could add a hotspot setup on `main`, and Luna joined its own Wi-Fi after the prompt
+  anyway; only the simulator review data reached it).
 
 ## Physical device checklist (Luna Ultra, iOS and Android)
 
@@ -240,9 +245,11 @@ Nothing below has run on hardware.
 
 15. SHELL-02 (iPhone and Android): first pair from an empty install (approve on the camera, join
     its Wi-Fi, picture); reconnect a saved camera with no new approval; quick join from saved
-    Wi-Fi (camera powered on after a while, Bluetooth advert not seen yet); Bluetooth off and
-    Bluetooth not allowed show the Bluetooth card with Open Settings, and the list fills after
-    returning; Cancel during each step; forget (the camera's Wi-Fi password goes with it, the
+    Wi-Fi (camera powered on after a while, Bluetooth advert not seen yet); on iPhone Bluetooth
+    off shows main's error with Try again and Bluetooth not allowed with Open Settings; on Android
+    the pair page's primary action turns Bluetooth on or asks for the permission; the list fills
+    after returning; Pair on a
+    nearby card goes straight to "Approve on the camera"; Cancel during each step; forget (the camera's Wi-Fi password goes with it, the
     approval stays: re-pair without a new Allow); a failed connect shows the same copy as before
     ("The camera didn't respond in time..."). Upgrade from the current TestFlight or Play build
     keeps every camera, name and Wi-Fi; downgrade to it shows them too, an edit there (rename,
@@ -260,12 +267,10 @@ Nothing below has run on hardware.
     recording.
 
 17. Cameras-page follow-up (iPhone and Android, physical check untested): press and hold
-    the Luna's Camera Wi-Fi chip, rename only that setup, relaunch, and reconnect without
-    another approval or password prompt. Clear the setup name and confirm the default label
-    returns. The empty first-pair and saved-camera screens show no Privacy or Terms links (as
-    on main); Settings opens both. An older build has no setup-name
-    field: installing it, editing the camera name, and upgrading again must keep the new
-    setup name, saved Wi-Fi, favorites and approval identity.
+    the Luna's Camera Wi-Fi chip: no Rename setup (as on main). The empty first-pair and
+    saved-camera screens show no Privacy or Terms links (as on main); Settings opens both.
+    Installing an older build, editing the camera name, and upgrading again must keep the
+    saved Wi-Fi, favorites and approval identity.
 
 Known limits: two Luna cameras at once cannot be tested (LunaWiFi joins one camera access point,
 192.168.42.x); the two-session gate is simulated only. Android reports no serial on this path,

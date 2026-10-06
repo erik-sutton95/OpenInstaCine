@@ -316,7 +316,8 @@
             if state == "pair-bluetooth" {
                 throw ConnectionFailure(
                     reason: .permission(.bluetooth), title: "Couldn’t connect over Camera Wi-Fi",
-                    message: "Bluetooth access is disabled for this app. Enable it in Settings → Privacy & Security → Bluetooth.",
+                    message:
+                        "OpenInstaCine needs Bluetooth access to find the camera. Open Settings, turn on Bluetooth for OpenInstaCine, then try again.",
                     actions: [.openSettings, .retry], code: "review.bluetooth.denied")
             }
             guard state == "saved-nearby" || state.hasPrefix("pair-") else { return }

@@ -4,7 +4,7 @@ import android.content.Context
 import com.opencapture.opencine.appkit.*
 import com.opencapture.opencine.media.*
 import com.opencapture.opencine.vocabulary.CameraCommands
-import com.opencapture.openpocketcine.lut.ClipColorProfile
+import com.opencapture.opencine.vocabulary.ClipColorProfile
 import com.opencapture.opencine.vocabulary.fromColorMode
 import com.opencapture.openpocketcine.session.PocketCameraSession
 import kotlinx.coroutines.Dispatchers
