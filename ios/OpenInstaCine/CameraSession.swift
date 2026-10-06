@@ -132,12 +132,11 @@ final class CameraSession {
     @ObservationIgnored private var expectedDisconnect = false
     @ObservationIgnored private var incidentSessionActive = false
     @ObservationIgnored private var sessionRecoveryTask: Task<Void, Never>?
-    @ObservationIgnored private var sessionRecoveryGeneration = 0
     @ObservationIgnored private var recoveryCardGraceTask: Task<Void, Never>?
-    @ObservationIgnored private var sessionDropStormGuard = SessionDropStormGuard()
+    /// Recovery decisions (admit, storm, attempts, budget). Transport and the card stay here.
+    @ObservationIgnored private var recoveryDrive = SessionRecoveryDrive()
     @ObservationIgnored private var recoveryCameraID: UUID?
     @ObservationIgnored private var needsForegroundRecover = false
-    private static let recoveryCardGrace: Duration = .seconds(2.5)
     private static let recoveryScanDeadline: Duration = .seconds(30)
     private static let recoveryAttemptDeadline: Duration = .seconds(90)
     private(set) var isReconnecting = false
@@ -981,54 +980,54 @@ final class CameraSession {
     // MARK: - Session recovery (camera power cycle, Wi-Fi loss)
 
     func beginSessionRecovery(reason: String, trigger: SessionRecoveryTrigger = .bleDropped) {
-        guard SessionRecoveryPolicy.shouldBegin(trigger) else { return }
-        if case .pausedAfterRepeatedDrops = sessionRecovery { return }
-        if case .waitingForOperator = sessionRecovery { return }
-        if sessionRecoveryTask != nil { return }
+        let hasTarget = connectedCamera?.id ?? recoveryCameraID != nil
+        let began = recoveryDrive.begin(
+            trigger: trigger, hasTarget: hasTarget,
+            now: ProcessInfo.processInfo.systemUptime, current: sessionRecovery)
+        guard began != .ignored else { return }
         guard let cameraID = connectedCamera?.id ?? recoveryCameraID else { return }
         AppDiagnostics.incidents.noteUnexpectedDisconnect(now: ProcessInfo.processInfo.systemUptime)
         recordFeedRepair("session", phase: .requested, reason: String(describing: trigger))
         recoveryCameraID = cameraID
         if recoveryDeviceName.isEmpty { recoveryDeviceName = connectedCamera?.name ?? "" }
-        holdsMonitor = true
+        holdsMonitor = recoveryDrive.holdsPicture
         endGimbalStick(cancelMove: true)
         decoder.flushForRecovery()
         feedRecovering = false
-        sessionRecoveryGeneration += 1
-        let generation = sessionRecoveryGeneration
-        if sessionDropStormGuard.noteDrop(now: ProcessInfo.processInfo.systemUptime) {
-            sessionRecovery = .pausedAfterRepeatedDrops(drops: sessionDropStormGuard.dropsInWindow)
-            sessionRecoveryCardGraceElapsed = true
+        if case .started = began {
+            ControlLiveLog.line("session: drop (\(reason)) → bounded recovery")
+        }
+        sessionRecovery = recoveryDrive.state
+        sessionRecoveryCardGraceElapsed = recoveryDrive.cardGraceElapsed
+        guard case .started = began else {
             applyLinkPresentation()
             return
         }
-        ControlLiveLog.line("session: drop (\(reason)) → bounded recovery")
-        sessionRecovery = SessionRecoveryPolicy.monitor.state(afterFailedAttempts: 0)
-        sessionRecoveryCardGraceElapsed = false
+        let generation = recoveryDrive.generation
         recoveryCardGraceTask?.cancel()
         recoveryCardGraceTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.recoveryCardGrace)
-            guard let self, !Task.isCancelled, self.sessionRecoveryGeneration == generation else {
-                return
-            }
+            try? await Task.sleep(for: .seconds(SessionRecoveryDrive.cardGraceSeconds))
+            guard let self, !Task.isCancelled else { return }
+            guard self.recoveryDrive.noteCardGrace(seenGeneration: generation) else { return }
             self.sessionRecoveryCardGraceElapsed = true
         }
         sessionRecoveryTask = Task { [weak self] in
             await self?.runSessionRecovery()
-            guard let self, self.sessionRecoveryGeneration == generation else { return }
+            guard let self, self.recoveryDrive.generation == generation else { return }
+            self.recoveryDrive.noteAutomaticTaskEnded(seenGeneration: generation)
             self.sessionRecoveryTask = nil
         }
         applyLinkPresentation()
     }
 
     func retrySessionRecovery() {
-        sessionDropStormGuard.reset()
+        recoveryDrive.resetStorm()
         cancelSessionRecovery(clearHoldsMonitor: false)
         beginSessionRecovery(reason: "operator retry", trigger: .operatorRetry)
     }
 
     func cancelSessionRecovery(clearHoldsMonitor: Bool = true) {
-        sessionRecoveryGeneration += 1
+        recoveryDrive.cancel(clearHold: clearHoldsMonitor)
         sessionRecoveryTask?.cancel()
         sessionRecoveryTask = nil
         recoveryCardGraceTask?.cancel()
@@ -1046,7 +1045,7 @@ final class CameraSession {
     func runSessionRecovery(
         budget: Duration = .seconds(SessionRecoveryPolicy.automaticRecoveryBudgetSeconds)
     ) async {
-        let generation = sessionRecoveryGeneration
+        let generation = recoveryDrive.generation
         let timedOut = await withTaskGroup(of: Bool.self) { group in
             group.addTask { @MainActor [weak self] in
                 await self?.runSessionRecoveryAttempts()
@@ -1060,21 +1059,19 @@ final class CameraSession {
             group.cancelAll()
             return timedOut
         }
-        guard timedOut, !Task.isCancelled, sessionRecoveryGeneration == generation else { return }
-        let attempts: Int
-        if case .retrying(let attempt, _) = sessionRecovery { attempts = attempt } else { attempts = 0 }
+        guard timedOut, !Task.isCancelled, recoveryDrive.generation == generation else { return }
         runTask?.cancel()
         backend.stopScan()
-        sessionRecovery = .waitingForOperator(attemptsMade: attempts)
+        recoveryDrive.noteBudgetExhausted(current: sessionRecovery)
+        sessionRecovery = recoveryDrive.state
         sessionRecoveryCardGraceElapsed = true
         applyLinkPresentation()
     }
 
     func runSessionRecoveryAttempts(connectAttempt: (@MainActor () async -> Bool)? = nil) async {
-        let policy = SessionRecoveryPolicy.monitor
-        var failures = 0
+        recoveryDrive.beginAttempts()
         while !Task.isCancelled {
-            let state = policy.state(afterFailedAttempts: failures)
+            let state = recoveryDrive.prepareAttempt()
             sessionRecovery = state
             applyLinkPresentation()
             guard case .retrying = state else { return }
@@ -1086,6 +1083,7 @@ final class CameraSession {
             }
             if Task.isCancelled { return }
             if recovered {
+                let failures = recoveryDrive.noteRecovered()
                 sessionRecovery = .idle
                 holdsMonitor = false
                 isReconnecting = false
@@ -1094,14 +1092,11 @@ final class CameraSession {
                 applyLinkPresentation()
                 return
             }
-            failures += 1
+            let step = recoveryDrive.noteAttemptFailed(jitter: .random(in: 0...1))
             runTask?.cancel()
             backend.stopScan()
-            guard
-                case .retry(let wait) = policy.decision(
-                    afterFailedAttempts: failures, jitter: .random(in: 0...1))
-            else {
-                sessionRecovery = policy.state(afterFailedAttempts: failures)
+            guard case .backoff(let wait) = step else {
+                sessionRecovery = recoveryDrive.state
                 applyLinkPresentation()
                 return
             }
