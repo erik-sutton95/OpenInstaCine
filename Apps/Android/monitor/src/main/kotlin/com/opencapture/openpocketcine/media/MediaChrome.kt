@@ -30,10 +30,7 @@ import com.opencapture.openpocketcine.LocalMonitorGlass
 import com.opencapture.openpocketcine.OpcIcon
 import com.opencapture.openpocketcine.liveChromeGlass
 import com.opencapture.openpocketcine.panelGlass
-
-val MediaCapsuleShape: RoundedCornerShape = RoundedCornerShape(percent = 50)
-
-val MediaCornerShape: RoundedCornerShape = ChromeShape
+import com.opencapture.opencine.cameracontrols.MediaCornerShape
 
 @Composable
 fun Modifier.mediaGlass(shape: Shape = MediaCornerShape): Modifier {
@@ -44,63 +41,7 @@ fun Modifier.mediaGlass(shape: Shape = MediaCornerShape): Modifier {
 fun Modifier.mediaSheetPlate(shape: Shape = MediaCornerShape): Modifier =
     background(LiveDesign.sheetPlate, shape).border(1.dp, LiveDesign.hairlineStrong, shape)
 
-@Composable
-fun MediaCloseButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    size: Dp = 37.dp,
-    enabled: Boolean = true,
-) {
-    Box(
-        modifier
-            .size(size)
-            .clip(CircleShape)
-            .mediaGlass(CircleShape)
-            .chromeClickable(enabled = enabled, onClick = onClick)
-            .semantics { contentDescription = "Close" },
-        contentAlignment = Alignment.Center,
-    ) {
-        OpcIcon(
-            icon = OpcIcon.X,
-            contentDescription = null,
-            tint = LiveDesign.text,
-            modifier = Modifier.size(size * 0.30f),
-        )
-    }
-}
 
-@Composable
-fun MediaCircleIconButton(
-    icon: OpcIcon,
-    contentDescription: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    size: Dp = 34.dp,
-    iconSize: Dp = size * 0.47f,
-    tint: androidx.compose.ui.graphics.Color = LiveDesign.text,
-    enabled: Boolean = true,
-    highlighted: Boolean = false,
-    filled: Boolean = false,
-) {
-    Box(
-        modifier
-            .size(size)
-            .clip(CircleShape)
-            .then(if (highlighted) Modifier.background(LiveDesign.accentDim, CircleShape) else Modifier)
-            .mediaGlass(CircleShape)
-            .chromeClickable(enabled = enabled, onClick = onClick)
-            .semantics { this.contentDescription = contentDescription },
-        contentAlignment = Alignment.Center,
-    ) {
-        OpcIcon(
-            icon = icon,
-            contentDescription = null,
-            tint = if (!enabled) LiveDesign.faint else if (highlighted) LiveDesign.accent else tint,
-            modifier = Modifier.size(iconSize),
-            filled = filled,
-        )
-    }
-}
 
 @Composable
 fun MediaGlassTrack(
