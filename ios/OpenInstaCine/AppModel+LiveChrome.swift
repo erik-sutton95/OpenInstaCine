@@ -2,6 +2,7 @@ import MonitorPresentation
 import MonitorUI
 import OpenCineAppKit
 import OpenCineCameraControls
+import OpenCineCameraVocabulary
 import SwiftUI
 
 typealias FieldMonitorStatusChrome = LiveStatusChrome<AppModel>
@@ -10,6 +11,29 @@ typealias FieldMonitorGauges = LiveTelemetryGauges<AppModel>
 typealias LiveTopPickerHost = LiveTopSheetHost<AppModel>
 typealias ChromeEditBadgeLayer = ChromeEditBadges<AppModel>
 typealias ChromeEditBanner = ChromeEditDoneBanner<AppModel>
+typealias LiveSystemChrome = LiveSystemRail<AppModel, LiveRecordButton, LiveDispToggle>
+typealias LiveFocusResetButton = FocusResetButton<AppModel>
+typealias LiveAutoExposureUnlockButton = AutoExposureUnlockButton<AppModel>
+typealias LiveHeadTrackCalibrateButton = HeadTrackCalibrateButton<LiveDesign>
+typealias LivePortraitAspectToggle = PortraitAspectToggle<LiveDesign>
+typealias LiveZoomPinchWell = FeedGestureWell<AppModel>
+typealias LiveZoomChip = ZoomChip<AppModel>
+
+extension LiveSystemRail where Host == AppModel, Record == LiveRecordButton, Display == LiveDispToggle {
+    init(
+        locked: Binding<Bool>, layout: FieldMonitorLayout, capturePresented: Bool, visible: Bool,
+        interactive: Bool
+    ) {
+        self.init(
+            locked: locked, layout: layout, capturePresented: capturePresented, visible: visible,
+            interactive: interactive
+        ) {
+            LiveRecordButton(diameter: $0)
+        } display: {
+            LiveDispToggle(size: $0)
+        }
+    }
+}
 
 /// The shared capture strip with this app's face metering tile after EXPOSURE.
 struct LiveCameraControlBar: View {
@@ -53,4 +77,31 @@ extension AppModel: LiveChromeHost {
     var liveSignalBars: Int { session.liveSignalBars }
     var liveFPS: String { session.liveFPS }
     var gimbalPanelOpen: Bool { liveGimbalPanel != .none }
+    var multiviewBorrowed: Bool { session.isMultiviewBorrowed }
+    func openSettings() { shell.open(.settings) }
+    func openMedia() { shell.open(.media) }
+    func resetFocusPoint() { session.resetFocusPoint() }
+    func unlockAutoExposure() { session.unlockAutoExposure() }
+
+    var zoomFactor: Double { session.zoomReadout }
+    var zoomCycleOrigin: Double {
+        session.zoomPinchPreview ?? session.zoomOptimistic ?? session.status.zoomFactor
+            ?? session.zoomStop
+    }
+    var zoomPinchPreview: Double? { session.zoomPinchPreview }
+    /// The chip label tops out at this body's zoom ceiling.
+    var zoomCeiling: Double { session.zoomCeiling }
+    var zoomTapStops: MonitorZoomTapStops { OsmoMonitorPresentation.zoomTapStops(session) }
+    var zoomStops: [Double] { session.zoomStops }
+    func cycleZoom(to ratio: Double) { session.setZoom(ratio) }
+    func zoomPinchWillBegin() {}
+    var canLockAutoExposure: Bool { session.canLockAutoExposure }
+    func lockAutoExposure() -> Bool { session.lockAutoExposure() }
+    func showControlNote(_ note: String) { session.controlNote = note }
+    var tapFocusPoint: CGPoint? {
+        guard session.supportsTapFocus, case .focus = session.focusOverlay else { return nil }
+        return session.focusPoint
+    }
+    func handleFeedTap(at point: CGPoint) { session.handleFeedTap(at: point) }
+    func startTracking(_ box: TrackingBox) { session.startTracking(box) }
 }

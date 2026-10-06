@@ -1,4 +1,5 @@
 import CoreImage
+import OpenCineCameraControls
 import XCTest
 
 @testable import OpenInstaCine
