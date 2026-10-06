@@ -1,17 +1,16 @@
 package com.opencapture.openpocketcine
 
+import com.opencapture.opencine.cameracontrols.LiveViewLink
+import com.opencapture.openpocketcine.session.vocabularyPhase
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class CaptureSheetTest {
     @Test
-    fun holdFpsIgnoresHundredthTick() {
-        assertEquals("25.00", LiveChromeReadout.holdFPS("25.13", "25.00"))
-        assertEquals("25.00", LiveChromeReadout.holdFPS("24.70", "25.00"))
-        assertEquals("25.50", LiveChromeReadout.holdFPS("25.50", "25.00"))
-        assertEquals("RECOV", LiveChromeReadout.holdFPS("RECOV", "25.00"))
-        assertEquals("25.00", LiveChromeReadout.holdFPS("25.00", "LINK"))
-        assertEquals("—", LiveChromeReadout.holdFPS("—", "25.00"))
+    fun everyShellPhaseIsTheSameVocabularyPhase() {
+        for (phase in com.opencapture.opencine.insta360.shell.ConnectionPhase.entries) {
+            assertEquals(phase.name, phase.vocabularyPhase().name)
+        }
     }
 
     @Test
@@ -35,7 +34,7 @@ class CaptureSheetTest {
             assertEquals(
                 case.expected,
                 LiveViewLink.fpsChipLabel(
-                    connection = case.connection,
+                    connection = case.connection.vocabularyPhase(),
                     recovering = case.recovering,
                     formattedFPS = "25.00",
                     measuredFPS = case.measured,

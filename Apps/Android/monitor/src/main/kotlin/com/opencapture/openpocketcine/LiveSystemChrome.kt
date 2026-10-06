@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import com.opencapture.monitorui.MonitorSystemControls
 import com.opencapture.monitorui.MonitorSystemControlsVisibility
 import com.opencapture.opencine.appkit.ShellModel
+import com.opencapture.opencine.cameracontrols.LockButton
 
 /** App display customization and the native photo adapter over the shared system composition. */
 @Composable
