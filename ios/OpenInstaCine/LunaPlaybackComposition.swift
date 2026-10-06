@@ -26,9 +26,10 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
     func mediaPlaybackRecord(for file: MediaFile) -> MonitorMediaRecord<LunaMediaLibraryPayload>? {
         if let record = mediaRecord(for: file) { return record }
         #if targetEnvironment(simulator)
-        if MonitorMediaReview.clipURL(for: file) != nil {
+        if MonitorMediaReview.isActive, file.path.hasPrefix(MonitorMediaReview.pathPrefix) {
             // The existing opt-in simulator review passes synthetic files directly, outside its
-            // catalog. Use the real legacy codec for immutable cached-file facts, without a service.
+            // catalog, with or without supplied footage: the player's controls work without it, as
+            // on main. Use the real legacy codec for immutable cached-file facts, without a service.
             let codec = LunaMediaCatalogCodec(source: nil, shotColor: { _ in nil })
             return try? codec.decode(JSONEncoder().encode([file])).first
         }

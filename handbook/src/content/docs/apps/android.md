@@ -30,8 +30,7 @@ page with it selected.
 
 Press and hold a saved setup chip and choose **Rename setup** to label that
 connection. Clear the name to use its default title again. Renaming keeps the
-camera and its saved Wi-Fi details. **Privacy** and **Terms** are available from
-both the cameras page and the first-pair screen.
+camera and its saved Wi-Fi details. **Privacy** and **Terms** are in Settings.
 
 Upgrading preserves saved cameras, custom names and Wi-Fi details. Earlier
 builds can still read the list, and edits made there are reconciled on the next
