@@ -45,7 +45,7 @@ import androidx.compose.ui.unit.sp
 import com.opencapture.opencine.cameracontrols.chromeClickable
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.LiveType
-import com.opencapture.openpocketcine.OpcIcon
+import com.opencapture.monitorui.MonitorIcon
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -93,7 +93,7 @@ private fun MediaCatalogClip(file: MediaFile, controller: LunaMediaPlaybackAdapt
         val bitmap = thumbnail
         if (bitmap != null) Image(bitmap.asImageBitmap(), contentDescription = null,
             contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        else OpcIcon(if (file.kind == MediaKind.PHOTO) OpcIcon.IMAGE else OpcIcon.FILM, null,
+        else MonitorIcon(if (file.kind == MediaKind.PHOTO) MonitorIcon.IMAGE else MonitorIcon.FILM, null,
             Modifier.size(if (list) 20.dp else 28.dp).align(Alignment.Center), LiveDesign.faint)
     }
 }

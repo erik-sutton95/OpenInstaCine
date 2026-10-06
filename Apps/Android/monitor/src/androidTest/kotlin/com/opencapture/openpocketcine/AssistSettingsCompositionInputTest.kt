@@ -29,6 +29,15 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.opencapture.opencine.media.MonitorPeakingColor
+import com.opencapture.opencine.media.MonitorPeakingSense
+import com.opencapture.monitorui.MonitorFalseColorSelection
+import com.opencapture.monitorui.MonitorZebraUnit
+import com.opencapture.opencine.media.MonitorZebraPaint
+import com.opencapture.monitorui.MonitorWaveformMode
+import com.opencapture.monitorui.MonitorParadeMode
+import com.opencapture.monitorui.MonitorVectorscopeZoom
+import com.opencapture.opencine.media.MonitorCrushClipCompensation
 
 /** SIMULATED source; actual card actions and the actual app preference factory are exercised. */
 @RunWith(AndroidJUnit4::class)
@@ -48,17 +57,17 @@ class AssistSettingsCompositionInputTest {
         }
         try {
             val state = createLiveAssistState(context)
-            state.setFalseColor(scale = FalseColorScale.IRE, reference = false)
-            state.setWaveform(mode = WaveformMode.LUMA, brightness = 173,
+            state.setFalseColor(scale = MonitorFalseColorSelection.IRE, reference = false)
+            state.setWaveform(mode = MonitorWaveformMode.LUMA, brightness = 173,
                 guides = state.waveGuides.copy(clip = false, crush = false, middle = false))
-            state.setParade(mode = ParadeMode.YRGB, brightness = 177,
+            state.setParade(mode = MonitorParadeMode.YRGB, brightness = 177,
                 guides = state.paradeGuides.copy(clip = false, crush = false, middle = false))
             state.setHistogram(traffic = false)
-            state.setCompensation(CrushClipCompensation.entries.last())
-            state.setVectorscope(zoom = VectorscopeZoom.X4, brightness = 181)
-            state.setPeaking(color = PeakingColor.GREEN, sense = PeakingSense.entries.first())
-            state.setZebraHighlight(enabled = false, ire = 42.0, color = ZebraPaint.WHITE)
-            state.setZebraMidtone(enabled = false, ire = 37.0, color = ZebraPaint.CYAN)
+            state.setCompensation(MonitorCrushClipCompensation.entries.last())
+            state.setVectorscope(zoom = MonitorVectorscopeZoom.X4, brightness = 181)
+            state.setPeaking(color = MonitorPeakingColor.GREEN, sense = MonitorPeakingSense.entries.first())
+            state.setZebraHighlight(enabled = false, ire = 42.0, color = MonitorZebraPaint.WHITE)
+            state.setZebraMidtone(enabled = false, ire = 37.0, color = MonitorZebraPaint.CYAN)
             OperatorPrefs.setCleanViewPinnedTools(context, setOf("WAVE"))
             OperatorPrefs.setPlaybackVisibleAssistTools(context, setOf("FALSE"))
             ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
@@ -96,7 +105,7 @@ class AssistSettingsCompositionInputTest {
                 tap(red)
                 instrumentation.waitForIdleSync()
                 assertFalse(state.zebraHighlight)
-                assertEquals(ZebraPaint.RED, createLiveAssistState(context).zebraHighlightColor)
+                assertEquals(MonitorZebraPaint.RED, createLiveAssistState(context).zebraHighlightColor)
                 for (tool in listOf(MonitorAssistTool.FALSE, MonitorAssistTool.ZEBRA,
                     MonitorAssistTool.WAVE, MonitorAssistTool.PARADE, MonitorAssistTool.HISTO,
                     MonitorAssistTool.VECTOR, MonitorAssistTool.PEAK, MonitorAssistTool.LIGHTS)) {
@@ -107,42 +116,42 @@ class AssistSettingsCompositionInputTest {
                     val saved = createLiveAssistState(context)
                     when (tool) {
                         MonitorAssistTool.FALSE -> {
-                            assertEquals(FalseColorScale.SCENE_STOPS, saved.falseColorScale)
+                            assertEquals(MonitorFalseColorSelection.SCENE_STOPS, saved.falseColorScale)
                             assertTrue(saved.falseColorReference)
                         }
                         MonitorAssistTool.ZEBRA -> {
-                            assertEquals(ZebraUnit.IRE, saved.zebraUnit)
+                            assertEquals(MonitorZebraUnit.IRE, saved.zebraUnit)
                             assertTrue(saved.zebraHighlight && saved.zebraMidtone)
                             assertEquals(LiveZebra.HIGHLIGHT_IRE, saved.zebraHighlightIRE)
                             assertEquals(LiveZebra.MIDTONE_IRE, saved.zebraMidtoneIRE)
-                            assertEquals(ZebraPaint.WHITE, saved.zebraHighlightColor)
-                            assertEquals(ZebraPaint.AMBER, saved.zebraMidtoneColor)
+                            assertEquals(MonitorZebraPaint.WHITE, saved.zebraHighlightColor)
+                            assertEquals(MonitorZebraPaint.AMBER, saved.zebraMidtoneColor)
                         }
                         MonitorAssistTool.WAVE -> {
-                            assertEquals(WaveformMode.RGB, saved.waveMode)
+                            assertEquals(MonitorWaveformMode.RGB, saved.waveMode)
                             assertEquals(100, saved.waveBrightness)
                             assertEquals(ScopeGuides(), saved.waveGuides)
                         }
                         MonitorAssistTool.PARADE -> {
-                            assertEquals(ParadeMode.RGB, saved.paradeMode)
+                            assertEquals(MonitorParadeMode.RGB, saved.paradeMode)
                             assertEquals(100, saved.paradeBrightness)
                             assertEquals(ScopeGuides(), saved.paradeGuides)
                         }
                         MonitorAssistTool.HISTO -> {
                             assertTrue(saved.histoTrafficLights)
-                            assertEquals(CrushClipCompensation.ZERO, saved.crushClipCompensation)
-                            state.setCompensation(CrushClipCompensation.entries.last())
+                            assertEquals(MonitorCrushClipCompensation.ZERO, saved.crushClipCompensation)
+                            state.setCompensation(MonitorCrushClipCompensation.entries.last())
                         }
                         MonitorAssistTool.VECTOR -> {
-                            assertEquals(VectorscopeZoom.X1, saved.vectorZoom)
+                            assertEquals(MonitorVectorscopeZoom.X1, saved.vectorZoom)
                             assertEquals(100, saved.vectorBrightness)
                         }
                         MonitorAssistTool.PEAK -> {
-                            assertEquals(PeakingColor.RED, saved.peakingColor)
-                            assertEquals(PeakingSense.MED, saved.peakingSensitivity)
+                            assertEquals(MonitorPeakingColor.RED, saved.peakingColor)
+                            assertEquals(MonitorPeakingSense.MED, saved.peakingSensitivity)
                         }
                         MonitorAssistTool.LIGHTS -> {
-                            assertEquals(CrushClipCompensation.ZERO, saved.crushClipCompensation)
+                            assertEquals(MonitorCrushClipCompensation.ZERO, saved.crushClipCompensation)
                             assertTrue(saved.histoTrafficLights, "Shared compensation preserves histogram enablement")
                         }
                         else -> error("Unexpected settings tool")

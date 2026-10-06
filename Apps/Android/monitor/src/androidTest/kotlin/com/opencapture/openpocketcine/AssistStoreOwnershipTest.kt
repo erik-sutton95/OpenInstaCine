@@ -5,8 +5,8 @@ import android.content.ContextWrapper
 import android.content.SharedPreferences
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.opencapture.openpocketcine.assists.FalseColorScale
-import com.opencapture.openpocketcine.assists.LiveAssistTool
+import com.opencapture.monitorui.MonitorFalseColorSelection
+import com.opencapture.monitorui.MonitorAssistTool
 import com.opencapture.openpocketcine.assists.StoredCenter
 import com.opencapture.openpocketcine.assists.createLiveAssistState
 import org.json.JSONObject
@@ -41,27 +41,27 @@ class AssistStoreOwnershipTest {
             val before = OperatorPrefs.assistEncoded(context)
             val state = createLiveAssistState(context)
             assertEquals(before, OperatorPrefs.assistEncoded(context), "Opening the owner must not rewrite legacy JSON")
-            assertEquals(FalseColorScale.STOPS, state.falseColorScale)
+            assertEquals(MonitorFalseColorSelection.STOPS, state.falseColorScale)
             assertEquals(StoredCenter(0.25, 0.75), state.waveCenter)
             assertEquals(StoredCenter(0.1, 0.2), state.audioCenterFor(false))
             assertEquals(state.audioCenterFor(false), state.audioCenterFor(true))
             assertTrue(state.pinned.isEmpty())
-            assertTrue(state.isPlaybackVisible(LiveAssistTool.FALSE))
-            assertFalse(state.isOn(LiveAssistTool.FALSE))
-            state.storeCenter(LiveAssistTool.WAVE, StoredCenter(0.6, 0.4), portrait = true)
+            assertTrue(state.isPlaybackVisible(MonitorAssistTool.FALSE))
+            assertFalse(state.isOn(MonitorAssistTool.FALSE))
+            state.storeCenter(MonitorAssistTool.WAVE, StoredCenter(0.6, 0.4), portrait = true)
             state.storeAudioCenter(StoredCenter(0.2, 0.3), portrait = false)
             state.storeAudioCenter(StoredCenter(0.8, 0.7), portrait = true)
             state.updateAudioShowDB(true)
-            state.togglePin(LiveAssistTool.WAVE)
-            state.togglePlayback(LiveAssistTool.FALSE)
+            state.togglePin(MonitorAssistTool.WAVE)
+            state.togglePlayback(MonitorAssistTool.FALSE)
             val restored = createLiveAssistState(context)
             assertEquals(StoredCenter(0.25, 0.75), restored.waveCenter)
             assertEquals(StoredCenter(0.6, 0.4), restored.waveCenterPortrait)
             assertEquals(StoredCenter(0.2, 0.3), restored.audioCenterFor(false))
             assertEquals(StoredCenter(0.8, 0.7), restored.audioCenterFor(true))
-            assertTrue(restored.audioShowDB && restored.isOn(LiveAssistTool.WAVE))
+            assertTrue(restored.audioShowDB && restored.isOn(MonitorAssistTool.WAVE))
             assertEquals(setOf("WAVE"), OperatorPrefs.cleanViewPinnedTools(context))
-            assertFalse(restored.isPlaybackVisible(LiveAssistTool.FALSE))
+            assertFalse(restored.isPlaybackVisible(MonitorAssistTool.FALSE))
             val encoded = JSONObject(requireNotNull(OperatorPrefs.assistEncoded(context)))
             assertEquals("CineStop", encoded.getString("falseColorScale"))
             assertEquals(1, encoded.getInt("audioCentersSchema"))

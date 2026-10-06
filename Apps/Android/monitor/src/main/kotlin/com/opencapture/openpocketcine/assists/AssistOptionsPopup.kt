@@ -17,6 +17,7 @@ import com.opencapture.openpocketcine.AppModel
 import com.opencapture.openpocketcine.OperatorPrefs
 import com.opencapture.openpocketcine.lut.AppLutPickerCopy
 import com.opencapture.openpocketcine.settings.SettingsPalette
+import com.opencapture.monitorui.MonitorAssistTool
 
 /** This app's assist values: its settings palettes and ND copy; the live ceiling and the union guide mask. */
 internal val AppAssistHost = AssistHost(
@@ -38,7 +39,7 @@ private const val ND_HELP =
  */
 @Composable
 fun AssistOptionsPopup(
-    tool: LiveAssistTool,
+    tool: MonitorAssistTool,
     state: LiveAssistState,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,

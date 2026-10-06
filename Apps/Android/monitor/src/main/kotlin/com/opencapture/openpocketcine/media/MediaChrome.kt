@@ -27,7 +27,7 @@ import com.opencapture.monitorui.monitorMaterial
 import com.opencapture.openpocketcine.GlassTier
 import com.opencapture.openpocketcine.LiveDesign
 import com.opencapture.openpocketcine.LocalMonitorGlass
-import com.opencapture.openpocketcine.OpcIcon
+import com.opencapture.monitorui.MonitorIcon
 import com.opencapture.openpocketcine.liveChromeGlass
 import com.opencapture.openpocketcine.panelGlass
 import com.opencapture.opencine.cameracontrols.MediaCornerShape
@@ -73,8 +73,8 @@ internal object PlaybackChromeMetrics {
     const val actionChipSize = 44f
     const val actionChipIcon = 18f
     const val actionChipCorner = 14f
-    val hideChromeIcon = OpcIcon.MAXIMIZE
-    val showChromeIcon = OpcIcon.MINIMIZE
+    val hideChromeIcon = MonitorIcon.MAXIMIZE
+    val showChromeIcon = MonitorIcon.MINIMIZE
 
     fun usesDarkenedBars(tier: GlassTier): Boolean = tier == GlassTier.FLAT
 

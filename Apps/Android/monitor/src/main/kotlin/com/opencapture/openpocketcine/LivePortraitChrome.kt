@@ -93,10 +93,11 @@ import com.opencapture.opencine.vocabulary.CaptureShutterPolicy
 import com.opencapture.opencine.vocabulary.EvComp
 import com.opencapture.opencine.cameracontrols.AssistToolGlyph
 import com.opencapture.openpocketcine.assists.LiveAssistState
-import com.opencapture.openpocketcine.assists.LiveAssistTool
+import com.opencapture.monitorui.MonitorAssistTool
 import kotlin.math.max
 import kotlin.math.min
 import com.opencapture.opencine.cameracontrols.PortraitFeedAspect
+import com.opencapture.monitorui.MonitorIcon
 
 @Composable
 fun LivePortraitChrome(
@@ -109,7 +110,7 @@ fun LivePortraitChrome(
     sheet: LiveSheet?,
     onSheet: (LiveSheet?) -> Unit,
     assist: LiveAssistState,
-    onAssistLongPress: (LiveAssistTool) -> Unit,
+    onAssistLongPress: (MonitorAssistTool) -> Unit,
     chromeInteractive: Boolean,
     controlBusy: Boolean,
     focusOffCenter: Boolean,
@@ -125,7 +126,7 @@ fun LivePortraitChrome(
 ) {
     val cover = model.liveCover()
     val captureOpen = sheet != null || captureQuickActive
-    val desqueezeVisible = assist.isVisible(LiveAssistTool.DESQ)
+    val desqueezeVisible = assist.isVisible(MonitorAssistTool.DESQ)
     val fill = sourceIsVertical || (!desqueezeVisible && model.portraitFeedAspect == PortraitFeedAspect.FILL)
     val tablet = min(layout.viewportWidth, layout.viewportHeight) >= 600f
     val editing = model.chromeEditorMode
@@ -273,7 +274,7 @@ fun LivePortraitAspectToggle(
             .semantics { contentDescription = if (fill) "Fit feed in frame" else "Fill frame with feed" },
         contentAlignment = Alignment.Center,
     ) {
-        OpcIcon(if (fill) OpcIcon.MINIMIZE else OpcIcon.MAXIMIZE, null, Modifier.size(15.dp), LiveDesign.text)
+        MonitorIcon(if (fill) MonitorIcon.MINIMIZE else MonitorIcon.MAXIMIZE, null, Modifier.size(15.dp), LiveDesign.text)
     }
 }
 
@@ -306,7 +307,7 @@ fun LiveCaptureStrip(
         OperatorPrefs.shutterAngleDegrees(context),
     )
     fun value(sheet: LiveSheet, label: String, readout: String, annotation: String? = null,
-        valueIcon: OpcIcon? = null, badgeIcon: OpcIcon? = null) =
+        valueIcon: MonitorIcon? = null, badgeIcon: MonitorIcon? = null) =
         com.opencapture.monitorui.MonitorValue(
             sheet.name, label, readout, selected = active == sheet, annotation = annotation,
             valueIcon = valueIcon, badgeIcon = badgeIcon,
@@ -319,14 +320,14 @@ fun LiveCaptureStrip(
             else "SHUTTER",
             if (auto) EvComp.fromRaw(status.evComp)?.label ?: "\u2014" else captureReadoutLabel(LiveSheet.SHUTTER, status, model, shutter),
             if (auto && facePriority) CaptureLists.FACE_PRIORITY_TITLE else null,
-            badgeIcon = if (auto && facePriority) OpcIcon.SCAN else null))
+            badgeIcon = if (auto && facePriority) MonitorIcon.SCAN else null))
         add(value(LiveSheet.EXPO, "EXPOSURE", if (aeLocked) CaptureLists.AE_LOCK
             else if (status.expoMode == CameraCommands.EXPO_MANUAL) "M" else if (auto) "A" else "\u2014"))
         // iOS `LunaMeteringTile`: two values, so a tap toggles in place; hidden until the camera reports it.
         if (faceMetering != null) add(com.opencapture.monitorui.MonitorValue(
             METER_TILE, "METER", if (faceMetering) "Face" else "Matrix"))
         add(value(LiveSheet.WB, "WB", captureReadoutLabel(LiveSheet.WB, status, model, CaptureLists.wbChipValue(status, awbLocked)),
-            valueIcon = if (CaptureLists.wbIsAuto(status) && !awbLocked) OpcIcon.APERTURE else null))
+            valueIcon = if (CaptureLists.wbIsAuto(status) && !awbLocked) MonitorIcon.APERTURE else null))
         if (showFocus) add(value(LiveSheet.FOCUS, "FOCUS", status.focusLabel))
         if (showAperture) add(value(LiveSheet.APERTURE, "APERTURE", ApertureStrategy.tileValue(status)))
         if (model?.monitorLayout()?.audio != false && CaptureShutterPolicy.showsAudioControls(status.shootingMode)) {
