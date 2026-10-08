@@ -256,9 +256,9 @@ private fun OpenPocketCineApp(model: AppModel) {
                     cameras.nearby.firstOrNull { it.id == model.cameras.state.value.selection }?.let(model.cameras::connect)
                 },
             ),
-            // Temporary (SHELL-03 I-1): the existing monitor, which draws Settings and Media over itself.
             monitor = { LiveViewScreen(model) },
             page = { cover -> ShellPage(model, cover) },
+            coverPresentation = com.opencapture.opencine.appkit.ShellCoverPresentation.SHELL,
             pageFrame = { route, content -> HomeFrame(model, pairing = route == ShellModel.Route.PAIR, content) },
             pairingFlow = pairingWizard(
                 label = PairingWizard.phaseLabel(

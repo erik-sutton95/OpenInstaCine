@@ -36,11 +36,12 @@ class CaptureSheetHostTest {
         assertFalse(state.formatPinned)
     }
 
-    @Test fun apertureRowsAlwaysDrawWhileFocusAndNativeIsoHopFollowTheSession() {
+    @Test fun declaredApertureRowsDrawWhileFocusAndNativeIsoHopFollowTheSession() {
         var focus = false
         var hop = false
-        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, { focus }, { hop })
+        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, { focus }, { hop }, irisSupported = { true })
         assertTrue(state.irisSupported)
+        assertFalse(instaCaptureSessionState({ null }, { null }, { false }, { false }, { false }, { false }).irisSupported)
         assertFalse(state.focusModeSupported)
         assertFalse(state.nativeIsoHopSupported, "No native ISO hop toggle without the session capability")
         focus = true

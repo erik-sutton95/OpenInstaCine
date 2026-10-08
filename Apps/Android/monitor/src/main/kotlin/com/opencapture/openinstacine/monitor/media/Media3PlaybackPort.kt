@@ -27,37 +27,62 @@ class Media3PlaybackPort(val player: ExoPlayer, scope: CoroutineScope) : Monitor
     private var tick: Job? = null
     private var closed = false
     private var pictureOwner: UUID? = null
-    /** A claimed picture whose decoder surface has not arrived yet. */
+    /** A claimed or retired picture whose decoder surface has not arrived yet. */
     private val picturePending = MutableStateFlow(false)
+    /** Captured host listing value, qualified by the actual item token; absent by default. */
+    var listedFrameRate: (MonitorPlaybackItemToken) -> Double? = { null }
+    var sourceAdmission: ((MonitorPlaybackItemToken) -> Boolean)? = null
+    private var pictureRetire: (() -> Unit)? = null
+    private var pictureClose: (() -> Unit)? = null
+    fun bindPicture(owner: UUID, retire: () -> Unit, close: () -> Unit) {
+        if (closed || pictureOwner != owner) return
+        pictureRetire = retire; pictureClose = close
+    }
+    private fun admitted(token: MonitorPlaybackItemToken): Boolean = sourceAdmission?.invoke(token) ?: true
 
     fun claimPicture(): UUID {
         check(!closed)
-        val owner = UUID.randomUUID(); pictureOwner = owner; picturePending.value = true
-        player.clearVideoSurface()
+        val previous = pictureClose
+        val owner = UUID.randomUUID()
+        pictureOwner = owner; pictureRetire = null; pictureClose = null; picturePending.value = true
+        previous?.invoke()
+        if (!closed && pictureOwner == owner) player.clearVideoSurface()
         return owner
     }
     fun attachPicture(surface: Surface, owner: UUID) {
-        if (!closed && pictureOwner == owner) { player.setVideoSurface(surface); picturePending.value = false }
+        if (!closed && pictureOwner == owner && token?.let(::admitted) != false) { player.setVideoSurface(surface); picturePending.value = false }
     }
     fun releasePicture(owner: UUID) {
         if (closed || pictureOwner != owner) return
-        pictureOwner = null; picturePending.value = false; player.clearVideoSurface()
+        val departing = pictureClose
+        pictureOwner = null; pictureRetire = null; pictureClose = null; picturePending.value = false
+        departing?.invoke()
+        if (!closed && pictureOwner == null) player.clearVideoSurface()
     }
     private fun current(token: MonitorPlaybackItemToken, request: String): Boolean =
-        !closed && this.token == token && preparation == request && player.currentMediaItem?.mediaId == request
+        !closed && this.token == token && admitted(token) && preparation == request && player.currentMediaItem?.mediaId == request
     override fun retireItem(token: MonitorPlaybackItemToken) {
         if (closed || (this.token != null && token.revision != 0L &&
                 (this.token?.owner != token.owner || token.revision < (this.token?.revision ?: 0)))) return
         this.token = token; retireObservers()
+        if (closed || this.token != token) return
+        val capturedPicture = pictureOwner
+        pictureRetire?.invoke()
+        if (closed || this.token != token) return
+        if (pictureOwner == capturedPicture) {
+            player.clearVideoSurface()
+            // The next item's picture is claimed after this token change; hold its prepare until then.
+            if (capturedPicture != null) picturePending.value = true
+        }
         if (closed || this.token != token) return
         player.stop()
         if (closed || this.token != token) return
         player.clearMediaItems()
     }
     override suspend fun prepare(item: MonitorPlaybackItem, token: MonitorPlaybackItemToken, readyTimeout: Duration?): MonitorPlaybackMetadata {
-        if (closed || this.token != token) throw MonitorPlaybackException(MonitorPlaybackFailure.RETIRED)
+        if (closed || this.token != token || !admitted(token)) throw MonitorPlaybackException(MonitorPlaybackFailure.RETIRED)
         retireObservers()
-        if (closed || this.token != token) throw MonitorPlaybackException(MonitorPlaybackFailure.RETIRED)
+        if (closed || this.token != token || !admitted(token)) throw MonitorPlaybackException(MonitorPlaybackFailure.RETIRED)
         val request = UUID.randomUUID().toString(); preparation = request
         val ready = CompletableDeferred<MonitorPlaybackMetadata>(); waiter = ready
         val listener = object : Player.Listener {
@@ -115,23 +140,23 @@ class Media3PlaybackPort(val player: ExoPlayer, scope: CoroutineScope) : Monitor
         val rate = player.videoFormat?.frameRate?.takeIf { it.isFinite() && it > 1f }?.toDouble()
         return MonitorPlaybackMetadata(player.duration.takeIf { it > 0 }?.div(1000.0),
             video.width.takeIf { it > 1 }?.let { it * ratio.toDouble() }, video.height.takeIf { it > 1 }?.toDouble(),
-            MonitorConformPreview.probe(nominalFrameRate = rate))
+            MonitorConformPreview.probe(nominalFrameRate = rate, listedRate = token?.let(listedFrameRate)))
     }
     override fun play(rate: Double, token: MonitorPlaybackItemToken) {
-        if (closed || this.token != token || !rate.isFinite() || rate <= 0) return
+        if (closed || this.token != token || !admitted(token) || !rate.isFinite() || rate <= 0) return
         player.playbackParameters = PlaybackParameters(rate.toFloat(), 1f)
-        if (!closed && this.token == token) player.playWhenReady = true
+        if (!closed && this.token == token && admitted(token)) player.playWhenReady = true
     }
-    override fun pause(token: MonitorPlaybackItemToken) { if (!closed && this.token == token) player.pause() }
+    override fun pause(token: MonitorPlaybackItemToken) { if (!closed && this.token == token && admitted(token)) player.pause() }
     override suspend fun seek(seconds: Double, tolerance: Double, token: MonitorPlaybackItemToken): Boolean {
-        if (closed || this.token != token || !seconds.isFinite() || seconds < 0) return false
+        if (closed || this.token != token || !admitted(token) || !seconds.isFinite() || seconds < 0) return false
         // Media3 has no AVPlayer tolerance/decoded-frame seek receipt. Keep its existing seekTo
         // admission, without reporting a decoded new frame or ACK-as-camera observation.
         player.seekTo((seconds * 1000).toLong())
-        return !closed && this.token == token && currentCoroutineContext().isActive
+        return !closed && this.token == token && admitted(token) && currentCoroutineContext().isActive
     }
     override fun setMuted(muted: Boolean, token: MonitorPlaybackItemToken) {
-        if (!closed && this.token == token) player.volume = if (muted) 0f else 1f
+        if (!closed && this.token == token && admitted(token)) player.volume = if (muted) 0f else 1f
     }
     private fun retireObservers() {
         preparation = ""; waiter?.completeExceptionally(MonitorPlaybackException(MonitorPlaybackFailure.RETIRED)); waiter = null
@@ -139,6 +164,11 @@ class Media3PlaybackPort(val player: ExoPlayer, scope: CoroutineScope) : Monitor
     }
     override fun close(token: MonitorPlaybackItemToken) {
         if (closed || this.token?.owner != token.owner) return
-        closed = true; pictureOwner = null; picturePending.value = false; this.token = null; onEvent = null; retireObservers(); owner.cancel(); player.release()
+        closed = true
+        val departing = pictureClose
+        pictureOwner = null; pictureRetire = null; pictureClose = null; picturePending.value = false
+        this.token = null; onEvent = null; retireObservers(); sourceAdmission = null
+        departing?.invoke()
+        owner.cancel(); player.release()
     }
 }

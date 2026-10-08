@@ -284,7 +284,7 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
             })
         let owner = UUID()
         renderer.activate(owner)
-        func render() async throws -> MonitorVideoBackdropRenderer.Result {
+        func render() async throws -> OpenInstaCine.MonitorVideoBackdropRenderer.Result {
             clock.now += step
             // Like `HevcDecoder.backdropEffects`: each frame carries its source's own ceiling.
             var source = zebraSource

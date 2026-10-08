@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -41,12 +42,13 @@ internal fun PlaybackFeedView(
     sourceHeight: Int,
     sourceIdentity: MonitorPlaybackItemToken,
     sourceReady: Boolean,
+    sourceAdmission: (MonitorPlaybackItemToken) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val pictureOwner = remember(native) { native.claimPicture() }
+    val pictureOwner = remember(native, sourceIdentity) { native.claimPicture() }
     val session =
-        remember(native) {
+        remember(native, pictureOwner) {
             LiveFeedEffectsSession(
                 context = context,
                 scopeBus = scopeBus,
@@ -63,17 +65,21 @@ internal fun PlaybackFeedView(
                 playback = true,
             )
         }
+    session.setSourceAdmission { identity ->
+        (identity as? MonitorPlaybackItemToken)?.let(sourceAdmission) == true
+    }
+    session.configurePreviewSource(sourceIdentity, sourceReady)
     DisposableEffect(session, native) {
+        native.bindPicture(pictureOwner,
+            retire = session::close,
+            close = session::close)
         onDispose {
             session.close()
             native.releasePicture(pictureOwner)
         }
     }
-    LaunchedEffect(sourceIdentity, sourceReady) {
-        session.configurePreviewSource(sourceIdentity, sourceReady)
-    }
-    LaunchedEffect(plan) { session.updatePlan(plan) }
-    LaunchedEffect(sourceWidth, sourceHeight) {
+    LaunchedEffect(session, plan) { session.updatePlan(plan) }
+    LaunchedEffect(session, sourceWidth, sourceHeight) {
         session.setSourceSize(sourceWidth.coerceAtLeast(16), sourceHeight.coerceAtLeast(16))
     }
     BoxWithConstraints(modifier) {
@@ -93,6 +99,8 @@ internal fun PlaybackFeedView(
             translationY = zoom.offsetY
         },
     ) {
+        // A new actual decoder Surface cannot contain pixels queued for the departing item.
+        key(session) {
         AndroidView(
             factory = { viewContext ->
                 TextureView(viewContext).apply {
@@ -103,6 +111,7 @@ internal fun PlaybackFeedView(
             },
             modifier = Modifier.fillMaxSize(),
         )
+        }
     }
     }
 }

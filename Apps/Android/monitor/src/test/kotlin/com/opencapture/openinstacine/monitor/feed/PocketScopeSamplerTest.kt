@@ -11,7 +11,7 @@ import com.opencapture.opencine.media.ScopeSamples
 import com.opencapture.opencine.media.ScopeHistogramDisplay
 import com.opencapture.opencine.media.ScopeSampler
 import com.opencapture.opencine.media.VectorscopeRaster
-import com.opencapture.opencine.vocabulary.ScopeExposureCeiling
+import com.opencapture.opencine.dji.DjiScopeExposureCeiling as ScopeExposureCeiling
 
 class PocketScopeSamplerTest {
     @Test

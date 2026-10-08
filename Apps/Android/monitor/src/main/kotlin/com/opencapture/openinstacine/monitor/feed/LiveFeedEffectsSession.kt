@@ -7,10 +7,9 @@ import com.opencapture.openinstacine.monitor.OperatorPrefs
 import com.opencapture.opencine.runtime.GlesPresentationOptions
 import com.opencapture.opencine.runtime.InspectorPreviewPipeline
 import com.opencapture.opencine.runtime.ScopeSampleBus
-import com.opencapture.opencine.vocabulary.inferred
-import com.opencapture.opencine.vocabulary.ScopeExposureCeiling
+import com.opencapture.openinstacine.monitor.feed.LunaScopeExposureCeiling as ScopeExposureCeiling
 
-/** Source configuration and the existing third-party GL backend remain in the app. */
+/** Integration source configuration around the shared native GL owner. */
 internal class LiveFeedEffectsSession(context: Context, scopeBus: ScopeSampleBus,
     preview: InspectorPreviewPipeline, onDecoderSurface: (Surface) -> Unit,
     onGpuFailed: () -> Unit, onFirstFrame: () -> Unit = {}, letterboxSource: Boolean = true,
@@ -18,8 +17,8 @@ internal class LiveFeedEffectsSession(context: Context, scopeBus: ScopeSampleBus
     playback: Boolean = false, backdrop: MonitorBackdropFeed? = null,
 ) {
     private val runtime = com.opencapture.opencine.runtime.NativeGlesFeedSession(context, scopeBus,
-        preview, ::Media3GlBackend, clipProfile = ScopeExposureCeiling.PROFILE,
-        inferTransfer = { low, high, transfer -> MonitorTransfer.inferred(low, high, transfer) },
+        preview, { com.opencapture.opencine.runtime.NativeGlBackend.create(it) }, clipProfile = ScopeExposureCeiling.PROFILE,
+        inferTransfer = { _, _, transfer -> transfer },
         options = { GlesPresentationOptions(OperatorPrefs.feedUpscaler(context)) },
         logTag = "OpcFeedFx", onDecoderSurface = onDecoderSurface, onGpuFailed = onGpuFailed,
         onFirstFrame = onFirstFrame, letterboxSource = letterboxSource,
@@ -38,6 +37,7 @@ internal class LiveFeedEffectsSession(context: Context, scopeBus: ScopeSampleBus
     fun updatePlan(plan: FeedEffectsRenderPlan) = runtime.updatePlan(plan)
     fun setSourceSize(width: Int, height: Int) = runtime.setSourceSize(width, height)
     fun configurePreviewSource(identity: Any, ready: Boolean, active: Boolean = true) = runtime.configurePreviewSource(identity, ready, active)
+    fun setSourceAdmission(admission: ((Any) -> Boolean)?) = runtime.setSourceAdmission(admission)
     fun close() = runtime.close()
     fun detachDisplay() = runtime.detachDisplay()
 }

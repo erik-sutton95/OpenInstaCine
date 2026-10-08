@@ -25,6 +25,7 @@ internal val AppAssistHost = AssistHost(
     highlightColors = SettingsPalette.highlight,
     midtoneColors = SettingsPalette.midtone,
     ndHelp = ND_HELP,
+    rec709LookCurve = { com.opencapture.openinstacine.monitor.feed.LunaMonitorColorProfile.value.rec709LookCurves[it] },
 )
 
 /** This app's ND help copy, as on its main (the shared [com.opencapture.opencine.cameracontrols.NDAssist.HELP] uses hyphens). */
@@ -66,8 +67,7 @@ fun AssistOptionsPopup(
                 OperatorPrefs.setLutSelection(context, id)
             }
         },
-        family = model?.session?.connectedCamera?.model?.family ?: "pocket",
-        cameraName = model?.session?.connectedCamera?.name,
+        profile = model?.session?.connectedCamera?.model?.captureProfile?.looks ?: com.opencapture.openinstacine.monitor.session.LunaCameraLUTProfile.value,
         colorMode = colorMode,
     )
     AssistOptionsPanel(

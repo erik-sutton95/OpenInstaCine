@@ -1,5 +1,6 @@
 package com.opencapture.openinstacine.monitor
 
+import com.opencapture.opencine.cameracontrols.*
 import com.opencapture.monitorui.portraitZones
 import com.opencapture.monitorui.portraitOnFeedControls
 import android.graphics.Bitmap
@@ -117,8 +118,7 @@ private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabiliti
     LaunchedEffect(cover) {
         if (cover != null) model.assist.configureTool = null
     }
-    var locked by remember { mutableStateOf(false) }
-    var sheet by remember { mutableStateOf<LiveSheet?>(null) }
+    val liveState = remember(model) { MonitorOperatorLiveState() }
     val context = LocalContext.current
     val image = remember(context, patterned) {
         if (patterned) context.assets.open("monitor_backdrop_reference.png").use { BitmapFactory.decodeStream(it) } else null
@@ -131,50 +131,26 @@ private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabiliti
         LocalMonitorBackdrops provides if (image != null) listOf(backdrop) else emptyList(),
         com.opencapture.monitorui.LocalMonitorReadoutRegions provides readoutRegions,
     ) {
-    BoxWithConstraints(Modifier.fillMaxSize().background(LiveDesign.background)) {
-        val width = maxWidth.value
-        val height = maxHeight.value
-        val portrait = height > width
-        val zones = if (portrait) portraitZones(width, height, safeTop, safeBottom,
-            model.assistClean, sourceAspect < 1f || model.portraitFeedAspect == PortraitFeedAspect.FILL,
-            0f, sourceAspect) else null
-        val fitted = LiveMonitorLayout.fit(width, height, 0f, 0f, safeTop, safeBottom,
-            !model.assistClean, pictureAspect = sourceAspect)
-        val layout = if (zones != null) fitted.copy(feed = zones.feed, picture = zones.feed, topDeck = zones.topBar, capture = zones.controls) else fitted
-        val cluster = if (zones != null) portraitOnFeedControls(width, zones.assistToolbar.minY,
-            capabilities.gimbal) else layout.gimbalCluster(capabilities.gimbal)
-        // Optional pattern exercises the production widgets against a passive sampled source.
-        if (image != null) Image(image.asImageBitmap(), null,
-            Modifier.liveModuleFrame(layout.onFeed).monitorBackdropSource(backdrop), contentScale = ContentScale.FillBounds)
-        else Box(Modifier.liveModuleFrame(layout.onFeed).background(Color(0xFF4A4C48)))
-        com.opencapture.openinstacine.monitor.assists.LiveAssistLayer(model.assist, status = status, scopeBus = model.scopeBus, focus = null,
-            feedFrame = layout.onFeed, placementFrame = ChromeRect(6f, safeTop + 6f, width - 12f,
-                (zones?.systemBar?.minY ?: (height - safeBottom)) - safeTop - 12f), locked = locked,
-            onOpenOptions = { tool, frame -> model.assist.longPressAnchor = frame; model.assist.configureTool = tool })
-        if (zones != null) {
-            LivePortraitChrome(model, layout, zones, status, locked, { locked = !locked }, sheet,
-                { sheet = it }, model.assist, { model.assist.configureTool = it }, true, false, false, {},
-                fpsLabel = "25", bars = 4, sourceIsVertical = sourceAspect < 1f,
-                capabilities = capabilities)
-        } else {
-            LandscapeChrome(model, layout, status, locked, { locked = !locked }, sheet,
-                { sheet = it }, model.assist, { model.assist.configureTool = it }, true, false,
-                "25", 4, false, {}, cluster.zoom, cluster.stick, cluster.controls, false, {},
-                1.0, false, capabilities = capabilities)
+        BoxWithConstraints(Modifier.fillMaxSize().background(LiveDesign.background)) {
+            val geometry = monitorOperatorLiveLayout(
+                MonitorOperatorViewport(maxWidth.value, maxHeight.value, 0f, 0f, safeTop, safeBottom, 1f, safeTop > 0f),
+                model.assist, model::chromeSectionMounts, model.portraitFeedAspect, sourceAspect, sourceAspect < 1f,
+                model.virtualJoystickSize, false)
+            MonitorOperatorLiveSurface(rememberOperatorChromeSource(model, status), geometry, liveState,
+                MonitorOperatorLivePresentation(status, capabilities, "25", 4,
+                    model.phoneBatteryPercent.takeIf { it >= 0 }, true, sourceAspect < 1f, false, false, false, false, null),
+                model.assist, rememberOperatorAssistSource(model, status),
+                MonitorOperatorFocusObservation(null, com.opencapture.opencine.vocabulary.TrackingHud(), false, false, false, false),
+                MonitorOperatorFocusActions({ _, _ -> }, {}, { false }, { false }, {}, { false }, {}, {}, {}),
+                level = null, levelViewFlip = false, readExposure = { -1 }, exposureAvailable = false,
+                vpnActive = { false }, clearNote = {}, lockedChanged = {}, nativeInputBlocked = {},
+                picture = {
+                    if (image != null) Image(image.asImageBitmap(), null,
+                        Modifier.liveModuleFrame(geometry.pictureContent).monitorBackdropSource(backdrop),
+                        contentScale = ContentScale.FillBounds)
+                    else Box(Modifier.liveModuleFrame(geometry.pictureContent).background(Color(0xFF4A4C48)))
+                })
         }
-        if (!locked) sheet?.let {
-            LivePickerHost(it, width, height, 0f, 0f, safeTop, safeBottom, zones?.systemBar?.minY,
-                model, status, false, { sheet = it }, zones?.topBar?.maxY)
-        }
-        if (!locked && capabilities.gimbal && model.liveGimbalPanel == LiveGimbalPanel.SHEET) {
-            LiveGimbalSheetHost(model, layout, cluster, 0f, 0f, 0f, 0f)
-        }
-        if (!locked && cover == null) model.assist.configureTool?.let { tool ->
-            MonitorAssistInspector(tool, model.assist, model, status.colorMode,
-                width, height, 0f, 0f, 0f, zones?.controls?.minY ?: height,
-                onDismiss = { model.assist.configureTool = null })
-        }
-    }
     }
 }
 

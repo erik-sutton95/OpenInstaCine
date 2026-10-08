@@ -67,10 +67,12 @@ final class LiveAssistEngine: @unchecked Sendable {
         return .init(
             clipProfile: ScopeExposureCeiling.sourceProfile, lookCurves: curves,
             defaultScopeLook: { $0 == .ilog ? BundledLunaLUT.iLogToRec709 : nil },
-            inferTransfer: { MonitorTransfer.inferred(minByte: $0, maxByte: $1, fallback: $2) },
+            inferTransfer: { _, _, reported in reported },
             logSubsystem: "com.opencapture.openinstacine", journal: { ControlLiveLog.line($0) })
     }
-    init() { native = OpenCineApple.MonitorAssistEngine(configuration: Self.configuration) }
+    init(configuration: OpenCineApple.MonitorAssistConfiguration = LiveAssistEngine.configuration) {
+        native = OpenCineApple.MonitorAssistEngine(configuration: configuration)
+    }
     func adopt(exposureCeiling: OpenCineMedia.ScopeExposureCeiling) {
         native.adopt(exposureCeiling: exposureCeiling)
     }

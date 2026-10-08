@@ -142,7 +142,8 @@ class OperatorSetupContractTest {
         assertEquals("Auto · Off", lutLookLabel("auto"))
         assertEquals(
             "Auto · D-Log2 → Rec.709",
-            lutLookLabel("auto", colorMode = CameraCommands.COLOR_DLOG2),
+            lutLookLabel("auto", colorMode = CameraCommands.COLOR_DLOG2, profile = com.opencapture.opencine.vocabulary.CameraLUTProfile(automatic = mapOf(
+                CameraCommands.COLOR_DLOG2 to com.opencapture.opencine.vocabulary.LutLookSource.Asset("DJI_Official_Pocket4P_DLog2_Rec709_33.cube")))),
         )
         assertEquals("Off · Auto", lutLookLabel("auto", enabled = false, colorMode = CameraCommands.COLOR_DLOG2))
         assertEquals("D-Log2 → Rec.709", lutLookLabel("officialDLog2"))

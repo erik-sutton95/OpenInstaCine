@@ -1,3 +1,8 @@
+import OpenCineApple
+import OpenCineCameraControls
+import OpenCineAppKitApple
+import Observation
+import AVFoundation
 import Foundation
 import OpenCineAppKit
 import OpenCineMedia
@@ -16,12 +21,25 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
 
 @MainActor extension CameraSession {
     func makeMediaPlayback(native: any MonitorPlaybackPort, previousColor: @escaping @MainActor () -> ColorMode?) -> LunaPlaybackModel {
-        LunaPlaybackModel(library: mediaLibrary, native: native,
+        let owner = LunaPlaybackModel(library: mediaLibrary, native: native,
             candidates: { [weak self] record in self?.playbackCandidates(record) ?? [] },
             resolveLook: { [weak self] record, item in
                 guard let self else { return nil }
                 return await self.resolvePlaybackLook(record: record, item: item, previousColor: previousColor())
             })
+        owner.setItemAdmission { [weak self] record in
+            self?.capturePlaybackPresentation(record) ?? .init { false }
+        }
+        if let apple = native as? MonitorApplePlaybackOwner {
+            apple.sourceAdmission = { [weak owner] in
+                guard let owner else { return false }
+                let captured = owner.token, accepted = owner.isActive
+                guard owner.token == captured, !owner.closed else { return false }
+                if accepted { return true }
+                owner.close(); return false
+            }
+        }
+        return owner
     }
     func mediaPlaybackRecord(for file: MediaFile) -> MonitorMediaRecord<LunaMediaLibraryPayload>? {
         if let record = mediaRecord(for: file) { return record }
@@ -91,5 +109,102 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
             last: LUTPreferences.app.lastMonitorColorMode ?? previousColor) else { return nil }
         return .init(transfer: MonitorTransfer(color), source: .init(color: color, shotColor: clip,
             family: bodyFamily, cameraName: connectedCamera?.model.name, file: file, cameraID: cameraID))
+    }
+}
+
+/// Bounded native/source construction. Shared operators own the complete page lifetime.
+@MainActor @Observable final class LunaPlaybackPresentationSource {
+    @ObservationIgnored private var currentNative: MonitorApplePlaybackOwner?
+    @ObservationIgnored private var currentAssists: MonitorPlaybackAssistSession?
+    var native: MonitorApplePlaybackOwner? {
+        access(keyPath: \.native); return currentNative
+    }
+    var assists: MonitorPlaybackAssistSession? {
+        access(keyPath: \.assists); return currentAssists
+    }
+    func makeOwner(model: AppModel) -> MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook> {
+        MonitorOperatorMediaModel(library: model.session.mediaLibrary,
+            recordAdmission: { record in model.session.capturePlaybackPresentation(record) },
+            makeAdmittedPlayback: { [self] _, admission in
+                currentAssists?.close()
+                guard admission.isCurrent() else { return nil }
+                let native = MonitorApplePlaybackOwner(feed: PlaybackFeedSession())
+                let player = model.session.makeMediaPlayback(native: native,
+                    previousColor: { model.assist.monitorColorMode })
+                let assists = MonitorPlaybackAssistSession(native: native, samples: model.frameSamples,
+
+                    onTapFailure: MediaPlaybackAudioSession.tapFailure,
+                    onAudioFailure: MediaPlaybackAudioSession.audioFailure)
+                guard admission.isCurrent() else { assists.close(); player.close(); return nil }
+                currentNative = native; currentAssists = assists
+                withMutation(keyPath: \.native) {}; withMutation(keyPath: \.assists) {}
+                guard admission.isCurrent() else { assists.close(); player.close(); return nil }
+                return player
+            })
+    }
+    func operations(model: AppModel,
+        owner: MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>) -> MonitorOperatorPlaybackOperations<LunaMediaLibraryPayload, LunaPlaybackLook> {
+        let cache: (@MainActor (MonitorMediaRecord<LunaMediaLibraryPayload>) async -> Void)?
+        let delete: (@MainActor (MonitorMediaRecord<LunaMediaLibraryPayload>) async -> Bool)?
+        if model.session.canReachCameraMedia {
+            cache = { record in await model.session.download(file: record.payload.file) }
+            delete = { record in
+                await model.session.deleteMediaFiles([record.payload.file])
+                return model.session.mediaLibrary.record(record.asset.id) == nil
+            }
+        } else { cache = nil; delete = nil }
+        return .init(cacheOriginal: cache, delete: delete,
+            favorite: { record in model.session.toggleFavorite(record.payload.file) }, adoptLook: { _, look in
+            let value = look.source
+            guard let player = owner.playback else { return }
+            let token = player.token
+            guard owner.isCurrent(token) else { return }
+            if let shot = value.shotColor { model.session.rememberShotColor(shot, for: value.file) }
+            guard owner.isCurrent(token) else { return }
+            model.assist.adoptPlaybackColor(value.color,
+                family: value.family != .other ? value.family : model.assist.monitorFamily,
+                cameraName: value.cameraName,
+                lookProfile: model.session.connectedCamera?.model.captureProfile?.looks ?? LunaShellMapping.lookProfile)
+        })
+    }
+    func values(record: MonitorMediaRecord<LunaMediaLibraryPayload>, model: AppModel) -> MonitorPlaybackSourceValues {
+        let file = record.payload.file
+        let grade = model.session.cacheGrade(for: file)
+        let availability: MonitorPlaybackAvailability
+        #if targetEnvironment(simulator)
+        if MonitorMediaReview.clipURL(for: file) != nil { availability = .original }
+        else { availability = grade == .original ? .original : grade.isProxyOnly ? .proxy : .camera }
+        #else
+        availability = grade == .original ? .original : grade.isProxyOnly ? .proxy : .camera
+        #endif
+        let transfer = model.monitorTransfer ?? model.assist.monitorColorMode.map(MonitorTransfer.init)
+        let buffered = currentNative?.player.currentItem?.loadedTimeRanges.map {
+            CMTimeGetSeconds(CMTimeRangeGetEnd($0.timeRangeValue))
+        }.filter(\.isFinite).max()
+        return .init(availability: availability,
+            progress: model.session.mediaDownloadProgress[file.path], buffered: buffered,
+            colorLabel: model.session.shotColor(for: file)?.label(in: model.session.profile),
+            transfer: transfer,
+            clipByte: transfer.map { model.frameSamples.exposureCeiling.clipByte(transfer: $0) })
+    }
+}
+
+@MainActor extension CameraSession {
+    func capturePlaybackPresentation(_ record: MonitorMediaRecord<LunaMediaLibraryPayload>) -> MonitorPlaybackAdmission {
+        let owner: MonitorMediaLibraryModel<LunaMediaLibraryPayload> = mediaLibrary
+        let token = owner.actionToken, generation = owner.cache.directory.generation
+        let cameraID = mediaCameraID
+        let indexed = owner.record(record.asset.id) != nil
+        return .init { [weak self, weak owner] in
+            guard let self, let owner, self.mediaLibrary === owner,
+                owner.isCurrent(token), owner.cache.directory.generation == generation,
+                self.mediaCameraID == cameraID else { return false }
+            if indexed { return owner.record(record.asset.id) != nil }
+            #if targetEnvironment(simulator)
+            return MonitorMediaReview.isActive && record.payload.file.path.hasPrefix(MonitorMediaReview.pathPrefix)
+            #else
+            return false
+            #endif
+        }
     }
 }

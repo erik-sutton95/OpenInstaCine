@@ -67,7 +67,7 @@ class MonitorBackdropFeedTest {
 
     @Test fun rawOrientationAndRealGradeRemainBoundedAcrossResize() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val renderer = InspectorPreviewRenderer(::Media3GlBackend)
+        val renderer = InspectorPreviewRenderer({ com.opencapture.opencine.runtime.NativeGlBackend.create(it) })
         try {
             // Distinct rows catch double flips between bottom-up GLES and top-down Vulkan taps.
             val raw = byteArrayOf(255.toByte(), 0, 0, 255.toByte(), 0, 0, 255.toByte(), 255.toByte())

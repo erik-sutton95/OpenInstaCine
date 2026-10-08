@@ -27,6 +27,9 @@ import com.opencapture.opencine.cameracontrols.LiveGimbalPanel
 import com.opencapture.opencine.cameracontrols.LiveZoomChip
 import com.opencapture.opencine.motion.GimbalProgram
 import com.opencapture.opencine.motion.GimbalWaypoint
+import com.opencapture.opencine.motion.GimbalProgramPlayback
+import com.opencapture.opencine.appkit.MotionProgramSession
+import com.opencapture.opencine.core.OperationID
 import com.opencapture.openinstacine.monitor.session.PocketCameraSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.test.assertEquals
@@ -80,9 +83,7 @@ class MotionProgramSessionTest {
 
                 for (state in listOf("countdown", "running", "paused")) {
                     scenario.onActivity {
-                        seed(model!!.session, "_gimbalMoveRunning", true)
-                        seed(model!!.session, "_gimbalMoveCountdown", if (state == "countdown") 2 else null)
-                        seed(model!!.session, "_gimbalMovePaused", state == "paused")
+                        seedMove(model!!.session, countdown = if (state == "countdown") 2 else null, paused = state == "paused")
                         if (state != "paused") {
                             model!!.session.restartProgrammedMove()
                             assertTrue(model!!.session.gimbalMoveRunning.value, "Restart requires a paused move")
@@ -102,8 +103,9 @@ class MotionProgramSessionTest {
                     assertTrue(node("motion.loop").isChecked)
                 }
 
-                val token = PocketCameraSession::class.java.getDeclaredField("moveToken").apply { isAccessible = true }
-                scenario.onActivity { token.set(model!!.session, 42L) }
+                // The production shared owner's operation replaces the donor's missing moveToken field.
+                val token = { moveOwner(model!!.session).state.value.operation }
+                scenario.onActivity { assertTrue(token() != null) }
                 click("motion.restart")
                 scenario.onActivity {
                     // No connected camera: the existing Start guards prevent a new countdown,
@@ -111,7 +113,7 @@ class MotionProgramSessionTest {
                     assertFalse(model!!.session.gimbalMoveRunning.value)
                     assertFalse(model!!.session.gimbalMovePaused.value)
                     assertEquals(null, model!!.session.gimbalMoveCountdown.value)
-                    assertEquals(null, token.get(model!!.session))
+                    assertEquals(null, token())
                     assertEquals(program, model!!.session.gimbalProgram.value)
                     model!!.session.restartProgrammedMove()
                     assertFalse(model!!.session.gimbalMoveRunning.value, "Restart is ignored while idle")
@@ -155,8 +157,7 @@ class MotionProgramSessionTest {
                 for (height in listOf(420f, 280f)) {
                     scenario.onActivity {
                         heightLimit = height
-                        seed(model!!.session, "_gimbalMoveRunning", true)
-                        seed(model!!.session, "_gimbalMovePaused", true)
+                        seedMove(model!!.session, paused = true)
                     }
                     val settings = node("motion.settings") { state(it) == "More settings below" }
                     val header = bounds(node("motion.close"))
@@ -364,6 +365,19 @@ class MotionProgramSessionTest {
     private fun <T> seed(session: PocketCameraSession, name: String, value: T) {
         val field = PocketCameraSession::class.java.getDeclaredField(name).apply { isAccessible = true }
         (field.get(session) as MutableStateFlow<T>).value = value
+    }
+
+    private fun moveOwner(session: PocketCameraSession): MotionProgramSession =
+        PocketCameraSession::class.java.getDeclaredField("programmedMove").apply { isAccessible = true }
+            .get(session) as MotionProgramSession
+
+    /** Synthetic presentation values live in the real shared owner's state; no camera commands are sent. */
+    @Suppress("UNCHECKED_CAST")
+    private fun seedMove(session: PocketCameraSession, countdown: Int? = null, paused: Boolean = false) {
+        val owner = moveOwner(session)
+        val field = MotionProgramSession::class.java.getDeclaredField("_state").apply { isAccessible = true }
+        (field.get(owner) as MutableStateFlow<MotionProgramSession.State>).value = MotionProgramSession.State(
+            GimbalProgramPlayback.State(running = true, countdown = countdown, paused = paused), OperationID())
     }
 
     private fun click(id: String) {

@@ -23,18 +23,6 @@ class Action6SupportTest {
         assertFalse(CaptureLists.supportsFocusModeOrDefault(CameraModel(action6, supportsFocusMode = false, supportsTapFocus = false)))
     }
 
-    @Test fun captureBytes() {
-        assertEquals(CameraCommands.SHOOT_PHOTO, CameraCommands.photoModeRaw(action6))
-        assertEquals(
-            CaptureShutterPolicy.CaptureKind.SHUTTER_TRIGGER,
-            CaptureShutterPolicy.captureKind(CameraCommands.SHOOT_TIMELAPSE, action6),
-        )
-        assertEquals(
-            CaptureShutterPolicy.CaptureKind.VIDEO_RECORD,
-            CaptureShutterPolicy.captureKind(CameraCommands.SHOOT_TIMELAPSE, "Osmo Pocket 4"),
-        )
-    }
-
     @Test fun apertureChoicesFallBackByModeUntilTheCapabilityLands() {
         val superNight = CameraStatus(shootingMode = CameraCommands.SHOOT_SUPER_NIGHT)
         assertEquals(listOf(0, 2, 3), ApertureStrategy.choices(superNight))

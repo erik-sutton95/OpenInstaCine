@@ -147,6 +147,9 @@ targets:
         product: OpenInstaViewCore
       - package: OpenCine
         product: OpenCineMedia
+      # Original shared-math calibration fixtures explicitly select their DJI source profile.
+      - package: OpenCine
+        product: OpenCineDJI
       - package: OpenCine
         product: OpenCineCameraVocabulary
       - package: OpenCine

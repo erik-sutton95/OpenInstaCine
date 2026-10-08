@@ -11,6 +11,7 @@ import class OpenCineCore.LocalVPNNotice
 import struct OpenCineCore.CameraSessionID
 import struct OpenCineCore.CameraValuePin
 import OpenCineMedia
+import OpenCineMotion
 import OpenInstaViewCore
 import UIKit
 import os
@@ -176,10 +177,11 @@ final class CameraSession {
     var gimbalRamp: GimbalRamp = OperatorPrefs.gimbalRamp
     var gimbalDoubleTap: GimbalDoubleTap = OperatorPrefs.gimbalDoubleTap
     var gimbalProgram = GimbalProgram()
-    var gimbalMoveRunning = false
-    var gimbalMovePaused = false
-    var gimbalMoveCanPause = false
-    var gimbalStartCountdown: Int?
+    var programmedMoveState = MotionProgramSession.State()
+    var gimbalMoveRunning: Bool { programmedMoveState.progress.running }
+    var gimbalMovePaused: Bool { programmedMoveState.progress.paused }
+    var gimbalMoveCanPause: Bool { programmedMoveState.progress.canPause }
+    var gimbalStartCountdown: Int? { programmedMoveState.progress.countdown }
     private(set) var gimbalControlSceneActive = true
     private(set) var gimbalPoseViewFlip = false
     private(set) var gimbalPoseInvertPan = false
@@ -200,7 +202,7 @@ final class CameraSession {
     @ObservationIgnored var gimbalAimTask: Task<Void, Never>?
     @ObservationIgnored var gimbalAimGeneration: UInt64 = 0
     /// Head-tracking targets stamped with their AirPods measurement time (last second).
-    @ObservationIgnored var headTrackSamples: [HeadTrack.Sample] = []
+    @ObservationIgnored var headTrackSamples: [OpenInstaViewCore.HeadTrack.Sample] = []
     @ObservationIgnored var isSteeringHead = false
     /// Live frame stamps to time-of-day timecode, reset per live start.
     @ObservationIgnored var frameTimecode = LunaFrameTimecode()
@@ -210,9 +212,9 @@ final class CameraSession {
     #if DEBUG
         @ObservationIgnored var lastFrameClock: UInt64 = 0
     #endif
-    /// Programmed A/B/C move runner (SET_ANGLE stream).
-    @ObservationIgnored var gimbalMoveTask: Task<Void, Never>?
-    @ObservationIgnored var gimbalMoveClock = 0.0
+    /// Shared take owner; this facade supplies the captured Luna service and eligibility.
+    @ObservationIgnored var programmedMove = MotionProgramSession()
+    var gimbalMoveClock: TimeInterval { programmedMoveState.progress.elapsed }
     var gimbalYawTenthDeg: Int16? { freshGimbalWaypoint.map { Int16(($0.yawDeg * 10).rounded()) } }
     var gimbalPitchTenthDeg: Int16? { freshGimbalWaypoint.map { Int16(($0.pitchDeg * 10).rounded()) } }
     /// Camera GET_ANGLE when fresh (handle frame, degrees, yaw unwrapped across the
@@ -316,8 +318,9 @@ final class CameraSession {
     var zoomPinchPreview: Double?
     @ObservationIgnored var zoomPinchAnchor = 1.0
     @ObservationIgnored var lastZoomWriteAt = Date.distantPast
-    @ObservationIgnored var pendingZoomWrite: Double?
+    @ObservationIgnored var pendingZoomWrite: LunaQueuedZoomWrite?
     @ObservationIgnored var zoomWriteTask: Task<Void, Never>?
+    @ObservationIgnored var zoomWriteRevision: UInt64 = 0
     var zoomPin: CameraValuePin<Double>?
     var zoomOptimistic: Double? { zoomPin?.expected }
     /// Highest zoom the body accepts (fw 1.1.15 raised this; see LunaShellMapping).
@@ -540,7 +543,9 @@ final class CameraSession {
         zoomPinchPreview = nil
         zoomPin = nil
         pendingZoomWrite = nil
+        zoomWriteRevision &+= 1
         zoomWriteTask?.cancel()
+        zoomWriteTask = nil
         gimbalStick.reset()
         motion.endHold()
         gimbalAnglePoll?.cancel()
@@ -938,6 +943,7 @@ final class CameraSession {
     func noteSceneBecameInactive() {
         recordFeedBreadcrumb(.sceneActivity, detail: "inactive")
         gimbalControlSceneActive = false
+        cancelProgrammedMove()
         endGimbalStick(cancelMove: true)
         if case .live = phase { needsForegroundRecover = true }
     }

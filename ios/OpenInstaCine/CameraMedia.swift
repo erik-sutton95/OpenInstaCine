@@ -232,6 +232,38 @@ extension CameraSession {
     func ensureThumbnail(for file: MediaFile) async {
         if let id = mediaRecord(for: file)?.asset.id { await mediaLibrary.ensureThumbnailAndWait(id) }
     }
+    /// One raw original at the existing routed camera address, with no cache or look mutation.
+    /// The captured native session/epoch, catalog content and picture request all remain required.
+    func originalImageBytes(for file: MediaFile,
+        ifCurrent: @escaping @MainActor () -> Bool) async -> Data? {
+        guard file.kind == .photo, canReachCameraMedia, let library = mediaLibrary,
+            let record = mediaRecord(for: file), let source = backend.session, source.admitsControl,
+            let url = MediaHTTP.pathURL(storage: file.storage, path: file.path, route: profile.media)
+        else { return nil }
+        let epoch = source.current.epoch, generation = connectGeneration
+        let camera = connectedCamera?.id, cameraID = mediaCameraID, transport = cameraMedia.nativeIO
+        let current: @MainActor () -> Bool = { [weak self] in
+            guard let self, self.canReachCameraMedia, self.mediaLibrary === library,
+                self.backend.session === source, source.admitsControl, source.current.epoch == epoch,
+                self.connectGeneration == generation, self.connectedCamera?.id == camera,
+                self.mediaCameraID == cameraID,
+                self.mediaRecord(for: file)?.asset.id == record.asset.id else { return false }
+            return true
+        }
+        let authority = library.captureIO(key: .init(file.path), asset: record.asset.id) {
+            guard current() else { return false }
+            let allowed = ifCurrent()
+            return allowed && current()
+        }
+        do {
+            return try await library.readHostOriginalImage(authority) {
+                try authority.requireCurrent()
+                let bytes = try await transport.originalImageBytes(from: url)
+                try authority.requireCurrent()
+                return bytes
+            }
+        } catch { return nil }
+    }
     func download(file: MediaFile) async {
         guard let id = mediaRecord(for: file)?.asset.id else { return }
         do { _ = try await mediaLibrary.cacheOriginal(id) }

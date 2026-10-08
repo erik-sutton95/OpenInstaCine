@@ -28,6 +28,19 @@ import org.junit.Test
 
 /** Port checks for iOS `LunaShellMapping`: Luna readout to the shared CameraStatus and back. */
 class LunaShellMappingTest {
+    @kotlin.test.Test fun actualLookProfileDeclaresOnlyTheShippedConversion() {
+        val profile = LunaCameraLUTProfile.value
+        kotlin.test.assertEquals("camera:insta360-luna-ilog-rec709-v2", profile.cameraLooks.single().id)
+        val source = com.opencapture.opencine.vocabulary.LutLookResolver.resolve(
+            com.opencapture.opencine.vocabulary.LutCatalog.AUTO, true, CameraCommands.COLOR_ILOG, profile)
+        kotlin.test.assertEquals(com.opencapture.opencine.vocabulary.LutLookSource.Asset(
+            "Luna_I-Log_to_Rec709_BT1886_s33_v2.cube",
+            com.opencapture.opencine.media.MonitorTransfer.ILOG, "I-Log → Rec.709"), source)
+        kotlin.test.assertEquals(com.opencapture.opencine.vocabulary.LutLookSource.Off,
+            com.opencapture.opencine.vocabulary.LutLookResolver.resolve(
+                com.opencapture.opencine.vocabulary.LutCatalog.AUTO, true, CameraCommands.COLOR_DLOG2, profile))
+    }
+
     private val m = LunaShellMapping
 
     private val formats = listOf(

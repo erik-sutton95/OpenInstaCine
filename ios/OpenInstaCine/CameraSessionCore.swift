@@ -1,4 +1,5 @@
 import Foundation
+import Insta360Apple
 import OpenCineAppKit
 import OpenCineCore
 import OpenInstaViewCore
@@ -13,6 +14,25 @@ import OpenInstaViewCore
 extension CameraSession {
     /// The common session of the camera on the monitor, if any.
     var coreSession: (any OpenCineCore.CameraSession)? { control.session }
+
+    /// One operation's concrete integration port, retained by the shared control queue.
+    func commandDispatchAdmission(_ admission: LunaCommandAdmission) -> CommandDispatchAdmission? {
+        guard let target = lunaSession, admission.admits(target.commandOwner),
+            coreSession?.id == target.id
+        else { return nil }
+        let snapshot = target.current
+        return CommandDispatchAdmission(
+            session: snapshot.session, epoch: snapshot.epoch,
+            isCurrent: { admission.admits(target.commandOwner) },
+            submit: { command in await target.submit(command, admission: admission) })
+    }
+
+    private func writeSetting(
+        _ value: SettingValue, label: String, admission: CommandDispatchAdmission?
+    ) {
+        if let admission { control.set(value, label: label, admission: admission) }
+        else { control.set(value, label: label) }
+    }
 
     static let notApplied = " was not applied by the camera."
 
@@ -98,17 +118,35 @@ extension CameraSession {
     // MARK: - Settings
 
     func setISO(_ index: IsoIndex) {
+        setISO(index, suppliedAdmission: nil)
+    }
+
+    func setISO(_ index: IsoIndex, admission: LunaCommandAdmission) {
+        guard let dispatch = commandDispatchAdmission(admission) else { return }
+        setISO(index, suppliedAdmission: dispatch)
+    }
+
+    private func setISO(_ index: IsoIndex, suppliedAdmission admission: CommandDispatchAdmission?) {
         guard canSendControl else { return }
         if index == .auto {
-            control.set(.iso(.auto), label: "ISO \(index.label)")
+            writeSetting(.iso(.auto), label: "ISO \(index.label)", admission: admission)
         } else if let value = index.isoValue {
-            control.set(.iso(.manual(value)), label: "ISO \(index.label)")
+            writeSetting(.iso(.manual(value)), label: "ISO \(index.label)", admission: admission)
         }
     }
 
     func setShutterDenom(_ denom: Int) {
+        setShutterDenom(denom, suppliedAdmission: nil)
+    }
+
+    func setShutterDenom(_ denom: Int, admission: LunaCommandAdmission) {
+        guard let dispatch = commandDispatchAdmission(admission) else { return }
+        setShutterDenom(denom, suppliedAdmission: dispatch)
+    }
+
+    private func setShutterDenom(_ denom: Int, suppliedAdmission admission: CommandDispatchAdmission?) {
         guard canSendControl, denom > 0 else { return }
-        control.set(.shutter(.duration(Rational(1, denom))), label: "1/\(denom)")
+        writeSetting(.shutter(.duration(Rational(1, denom))), label: "1/\(denom)", admission: admission)
     }
 
     func setExpoMode(_ mode: ExpoMode) {
@@ -127,12 +165,30 @@ extension CameraSession {
     }
 
     func setWhiteBalanceAuto(tint: Int? = nil) {
+        setWhiteBalanceAuto(tint: tint, suppliedAdmission: nil)
+    }
+
+    func setWhiteBalanceAuto(tint: Int? = nil, admission: LunaCommandAdmission) {
+        guard let dispatch = commandDispatchAdmission(admission) else { return }
+        setWhiteBalanceAuto(tint: tint, suppliedAdmission: dispatch)
+    }
+
+    private func setWhiteBalanceAuto(tint: Int?, suppliedAdmission admission: CommandDispatchAdmission?) {
         guard canSendControl else { return }
         autoWhiteBalanceLock = nil
-        control.set(.whiteBalance(.auto), label: "WB Auto")
+        writeSetting(.whiteBalance(.auto), label: "WB Auto", admission: admission)
     }
 
     func setWhiteBalanceCustom(kelvin: Int, tint: Int) {
+        setWhiteBalanceCustom(kelvin: kelvin, tint: tint, suppliedAdmission: nil)
+    }
+
+    func setWhiteBalanceCustom(kelvin: Int, tint: Int, admission: LunaCommandAdmission) {
+        guard let dispatch = commandDispatchAdmission(admission) else { return }
+        setWhiteBalanceCustom(kelvin: kelvin, tint: tint, suppliedAdmission: dispatch)
+    }
+
+    private func setWhiteBalanceCustom(kelvin: Int, tint: Int, suppliedAdmission admission: CommandDispatchAdmission?) {
         guard canSendControl else { return }
         let kelvin = min(max(kelvin, 2_000), 10_000)
         // Custom from AWB Lock keeps the locked value; the camera is already there.
@@ -141,7 +197,7 @@ extension CameraSession {
             return
         }
         autoWhiteBalanceLock = nil
-        control.set(.whiteBalance(.kelvin(kelvin)), label: "WB \(kelvin)K")
+        writeSetting(.whiteBalance(.kelvin(kelvin)), label: "WB \(kelvin)K", admission: admission)
     }
 
     // MARK: - Record
@@ -149,6 +205,24 @@ extension CameraSession {
     /// The record lamp without a confirmation: start or stop as a fresh camera report says.
     func toggleRecording() { control.record(start: nil) }
 
+    func toggleRecording(admission: LunaCommandAdmission) {
+        guard let dispatch = commandDispatchAdmission(admission) else { return }
+        control.record(start: nil, admission: dispatch)
+    }
+
     /// A confirmed start or stop (the dialog already checked lock and link).
     func setRecording(start: Bool) { control.record(start: start) }
+
+    func setRecording(start: Bool, admission: LunaCommandAdmission) {
+        guard let dispatch = commandDispatchAdmission(admission) else { return }
+        control.record(start: start, admission: dispatch)
+    }
+
+    @discardableResult
+    func commitRecording(
+        from editor: MonitorControlModel.RecordEditor, admission: LunaCommandAdmission
+    ) -> Bool {
+        guard let dispatch = commandDispatchAdmission(admission) else { return false }
+        return control.commitRecord(from: editor, admission: dispatch)
+    }
 }

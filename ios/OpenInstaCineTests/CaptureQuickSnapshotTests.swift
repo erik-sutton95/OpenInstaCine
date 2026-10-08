@@ -58,6 +58,18 @@ final class CaptureQuickSnapshotTests: XCTestCase {
         }
     }
 
+    func testLunaProfileKeepsILogAndDolbyVisionInTheSharedColorDrum() throws {
+        var status = CameraStatus()
+        status.availableColorModes = LunaShellMapping.colorModes
+        for color in LunaShellMapping.colorModes {
+            status.colorMode = color
+            let snapshot = try XCTUnwrap(CaptureQuickSnapshot.primary(.color, status: status,
+                cameraModel: LunaShellMapping.cameraModel, profile: LunaShellMapping.profile))
+            XCTAssertEqual(snapshot.options, ["Standard", "I-Log", "Dolby Vision"])
+            XCTAssertEqual(snapshot.selection, color.label(in: LunaShellMapping.profile))
+        }
+    }
+
     func testFormatColorAndModeSnapshotsMatchTheFullPickerPrimaryDrum() throws {
         var status = CameraStatus()
         status.shootingMode = Int(ShootingMode.video.rawValue)
@@ -79,13 +91,13 @@ final class CaptureQuickSnapshotTests: XCTestCase {
 
         status.colorMode = .normal
         status.availableColorModes = [.normal, .hdr, .dLog]
-        let color = try XCTUnwrap(CaptureQuickSnapshot.primary(.color, status: status, profile: LunaShellMapping.profile))
+        let color = try XCTUnwrap(CaptureQuickSnapshot.primary(.color, status: status, profile: CameraLabelProfile(colorModeLabels: [.normal: "Standard"])))
         XCTAssertEqual(color.options, ["Standard", "HDR", "D-Log"])
         XCTAssertEqual(color.selection, "Standard")
         XCTAssertEqual(color.changedValue(translation: -56, current: color), "HDR")
 
         status.availableColorModes = [.normal]
-        let colorChanged = CaptureQuickSnapshot.primary(.color, status: status, profile: LunaShellMapping.profile)
+        let colorChanged = CaptureQuickSnapshot.primary(.color, status: status, profile: CameraLabelProfile(colorModeLabels: [.normal: "Standard"]))
         XCTAssertNil(color.changedValue(translation: -56, current: colorChanged))
 
         status.shootingMode = Int(ShootingMode.video.rawValue)

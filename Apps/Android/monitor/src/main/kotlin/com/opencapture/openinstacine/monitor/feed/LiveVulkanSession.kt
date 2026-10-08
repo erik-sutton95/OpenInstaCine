@@ -8,7 +8,7 @@ import com.opencapture.openinstacine.monitor.diagnostics.DiagnosticCenter
 import com.opencapture.opencine.runtime.GlesPresentationOptions
 import com.opencapture.opencine.runtime.InspectorPreviewPipeline
 import com.opencapture.opencine.runtime.ScopeSampleBus
-import com.opencapture.opencine.vocabulary.ScopeExposureCeiling
+import com.opencapture.openinstacine.monitor.feed.LunaScopeExposureCeiling as ScopeExposureCeiling
 
 internal class LiveVulkanSession(context: Context, scopeBus: ScopeSampleBus,
     preview: InspectorPreviewPipeline, onDecoderSurface: (Surface) -> Unit,

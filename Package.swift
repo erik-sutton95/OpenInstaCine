@@ -44,7 +44,12 @@ let package = Package(
         .testTarget(
             name: "OpenInstaViewCoreTests",
             // Insta360Apple: the shell reach is checked against what the Luna integration declares.
-            dependencies: ["OpenInstaViewCore", .product(name: "Insta360Apple", package: "OpenCine")]
+            dependencies: [
+                "OpenInstaViewCore",
+                .product(name: "Insta360Apple", package: "OpenCine"),
+                // Original DJI calibration fixtures exercise the shared math in this test target.
+                .product(name: "OpenCineDJI", package: "OpenCine"),
+            ]
         ),
         .target(
             name: "OpenInstaCineAndroidFacade",
@@ -56,7 +61,10 @@ let package = Package(
         ),
         .testTarget(
             name: "OpenInstaCineAndroidFacadeTests",
-            dependencies: ["OpenInstaCineAndroidFacade", "OpenInstaViewCore"]
+            dependencies: [
+                "OpenInstaCineAndroidFacade", "OpenInstaViewCore",
+                .product(name: "OpenCineDJI", package: "OpenCine"),
+            ]
         ),
     ]
 )

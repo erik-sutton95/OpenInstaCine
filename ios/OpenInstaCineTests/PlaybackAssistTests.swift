@@ -459,7 +459,7 @@ final class PlaybackAssistTests: XCTestCase {
     }
 
     func testEngineGradesPlaybackZebraAsOverlayOnly() async {
-        let engine = LiveAssistEngine()
+        let engine = LiveAssistEngine(configuration: DeclaredDJIMonitorFixture.assistConfiguration)
         var fx = LiveImageEffects()
         fx.zebra = true
         fx.colorMode = .dLog2
@@ -482,7 +482,7 @@ final class PlaybackAssistTests: XCTestCase {
         fx.lutDimension = cube.size
         fx.lutRGBA = cube.rgbaComponents.withUnsafeBytes { Data($0) }
         fx.colorMode = .dLog2
-        let engine = LiveAssistEngine()
+        let engine = LiveAssistEngine(configuration: DeclaredDJIMonitorFixture.assistConfiguration)
         let buffer = ScopeTestBuffers.makeFlatBuffer(code: 78)
         let presented = expectation(description: "lut present")
         presented.assertForOverFulfill = false

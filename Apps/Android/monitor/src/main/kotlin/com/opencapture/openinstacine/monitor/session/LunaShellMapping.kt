@@ -163,6 +163,9 @@ internal object LunaShellMapping {
             gimbalModeLabels = gimbalModeLabels,
             focusLabels = focusOptions.map { it.chip },
             colorModes = colorModes,
+            shootingModes = listOf(CameraCommands.SHOOT_VIDEO, CameraCommands.SHOOT_PHOTO,
+                CameraCommands.SHOOT_TIMELAPSE, CameraCommands.SHOOT_HYPERLAPSE,
+                CameraCommands.SHOOT_SUPER_NIGHT, CameraCommands.SHOOT_SLOWMO),
         ),
         media = com.opencapture.opencine.vocabulary.MediaRoute(host = "192.168.42.1", directPath = true),
     )

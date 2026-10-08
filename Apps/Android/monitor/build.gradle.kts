@@ -163,6 +163,8 @@ val stageSwiftCore =
                     "Sources/OpenCineMedia/**",
                     "Sources/OpenCineMotion/**",
                     "Sources/OpenCineRelay/**",
+                    "Sources/MonitorPresentation/**",
+                    "Sources/OpenCineCameraVocabulary/**",
                     "Sources/OpenCineCore/**",
                     "Sources/OpenCineJNISupport/**",
                     "Sources/OpenCineJNI/**",
@@ -240,6 +242,8 @@ dependencies {
     androidTestImplementation(testFixtures("com.opencapture.opencine:core:0.1.0-SNAPSHOT"))
 
     testImplementation(libs.kotlin.test.junit)
+    // Original cross-source calibration fixtures select DJI explicitly in tests only.
+    testImplementation("com.opencapture.opencine:dji:0.1.0-SNAPSHOT")
     testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)

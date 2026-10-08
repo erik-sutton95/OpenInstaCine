@@ -6,10 +6,8 @@ import OpenCineCore
 import OpenInstaViewCore
 import SwiftUI
 
-/// The app root on the shared shell (SHELL-03): `AppShell` shows the cameras or pair page, or
-/// the monitor, from `model.shell`. The existing native monitor (`LiveViewScreen`) is its monitor
-/// slot and still presents Settings and Media over itself (temporary); the cover pages over the
-/// cameras page are `AppPanelHost`. Sheets, the scene and network checks stay app composition.
+/// The shared shell retains the native monitor beneath complete settings and catalog covers.
+/// Integration pairing facts, diagnostic sheets and network checks stay app composition.
 struct LinkExperience: View {
     @Environment(AppModel.self) private var model
     @Environment(\.monitorWindowGeometry) private var windowGeometry
@@ -44,7 +42,8 @@ struct LinkExperience: View {
                 }),
             safeArea: safeArea,
             pairingFlow: model.pairingWizard(stillLooking: stillLooking).flow(
-                model.cameras, onDone: { model.shell.endPairing() }, rescan: { model.integration.retryDiscovery() })
+                model.cameras, onDone: { model.shell.endPairing() }, rescan: { model.integration.retryDiscovery() }),
+            coverPresentation: .shell
         ) { _ in
             LiveViewScreen()
         } page: { cover in

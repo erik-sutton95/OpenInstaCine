@@ -37,8 +37,7 @@ fun LUTPicker(model: AppModel, onClose: () -> Unit) {
         onExposure = { assist.updateLutExposure(it) },
         onArmLut = { assist.armLut() },
         colorMode = status.monitorColorMode,
-        family = model.session.connectedCamera?.model?.family ?: "pocket",
-        cameraName = model.session.connectedCamera?.name,
+        profile = model.session.connectedCamera?.model?.captureProfile?.looks ?: com.opencapture.openinstacine.monitor.session.LunaCameraLUTProfile.value,
         isPhoto = status.isPhoto,
     )
 }

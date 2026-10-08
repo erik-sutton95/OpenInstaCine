@@ -54,48 +54,28 @@ import com.opencapture.opencine.vocabulary.MediaFile
 import com.opencapture.opencine.vocabulary.MediaClipFormatting
 import com.opencapture.opencine.vocabulary.MediaCacheGrade
 
+/** Bounded SDK decode/cache adapter; the shared catalog owns card and selection composition. */
 @Composable
-fun MediaClipCell(file: MediaFile, controller: LunaMediaPlaybackAdapter, onOpen: () -> Unit,
-    isSelecting: Boolean = false, isSelected: Boolean = false,
-    onBeginSelection: (() -> Unit)? = null, onToggleSelection: (() -> Unit)? = null) =
-    MediaCatalogClip(file, controller, onOpen, false, isSelecting, isSelected, onBeginSelection, onToggleSelection)
-
-@Composable
-fun MediaClipListRow(file: MediaFile, controller: LunaMediaPlaybackAdapter, onOpen: () -> Unit,
-    isSelecting: Boolean = false, isSelected: Boolean = false,
-    onBeginSelection: (() -> Unit)? = null, onToggleSelection: (() -> Unit)? = null) =
-    MediaCatalogClip(file, controller, onOpen, true, isSelecting, isSelected, onBeginSelection, onToggleSelection)
-
-/** The adapter owns cache lookup and bounded thumbnail IO; shared UI owns both renderers. */
-@Composable
-private fun MediaCatalogClip(file: MediaFile, controller: LunaMediaPlaybackAdapter, onOpen: () -> Unit,
-    list: Boolean, isSelecting: Boolean, isSelected: Boolean,
-    onBeginSelection: (() -> Unit)?, onToggleSelection: (() -> Unit)?) {
-    val libraryState by controller.library.state.collectAsState()
-    val identity = controller.record(file)?.asset?.id?.rawValue ?: file.id
-    val entry = controller.record(file)?.let { libraryState.entries[it.asset.id] }
-    var thumbnail by remember(identity) { mutableStateOf<Bitmap?>(null) }
-    var duration by remember(identity) { mutableStateOf<String?>(null) }
-    LaunchedEffect(identity, entry?.thumbnail?.path, entry?.original?.path, list) {
-        thumbnail = MediaThumbs.load(file, controller, maxPx = if (list) 480 else 640)
-        duration = MediaThumbs.durationLabel(file, controller)
+internal fun androidx.compose.foundation.layout.BoxScope.MediaCatalogPicture(
+    context: com.opencapture.opencine.cameracontrols.MonitorMediaGalleryThumbnail<LunaMediaLibraryPayload>,
+    controller: LunaMediaPlaybackAdapter,
+) {
+    val file = context.record.payload.file
+    var thumbnail by remember(controller, context.record.asset.id, context.admission) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(controller, context.record.asset.id, context.admission, context.entry?.thumbnail?.path,
+        context.entry?.original?.path, context.list) {
+        if (!context.isCurrent) return@LaunchedEffect
+        val image = MediaThumbs.load(file, controller, maxPx = if (context.list) 480 else 640)
+        if (!context.isCurrent) return@LaunchedEffect
+        thumbnail = image
+        val duration = MediaThumbs.durationLabel(file, controller)
+        if (context.isCurrent && duration != null) context.duration(duration)
     }
-    val grade = MediaCacheGrade.resolve(entry?.original != null, entry?.proxy != null)
-    val source = if (grade == MediaCacheGrade.ORIGINAL) "CACHED" else if (grade.isProxyOnly) "PROXY" else "ON CAMERA"
-    val clip = com.opencapture.monitorui.MonitorClipValue(identity, file.filename,
-        listOfNotNull(file.resolution, file.fileExtension.uppercase()).joinToString(" · "),
-        duration, source, controller.isFavorite(file), controller.downloadProgress[file.path]?.toFloat())
-    com.opencapture.monitorui.MonitorClipCard(clip, list, isSelecting, isSelected,
-        onOpen = onOpen,
-        onSelect = { if (isSelecting) onToggleSelection?.invoke() else onBeginSelection?.invoke() },
-        onFavorite = { controller.toggleFavorite(file) },
-        clicks = false) {
-        val bitmap = thumbnail
-        if (bitmap != null) Image(bitmap.asImageBitmap(), contentDescription = null,
-            contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        else MonitorIcon(if (file.kind == MediaKind.PHOTO) MonitorIcon.IMAGE else MonitorIcon.FILM, null,
-            Modifier.size(if (list) 20.dp else 28.dp).align(Alignment.Center), LiveDesign.faint)
-    }
+    val image = thumbnail
+    if (image != null) Image(image.asImageBitmap(), contentDescription = null,
+        contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+    else MonitorIcon(if (file.kind == MediaKind.PHOTO) MonitorIcon.IMAGE else MonitorIcon.FILM, null,
+        Modifier.size(if (context.list) 20.dp else 28.dp).align(Alignment.Center), LiveDesign.faint)
 }
 
 object MediaThumbs {

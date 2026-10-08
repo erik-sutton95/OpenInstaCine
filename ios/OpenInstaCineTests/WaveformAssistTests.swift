@@ -60,7 +60,7 @@ final class WaveformAssistTests: XCTestCase {
                 blackByte, transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), plot),
             line0, accuracy: 0.1,
             "crushed paper black sits on the drawn 0 line")
-        let leftoverParade0 = scopeLevelY(ScopeDisplayScale.crushLevel, shared)
+        let leftoverParade0 = MonitorScopeGeometry.legacyLevelY(ScopeDisplayScale.crushLevel, shared)
         XCTAssertGreaterThan(
             line0 - leftoverParade0, 8,
             "PARADE's 4% inset + 8pt pad must not be WAVE's floor")

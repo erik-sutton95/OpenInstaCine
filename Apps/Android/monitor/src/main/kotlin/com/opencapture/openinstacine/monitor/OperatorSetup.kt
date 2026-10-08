@@ -47,7 +47,8 @@ internal fun AppModel.operatorSetupState(): OperatorSetupState {
     val status by session.chromeStatus.collectAsState()
     val camera = session.connectedCamera
     return OperatorSetupState(phase.vocabularyPhase(), failure, status.monitorColorMode, session.joinedSSID, camera?.name,
-        camera?.model?.family, remember(status) { monitorLayout() })
+        camera?.model?.family, remember(status) { monitorLayout() },
+        lookProfile = camera?.model?.captureProfile?.looks ?: com.opencapture.openinstacine.monitor.session.LunaCameraLUTProfile.value)
 }
 
 /**
@@ -87,6 +88,27 @@ internal fun operatorSetupApp(model: AppModel) = OperatorSetupApp(
     ),
     legalPage = { page, onClose -> LegalDocumentScreen(kind = page.kind, onClose = onClose) },
     lutPicker = { onClose -> LUTPicker(model = model, onClose = onClose) },
+    cacheSource = { context ->
+        val library = model.mediaLibrary
+        val value by library.state.collectAsState()
+        val shell by model.shell.state.collectAsState()
+        val source = shell.monitor?.id
+        val admission = library.actionToken
+        val capturedRevision = value.cacheRevision
+        com.opencapture.opencine.appkit.MonitorSettingsCacheSource(
+            com.opencapture.opencine.appkit.MonitorSettingsCacheIdentity(
+                OperatorMediaCache.candidates(context).first().absolutePath,
+                "${source}/${value.lifetimeToken}"),
+            capturedRevision,
+            isCurrent = { model.mediaLibrary === library && model.shell.state.value.monitor?.id == source &&
+                library.isCurrent(admission) && library.state.value.cacheRevision == capturedRevision },
+            count = { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { OperatorMediaCache.byteCount(context) } },
+            clear = {
+                library.cache.directory.retireWrites()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { OperatorMediaCache.clear(context) }
+            },
+        )
+    },
 )
 
 private val OperatorLegalPage.kind: LegalKind

@@ -24,7 +24,14 @@ struct LunaControlPins {
 /// Luna ↔ shared monitor vocabulary. Wire numbers stay in `Insta360Protocol`;
 /// everything the shared screens read goes through here.
 enum LunaShellMapping {
-    static let cameraModel = CameraModel(name: "Luna Ultra", datalinkPort: 0, tcpPoke: false, verified: true)
+    static let cameraModel = CameraModel(
+        name: "Luna Ultra", datalinkPort: 0, tcpPoke: false, verified: true,
+        captureProfile: CameraCaptureProfile(labels: profile, supportsFocusMode: true,
+            supportsTapFocus: true, supportsAperture: false, hasGimbal: true,
+            supportsZoom: true, zoom: CameraZoomProfile(stops: zoomChips), looks: lookProfile))
+    static let lookProfile = CameraLUTProfile(automatic: [.iLog: .iLogRec709],
+        selections: [.iLogRec709: .iLogRec709])
+
     /// Observed preview: 1280×720 HEVC at 25 fps.
     static let previewFPS: Double = 25
     /// fw 1.1.15 verified: 1.0…15.0 (values outside are ignored, not clamped).
@@ -36,7 +43,8 @@ enum LunaShellMapping {
     static let profile = CameraLabelProfile(
         shootingModeLabels: shootingModeLabels, colorModeLabels: [.normal: "Standard"],
         gimbalModeLabels: gimbalModeLabels,
-        media: MediaHTTP.Route(host: "192.168.42.1", addressing: .directPath))
+        media: MediaHTTP.Route(host: "192.168.42.1", addressing: .directPath),
+        colorModes: colorModes, shootingModes: ShootingMode.allCases.filter { $0 != .livePhoto })
 
     // MARK: Shooting mode
 

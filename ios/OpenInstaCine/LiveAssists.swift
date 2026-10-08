@@ -14,7 +14,8 @@ typealias LiveAssistTool = MonitorAssistSelection
 /// This app's LUT looks: its official cubes, saved choices and custom LUT folder.
 extension MonitorLUTLooks {
     convenience init() {
-        self.init(official: .app, preferences: .app, customLUTs: .app)
+        self.init(official: .app, preferences: .app, customLUTs: .app,
+            lookProfile: LunaShellMapping.lookProfile, colorSourceProfile: LunaMonitorColorProfile.value)
     }
 }
 
@@ -135,27 +136,9 @@ struct AssistToolChip: View {
     let tool: LiveAssistTool
     let isOn: Bool
     var compact = false
-
     var body: some View {
-        VStack(spacing: 3) {
+        MonitorAssistChip(id: tool.rawValue, isOn: isOn, compact: compact) {
             AssistToolIcon(tool: tool, size: 19)
-                .frame(height: 23)
-            Text(tool.rawValue)
-                .font(MonitorTheme.font(9, weight: .medium)).monospacedDigit()
-                .tracking(0.9)
-                .lineLimit(1)
-        }
-        .foregroundStyle(isOn ? LiveDesign.accent : LiveDesign.muted)
-        .padding(.vertical, 5)
-        .padding(.horizontal, compact ? 5 : 8)
-        .frame(minWidth: compact ? 48 : 52)
-        .background {
-            RoundedRectangle(cornerRadius: LiveDesign.cornerRadius, style: .continuous)
-                .fill(isOn ? LiveDesign.accentDim : Color.clear)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: LiveDesign.cornerRadius, style: .continuous)
-                .strokeBorder(isOn ? LiveDesign.accent : Color.clear, lineWidth: 1)
         }
     }
 }

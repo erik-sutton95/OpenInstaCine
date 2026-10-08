@@ -58,9 +58,9 @@ final class HevcDecoder: OpenCineApple.MonitorLiveVideoRuntime {
     private let simulatorFeed = SimulatorLiveFeed()
     #endif
 
-    init() {
+    init(assistConfiguration: OpenCineApple.MonitorAssistConfiguration = LiveAssistEngine.configuration) {
         super.init(configuration: .init(
-            assists: LiveAssistEngine.configuration,
+            assists: assistConfiguration,
             shouldRebuildSession: { CameraSoftAP.shouldRebuildVTSession(status: $0) },
             policyChanged: { replacing in
                 AppDiagnostics.incidents.recordBreadcrumb(FeedIncidentBreadcrumb(

@@ -3,6 +3,7 @@ import ImageIO
 import MonitorPresentation
 import MonitorUI
 import OpenCineAppKit
+import OpenCineCameraControls
 import OpenCineMedia
 import OpenInstaViewCore
 import SwiftUI
@@ -131,533 +132,103 @@ enum MediaCategoryTab: String, CaseIterable, Identifiable {
 }
 
 enum MediaClipPresentation {
-    static func resolutionLabel(_ resolution: String?) -> String? {
-        guard let resolution, !resolution.isEmpty else { return nil }
-        let width = resolution.split(separator: "x").first.flatMap { Int($0) }
-        if let width {
-            if width >= 7680 { return "8K" }
-            if width >= 5120 { return "6K" }
-            if width >= 3840 { return "4K" }
-            if width >= 2880 { return "3K" }
-            if width >= 2560 { return "2.7K" }
-            if width >= 1920 { return "1080p" }
-            if width >= 1280 { return "720p" }
-        }
-        return resolution
-    }
-
-    static func dateLabel(_ dateKey: String) -> String {
-        guard dateKey.count == 8 else { return dateKey }
-        let year = dateKey.prefix(4)
-        let month = dateKey.dropFirst(4).prefix(2)
-        let day = dateKey.suffix(2)
-        return "\(year)-\(month)-\(day)"
-    }
-
+    static let resolutionLevels = MonitorMediaResolutionLevel.standard
+    static func resolutionLabel(_ value: String?) -> String? { MonitorMediaGalleryLabels.resolution(value, levels: resolutionLevels) }
+    static func dateLabel(_ key: String) -> String { MonitorMediaGalleryLabels.date(key) }
     static func metadataLine(file: MediaFile, durationOverride: String? = nil) -> String {
-        var parts: [String] = []
-        if let resolution = resolutionLabel(file.resolution) {
-            parts.append(resolution)
-        }
-        let bytes = MediaClipFormatting.byteLabel(file.sizeBytes)
-        if !bytes.isEmpty { parts.append(bytes) }
-        if file.kind == .video {
-            parts.append(
-                durationOverride
-                    ?? MediaClipFormatting.durationLabel(seconds: file.durationSeconds))
-        }
-        return parts.joined(separator: " · ")
+        MonitorMediaGalleryLabels.metadata(resolution: file.resolution,
+            bytes: MediaClipFormatting.byteLabel(file.sizeBytes),
+            duration: file.kind == .video ? durationOverride ?? MediaClipFormatting.durationLabel(seconds: file.durationSeconds) : nil,
+            levels: resolutionLevels)
     }
 }
 
-/// Operator-facing media-browser copy. Never name a sister app.
-enum MediaLibraryCopy {
-    static let filterEmpty = "Nothing in this tab matches the filters."
-    static let emptyAll =
-        "Nothing on this camera yet. Record a clip, then pull to refresh."
-    static let emptyFavorites = "Nothing favorited yet. Star a clip to find it here."
-    static let emptyVideos =
-        "No videos on this camera yet. Record a clip, then pull to refresh."
-    static let emptyPhotos =
-        "No photos on this camera yet. Capture a still, then pull to refresh."
-    static let disconnected = "Connect the camera to list clips on the body."
-    static let disconnectedEmptyCache =
-        "Nothing cached on this phone. Connect the camera to list clips on the body."
-    static let proxyTag = "Proxy"
-    static let proxyHelp = "720p preview. Connect the camera to share the original."
-}
+typealias MediaLibraryCopy = MonitorMediaGalleryCopy
 
 struct MediaLibraryView: View {
-    /// Host-processed insets (OpenZCine `MediaBrowserView.safeArea`). Do not read
-    /// GeometryReader safeAreaInsets here — this surface `ignoresSafeArea()`.
-    var safeArea: EdgeInsets = EdgeInsets()
+    var safeArea: EdgeInsets = .init()
     var onClose: (() -> Void)? = nil
-
     @Environment(AppModel.self) private var model
-    @Environment(\.monitorWindowGeometry) private var windowGeometry
-    @State private var isFilterPopupPresented = false
-    @State private var pickingDate: FilterDateBound?
-    @State private var isBatchDeleteConfirmPresented = false
-    @State private var playingFile: MediaFile?
-    @State private var viewingPhoto: MediaFile?
+    @State private var presented: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>?
     @State private var deliveryFiles: [MediaFile]?
-    @State private var resolvedDurations: [String: String] = [:]
     private var session: CameraSession { model.session }
     private var library: MonitorMediaLibraryModel<LunaMediaLibraryPayload> { session.mediaLibrary }
     private var isLive: Bool { library.canRefresh }
-    private var displayedFiles: [MediaFile] { library.displayedRecords.map { record in
-        var file = record.payload.file; file.isStarred = record.favorite; return file
-    } }
-    private func cachedEntry(_ file: MediaFile) -> MonitorMediaCacheEntry? {
-        session.mediaRecord(for: file).flatMap { library.entries[$0.asset.id] }
-    }
-    private func cachedGrade(_ file: MediaFile) -> MediaCacheGrade {
-        let entry = cachedEntry(file)
-        return .resolve(hasOriginal: entry?.originalURL != nil, hasProxy: entry?.proxyURL != nil)
-    }
-    private var displayedVideos: [MediaFile] {
-        displayedFiles.filter { $0.kind == .video }
-    }
-
-    private var filterSourceFiles: [MediaFile] { library.records(in: library.category).map(\.payload.file) }
-    private var formatOptions: [String] {
-        Array(Set(filterSourceFiles.map(\.fileExtension)).filter { !$0.isEmpty }).sorted()
-    }
-
-    private var resolutionOptions: [String] {
-        Array(Set(filterSourceFiles.compactMap(\.resolution)).filter { !$0.isEmpty }).sorted()
-    }
-
-    private var colorOptions: [ColorMode] {
-        let present = Set(library.records(in: library.category).compactMap { $0.facts.color.flatMap(UInt8.init) })
-        return ColorMode.allCases.filter { present.contains($0.rawValue) }
-    }
-    private var dateBounds: ClosedRange<Date>? {
-        let dates = filterSourceFiles.compactMap { MediaLibraryQuery.date(fromKey: $0.dateKey) }
-        guard let first = dates.min(), let last = dates.max() else { return nil }
-        return first...last
-    }
-
-    private var activeFilterCount: Int { library.activeFilterCount }
-    private var hasActiveFilters: Bool { activeFilterCount > 0 }
-    private var selectedFiles: [MediaFile] { library.selectedRecords.map(\.payload.file) }
-    private func mediaPermissions(_ file: MediaFile) -> MonitorMediaPermissions {
-        var permissions: MonitorMediaPermissions = [.favorite]
-        let asset = session.mediaRecord(for: file)?.asset
-        let canTransfer = library.canTransfer && asset?.representations.contains { $0.role == .original } == true
-        if canTransfer || cachedGrade(file) == .original { permissions.insert(.share) }
-        if canTransfer && cachedGrade(file) != .original { permissions.insert(.cache) }
-        if library.canDelete && asset?.deletable == true { permissions.insert(.delete) }
-        return permissions
-    }
-
-    private var catalogItems: [MonitorMediaItem] {
-        displayedFiles.map { file in
-            let grade = cachedGrade(file)
-            let color = session.shotColor(for: file)?.label(in: session.profile) ?? ""
-            let metadata = MediaClipPresentation.metadataLine(
-                file: file, durationOverride: resolvedDurations[file.id])
-            return MonitorMediaItem(
-                id: session.mediaRecord(for: file)!.asset.id.rawValue, filename: file.filename,
-                metadata: color.isEmpty ? metadata : "\(color) · \(metadata)",
-                format: file.resolution ?? "", color: color,
-                duration: file.kind == .photo
-                    ? ""
-                    : resolvedDurations[file.id]
-                        ?? (file.durationSeconds > 0
-                            ? MediaClipFormatting.durationLabel(seconds: file.durationSeconds)
-                            : ""),
-                date: MediaClipPresentation.dateLabel(file.dateKey),
-                availability: grade == .original ? .original : grade.isProxyOnly ? .proxy : .camera,
-                progress: session.mediaDownloadProgress[file.path],
-                favorite: session.isFavorite(file), photo: file.kind == .photo,
-                permissions: mediaPermissions(file)
-            )
+    private var operations: MonitorMediaGalleryOperations<LunaMediaLibraryPayload> {
+        if isLive {
+            return .init(download: { record in await session.download(file: record.payload.file) },
+                delete: { record in await session.deleteMedia(record.payload.file) },
+                favorite: { record in session.toggleFavorite(record.payload.file) })
         }
+        return .init(favorite: { record in session.toggleFavorite(record.payload.file) })
     }
-
-    private var catalogCategories: [MonitorMediaCategory] {
-        MediaCategoryTab.allCases.map { tab in
-            MonitorMediaCategory(id: tab.rawValue, title: tab.rawValue,
-                count: library.records(in: MonitorMediaCategoryFilter(rawValue: tab.rawValue.lowercased())!).count)
-        }
-    }
-    private var categoryTitle: String { library.category.rawValue.capitalized }
-    private var sortTitle: String { library.sort.rawValue.capitalized }
-
     var body: some View {
-        @Bindable var library = library
-        let filesByID = Dictionary(library.displayedRecords.map { ($0.asset.id.rawValue, $0.payload.file) },
-            uniquingKeysWith: { _, latest in latest })
-        ZStack(alignment: .topLeading) {
-            LiveDesign.background
-
-            MonitorMediaCatalog(
-                brand: session.connectedCamera?.name ?? "OpenInstaCine", safeArea: safeArea,
-                items: catalogItems, categories: catalogCategories, category: categoryTitle,
-                layout: library.layout,
-                thumbnailSize: library.thumbnailSize,
-                sortTitle: sortTitle,
-                status: isLive ? "Camera + local cache" : "Available on this phone",
-                selectedIDs: Set(library.selectedIDs.map(\.rawValue)), selecting: library.selecting,
-                refreshing: library.fetching, canRefresh: library.canRefresh,
-                tablet: UIDevice.current.userInterfaceIdiom == .pad,
-                action: handleCatalogAction
-            ) { item in
-                if let file = filesByID[item.id] {
-                    MediaCatalogThumbnail(
-                        cameraID: session.mediaCameraID, file: file, cacheGrade: cachedGrade(file),
-                        localURL: cachedEntry(file)?.originalURL,
-                        thumbnailURL: cachedEntry(file)?.thumbnailURL,
-                        onDuration: { resolvedDurations[file.id] = $0 }
-                    )
-                }
-            } empty: {
-                if session.mediaFetchInProgress { listingState } else { emptyState }
-            } filters: {
-                MonitorCatalogFilterButton(
-                    activeCount: activeFilterCount, open: isFilterPopupPresented
-                ) { isFilterPopupPresented.toggle() }
-            }
-
-            if isFilterPopupPresented {
-                filterPopup
-            }
-
-            if let state = model.delivery.overlayState {
-                VStack {
-                    MediaDeliveryOverlay(state: state) {
-                        model.delivery.cancel()
+        MonitorOperatorCatalogScreen(library: library,
+            brand: session.connectedCamera?.name ?? "OpenInstaCine", safeArea: safeArea,
+            sourceAvailable: isLive, operations: operations,
+            colorChoices: ColorMode.allCases.map { .init(id: String($0.rawValue), label: $0.label(in: session.profile)) },
+            resolutionLevels: MediaClipPresentation.resolutionLevels,
+            facts: { record in
+                let file = record.payload.file
+                return .init(resolution: file.resolution, byteCount: file.sizeBytes,
+                    durationSeconds: file.durationSeconds, dateKey: file.dateKey,
+                    colorLabel: session.shotColor(for: file)?.label(in: session.profile), progress: session.mediaDownloadProgress[file.path])
+            }, begin: { library.begin() }, refresh: { library.refresh() }, close: dismiss,
+            open: { presented = $0 }, share: { records, token in
+                guard library.isCurrent(token) else { return }
+                deliveryFiles = records.map { record in record.payload.file }
+            }, thumbnail: { context in
+                let record = context.record
+                let file = record.payload.file
+                let grade = MediaCacheGrade.resolve(hasOriginal: context.cached?.originalURL != nil,
+                    hasProxy: context.cached?.proxyURL != nil)
+                MediaCatalogThumbnail(cameraID: session.mediaCameraID, file: file,
+                    cacheGrade: grade, localURL: context.cached?.originalURL, thumbnailURL: context.cached?.thumbnailURL,
+                    isCurrent: context.isCurrent, onDuration: context.duration)
+            })
+            .fullScreenCover(item: $presented) { request in
+                if library.isCurrent(request.admission) {
+                    let record = request.record
+                    let file = record.payload.file
+                    if (record.facts.presentationKind ?? record.asset.kind) == .photo {
+                        MediaPhotoViewer(file: file, admission: request.admission).environment(model)
+                    } else {
+                        MediaPlayerView(files: request.playlist.map { record in record.payload.file }, startingAt: file).environment(model)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-                    Spacer()
-                }
-                .allowsHitTesting(true)
-            }
-
-        }
-        .ignoresSafeArea()
-        .preferredColorScheme(.dark)
-        .animation(.easeInOut(duration: 0.2), value: library.thumbnailSize)
-        .animation(.easeInOut(duration: 0.2), value: library.layout)
-        .confirmationDialog(
-            "Delete \(library.selectedIDs.count) items from the camera?",
-            isPresented: $isBatchDeleteConfirmPresented, titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                let files = selectedFiles
-                Task {
-                    await session.deleteMediaFiles(files)
-                    exitSelectionMode()
                 }
             }
-        }
-        .onAppear { library.begin() }
-        .fullScreenCover(item: $playingFile) { file in
-            MediaPlayerView(files: displayedVideos, startingAt: file)
-                .environment(model)
-        }
-        .fullScreenCover(item: $viewingPhoto) { file in
-            MediaPhotoViewer(file: file)
-                .environment(model)
-        }
-        .overlay {
-            if let deliveryFiles {
-                MediaDeliveryPopupOverlay(files: deliveryFiles) {
-                    self.deliveryFiles = nil
-                }
-            }
-        }
-        .sheet(item: model.delivery.sharePresentation) { payload in
-            MediaShareSheet(urls: payload.urls) {
-                model.delivery.completeSharePresentation(id: payload.id)
-            }
-        }
-        .sheet(item: $pickingDate) { bound in
-            FilterCalendarSheet(
-                title: bound.title,
-                range: dateBounds ?? Date.distantPast...Date.distantFuture,
-                key: bound == .start ? $library.dateStart : $library.dateEnd
-            )
-        }
-        .onChange(of: library.dateStart) { _, start in
-            if let start, let end = library.dateEnd, start > end { library.dateEnd = start }
-        }
-        .onChange(of: library.dateEnd) { _, end in
-            if let end, let start = library.dateStart, end < start { library.dateStart = end }
-        }
-    }
-
-    private func dismiss() {
-        session.endMediaBrowse()
-        if let onClose {
-            onClose()
-        } else {
-            model.shell.dismissCover()
-        }
-    }
-
-    // MARK: - Sidebar / strip
-
-    private func handleCatalogAction(_ action: MonitorMediaAction) {
-        switch action {
-        case .back: dismiss()
-        case .refresh: library.refresh()
-        case .cycleSort:
-            let values = MonitorMediaSort.allCases
-            library.sort = values[(values.firstIndex(of: library.sort)! + 1) % values.count]
-        case .category(let id):
-            if let category = MonitorMediaCategoryFilter(rawValue: id.lowercased()) { library.category = category }
-        case .layout(let value): library.layout = value
-        case .thumbnailSize(let value): library.thumbnailSize = value
-        case .open(let id):
-            if let record = library.record(.init(id)) { open(record.payload.file) }
-        case .select(let id):
-            if let record = library.record(.init(id)) {
-                if library.selecting { toggleSelection(record.asset.id) } else { beginSelection(with: record.asset.id) }
-            }
-        case .selection(let ids):
-            if !library.selecting { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
-            library.selecting = true; library.selectedIDs = Set(ids.map { MediaAssetID($0) })
-        case .favorite(let id): library.toggleFavorite(.init(id))
-        case .selectAll: library.selectAll()
-        case .clearSelection: library.clearSelection()
-        case .shareSelection:
-            let files = selectedFiles
-            if !files.isEmpty, files.allSatisfy({ mediaPermissions($0).contains(.share) }) { deliveryFiles = files }
-        case .cacheSelection:
-            let ids = library.selectedRecords.filter { mediaPermissions($0.payload.file).contains(.cache) }.map(\.asset.id)
-            Task { for id in ids { _ = try? await library.cacheOriginal(id) } }
-        case .favoriteSelection:
-            for record in library.selectedRecords where !record.favorite { library.toggleFavorite(record.asset.id) }
-        case .deleteSelection:
-            if !selectedFiles.isEmpty, selectedFiles.allSatisfy({ mediaPermissions($0).contains(.delete) }) {
-                isBatchDeleteConfirmPresented = true
-            }
-        }
-    }
-
-    private var filterPopup: some View {
-        GeometryReader { proxy in
-            let physical = windowGeometry.safeArea
-            let card = MonitorMediaFilterPopupLayout.card(
-                viewportWidth: proxy.size.width, viewportHeight: proxy.size.height,
-                safeTop: max(safeArea.top, physical.top),
-                safeLeading: max(safeArea.leading, physical.leading),
-                safeBottom: max(safeArea.bottom, physical.bottom),
-                safeTrailing: max(safeArea.trailing, physical.trailing),
-                topControlInset: windowGeometry.topControlInset)
-            ZStack(alignment: .topLeading) {
-                Color.black.opacity(0.18)
-                    .ignoresSafeArea()
-                    .onTapGesture { isFilterPopupPresented = false }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("FILTER")
-                            .font(MonitorTheme.font(10, weight: .bold)).monospacedDigit()
-                            .kerning(0.8)
-                            .foregroundStyle(LiveDesign.muted)
+            .overlay {
+                if let state = model.delivery.overlayState {
+                    VStack {
+                        MediaDeliveryOverlay(state: state) { model.delivery.cancel() }
+                            .padding(.horizontal, 20).padding(.top, 8)
                         Spacer()
-                        CloseButton(action: { isFilterPopupPresented = false }, size: 26)
-                    }
-
-                    ScrollView {
-                        MonitorMediaFilterForm(
-                            formats: formatOptions, resolutions: resolutionOptions,
-                            colors: colorOptions.map {
-                                MonitorMediaFilterForm.ColorOption(
-                                    id: $0.rawValue, label: $0.label(in: session.profile))
-                            },
-                            formatSelection: library.formats, resolutionSelection: library.resolutions,
-                            colorSelection: Set(library.colors.compactMap(UInt8.init)),
-                            dateStartLabel: library.dateStart.map(MediaClipPresentation.dateLabel),
-                            dateEndLabel: library.dateEnd.map(MediaClipPresentation.dateLabel),
-                            hasDates: dateBounds != nil,
-                            onToggleFormat: { toggle($0, in: &library.formats) },
-                            onToggleResolution: { toggle($0, in: &library.resolutions) },
-                            onToggleColor: { toggle(String($0), in: &library.colors) },
-                            onPickStart: { pickingDate = .start },
-                            onPickEnd: { pickingDate = .end },
-                            onClear: { library.resetFilters() }
-                            )
-                    }
-                    .monitorScrollFade()
-                }
-                .padding(16)
-                .frame(width: card.width, height: card.height, alignment: .topLeading)
-                .liquidGlass(
-                    in: RoundedRectangle(
-                        cornerRadius: MonitorTheme.radius, style: .continuous)
-                )
-                .offset(x: card.x, y: card.y)
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("monitor.media.filter.popup")
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
-        }
-    }
-
-    private func toggle<Value: Hashable>(_ value: Value, in set: inout Set<Value>) {
-        if set.contains(value) {
-            set.remove(value)
-        } else {
-            set.insert(value)
-        }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            if model.session.mediaFetchInProgress {
-                ProgressView()
-                    .tint(LiveDesign.accent)
-            } else {
-                OpcIcon.film
-                    .frame(width: 40, height: 40)
-                    .foregroundStyle(LiveDesign.faint)
-            }
-            Text(model.session.mediaFetchInProgress ? "Listing clips" : "No clips yet")
-                .font(MonitorTheme.font(15, weight: .medium))
-                .foregroundStyle(LiveDesign.muted)
-            Text(model.session.mediaNote ?? emptySubtitle)
-                .font(MonitorTheme.font(12))
-                .foregroundStyle(LiveDesign.faint)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var listingState: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-                .controlSize(.large)
-                .tint(LiveDesign.muted)
-            Text("Listing clips on camera…")
-                .font(MonitorTheme.font(15, weight: .medium))
-                .foregroundStyle(LiveDesign.muted)
-            Text(
-                session.mediaFetchListedCount == 0
-                    ? "Querying card storage…"
-                    : "\(session.mediaFetchListedCount) clip\(session.mediaFetchListedCount == 1 ? "" : "s") found so far"
-            )
-            .font(MonitorTheme.font(12))
-            .foregroundStyle(LiveDesign.faint)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var emptySubtitle: String {
-        if !isLive {
-            return session.mediaFiles.isEmpty
-                ? MediaLibraryCopy.disconnected
-                : MediaLibraryCopy.disconnectedEmptyCache
-        }
-        if hasActiveFilters {
-            return MediaLibraryCopy.filterEmpty
-        }
-        switch library.category {
-        case .favorites: return MediaLibraryCopy.emptyFavorites
-        case .videos: return MediaLibraryCopy.emptyVideos
-        case .photos: return MediaLibraryCopy.emptyPhotos
-        case .all: return MediaLibraryCopy.emptyAll
-        }
-    }
-
-    private func open(_ file: MediaFile) {
-        if library.selecting, let id = session.mediaRecord(for: file)?.asset.id {
-            toggleSelection(id)
-            return
-        }
-        if !isLive, !session.isAvailableOffline(file) { return }
-        if file.kind == .photo {
-            viewingPhoto = file
-        } else {
-            playingFile = file
-        }
-    }
-
-    private func beginSelection(with id: MediaAssetID) {
-        guard !library.selecting else { return }
-        library.selecting = true; library.selectedIDs = [id]
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-    }
-    private func toggleSelection(_ id: MediaAssetID) {
-        if library.selectedIDs.contains(id) { library.selectedIDs.remove(id) } else { library.selectedIDs.insert(id) }
-    }
-    private func exitSelectionMode() { library.clearSelection() }
-
-    private func share(_ files: [MediaFile]) async {
-        guard !files.isEmpty else { return }
-        deliveryFiles = files
-    }
-
-    // MARK: - Layout chrome
-
-}
-
-private enum FilterDateBound: String, Identifiable {
-    case start, end
-    var id: String { rawValue }
-    var title: String { rawValue == "start" ? "Start date" : "End date" }
-}
-
-private struct FilterCalendarSheet: View {
-    let title: String
-    let range: ClosedRange<Date>
-    @Binding var key: String?
-    @Environment(\.dismiss) private var dismiss
-    @State private var date: Date
-
-    init(title: String, range: ClosedRange<Date>, key: Binding<String?>) {
-        self.title = title
-        self.range = range
-        self._key = key
-        let parsed = key.wrappedValue.flatMap { MediaLibraryQuery.date(fromKey: $0) }
-        let initial = min(max(parsed ?? Date(), range.lowerBound), range.upperBound)
-        _date = State(initialValue: initial)
-    }
-
-    var body: some View {
-        NavigationStack {
-            DatePicker(
-                title, selection: $date, in: range, displayedComponents: .date
-            )
-            .datePickerStyle(.graphical)
-            .environment(\.calendar, MediaLibraryQuery.filenameCalendar())
-            .tint(MonitorTheme.accent)
-            .padding(.horizontal, 8)
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Clear") {
-                        key = nil
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        key = MediaLibraryQuery.dateKey(from: date)
-                        dismiss()
-                    }
+                    }.allowsHitTesting(true)
                 }
             }
-        }
-        .presentationDetents([.medium, .large])
-        .preferredColorScheme(.dark)
+            .overlay {
+                if let deliveryFiles {
+                    MediaDeliveryPopupOverlay(files: deliveryFiles) { self.deliveryFiles = nil }
+                }
+            }
+            .sheet(item: model.delivery.sharePresentation) { payload in
+                MediaShareSheet(urls: payload.urls) { model.delivery.completeSharePresentation(id: payload.id) }
+            }
+            .onChange(of: library.lifetimeToken) { _, _ in presented = nil; deliveryFiles = nil }
+    }
+    private func dismiss() {
+        if let onClose { onClose() } else { model.shell.dismissCover() }
     }
 }
 
-/// The shared library owns thumbnail acquisition; native image/metadata decoding stays here. All card,
-/// grid/list and selection rendering lives in MonitorMediaCatalog.
+/// Bounded native image decoding/metadata adapter; the common catalog owns its admission.
 private struct MediaCatalogThumbnail: View {
     let cameraID: String
     let file: MediaFile
     let cacheGrade: MediaCacheGrade
     let localURL: URL?
     let thumbnailURL: URL?
+    let isCurrent: () -> Bool
     let onDuration: (String) -> Void
     @Environment(AppModel.self) private var model
     @State private var thumbnail: UIImage?
@@ -688,12 +259,13 @@ private struct MediaCatalogThumbnail: View {
 
     private func loadThumbnail() async {
         let cacheKey = "\(cameraID)#\(file.id)#grid" as NSString
+        guard isCurrent(), !Task.isCancelled else { return }
         if let cached = MediaCellThumbnailCache.shared.object(forKey: cacheKey) {
             thumbnail = cached
             return
         }
         func present(_ image: UIImage) {
-            guard !Task.isCancelled else { return }
+            guard isCurrent(), !Task.isCancelled else { return }
             MediaCellThumbnailCache.shared.setObject(image, forKey: cacheKey)
             thumbnail = image
         }
@@ -711,7 +283,9 @@ private struct MediaCatalogThumbnail: View {
             present(image)
             return
         }
+        guard isCurrent(), !Task.isCancelled else { return }
         await model.session.ensureThumbnail(for: file)
+        guard isCurrent(), !Task.isCancelled else { return }
         if let cachedURL = model.session.thumbnailURL(for: file),
             let image = await MediaCellImageLoader.shared.downsampled(
                 at: cachedURL, maxPixelSize: 640)
@@ -719,7 +293,7 @@ private struct MediaCatalogThumbnail: View {
             present(image)
             return
         }
-        guard isDownloaded, !isPhoto, let localURL else { return }
+        guard isCurrent(), !Task.isCancelled, isDownloaded, !isPhoto, let localURL else { return }
         let asset = AVURLAsset(url: localURL)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
@@ -731,14 +305,14 @@ private struct MediaCatalogThumbnail: View {
     }
 
     private func loadDuration() async {
-        guard !Task.isCancelled, !isPhoto else { return }
+        guard isCurrent(), !Task.isCancelled, !isPhoto else { return }
         if file.durationSeconds > 0 {
             onDuration(MediaClipFormatting.durationLabel(seconds: file.durationSeconds))
             return
         }
         guard isDownloaded, let localURL else { return }
         let asset = AVURLAsset(url: localURL)
-        if let duration = try? await asset.load(.duration), !Task.isCancelled, duration.isNumeric,
+        if let duration = try? await asset.load(.duration), isCurrent(), !Task.isCancelled, duration.isNumeric,
             duration.seconds > 0
         {
             onDuration(MediaClipFormatting.durationLabel(seconds: Int(duration.seconds)))
@@ -746,17 +320,12 @@ private struct MediaCatalogThumbnail: View {
     }
 }
 
-/// The shell's cover pages over the cameras and pair pages. The live monitor presents
-/// `MediaLibraryView` / `SettingsRootView` over itself (`LiveViewScreen`).
+/// Complete shared settings and catalog composition for the shell's retained cover.
 struct AppPanelHost: View {
     let cover: ShellModel.Cover
-    @Environment(\.monitorWindowGeometry) private var windowGeometry
 
     var body: some View {
-        GeometryReader { proxy in
-            let safeArea = OperatorPanelMetrics.standalonePanelSafeArea(
-                from: OperatorPanelMetrics.resolvedDeviceSafeArea(
-                    proxy.safeAreaInsets, window: windowGeometry.safeArea))
+        MonitorCoverPage { safeArea in
             switch cover {
             case .settings: SettingsRootView(safeArea: safeArea)
             case .media: MediaLibraryView(safeArea: safeArea)

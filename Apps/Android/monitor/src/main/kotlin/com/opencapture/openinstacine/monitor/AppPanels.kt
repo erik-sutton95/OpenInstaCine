@@ -5,7 +5,7 @@ import androidx.compose.runtime.collectAsState
 import com.opencapture.opencine.appkit.ShellModel
 import com.opencapture.openinstacine.monitor.media.MediaLibraryScreen
 
-/** The shell's cover pages over the cameras page (the live monitor draws its own over itself). */
+/** Complete shared settings and catalog composition beneath the shell's cover lifetime. */
 @Composable
 fun ShellPage(model: AppModel, cover: ShellModel.Cover) {
     when (cover) {

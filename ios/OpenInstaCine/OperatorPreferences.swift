@@ -9,10 +9,10 @@ import SwiftUI
 enum OperatorPrefs {
     private static let toolUsage = MonitorToolUsagePreferences(
         storage: .standard, key: "OpenInstaCine.AssistToolUsage.v1")
-    private static let display = MonitorDisplayPreferences(
+    static let display = MonitorDisplayPreferences(
         storage: .standard,
         keys: .init(live: "OpenInstaCine.DispChrome.Live", clean: "OpenInstaCine.DispChrome.Clean"))
-    private static let common = MonitorOperatorPreferences(
+    static let common = MonitorOperatorPreferences(
         storage: .standard,
         keys: .init(
             keepScreenAwake: "OpenInstaCine.KeepScreenAwake",

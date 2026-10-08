@@ -43,7 +43,7 @@ internal object LiveLevel {
     }
 
     fun label(value: Double?): String =
-        if (value == null) "—" else String.format(Locale.ROOT, "%+.1f°", if (abs(value) < 0.05) 0.0 else value)
+        if (value == null) "\u2014" else String.format(Locale.ROOT, "%+.1f°", if (abs(value) < 0.05) 0.0 else value)
 
     fun accessibilityLabel(mode: LevelMode): String =
         MonitorLevelGeometry.accessibilityLabel(mode.display(), WorldLevelSnap.NO_LEVEL_DATA)
@@ -58,21 +58,7 @@ private fun LevelMode.display(): MonitorLevelDisplay = when (this) {
 }
 
 @Composable
-internal fun LiveLevelOverlay(
-    reading: LevelReading,
-    viewFlip: Boolean,
-    feed: ChromeRect,
-    viewport: ChromeRect,
-    portrait: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    var mode by remember { mutableStateOf<LevelMode>(LevelMode.Unavailable) }
-    LaunchedEffect(reading, viewFlip) {
-        while (true) {
-            mode = reading.mode(android.os.SystemClock.elapsedRealtimeNanos() / 1e9, viewFlip)
-            delay(LiveLevel.REFRESH_MS)
-        }
-    }
-    MonitorLevelOverlay(mode.display(), feed.levelRect(), viewport.levelRect(), portrait, modifier,
-        noDataLabel = WorldLevelSnap.NO_LEVEL_DATA, unknownLabel = LiveLevel.label(null))
+internal fun LiveLevelOverlay(reading: LevelReading, viewFlip: Boolean, feed: ChromeRect, viewport: ChromeRect,
+    portrait: Boolean, modifier: Modifier = Modifier) {
+    com.opencapture.opencine.cameracontrols.MonitorOperatorLevelOverlay(reading, viewFlip, feed, viewport, portrait, modifier)
 }

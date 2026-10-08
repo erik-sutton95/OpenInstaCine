@@ -43,13 +43,14 @@ internal fun instaCaptureSessionState(
     formatPinned: () -> Boolean,
     focusModeSupported: () -> Boolean,
     nativeIsoHopSupported: () -> Boolean,
+    irisSupported: () -> Boolean = { false },
 ): CaptureSessionState = object : CaptureSessionState {
     override val aeLocked get() = aeLock() != null
     override val awbLockKelvin get() = awbLockKelvin()
     override val awbLockOffered get() = awbLockOffered()
     override val formatPinned get() = formatPinned()
     override val focusModeSupported get() = focusModeSupported()
-    override val irisSupported get() = true
+    override val irisSupported get() = irisSupported()
     override val nativeIsoHopSupported get() = nativeIsoHopSupported()
 }
 
@@ -59,7 +60,7 @@ internal fun AppModel.observedCaptureSessionState(status: CameraStatus): Capture
     val awbLock by session.awbLockKelvin.collectAsState()
     return instaCaptureSessionState({ aeLock }, { awbLock }, { session.autoWhiteBalanceLock(status) != null },
         { session.isFormatPinActive }, { CaptureLists.supportsFocusModeOrDefault(session.connectedCamera?.model) },
-        { session.supportsNativeIsoHop })
+        { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true })
 }
 
 /** The Core drum for ISO, shutter and white balance Kelvin; EV is its own wheel on the typed path. */
@@ -122,16 +123,12 @@ internal fun AppModel.routeCaptureSetting(setting: CaptureSetting, field: Monito
         is CaptureSetting.Aperture -> setApertureStrategy(setting.raw)
         is CaptureSetting.ExpoMode -> setExpoMode(setting.mode)
         is CaptureSetting.Focus -> applyCaptureFocusChoice(setting.label, status, this)
-        is CaptureSetting.AudioChannel -> setAudioChannel(setting.value)
-        is CaptureSetting.DirectionalAudio -> setDirectionalAudio(setting.mode)
-        is CaptureSetting.WindNoiseReduction -> setWindNr(setting.on)
-        is CaptureSetting.VocalBoost -> setVocalBoost(setting.on)
     }
 }
 
 internal suspend fun AppModel.refreshForCaptureSheet(what: CaptureRefresh) {
     when (what) {
-        CaptureRefresh.AUDIO -> refreshAudio()
+        CaptureRefresh.AUDIO -> audioService?.refresh?.invoke()
         CaptureRefresh.FOCUS_TRACK -> refreshFocusTrack()
         CaptureRefresh.ISO_LIMIT -> refreshIsoLimitNow()
     }

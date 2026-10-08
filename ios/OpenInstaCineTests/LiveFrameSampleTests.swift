@@ -18,7 +18,7 @@ final class LiveFrameSampleTests: XCTestCase {
     private let ceiling = ScopeExposureCeiling()
 
     func testVideoFallbackStillInfersLogFromTap() async {
-        let engine = LiveAssistEngine()
+        let engine = LiveAssistEngine(configuration: DeclaredDJIMonitorFixture.assistConfiguration)
         var effects = LiveImageEffects()
         effects.histogram = true
         let sampled = expectation(description: "Unknown video scope sample")
@@ -38,7 +38,7 @@ final class LiveFrameSampleTests: XCTestCase {
         var effects = assist.effects
         effects.histogram = true
         effects.waveform = true
-        let engine = LiveAssistEngine()
+        let engine = LiveAssistEngine(configuration: DeclaredDJIMonitorFixture.assistConfiguration)
         let sampled = expectation(description: "Photo scope sample")
         let buffer = ScopeTestBuffers.makeBGRA { x, _ in x < 64 ? 16 : 247 }
         engine.updatePolicy(effects: effects, transfer: .rec709)
@@ -477,7 +477,7 @@ final class LiveFrameSampleTests: XCTestCase {
 
     func testDLog2TapSignaturePromotesDefaultRec709Transfer() async {
         let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
-        let decoder = HevcDecoder()
+        let decoder = HevcDecoder(assistConfiguration: DeclaredDJIMonitorFixture.assistConfiguration)
         var fx = LiveImageEffects()
         fx.waveform = true
         decoder.attach(sampleBus: bus, effects: { fx }, transfer: { .rec709 })

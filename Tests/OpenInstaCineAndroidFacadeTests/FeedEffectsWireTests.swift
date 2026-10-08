@@ -2,6 +2,7 @@ import Foundation
 import OpenInstaCineAndroidFacade
 import OpenInstaViewCore
 import Testing
+import OpenCineDJI
 
 @Suite
 struct FeedEffectsWireTests {
@@ -19,10 +20,10 @@ struct FeedEffectsWireTests {
             colorModeCode: Int(ColorMode.dLog2.rawValue),
             iso: 1600,
             highlightIRE: 100,
-            midtoneIRE: LiveZebra.midtoneIRE)
+            midtoneIRE: LiveZebra.midtoneIRE, sourceProfile: DJIMonitorColorProfile.value)
         #expect(scalars.count == FeedEffectsWire.assistScalarCount)
         let shelf = Float(
-            Int(ScopeExposureCeiling.dlog2LiveTapByteAt1600) - ScopeExposureCeiling.clipShelfCodes)
+            Int(DJIScopeExposureCeiling.dlog2LiveTapByteAt1600) - DJIScopeExposureCeiling.clipShelfCodes)
         #expect(abs(scalars[0] - shelf / 255) < 0.002, "zebra 100% fires on the clip shelf")
         #expect(scalars[3] == 1)
     }
@@ -34,7 +35,7 @@ struct FeedEffectsWireTests {
         let code = Int(ColorMode.dLog2.rawValue)
         func highlight(iso: Int) -> Float {
             FeedEffectsWire.assistScalars(
-                colorModeCode: code, iso: iso, highlightIRE: 100, midtoneIRE: 55)[0]
+                colorModeCode: code, iso: iso, highlightIRE: 100, midtoneIRE: 55, sourceProfile: DJIMonitorColorProfile.value)[0]
         }
         let reference = highlight(iso: 1600)
         let dim = highlight(iso: 800)
@@ -49,9 +50,9 @@ struct FeedEffectsWireTests {
             colorModeCode: Int(ColorMode.normal.rawValue),
             iso: 100,
             highlightIRE: 100,
-            midtoneIRE: 55)
+            midtoneIRE: 55, sourceProfile: DJIMonitorColorProfile.value)
         #expect(abs(Double(scalars[3]) - 1.57 * 1.57) < 1e-5)
-        let shelf = Float(255 - ScopeExposureCeiling.clipShelfCodes) / 255
+        let shelf = Float(255 - DJIScopeExposureCeiling.clipShelfCodes) / 255
         #expect(abs(scalars[0] - shelf) < 0.002, "Rec.709 zebra 100% sits on the clip shelf")
     }
 
@@ -61,7 +62,7 @@ struct FeedEffectsWireTests {
             FeedEffectsWire.packedFalseColorPaint(
                 scaleOrdinal: 3,
                 colorModeCode: Int(ColorMode.dLog2.rawValue),
-                iso: 1600))
+                iso: 1600, sourceProfile: DJIMonitorColorProfile.value))
         let size = FeedEffectsWire.falseColorCubeSize
         func neutral(_ i: Int) -> (Int, Int, Int) {
             let dst = (i * size * size + i * size + i) * 4
@@ -89,7 +90,7 @@ struct FeedEffectsWireTests {
             FeedEffectsWire.packedFalseColorPaint(
                 scaleOrdinal: 3,
                 colorModeCode: Int(ColorMode.dLog2.rawValue),
-                iso: 1600))
+                iso: 1600, sourceProfile: DJIMonitorColorProfile.value))
         let size = FeedEffectsWire.falseColorCubeSize
         func rgb(_ i: Int) -> (Int, Int, Int) {
             let dst = (i * size * size + i * size + i) * 4
@@ -97,7 +98,7 @@ struct FeedEffectsWireTests {
         }
         // The GPU blends neighbouring lattice points: both points around the shelf byte
         // must already be clip red, or a blown window paints a pink blend.
-        let shelf = Double(ScopeExposureCeiling().clipShelfByte(transfer: .dlog2))
+        let shelf = Double(DJIScopeExposureCeiling().clipShelfByte(transfer: .dlog2))
         let below = Int((shelf / 255 * Double(size - 1)).rounded(.down))
         for i in [below, below + 1] {
             let (r, g, b) = rgb(i)
@@ -111,11 +112,11 @@ struct FeedEffectsWireTests {
     func packedLimitsPaintsTheWholeClipShelf() throws {
         let code = Int(ColorMode.dLog2.rawValue)
         let paint = try #require(
-            FeedEffectsWire.packedFalseColorPaint(scaleOrdinal: 2, colorModeCode: code, iso: 1600))
+            FeedEffectsWire.packedFalseColorPaint(scaleOrdinal: 2, colorModeCode: code, iso: 1600, sourceProfile: DJIMonitorColorProfile.value))
         let weight = try #require(
-            FeedEffectsWire.packedFalseColorWeight(scaleOrdinal: 2, colorModeCode: code, iso: 1600))
+            FeedEffectsWire.packedFalseColorWeight(scaleOrdinal: 2, colorModeCode: code, iso: 1600, sourceProfile: DJIMonitorColorProfile.value))
         let size = FeedEffectsWire.falseColorCubeSize
-        let shelf = Double(ScopeExposureCeiling().clipShelfByte(transfer: .dlog2))
+        let shelf = Double(DJIScopeExposureCeiling().clipShelfByte(transfer: .dlog2))
         let below = Int((shelf / 255 * Double(size - 1)).rounded(.down))
         for i in [below, below + 1] {
             let dst = (i * size * size + i * size + i) * 4
@@ -136,7 +137,7 @@ struct FeedEffectsWireTests {
             let packed = try #require(
                 FeedEffectsWire.packedFalseColorPaint(
                     scaleOrdinal: ordinal, colorModeCode: Int(ColorMode.dLog2.rawValue),
-                    iso: 1600))
+                    iso: 1600, sourceProfile: DJIMonitorColorProfile.value))
             let dst = (i * size * size + i * size + i) * 4
             return (Int(packed[dst]), Int(packed[dst + 1]), Int(packed[dst + 2]))
         }
@@ -153,7 +154,7 @@ struct FeedEffectsWireTests {
             FeedEffectsWire.packedFalseColorWeight(
                 scaleOrdinal: ordinal,
                 colorModeCode: Int(ColorMode.dLog2.rawValue),
-                iso: 1600))
+                iso: 1600, sourceProfile: DJIMonitorColorProfile.value))
         let size = FeedEffectsWire.falseColorCubeSize
         #expect(packed.count == size * size * size * 4)
         #expect(packed[0] == 255)
@@ -167,7 +168,7 @@ struct FeedEffectsWireTests {
             FeedEffectsWire.packedFalseColorWeight(
                 scaleOrdinal: 2,
                 colorModeCode: Int(ColorMode.dLog2.rawValue),
-                iso: 1600))
+                iso: 1600, sourceProfile: DJIMonitorColorProfile.value))
         let opaque = packed.enumerated().filter { $0.offset % 4 == 0 }.filter { $0.element == 255 }
             .count
         let clear = packed.enumerated().filter { $0.offset % 4 == 0 }.filter { $0.element == 0 }

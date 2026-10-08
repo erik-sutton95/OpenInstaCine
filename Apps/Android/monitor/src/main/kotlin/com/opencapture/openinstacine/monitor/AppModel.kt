@@ -1,5 +1,6 @@
 package com.opencapture.openinstacine.monitor
 
+import com.opencapture.opencine.appkit.MonitorOperatorSessionModel
 import androidx.compose.runtime.Composable
 import com.opencapture.opencine.appkit.MonitorCaptureField
 import com.opencapture.opencine.appkit.MonitorCapturePreferences
@@ -7,6 +8,7 @@ import com.opencapture.opencine.appkit.captureField
 import com.opencapture.opencine.appkit.readPhoneBatteryReadout
 import com.opencapture.opencine.cameracontrols.CaptureRefresh
 import com.opencapture.opencine.cameracontrols.CaptureSheetHost
+import com.opencapture.opencine.cameracontrols.CaptureAudioService
 import com.opencapture.opencine.cameracontrols.CaptureWheelState
 import com.opencapture.opencine.cameracontrols.GamepadHost
 import com.opencapture.opencine.cameracontrols.OperatorSetupModel
@@ -84,7 +86,7 @@ class AppModel(
     private var mediaServiceID: com.opencapture.opencine.core.CameraSessionID? = null
     val scopeBus = com.opencapture.opencine.runtime.ScopeSampleBus()
     val inspectorPreview = com.opencapture.opencine.runtime.InspectorPreviewPipeline(scopeBus,
-        { com.opencapture.openinstacine.monitor.feed.Media3GlBackend(it) }, logTag = "OpcInspector")
+        { com.opencapture.opencine.runtime.NativeGlBackend.create(it) }, logTag = "OpcInspector")
     override val assist = createLiveAssistState(appContext)
 
     /**
@@ -118,10 +120,17 @@ class AppModel(
     var coreVersion by mutableStateOf<String?>(null)
     /** A legal document over the cameras page (product composition, not a shell cover). */
     var legal by mutableStateOf<LegalKind?>(null)
-    override var operatorSettingsTab by mutableStateOf(MonitorSettingsTab.LINK)
-    var chromeEditorMode by mutableStateOf<PocketDispMode?>(null)
-    override var chromeEditorReturnMode by mutableStateOf<PocketDispMode?>(null)
-    override var liveChromeInteractive by mutableStateOf(true)
+    internal val operatorSession = MonitorOperatorSessionModel(shell, assist, OperatorPrefs.displayPreferences(appContext), scope)
+    override var operatorSettingsTab: MonitorSettingsTab
+        get() = operatorSession.settingsTab
+        set(value) { operatorSession.settingsTab = value }
+    var chromeEditorMode: PocketDispMode?
+        get() = operatorSession.editingMode
+        set(value) { operatorSession.editingMode = value }
+    override var chromeEditorReturnMode: PocketDispMode?
+        get() = operatorSession.returnedMode
+        set(value) { operatorSession.returnedMode = value }
+    override val liveChromeInteractive: Boolean get() = operatorSession.interactive
     override var keepScreenAwake by mutableStateOf(OperatorPrefs.keepScreenAwake(appContext))
         private set
     override var hdrDisplay by mutableStateOf(OperatorPrefs.hdrDisplay(appContext))
@@ -174,10 +183,8 @@ class AppModel(
         session.gimbalRamp = gimbalRamp
         session.gimbalDoubleTap = gimbalDoubleTap
     }
-    var dispLive by mutableStateOf(OperatorPrefs.dispLive(appContext))
-        private set
-    var dispClean by mutableStateOf(OperatorPrefs.dispClean(appContext))
-        private set
+    val dispLive: PocketDispChrome get() = operatorSession.live
+    val dispClean: PocketDispChrome get() = operatorSession.clean
     var cleanViewPinnedTools by mutableStateOf(OperatorPrefs.cleanViewPinnedTools(appContext))
         private set
     var portraitFeedAspect by mutableStateOf(OperatorPrefs.portraitFeedAspect(appContext))
@@ -190,7 +197,9 @@ class AppModel(
         private set
     override var lutSelection by mutableStateOf(OperatorPrefs.lutSelection(appContext))
         private set
-    var assistClean by mutableStateOf(false)
+    var assistClean: Boolean
+        get() = assist.clean
+        set(value) { assist.clean = value }
     var phoneBatteryPercent by mutableIntStateOf(-1)
         private set
     var phoneCharging by mutableStateOf(false)
@@ -199,69 +208,23 @@ class AppModel(
     override val gimbalGamepad = GimbalGamepadDriver(OperatorPrefs::gimbalGamepadStick)
     override var gamepadConnected by mutableStateOf(false)
 
-    val currentDispMode: PocketDispMode
-        get() = if (assistClean) PocketDispMode.CLEAN else PocketDispMode.LIVE
-
-    val dispChrome: PocketDispChrome
-        get() = chrome(currentDispMode)
-
-    override val isEditingChrome: Boolean
-        get() = chromeEditorMode != null
-
-    override fun chrome(mode: PocketDispMode): PocketDispChrome =
-        when (mode) {
-            PocketDispMode.LIVE -> dispLive
-            PocketDispMode.CLEAN -> dispClean
-        }
-
-    fun chromeSectionMounts(section: PocketDispSection): Boolean {
-        val editing = chromeEditorMode
-        if (editing != null && editing == currentDispMode) return true
-        if (section == PocketDispSection.RAIL_SETTINGS && !dispLive.railSettings && !dispClean.railSettings) {
-            return true
-        }
-        return dispChrome.isVisible(section)
-    }
-
-    override fun toggleChrome(section: PocketDispSection, mode: PocketDispMode) {
-        when (mode) {
-            PocketDispMode.LIVE -> {
-                dispLive = dispLive.toggling(section)
-                OperatorPrefs.setDispLive(appContext, dispLive)
-            }
-            PocketDispMode.CLEAN -> {
-                dispClean = dispClean.toggling(section)
-                OperatorPrefs.setDispClean(appContext, dispClean)
-            }
-        }
-    }
+    val currentDispMode: PocketDispMode get() = operatorSession.mode
+    val dispChrome: PocketDispChrome get() = operatorSession.chrome
+    override val isEditingChrome: Boolean get() = operatorSession.isEditing
+    override fun chrome(mode: PocketDispMode): PocketDispChrome = operatorSession.chrome(mode)
+    fun chromeSectionMounts(section: PocketDispSection): Boolean = operatorSession.mounts(section)
+    override fun toggleChrome(section: PocketDispSection, mode: PocketDispMode) = operatorSession.toggle(section, mode)
 
     override fun beginChromeEditing(mode: PocketDispMode) {
-        shell.dismissCover()
         liveGimbalPanel = LiveGimbalPanel.NONE
-        setDisplayMode(clean = mode == PocketDispMode.CLEAN)
-        chromeEditorMode = mode
+        operatorSession.beginEditing(mode)
     }
 
-    fun endChromeEditing() {
-        chromeEditorReturnMode = chromeEditorMode
-        chromeEditorMode = null
-        operatorSettingsTab = MonitorSettingsTab.DISPLAY
-        shell.open(ShellModel.Cover.SETTINGS)
-    }
+    fun endChromeEditing() = operatorSession.finishEditing()
+    fun setDisplayMode(clean: Boolean) { assist.clean = clean }
 
-    fun setDisplayMode(clean: Boolean) {
-        assistClean = clean
-    }
-
-    /** A new monitor: no leftover Edit view, and the connect tap cannot hit live chrome. */
     fun noteBecameLive() {
-        chromeEditorMode = null
-        liveChromeInteractive = false
-        scope.launch {
-            kotlinx.coroutines.delay(550)
-            liveChromeInteractive = true
-        }
+        operatorSession.synchronize(shell.state.value.monitor?.id)
     }
 
     override fun updateKeepScreenAwake(value: Boolean) {
@@ -451,15 +414,10 @@ class AppModel(
         session.setVideoFormat(format)
     }
 
-    fun setAudioChannel(value: Int) = session.setAudioChannel(value)
 
-    fun setVocalBoost(on: Boolean) = session.setVocalBoost(on)
 
-    fun setWindNr(on: Boolean) = session.setWindNr(on)
 
-    fun setDirectionalAudio(mode: Int) = session.setDirectionalAudio(mode)
 
-    fun refreshAudio() = session.refreshAudio()
 
     fun tapFocus(x: Float, y: Float) = session.tapFocus(x, y)
 
@@ -484,8 +442,11 @@ class AppModel(
     val isLive: Boolean
         get() = shell.state.value.monitor != null
 
+    internal val operatorCaptureSource by lazy { makeOperatorCaptureSource() }
+
     // CaptureSheetHost (camera-controls): the capture sheets read these values and commit through one typed entry.
     override val camera get() = session.connectedCamera?.model
+    override val audioService: CaptureAudioService? get() = null
     override fun captureField(sheet: LiveSheet, expoMode: Int): MonitorCaptureField? =
         captureSettingKey(sheet)?.let { session.control.captureField(it) }
     @Composable override fun captureSessionState(status: CameraStatus) = observedCaptureSessionState(status)
@@ -567,7 +528,7 @@ class AppModel(
                     scope.launch { retired.dispose() }
                 } else if (mediaServiceID != service?.sessionID) mediaLibrary.bind(service)
                 mediaServiceID = service?.sessionID
-                if (connected != null) noteBecameLive()
+                if (connected != null) noteBecameLive() else operatorSession.close()
             }
         }
         scope.launch {

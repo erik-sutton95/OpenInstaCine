@@ -26,6 +26,7 @@ extension CaptureQuickSnapshot {
         return primary(
             sheet, status: status, cameraModel: model.session.connectedCamera?.model,
             supportsFocusMode: model.session.supportsFocusMode,
+            supportsAperture: model.session.supportsAperture,
             facePriorityExposureEnabled: model.facePriorityExposureEnabled,
             shutterUsesAngle: OperatorPrefs.shutterUsesAngle,
             shutterAngleDegrees: OperatorPrefs.shutterAngleDegrees,
@@ -49,6 +50,7 @@ extension AppModel: CaptureSheetHost {
     var sessionPhaseLabel: String { session.phase.label }
     var bodyFamily: CameraBodyFamily { session.bodyFamily }
     var labelProfile: CameraLabelProfile { session.profile }
+    var audioService: CaptureAudioService? { nil }
     var colorModes: [ColorMode] { session.colorModes }
     var currentShootingMode: ShootingMode? { session.currentShootingMode }
     var sessionLocked: Bool { session.isLocked }
@@ -61,7 +63,7 @@ extension AppModel: CaptureSheetHost {
             focusMode: session.supportsFocusMode, aperture: session.supportsAperture,
             nativeIsoHop: session.supportsNativeIsoHop, isoLimit: session.supportsIsoLimit,
             commonExposureCompensation: false, commonFocusMode: false,
-            audio: OsmoMonitorPresentation.capabilities(session).audio,
+            audio: audioService != nil,
             faceMetering: session.supportsFaceMetering)
     }
     var focusOptions: [FocusOption] { CaptureLists.focusOptions }
@@ -126,10 +128,6 @@ extension AppModel: CaptureSheetHost {
         case .aperture(let strategy): session.setApertureStrategy(strategy)
         case .expoMode(let mode): session.setExpoMode(mode)
         case .focus(let option, _): session.setFocusOption(option)
-        case .audioChannel(let channel): session.setAudioChannel(channel)
-        case .windNoiseReduction(let value): session.setWindNR(value)
-        case .directionalAudio(let value): session.setDirectionalAudio(value)
-        case .vocalBoost(let value): session.setVocalBoost(value)
         }
     }
 
@@ -147,5 +145,4 @@ extension AppModel: CaptureSheetHost {
         if value.key == .whiteBalance { session.autoWhiteBalanceLock = nil }
     }
     func refreshIsoLimit() async { await session.refreshIsoLimit() }
-    func refreshAudioState() async { await session.refreshAudioState() }
 }

@@ -18,6 +18,7 @@ includeBuild("../../../OpenCine/Android") {
         substitute(module("com.opencapture.opencine:native-runtime")).using(project(":native-runtime"))
         substitute(module("com.opencapture.opencine:platform")).using(project(":platform"))
         substitute(module("com.opencapture.opencine:decoder")).using(project(":decoder"))
+        substitute(module("com.opencapture.opencine:dji")).using(project(":dji"))
         substitute(module("com.opencapture.opencine:vulkan")).using(project(":vulkan"))
         substitute(module("com.opencapture.opencine:monitor-ui")).using(project(":monitor-ui"))
         substitute(module("com.opencapture.opencine:insta360-shell")).using(project(":insta360-shell"))

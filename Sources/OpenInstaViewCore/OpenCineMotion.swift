@@ -5,7 +5,15 @@ import Foundation
 // Re-exported so app and facade call sites keep importing only this module.
 @_exported import OpenCineMotion
 
-extension HeadTrack {
+/// Keeps the shell's legacy reach separate from other integrations' motion extensions.
+public enum HeadTrack {
+    public typealias Sample = OpenCineMotion.HeadTrack.Sample
+    public typealias Reference = OpenCineMotion.HeadTrack.Reference
+
+    public static func reference(_ samples: [Sample], at time: Double, fitWindow: Double) -> Reference? {
+        OpenCineMotion.HeadTrack.reference(samples, at: time, fitWindow: fitWindow)
+    }
+
     /// The shell's head-track and waypoint reach, inherited from the Pocket shell (display
     /// `0x04/0x05` degrees). Pan 0 is front; the positive arc passes selfie to raw −135°
     /// (= +225°). The other endpoint is −48°; the intervening negative arc is unreachable.

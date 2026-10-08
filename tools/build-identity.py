@@ -25,31 +25,32 @@ def identity(root: Path, platform: str, configuration: str) -> str:
     return platform + "-" + digest.hexdigest()[:32]
 
 
+# Shipping target inputs from ios/project.yml, Package.swift and the Android composite.
+# Android stages portable Swift/JNI and compiles its own Kotlin/Compose source, not SwiftUI.
 SIBLING_PACKAGES = {
-    # OpenCine (one platform repository): iOS links OpenCineCore, OpenCineMedia, OpenCineMotion,
-    # OpenCineRelay, OpenCineApple, MonitorUI/MonitorPresentation and the Insta360 products. The
-    # Swift Android core (scripts/android-stage-swift-core.sh) compiles OpenCineCore, OpenCineMedia,
-    # OpenCineMotion and OpenCineRelay; Apps/Android/settings.gradle.kts includes OpenCine/Android
-    # (core, media, the live-view decoder, the native Vulkan renderer, monitor-ui, the Insta360
-    # shell contract and Luna adapter), so a renderer edit changes the Android identity.
-    "ios": [
-        ("OpenCine", ["Package.swift", "Sources"]),
-    ],
+    "ios": [("OpenCine", [
+        "Package.swift", "Package.resolved",
+        "Sources/OpenCineCore", "Sources/OpenCineMedia", "Sources/OpenCineMotion",
+        "Sources/OpenCineRelay", "Sources/OpenCineRelayApple", "Sources/OpenCineFrameIO",
+        "Sources/OpenCineApple", "Sources/OpenCineWatch", "Sources/OpenCineMulticam",
+        "Sources/MonitorPresentation", "Sources/MonitorUI",
+        "Sources/OpenCineAppKit", "Sources/OpenCineAppKitApple",
+        "Sources/OpenCineCameraVocabulary", "Sources/OpenCineCameraControls",
+        "Sources/Insta360Protocol", "Sources/Insta360Apple", "Sources/CKcp",
+    ])],
     "android": [
-        (
-            "OpenCine",
-            [
-                "Package.swift",
-                "scripts/android-stage-swift-core.sh",
-                "Sources/OpenCineCore",
-                "Sources/OpenCineMedia",
-                "Sources/OpenCineMotion",
-                "Sources/OpenCineRelay",
-                "Sources/OpenCineJNI",
-                "Sources/OpenCineJNISupport",
-                "Android",
-            ],
-        ),
+        ("OpenCine", [
+            "Package.swift", "Package.resolved", "scripts/android-stage-swift-core.sh",
+            "Sources/OpenCineCore", "Sources/OpenCineMedia", "Sources/OpenCineMotion",
+            "Sources/OpenCineRelay", "Sources/MonitorPresentation", "Sources/OpenCineCameraVocabulary",
+            "Sources/OpenCineJNISupport", "Sources/OpenCineJNI",
+            "Android/build.gradle.kts", "Android/settings.gradle.kts", "Android/gradle.properties",
+            "Android/gradle", "Android/gradlew", "Android/gradlew.bat",
+            "Android/core", "Android/media", "Android/platform", "Android/decoder",
+            "Android/native-runtime", "Android/vulkan", "Android/multicam",
+            "Android/monitor-ui", "Android/appkit", "Android/camera-vocabulary", "Android/camera-controls",
+            "Android/insta360-shell", "Android/insta360-luna",
+        ]),
     ],
 }
 

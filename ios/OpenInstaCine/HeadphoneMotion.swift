@@ -34,7 +34,7 @@ extension HeadphoneMotionBridge {
     /// This app's bridge: its name in the permission note, the gimbal reach and stream rate.
     static func appBridge() -> HeadphoneMotionBridge {
         HeadphoneMotionBridge(
-            appName: "OpenInstaCine", bounds: HeadTrack.Reach.bounds,
+            appName: "OpenInstaCine", bounds: OpenInstaViewCore.HeadTrack.Reach.bounds,
             sampleInterval: GimbalStick.streamInterval, hudInterval: LiveChromeThrottle.statusInterval,
             log: ControlLiveLog.line)
     }

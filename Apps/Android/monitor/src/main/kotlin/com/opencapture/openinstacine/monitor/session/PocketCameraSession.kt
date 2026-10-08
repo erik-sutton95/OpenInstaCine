@@ -13,6 +13,8 @@ import com.opencapture.opencine.motion.WorldLevelSnap
 import com.opencapture.opencine.vocabulary.AutoExposureLock
 import com.opencapture.opencine.vocabulary.CamFov
 import com.opencapture.opencine.vocabulary.CameraCommands
+import com.opencapture.opencine.vocabulary.CameraCaptureProfile
+import com.opencapture.opencine.vocabulary.CameraZoomProfile
 import com.opencapture.opencine.vocabulary.CameraModel
 import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.opencine.vocabulary.ControlHud
@@ -46,6 +48,7 @@ import com.opencapture.opencine.vocabulary.VideoFormat
 import com.opencapture.openinstacine.monitor.OperatorPrefs
 import com.opencapture.openinstacine.monitor.bridge.SwiftCore
 import com.opencapture.opencine.appkit.MonitorControlModel
+import com.opencapture.opencine.appkit.MotionProgramSession
 import com.opencapture.opencine.core.CameraCommandIntent
 import com.opencapture.opencine.core.CapabilitySnapshot
 import com.opencapture.opencine.core.MonitorLayoutCapabilities
@@ -99,6 +102,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.TimeoutCancellationException
@@ -222,9 +226,11 @@ class PocketCameraSession(
     private var isBrowsingMedia = false
     val browsingMedia: Boolean get() = isBrowsingMedia
 
-    // Programmed moves: waypoints from GET_ANGLE, the path streamed as SET_ANGLE (iOS 309049f).
-    private val _gimbalMoveCountdown = MutableStateFlow<Int?>(null)
-    val gimbalMoveCountdown: StateFlow<Int?> = _gimbalMoveCountdown.asStateFlow()
+    // The shared owner owns the take; this adapter supplies one captured Luna connection/epoch.
+    private val programmedMove = MotionProgramSession(scope)
+    private var programSceneActive = true
+    val gimbalMoveCountdown: StateFlow<Int?> = programmedMove.state.map { it.progress.countdown }
+        .stateIn(scope, SharingStarted.Eagerly, null)
     val gimbalMoveReadout: StateFlow<String> = MutableStateFlow("").asStateFlow()
     var gimbalRamp: GimbalRamp = GimbalRamp.OFF
     var gimbalDoubleTap: GimbalDoubleTap = GimbalDoubleTap.RECENTER
@@ -234,10 +240,10 @@ class PocketCameraSession(
     val gimbalSpeed: StateFlow<GimbalSpeed> = _gimbalSpeed.asStateFlow()
     private val _gimbalProgram = MutableStateFlow(GimbalProgram())
     val gimbalProgram: StateFlow<GimbalProgram> = _gimbalProgram.asStateFlow()
-    private val _gimbalMovePaused = MutableStateFlow(false)
-    val gimbalMovePaused: StateFlow<Boolean> = _gimbalMovePaused.asStateFlow()
-    private val _gimbalMoveRunning = MutableStateFlow(false)
-    val gimbalMoveRunning: StateFlow<Boolean> = _gimbalMoveRunning.asStateFlow()
+    val gimbalMovePaused: StateFlow<Boolean> = programmedMove.state.map { it.progress.paused }
+        .stateIn(scope, SharingStarted.Eagerly, false)
+    val gimbalMoveRunning: StateFlow<Boolean> = programmedMove.state.map { it.progress.running }
+        .stateIn(scope, SharingStarted.Eagerly, false)
     val hasGimbal: Boolean get() = connectedCamera != null && can(CameraCapability.GIMBAL)
     val supportsZoom: Boolean get() = connectedCamera != null && can(CameraCapability.ZOOM)
     val canRunProgrammedMove: Boolean
@@ -370,6 +376,7 @@ class PocketCameraSession(
         }
         scope.launch {
             backend.phase.collect { value ->
+                if (value != ConnectionPhase.LIVE) cancelProgrammedMove()
                 when (value) {
                     ConnectionPhase.LIVE -> {
                         holdsMonitor = true; _recoveryState.value = SessionRecoveryUi.Idle; resetFrameClock()
@@ -407,6 +414,11 @@ class PocketCameraSession(
             family = "generic", supportsTapFocus = CameraCapability.FOCUS in capabilities, supportsFocusMode = supportsFocusMode,
             usesCapturedLiveEnable = false, zoomStops = lunaZoomStops(), hasGimbal = CameraCapability.GIMBAL in capabilities,
             supportsZoom = CameraCapability.ZOOM in capabilities, sendsLiveViewPrepare = false, supportsAperture = false,
+            captureProfile = CameraCaptureProfile(labels = profile.labels,
+                supportsFocusMode = supportsFocusMode, supportsTapFocus = CameraCapability.FOCUS in capabilities,
+                supportsAperture = false, hasGimbal = CameraCapability.GIMBAL in capabilities,
+                supportsZoom = CameraCapability.ZOOM in capabilities,
+                zoom = CameraZoomProfile(stops = lunaZoomStops()), looks = LunaCameraLUTProfile.value),
         ),
         null,
     )
@@ -431,6 +443,7 @@ class PocketCameraSession(
     val lunaPort: LunaConnectPort? = (backend as? LunaConnectPort)?.let { port ->
         object : LunaConnectPort by port {
             override fun connect(id: String) {
+                cancelProgrammedMove()
                 decoder.reset(); videoPackets = 0; hasVideoFormat = false
                 port.connect(id)
             }
@@ -446,13 +459,16 @@ class PocketCameraSession(
 
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     fun disconnect() {
+        cancelProgrammedMove()
         backend.disconnect(); decoder.reset()
         holdsMonitor = false; hasVideoFormat = false
         tracking.clear()
     }
-    fun close() { backend.close(); decoder.reset(); scope.cancel() }
-    fun noteSceneBecameInactive() = backend.sceneActive(false)
-    fun noteSceneBecameActive() = backend.sceneActive(true)
+    fun close() { cancelProgrammedMove(); backend.close(); decoder.reset(); scope.cancel() }
+    fun noteSceneBecameInactive() {
+        programSceneActive = false; cancelProgrammedMove(); backend.sceneActive(false)
+    }
+    fun noteSceneBecameActive() { programSceneActive = true; backend.sceneActive(true) }
     internal fun hasRecoveryPicture(startedAt: Long): Boolean = hasVideoFormat
     /** iOS `retrySessionRecovery`: the operator starts a fresh bounded run. */
     fun retrySessionRecovery() {
@@ -661,7 +677,7 @@ class PocketCameraSession(
     fun setFacePriorityEnabled(on: Boolean) { if (on) unavailable("Face priority") }
     /** Luna's ISO ceiling is not an operator setting in the official app. */
     fun setIsoLimit(raw: Int) = presentControlNote("Auto ISO ceiling is managed by the camera.")
-    fun setApertureStrategy(raw: Int) = Unit
+    fun setApertureStrategy(raw: Int) { presentControlNote("Aperture control unavailable") }
     fun getIsoLimit() = Unit
     suspend fun refreshIsoLimit(): Boolean = false
 
@@ -716,7 +732,7 @@ class PocketCameraSession(
         scope.launch {
             delay(2_500)
             val pitch = controls?.gimbalHeadPitch ?: return@launch
-            if (aimJob?.isActive != true && !motion.isHeld && !_gimbalMoveRunning.value && abs(pitch) > 0.3) {
+            if (aimJob?.isActive != true && !motion.isHeld && !programmedMove.state.value.progress.running && abs(pitch) > 0.3) {
                 levelGimbalToWorld(refine = false)
             }
         }
@@ -747,7 +763,7 @@ class PocketCameraSession(
     }
     /** iOS `aimGimbal`: one SET_ANGLE; the aim ends once GET_ANGLE reads within 0.5 deg, or after 8 s. */
     private fun aimGimbal(target: GimbalWaypoint) {
-        if (!canSetGimbalConfiguration() || motion.isHeld || _gimbalMoveRunning.value) return
+        if (!canSetGimbalConfiguration() || motion.isHeld || programmedMove.state.value.progress.running) return
         aimJob?.cancel()
         aimJob = scope.launch {
             sendGimbalAngle(target)
@@ -784,7 +800,7 @@ class PocketCameraSession(
         // The operator's stick always wins over an aim or a programmed move.
         if (x != 0f || y != 0f) {
             aimJob?.cancel()
-            if (_gimbalMoveRunning.value) cancelProgrammedMove()
+            if (programmedMove.state.value.progress.running) cancelProgrammedMove()
         }
         // Same shaping as the iOS Luna session: deadzone, ease-in curve, sensitivity scale.
         val dead = if (linear) CameraCommands.GIMBAL_STICK_DEADZONE else mapping.deadzone
@@ -820,7 +836,7 @@ class PocketCameraSession(
     }
     fun setGimbalWaypoint(slot: GimbalWaypointSlot) {
         if (!hasGimbal) return
-        if (_gimbalMoveRunning.value || motion.isHeld) return presentControlNote(GimbalHudCopy.HOLD_STILL)
+        if (programmedMove.state.value.progress.running || motion.isHeld) return presentControlNote(GimbalHudCopy.HOLD_STILL)
         val angle = freshGimbalAngle(300) ?: return presentControlNote(GimbalHudCopy.POSE_NOT_READY)
         _gimbalProgram.update { it.withPoint(slot, LunaGimbalAim.waypoint(angle, _zoomReadout.value)) }
     }
@@ -829,7 +845,7 @@ class PocketCameraSession(
         _gimbalProgram.update { it.withPoint(slot, null) }
     }
     fun setGimbalLegDuration(ab: Double? = null, bc: Double? = null) {
-        if (_gimbalMoveRunning.value) cancelProgrammedMove()
+        if (programmedMove.state.value.progress.running) cancelProgrammedMove()
         _gimbalProgram.update { program ->
             var next = program
             if (ab != null) next = next.copy(durationAB = GimbalProgram.snapDuration(maxOf(ab, GimbalProgram.minTravelDuration(next.a, next.b))))
@@ -851,74 +867,44 @@ class PocketCameraSession(
         _gimbalProgram.update { GimbalProgram(durationAB = it.durationAB, durationBC = it.durationBC) }
     }
 
-    private var moveJob: Job? = null
-    private var moveCanPause = false
-    /** iOS `runProgrammedMove`: countdown while the head goes to A, then stream the path every 33 ms; loop ping-pongs. */
+    /** iOS runProgrammedMove: shared timeline/scheduler, captured source and integration-owned wire values. */
     fun runProgrammedMove() {
-        if (!hasGimbal) return
-        if (_gimbalMoveRunning.value) return cancelProgrammedMove()
+        if (!hasGimbal || !programSceneActive) return
+        if (programmedMove.state.value.progress.running) return cancelProgrammedMove()
         programmedZoomUnavailableReason()?.let { return presentControlNote(it) }
         val take = _gimbalProgram.value
-        val a = take.a
-        if (!canRunProgrammedMove || a == null || gimbalAngle == null) {
+        if (!canRunProgrammedMove || gimbalAngle == null) {
             return presentControlNote(if (take.canRun) GimbalHudCopy.POSE_NOT_READY else GimbalHudCopy.NEED_AB)
+        }
+        val session = control.state.value.session as? LunaCameraSession
+            ?: return presentControlNote("Connect the camera to use its controls.")
+        val epoch = session.snapshots.value.epoch
+        val service = LunaMotionService.boundTo(session, scope)
+            ?: return presentControlNote("Connect the camera to use its controls.")
+        val source = MotionProgramSession.Source(service) {
+            val snapshot = session.snapshots.value
+            control.state.value.session === session && phase == ConnectionPhase.LIVE && programSceneActive &&
+                snapshot.epoch == epoch && snapshot.connection == com.opencapture.opencine.core.ConnectionState.Ready &&
+                snapshot.authority == com.opencapture.opencine.core.ControlAuthority.Owner
         }
         _controlNote.value = null
         aimJob?.cancel()
         if (motion.isHeld) endGimbalStick()
-        _gimbalMoveRunning.value = true
-        _gimbalMovePaused.value = false
-        moveCanPause = false
-        moveJob?.cancel()
-        moveJob = scope.launch {
-            sendGimbalAngle(a)
-            for (remaining in 3 downTo 1) { _gimbalMoveCountdown.value = remaining; delay(1_000) }
-            _gimbalMoveCountdown.value = null
-            moveCanPause = true
-            val duration = take.duration
-            Log.i("OpenInstaCine", "gimbal-move: start ${take.summary} duration=$duration")
-            var clock = 0.0
-            var last = SystemClock.elapsedRealtime()
-            var reverse = false
-            while (isActive) {
-                if (phase != ConnectionPhase.LIVE) return@launch cancelProgrammedMove()
-                val now = SystemClock.elapsedRealtime()
-                if (!_gimbalMovePaused.value) clock += (now - last) / 1_000.0
-                last = now
-                if (clock >= duration) {
-                    if (!take.loop) break
-                    clock -= duration
-                    reverse = !reverse
-                }
-                if (!_gimbalMovePaused.value) {
-                    take.pose(if (reverse) duration - clock else clock)?.let(::sendGimbalAngle)
-                }
-                delay(33)
-            }
-            take.pose(if (reverse) 0.0 else duration)?.let(::sendGimbalAngle)
-            Log.i("OpenInstaCine", "gimbal-move: done")
-            finishProgrammedMove()
+        programmedMove.onChange = { state ->
+            if (state.failure != null) presentControlNote("Programmed move was not applied by the camera.")
         }
+        if (!programmedMove.start(take, source, LunaMotionService.PROGRAM_TIMING))
+            presentControlNote("Programmed move is unavailable for the current camera state.")
     }
-    // The head settles on the last target; re-sending the GET pose (about 70 ms stale) steps it back.
-    fun pauseProgrammedMove() { if (_gimbalMoveRunning.value && moveCanPause) _gimbalMovePaused.value = true }
-    fun resumeProgrammedMove() { if (_gimbalMoveRunning.value && moveCanPause) _gimbalMovePaused.value = false }
+    fun pauseProgrammedMove() { if (programSceneActive) programmedMove.pause() }
+    fun resumeProgrammedMove() { if (programSceneActive) programmedMove.resume() }
     fun restartProgrammedMove() {
-        if (!_gimbalMoveRunning.value || !_gimbalMovePaused.value) return
+        val progress = programmedMove.state.value.progress
+        if (!programSceneActive || !progress.running || !progress.paused) return
         cancelProgrammedMove()
         runProgrammedMove()
     }
-    fun cancelProgrammedMove() {
-        moveJob?.cancel()
-        finishProgrammedMove()
-    }
-    private fun finishProgrammedMove() {
-        moveJob = null
-        _gimbalMoveCountdown.value = null
-        _gimbalMoveRunning.value = false
-        _gimbalMovePaused.value = false
-        moveCanPause = false
-    }
+    fun cancelProgrammedMove() = programmedMove.cancel()
 
     // Focus and Deep Track.
     /** Last feed tap (elapsed ms, x, y) for the Deep Track double tap. */
@@ -1170,11 +1156,6 @@ class PocketCameraSession(
     }
     fun setResolutionFps(res: Int, fpsIndex: Int): Boolean = VideoFormat.parse(res, fpsIndex)?.let(::setVideoFormat) ?: false
     // The Luna exposes no audio controls or level meters.
-    fun setAudioChannel(value: Int) = Unit
-    fun setVocalBoost(on: Boolean) = Unit
-    fun setWindNr(on: Boolean) = Unit
-    fun setDirectionalAudio(mode: Int) = Unit
-    fun refreshAudio() = Unit
 
     companion object {
         /** fw 1.1.15 official presets, same as iOS `LunaShellMapping.zoomChips`; the ceiling is appended when larger. */
@@ -1183,4 +1164,3 @@ class PocketCameraSession(
         const val DOUBLE_TAP_WINDOW_MS = 350L
     }
 }
-
