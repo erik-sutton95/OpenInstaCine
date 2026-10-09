@@ -36,8 +36,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -58,10 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.InfiniteAnimationPolicy
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.createLifecycleAwareWindowRecomposer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -347,48 +342,17 @@ private fun beginDiscovery(model: AppModel, onBluetoothOff: () -> Unit = {}) {
     if (!model.session.radioOn.value) onBluetoothOff()
 }
 
-/** The app's insets and back handling around the shared cameras and pair pages. */
+/** Existing pair-page insets and back handling; camera clearance belongs to the shared page. */
 @Composable
 private fun HomeFrame(model: AppModel, pairing: Boolean, content: @Composable () -> Unit) {
-    val density = LocalDensity.current
-    val layoutDir = LocalLayoutDirection.current
-    val configuration = LocalConfiguration.current
+    if (!pairing) { content(); return }
     val state by model.cameras.state.collectAsState()
-    val landscapeHome = configuration.screenWidthDp > configuration.screenHeightDp
-    val homeSide = with(density) {
-        val leading = WindowInsets.safeDrawing.getLeft(this, layoutDir).toDp()
-        val trailing = WindowInsets.safeDrawing.getRight(this, layoutDir).toDp()
-        com.opencapture.monitorui.MonitorLayoutPolicy.pageSideInsets(
-            landscape = true, safeLeading = leading.value, safeTrailing = trailing.value,
-        ).first.dp
-    }
-    Column(
-        Modifier
-            .fillMaxSize()
-            // Cameras landscape mirrors the larger cutout onto both sides so the list stays
-            // centered; pairing and live chrome keep their own edges.
-            .then(
-                if (!pairing && landscapeHome) {
-                    Modifier
-                        .padding(start = homeSide, end = homeSide)
-                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical))
-                } else {
-                    Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
-                },
-            )
-            .padding(vertical = 16.dp),
-    ) {
-        Box(Modifier.weight(1f).padding(
-            start = if (pairing) 14.dp else 18.dp,
-            end = if (pairing) 14.dp else 18.dp,
-            top = if (pairing) 0.dp else 8.dp,
-        )) {
-            if (pairing) {
-                // As the pair page always did: Back stops a connect and leaves the page.
-                BackHandler(enabled = state.attempts.isNotEmpty() || state.saved.isNotEmpty()) {
-                    model.cameras.cancelAll()
-                    model.shell.endPairing()
-                }
+    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(vertical = 16.dp)) {
+        Box(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+            // As the pair page always did: Back stops a connect and leaves the page.
+            BackHandler(enabled = state.attempts.isNotEmpty() || state.saved.isNotEmpty()) {
+                model.cameras.cancelAll()
+                model.shell.endPairing()
             }
             content()
         }
