@@ -653,6 +653,9 @@ final class AppModel {
     /// The app's own link gave up while the monitor showed it, outside recovery (a reconnect
     /// that failed, Bluetooth off): the monitor closes as it always did.
     func noteLinkPhase() {
+        if case .live = session.phase, let monitor = shell.monitor {
+            session.configureMediaLibrary(service: monitor.camera.services[(any CameraMediaService).self])
+        }
         guard isLive, !session.holdsMonitor else { return }
         switch session.phase {
         case .idle, .failed: shell.close()

@@ -15,7 +15,10 @@ import XCTest
     func close() { finished = true }
 }
 @MainActor private final class GalleryBrowse: CameraMediaBrowse {
-    let binding = MediaBrowseBinding(session: .init(), epoch: .init(1))
+    let binding: MediaBrowseBinding
+    init(session: OpenCineCore.CameraSessionID = .init()) {
+        binding = MediaBrowseBinding(session: session, epoch: .init(1))
+    }
     var thumbnails: (any CameraMediaThumbnailService)? { nil }
     var transfers: (any CameraMediaTransferService)? { nil }
     var deletion: (any CameraMediaDeleteService)? { nil }
@@ -24,7 +27,8 @@ import XCTest
     func close() async { closes += 1 }
 }
 @MainActor private final class GalleryService: CameraMediaService {
-    let browse = GalleryBrowse()
+    let browse: GalleryBrowse
+    init(session: OpenCineCore.CameraSessionID = .init()) { browse = GalleryBrowse(session: session) }
     var sessionID: OpenCineCore.CameraSessionID { browse.binding.session }
     var opens = 0
     func openBrowse() async -> any CameraMediaBrowse { opens += 1; return browse }
@@ -155,5 +159,94 @@ import XCTest
         XCTAssertEqual(try directory.read("files/take.mp4"), Data([2]))
         XCTAssertEqual(try directory.read("index.json"), Data("[]".utf8))
         old.resetMediaSession(); next.resetMediaSession()
+    }
+
+    /// SIMULATED: drive the real app phase callback and shared gallery, retaining an uncached catalogue.
+    func testHeldLiveRecoveryReopensRegisteredServiceWithoutReplacingRetainedCatalogue() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let storage = MonitorMediaCacheStorage(), seed = session(root: root, storage: storage)
+        let file = MediaFile(path: "/DCIM/VID_SIMULATED_recovery.MP4", thumbPath: "", sizeBytes: 99,
+            durationSeconds: 2, resolution: "1920x1080", fps: 30)
+        try seed.cameraMedia.directory(cameraID: seed.mediaCameraID)
+            .write(JSONEncoder().encode([file]), at: "index.json")
+        let current = session(root: root, storage: storage), model = AppModel(session: current)
+        defer { current.endMediaBrowse(); model.shell.close(); seed.endMediaBrowse() }
+        let library = try XCTUnwrap(current.mediaLibrary)
+        let retainedIDs = library.records.map(\.asset.id)
+        XCTAssertEqual(retainedIDs.count, 1)
+        XCTAssertTrue(library.libraryRecords.isEmpty, "The retained uncached row is unavailable without a source")
+        XCTAssertTrue(library.cache.directory === seed.mediaLibrary.cache.directory)
+        var camera = ChromeEditorReturnTests.camera(model)
+        let service = GalleryService(session: camera.session.id)
+        camera.services.register(service, as: (any CameraMediaService).self)
+        model.shell.present(camera); model.noteMonitorChanged()
+        let monitorID = try XCTUnwrap(model.shell.monitor?.id)
+        current.beginMediaBrowse()
+        await settle { library.binding == service.browse.binding && !library.fetching }
+        XCTAssertEqual(service.opens, 1)
+        XCTAssertEqual(library.libraryRecords.map(\.asset.id), retainedIDs)
+        current.endMediaBrowse()
+        await settle { service.browse.closes == 1 }
+
+        // Connection preparation retires the service while the same monitor and cache survive.
+        current.configureMediaLibrary()
+        current.holdsMonitor = true; current.phase = .connectingGatt
+        model.noteLinkPhase()
+        XCTAssertFalse(library.canRefresh)
+        XCTAssertEqual(library.records.map(\.asset.id), retainedIDs)
+        XCTAssertTrue(library.libraryRecords.isEmpty)
+        current.phase = .live; model.noteLinkPhase()
+        XCTAssertTrue(library.canRefresh, "A ready kept session must restore its registered media service")
+        XCTAssertTrue(current.mediaLibrary === library)
+        XCTAssertTrue(library.cache.directory === seed.mediaLibrary.cache.directory)
+        XCTAssertEqual(model.shell.monitor?.id, monitorID)
+        XCTAssertEqual(current.mediaLibraryServiceID, camera.session.id)
+        current.beginMediaBrowse()
+        await settle { service.opens == 2 && library.binding == service.browse.binding && !library.fetching }
+        XCTAssertEqual(library.records.map(\.asset.id), retainedIDs)
+        XCTAssertEqual(library.libraryRecords.map(\.asset.id), retainedIDs)
+        let lifetime = library.lifetimeToken
+        model.noteLinkPhase(); current.beginMediaBrowse(); await Task.yield()
+        XCTAssertEqual(service.opens, 2)
+        XCTAssertEqual(library.lifetimeToken, lifetime)
+        XCTAssertEqual(library.binding?.session, camera.session.id)
+    }
+
+    /// SIMULATED: a failed held connection cannot restore a browse merely because the monitor remains.
+    func testHeldNonLiveRecoveryKeepsMediaUnavailable() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let current = session(root: root, storage: MonitorMediaCacheStorage()), model = AppModel(session: current)
+        defer { current.endMediaBrowse(); model.shell.close() }
+        var camera = ChromeEditorReturnTests.camera(model)
+        let service = GalleryService(session: camera.session.id)
+        camera.services.register(service, as: (any CameraMediaService).self)
+        model.shell.present(camera); model.noteMonitorChanged()
+        let library = try XCTUnwrap(current.mediaLibrary), monitorID = try XCTUnwrap(model.shell.monitor?.id)
+        current.configureMediaLibrary(); current.holdsMonitor = true; current.phase = .failed("SIMULATED recovery")
+        model.noteLinkPhase(); current.beginMediaBrowse(); await Task.yield()
+        XCTAssertEqual(model.shell.monitor?.id, monitorID)
+        XCTAssertTrue(current.mediaLibrary === library)
+        XCTAssertFalse(library.canRefresh)
+        XCTAssertNil(library.binding)
+        XCTAssertEqual(service.opens, 0)
+    }
+
+    /// SIMULATED: a live monitor without a registered media service stays unsupported.
+    func testUnregisteredLiveMonitorDoesNotInventMediaService() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let current = session(root: root, storage: MonitorMediaCacheStorage()), model = AppModel(session: current)
+        defer { current.endMediaBrowse(); model.shell.close() }
+        model.shell.present(ChromeEditorReturnTests.camera(model)); model.noteMonitorChanged()
+        let library = try XCTUnwrap(current.mediaLibrary), monitorID = try XCTUnwrap(model.shell.monitor?.id)
+        current.holdsMonitor = true; current.phase = .live
+        model.noteLinkPhase(); current.beginMediaBrowse(); await Task.yield()
+        XCTAssertEqual(model.shell.monitor?.id, monitorID)
+        XCTAssertTrue(current.mediaLibrary === library)
+        XCTAssertFalse(library.canRefresh)
+        XCTAssertNil(library.binding)
+        XCTAssertNil(current.mediaLibraryServiceID)
     }
 }
