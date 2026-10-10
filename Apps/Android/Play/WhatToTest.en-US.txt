@@ -9,8 +9,10 @@ Fixes
 - Live View shows a vertical camera picture whole instead of a heavily zoomed crop.
 - Playback scopes, zebra and false color keep their own clip level instead of moving the live picture's, and the reverse.
 
+- Playback stays paused when a late loop, seek or scrub finishes. Press Play to resume.
+
 What to test
 
 - Force quit the Insta360 app, then pair from the start screen. Set ISO Auto, 400 and 800 and WB Kelvin: each settles on the camera's value without bouncing back.
 - Start and stop recording from the app and the camera button: the lamp follows the camera. Drop Wi-Fi during a change: it says the link dropped, then controls work again.
-- Try waveform, false color, zoom and the gimbal. Something wrong? Use Report a problem in Operator Setup, or email support@opencapture.org.
+- Try waveform, false color, zoom and the gimbal. Pause a clip during a loop or scrub: it should hold. Report problems from Operator Setup or support@opencapture.org.
