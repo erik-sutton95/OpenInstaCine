@@ -131,7 +131,8 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
                 let native = MonitorApplePlaybackOwner(feed: PlaybackFeedSession())
                 let player = model.session.makeMediaPlayback(native: native,
                     previousColor: { model.assist.monitorColorMode })
-                let assists = MonitorPlaybackAssistSession(native: native, samples: model.frameSamples,
+                let assists = MonitorPlaybackAssistSession(audioSession: model.playbackAudioSession,
+                    native: native, samples: model.frameSamples,
 
                     onTapFailure: MediaPlaybackAudioSession.tapFailure,
                     onAudioFailure: MediaPlaybackAudioSession.audioFailure)
