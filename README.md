@@ -126,7 +126,7 @@ OpenCine shared packages, Luna protocol adapters and native app composition:
 
 | Layer | Path | Purpose |
 | --- | --- | --- |
-| **App core** | `Sources/` | `OpenInstaViewCore`: an app-owned fork of the OpenPocketCine monitor core with small Luna hooks, no longer synced from OpenPocketCine and pending extraction into OpenCine |
+| **App core** | `Sources/` | `OpenInstaViewCore`: app-owned Luna profile adapters and compatibility re-exports of shared OpenCine camera, media, motion and relay values |
 | **Shared UI** | `../OpenCine` | Sibling checkout of the OpenCine platform repository: SwiftUI `MonitorUI` and `MonitorPresentation`, Compose `monitor-ui` |
 | **App shell** | `../OpenCine` | `OpenCineAppKit` and Compose `appkit`: the root (cameras, pair, monitor and its Settings/Media covers), the monitor's camera lifetime and common controls (ISO, shutter, white balance, record), cameras, pairing, progress, recovery actions and saved-camera migration through `LunaIntegration` |
 | **Shared camera core** | `../OpenCine` | OpenCine: camera `CameraSession` contracts (Swift and Kotlin `:core`) and `OpenCineMedia` (LUT, curve, scope math) |
