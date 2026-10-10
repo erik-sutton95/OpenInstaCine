@@ -68,4 +68,3 @@ enum StartupConnectionCopy {
     static let scanEmptyHint =
         "Force quit the Insta360 app on every phone near the camera. Make sure the camera is on and activated, then move closer."
 }
-

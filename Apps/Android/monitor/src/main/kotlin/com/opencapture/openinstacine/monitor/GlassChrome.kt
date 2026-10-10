@@ -71,4 +71,3 @@ fun Modifier.pickerPanelGlass(shape: Shape = ChromeShape): Modifier =
 
 fun Modifier.chipGlass(shape: Shape = ChromeShape): Modifier =
     background(LiveDesign.tile, shape)
-

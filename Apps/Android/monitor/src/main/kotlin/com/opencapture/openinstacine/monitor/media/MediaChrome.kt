@@ -89,4 +89,3 @@ internal object PlaybackChromeMetrics {
         return buttons + gaps + barPaddingH * 2 + minimumSpacer
     }
 }
-
