@@ -2,15 +2,76 @@ import AVFoundation
 import CoreImage
 import CoreVideo
 import Metal
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
+import OpenCineAppKit
+import OpenCineCameraControls
+import OpenCineApple
+import OpenCineMedia
+import MonitorPresentation
 
 @testable import OpenInstaCine
 
 /// Playback LUT / PEAK / FALSE / ZEBRA must follow live present order:
 /// identity on `AVPlayerLayer`, assist image on `CIFeedView` only after a bake
 /// lands. `AVVideoComposition` after `replaceCurrentItem` never showed the look.
+@MainActor
 final class PlaybackAssistTests: XCTestCase {
+    func testActualNativeOwnerRejectsOutgoingRetireAndCloseAfterSuccessorClaim() {
+        let player = AVPlayer(), feed = PlaybackFeedSession()
+        let native = MonitorApplePlaybackOwner(player: player, feed: feed)
+        let a = MonitorPlaybackItemToken(owner: UUID(), revision: 0)
+        let b = MonitorPlaybackItemToken(owner: UUID(), revision: 0)
+        native.retireItem(for: a); native.retireItem(for: b)
+        let item = ReadyPlaybackItem(url: URL(fileURLWithPath: "/tmp/owned-player-B.mp4"))
+        player.replaceCurrentItem(with: item)
+        var retiredItems = 0
+        native.onItemChanged = { if $0 == nil { retiredItems += 1 } }
+        native.retireItem(for: .init(owner: a.owner, revision: 1))
+        native.close(token: .init(owner: a.owner, revision: 2))
+        XCTAssertTrue(player.currentItem === item)
+        XCTAssertEqual(retiredItems, 0, "an outgoing owner cannot clear the successor's native graph")
+        native.close(token: .init(owner: b.owner, revision: 1))
+        XCTAssertNil(player.currentItem)
+        XCTAssertEqual(retiredItems, 1)
+    }
+
+    func testLateParkedSeekCannotKickTheNextSource() async {
+        let player = ControlledPlaybackPlayer(), session = PlaybackFeedSession()
+        let host = PlaybackFeedHostView(frame: CGRect(x: 0, y: 0, width: 64, height: 64))
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        var effects = LiveImageEffects(); effects.histogram = true
+        let a = ReadyPlaybackItem(url: URL(fileURLWithPath: "/tmp/parked-A.mp4"))
+        session.prepare(a); player.replaceCurrentItem(with: a); session.attach(host: host, player: player)
+        session.setEffects(effects, transfer: .rec709, sampleBus: bus)
+        await player.whenCaptured(1)
+        XCTAssertEqual(player.seekCount, 1)
+        let b = ReadyPlaybackItem(url: URL(fileURLWithPath: "/tmp/parked-B.mp4"))
+        session.prepare(b); player.replaceCurrentItem(with: b); session.noteItemReady()
+        await player.whenCaptured(2)
+        XCTAssertEqual(player.seekCount, 2)
+        player.finishSeek(0)
+        await withCheckedContinuation { continuation in session.debugOnPullQueue { continuation.resume() } }
+        XCTAssertEqual(player.seekCount, 2, "A's native completion must not reset B's pending kick or seek B again")
+        XCTAssertTrue(player.currentItem === b && bus.usesPlaybackSource)
+        session.shutdown(); XCTAssertFalse(bus.usesPlaybackSource)
+    }
+
+    func testRetiredFeedCannotClearSuccessorPictureOrSampleLease() {
+        let a = PlaybackFeedSession(), b = PlaybackFeedSession()
+        let host = PlaybackFeedHostView(frame: CGRect(x: 0, y: 0, width: 64, height: 64))
+        let player = AVPlayer(), bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        var effects = LiveImageEffects(); effects.histogram = true
+        a.attach(host: host, player: AVPlayer()); a.setEffects(effects, transfer: .rec709, sampleBus: bus)
+        b.attach(host: host, player: player); b.setEffects(effects, transfer: .rec709, sampleBus: bus)
+        XCTAssertTrue(bus.usesPlaybackSource)
+        a.shutdown()
+        XCTAssertTrue(b.debugBoundHost === host && host.playerLayer.player === player)
+        XCTAssertNotNil(host.ciFeed.onPresented)
+        XCTAssertTrue(bus.usesPlaybackSource, "A's cleanup cannot close B's current sample lease")
+        b.shutdown(); XCTAssertFalse(bus.usesPlaybackSource)
+    }
+
     /// Sentry OPENPOCKETCINE-IOS-2Q: Main waited on a busy pull during a clip
     /// change until the watchdog killed the app.
     @MainActor
@@ -39,7 +100,7 @@ final class PlaybackAssistTests: XCTestCase {
             session.attach(host: host, player: player)
             var effects = LiveImageEffects()
             effects.zebra = true
-            session.setEffects(effects, transfer: .rec709, sampleBus: LiveFrameSampleBus())
+            session.setEffects(effects, transfer: .rec709, sampleBus: LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile))
             try? await Task.sleep(for: .milliseconds(150))
             session.shutdown()
             XCTAssertEqual(player.seekCount, 0, "A ready output must still wait for a numeric time")
@@ -57,7 +118,7 @@ final class PlaybackAssistTests: XCTestCase {
         session.attach(host: host, player: player)
         var effects = LiveImageEffects()
         effects.zebra = true
-        session.setEffects(effects, transfer: .rec709, sampleBus: LiveFrameSampleBus())
+        session.setEffects(effects, transfer: .rec709, sampleBus: LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile))
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while player.seekCount == 0, ContinuousClock.now < deadline {
             try? await Task.sleep(for: .milliseconds(10))
@@ -182,7 +243,7 @@ final class PlaybackAssistTests: XCTestCase {
                 showPlayer: true, showFeed: false),
         ]
         for c in cases {
-            let plan = PlaybackFeedHandoff.plan(
+            let plan = MonitorPlaybackFeedHandoff.plan(
                 effects: c.effects, overlayOnly: c.overlayOnly, unmanagedBake: c.unmanagedBake,
                 metalHasPresented: c.metalHasPresented, hdrDisplay: c.hdrDisplay)
             XCTAssertEqual(plan.showPlayer, c.showPlayer, "\(c.name): showPlayer")
@@ -197,57 +258,57 @@ final class PlaybackAssistTests: XCTestCase {
     }
 
     func testPausedLinkParksOnlyAfterAPausedSeekCanLand() {
-        XCTAssertFalse(PlaybackDisplayLink.parkIsDue(idleSince: nil, now: 10))
-        XCTAssertFalse(PlaybackDisplayLink.parkIsDue(idleSince: 10, now: 10.1))
-        XCTAssertFalse(PlaybackDisplayLink.parkIsDue(idleSince: 10, now: 10.5))
-        XCTAssertTrue(PlaybackDisplayLink.parkIsDue(idleSince: 10, now: 10.61))
+        XCTAssertFalse(MonitorPlaybackDisplayLink.parkIsDue(idleSince: nil, now: 10))
+        XCTAssertFalse(MonitorPlaybackDisplayLink.parkIsDue(idleSince: 10, now: 10.1))
+        XCTAssertFalse(MonitorPlaybackDisplayLink.parkIsDue(idleSince: 10, now: 10.5))
+        XCTAssertTrue(MonitorPlaybackDisplayLink.parkIsDue(idleSince: 10, now: 10.61))
     }
 
     func testPlaybackDisplayLinkDoesNotCapTheCubeAtTwentyFour() {
         XCTAssertGreaterThanOrEqual(
-            PlaybackDisplayLink.pollRange.maximum, 60,
+            MonitorPlaybackDisplayLink.pollRange.maximum, 60,
             "max 30 preferred 24 is the 22–23 fps LUT hitch; LUT-off is AVPlayerLayer at clip rate")
-        XCTAssertNotEqual(PlaybackDisplayLink.pollRange.preferred, 24)
-        XCTAssertGreaterThan(PlaybackDisplayLink.pollRange.minimum, 15)
+        XCTAssertNotEqual(MonitorPlaybackDisplayLink.pollRange.preferred, 24)
+        XCTAssertGreaterThan(MonitorPlaybackDisplayLink.pollRange.minimum, 15)
         XCTAssertTrue(
-            PlaybackDisplayLink.shouldPull(itemHasPresented: false, hasNewPixelBuffer: false),
+            MonitorPlaybackDisplayLink.shouldPull(itemHasPresented: false, hasNewPixelBuffer: false),
             "until the first cube lands, keep pulling even without a new buffer")
         XCTAssertFalse(
-            PlaybackDisplayLink.shouldPull(itemHasPresented: true, hasNewPixelBuffer: false),
+            MonitorPlaybackDisplayLink.shouldPull(itemHasPresented: true, hasNewPixelBuffer: false),
             "after present, the cube only bakes a new player frame")
         XCTAssertTrue(
-            PlaybackDisplayLink.shouldPull(itemHasPresented: true, hasNewPixelBuffer: true))
+            MonitorPlaybackDisplayLink.shouldPull(itemHasPresented: true, hasNewPixelBuffer: true))
     }
 
     func testPausedPlaybackParksTheDisplayLinkOnceTheSourceIsReady() {
-        XCTAssertTrue(PlaybackDisplayLink.shouldPark(itemHasPresented: true, playerRate: 0))
+        XCTAssertTrue(MonitorPlaybackDisplayLink.shouldPark(itemHasPresented: true, playerRate: 0))
         XCTAssertFalse(
-            PlaybackDisplayLink.shouldPark(itemHasPresented: true, playerRate: 1),
+            MonitorPlaybackDisplayLink.shouldPark(itemHasPresented: true, playerRate: 1),
             "playing keeps display-rate polling")
         XCTAssertFalse(
-            PlaybackDisplayLink.shouldPark(itemHasPresented: false, playerRate: 0),
+            MonitorPlaybackDisplayLink.shouldPark(itemHasPresented: false, playerRate: 0),
             "a new item keeps force-pulling until it presents")
     }
 
     func testScopesOnlyPlaybackIsReadyWithoutAMetalCompletion() {
         XCTAssertTrue(
-            PlaybackFeedHandoff.sourceReadyWithoutMetal(needsGPUFeed: false, hdrDisplay: false),
+            MonitorPlaybackFeedHandoff.sourceReadyWithoutMetal(needsGPUFeed: false, hdrDisplay: false),
             "scopes-only never reaches a Metal completion")
         XCTAssertFalse(
-            PlaybackFeedHandoff.sourceReadyWithoutMetal(needsGPUFeed: true, hdrDisplay: false))
+            MonitorPlaybackFeedHandoff.sourceReadyWithoutMetal(needsGPUFeed: true, hdrDisplay: false))
         XCTAssertFalse(
-            PlaybackFeedHandoff.sourceReadyWithoutMetal(needsGPUFeed: false, hdrDisplay: true))
+            MonitorPlaybackFeedHandoff.sourceReadyWithoutMetal(needsGPUFeed: false, hdrDisplay: true))
     }
 
     func testPlaybackVideoOutputGradesNativeYUVNotBGRA() {
         XCTAssertFalse(
-            PlaybackVideoOutput.forcesRGBConversion,
+            MonitorPlaybackVideoOutput.forcesRGBConversion,
             "32BGRA from AVPlayerItemVideoOutput converts every HEVC frame; live grades 420")
         XCTAssertEqual(
-            PlaybackVideoOutput.pixelFormat,
+            MonitorPlaybackVideoOutput.pixelFormat,
             kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange)
         XCTAssertEqual(
-            PlaybackVideoOutput.pixelBufferAttributes[
+            MonitorPlaybackVideoOutput.pixelBufferAttributes[
                 kCVPixelBufferMetalCompatibilityKey as String] as? Bool,
             true)
     }
@@ -266,47 +327,47 @@ final class PlaybackAssistTests: XCTestCase {
 
     func testNextClipForcesAPullUntilTheHostPresents() {
         XCTAssertTrue(
-            PlaybackFeedHandoff.shouldForcePull(
+            MonitorPlaybackFeedHandoff.shouldForcePull(
                 effectsChanged: false, hasLastBuffer: true, metalHasPresented: true,
                 itemHasPresented: false),
             "stale lastBuffer + metal from the previous clip must not skip the new item")
         XCTAssertTrue(
-            PlaybackFeedHandoff.shouldForcePull(
+            MonitorPlaybackFeedHandoff.shouldForcePull(
                 effectsChanged: false, hasLastBuffer: true, metalHasPresented: false,
                 itemHasPresented: false),
             "prepare drops metal ownership — LUT must bake the new item without toggling the chip")
         XCTAssertFalse(
-            PlaybackFeedHandoff.shouldForcePull(
+            MonitorPlaybackFeedHandoff.shouldForcePull(
                 effectsChanged: false, hasLastBuffer: true, metalHasPresented: true,
                 itemHasPresented: true))
         XCTAssertTrue(
-            PlaybackFeedHandoff.shouldForcePull(
+            MonitorPlaybackFeedHandoff.shouldForcePull(
                 effectsChanged: false, hasLastBuffer: false, metalHasPresented: true,
                 itemHasPresented: true))
         XCTAssertTrue(
-            PlaybackFeedHandoff.shouldForcePull(
+            MonitorPlaybackFeedHandoff.shouldForcePull(
                 effectsChanged: true, hasLastBuffer: true, metalHasPresented: true,
                 itemHasPresented: true))
     }
 
     func testShouldAdoptHostPrefersTheNewerRepresentable() {
         XCTAssertTrue(
-            PlaybackFeedHandoff.shouldAdoptHost(
+            MonitorPlaybackFeedHandoff.shouldAdoptHost(
                 incomingGeneration: 1, currentGeneration: nil, isSameHost: false),
             "first host always binds")
         XCTAssertTrue(
-            PlaybackFeedHandoff.shouldAdoptHost(
+            MonitorPlaybackFeedHandoff.shouldAdoptHost(
                 incomingGeneration: 1, currentGeneration: 1, isSameHost: true),
             "SwiftUI updateUIView on the bound host must keep it")
         XCTAssertTrue(
-            PlaybackFeedHandoff.shouldAdoptHost(
+            MonitorPlaybackFeedHandoff.shouldAdoptHost(
                 incomingGeneration: 2, currentGeneration: 1, isSameHost: false))
         XCTAssertFalse(
-            PlaybackFeedHandoff.shouldAdoptHost(
+            MonitorPlaybackFeedHandoff.shouldAdoptHost(
                 incomingGeneration: 1, currentGeneration: 2, isSameHost: false),
             "the departing next-clip identity must not steal LUT present")
         XCTAssertFalse(
-            PlaybackFeedHandoff.shouldAdoptHost(
+            MonitorPlaybackFeedHandoff.shouldAdoptHost(
                 incomingGeneration: 2, currentGeneration: 2, isSameHost: false),
             "equal generation on a different view is the outgoing slide twin")
     }
@@ -325,7 +386,7 @@ final class PlaybackAssistTests: XCTestCase {
         var fx = LiveImageEffects()
         fx.lutDimension = cube.size
         fx.lutRGBA = cube.rgbaComponents.withUnsafeBytes { Data($0) }
-        let waiting = PlaybackFeedHandoff.plan(
+        let waiting = MonitorPlaybackFeedHandoff.plan(
             effects: fx, overlayOnly: false, unmanagedBake: false, metalHasPresented: false)
         XCTAssertTrue(waiting.showPlayer)
         XCTAssertFalse(waiting.showFeed)
@@ -378,7 +439,7 @@ final class PlaybackAssistTests: XCTestCase {
         session.attach(host: host, player: player)
         var fx = LiveImageEffects()
         fx.zebra = true
-        session.setEffects(fx, transfer: .rec709, sampleBus: LiveFrameSampleBus())
+        session.setEffects(fx, transfer: .rec709, sampleBus: LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile))
         XCTAssertFalse(host.ciFeed.hasPresentedFrame)
         XCTAssertFalse(host.playerLayer.isHidden)
         session.shutdown()
@@ -398,7 +459,7 @@ final class PlaybackAssistTests: XCTestCase {
     }
 
     func testEngineGradesPlaybackZebraAsOverlayOnly() async {
-        let engine = LiveAssistEngine()
+        let engine = LiveAssistEngine(configuration: DeclaredDJIMonitorFixture.assistConfiguration)
         var fx = LiveImageEffects()
         fx.zebra = true
         fx.colorMode = .dLog2
@@ -421,7 +482,7 @@ final class PlaybackAssistTests: XCTestCase {
         fx.lutDimension = cube.size
         fx.lutRGBA = cube.rgbaComponents.withUnsafeBytes { Data($0) }
         fx.colorMode = .dLog2
-        let engine = LiveAssistEngine()
+        let engine = LiveAssistEngine(configuration: DeclaredDJIMonitorFixture.assistConfiguration)
         let buffer = ScopeTestBuffers.makeFlatBuffer(code: 78)
         let presented = expectation(description: "lut present")
         presented.assertForOverFulfill = false
@@ -437,13 +498,13 @@ final class PlaybackAssistTests: XCTestCase {
 
     func testLUTReplacePresentsUnmanagedLikeLive() {
         XCTAssertTrue(
-            PlaybackFeedHandoff.presentUnmanaged(overlay: false, unmanagedBake: true),
+            MonitorPlaybackFeedHandoff.presentUnmanaged(overlay: false, unmanagedBake: true),
             "LUT cube product is NSNull, same as live HevcDecoder")
         XCTAssertFalse(
-            PlaybackFeedHandoff.presentUnmanaged(overlay: false, unmanagedBake: false),
+            MonitorPlaybackFeedHandoff.presentUnmanaged(overlay: false, unmanagedBake: false),
             "identity fallback stays color-managed")
         XCTAssertTrue(
-            PlaybackFeedHandoff.presentUnmanaged(overlay: true, unmanagedBake: false),
+            MonitorPlaybackFeedHandoff.presentUnmanaged(overlay: true, unmanagedBake: false),
             "zebra / peaking / false colour overlay is unmanaged chrome")
     }
 
@@ -504,7 +565,7 @@ final class PlaybackAssistTests: XCTestCase {
         CVBufferSetAttachment(
             made.buffer, kCVImageBufferTransferFunctionKey,
             kCVImageBufferTransferFunction_ITU_R_709_2, .shouldPropagate)
-        let cloned = PlaybackPixelCopy.untaggedBGRA(made.buffer)
+        let cloned = MonitorPlaybackPixelCopy.untaggedBGRA(made.buffer)
         XCTAssertNil(
             CVBufferGetAttachment(cloned, kCVImageBufferColorPrimariesKey, nil),
             "clone must drop Rec.709 tags so NSNull present is not a black well")
@@ -527,11 +588,11 @@ final class PlaybackAssistTests: XCTestCase {
         fx.lutDimension = cube.size
         fx.lutRGBA = cube.rgbaComponents.withUnsafeBytes { Data($0) }
         fx.colorMode = colorMode
-        let source = CIImage(cvPixelBuffer: buffer, options: LiveMonitorWorkingSpace.imageOptions)
+        let source = CIImage(cvPixelBuffer: buffer, options: MonitorWorkingSpace.imageOptions)
         let identity = displayIsSource ? source : CIImage(cvPixelBuffer: buffer)
         let product = LiveMonitorCompositor.applyProduct(to: source, effects: fx, display: identity)
         XCTAssertTrue(product.unmanagedBake)
-        let baker = FeedFrameBaker(device: device)
+        let baker = MonitorFrameBaker(device: device)
         let drawable = CGSize(width: 32, height: 32)
         func luma(unmanaged: Bool) -> Float {
             let done = XCTestExpectation(description: "bake unmanaged=\(unmanaged)")
@@ -550,7 +611,7 @@ final class PlaybackAssistTests: XCTestCase {
             defer { baker.releaseBakedTexture(texture) }
             guard
                 let wrapped = CIImage(
-                    mtlTexture: texture, options: LiveMonitorWorkingSpace.imageOptions)
+                    mtlTexture: texture, options: MonitorWorkingSpace.imageOptions)
             else {
                 XCTFail("CIImage(mtlTexture:) must wrap the bake")
                 return 0
@@ -580,7 +641,7 @@ final class PlaybackAssistTests: XCTestCase {
     }
 
     private static func sampleLuma(_ image: CIImage) -> Float {
-        let context = CIContext(options: LiveMonitorWorkingSpace.contextOptions)
+        let context = CIContext(options: MonitorWorkingSpace.contextOptions)
         var bytes = [UInt8](repeating: 0, count: 4)
         context.render(
             image, toBitmap: &bytes, rowBytes: 4,
@@ -612,6 +673,86 @@ private final class UnreadyPlaybackPlayer: AVPlayer {
     }
 }
 
+private final class ControlledPlaybackPlayer: AVPlayer, @unchecked Sendable {
+    private let lock = NSLock()
+    private var completions: [(Bool) -> Void] = []
+    private var waiters: [(Int, CheckedContinuation<Void, Never>)] = []
+    override func currentTime() -> CMTime { .zero }
+    var seekCount: Int { lock.withLock { completions.count } }
+    override func seek(to time: CMTime, toleranceBefore: CMTime, toleranceAfter: CMTime,
+        completionHandler: @escaping (Bool) -> Void) {
+        let ready = lock.withLock {
+            completions.append(completionHandler)
+            let ready = waiters.filter { $0.0 <= completions.count }.map { $0.1 }
+            waiters.removeAll { $0.0 <= completions.count }
+            return ready
+        }
+        for waiter in ready { waiter.resume() }
+    }
+    func whenCaptured(_ count: Int) async {
+        await withCheckedContinuation { continuation in
+            let ready = lock.withLock {
+                if completions.count >= count { return true }
+                waiters.append((count, continuation)); return false
+            }
+            if ready { continuation.resume() }
+        }
+    }
+    func finishSeek(_ index: Int) { lock.withLock { completions[index] }(true) }
+}
+
 private final class ReadyPlaybackItem: AVPlayerItem {
     override var status: AVPlayerItem.Status { .readyToPlay }
+}
+
+@MainActor
+final class LiveAssistStateOwnershipTests: XCTestCase {
+    func testActualLegacySnapshotBytesAndSavedNamespaceRemainCompatible() throws {
+        let domain = "opc-assist-native-codec." + UUID().uuidString
+        let storage = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { storage.removePersistentDomain(forName: domain) }
+        let keys = MonitorAssistPreferenceKeys(assist: "OpenInstaCine.Assist.v1",
+            cleanPins: "OpenInstaCine.CleanViewPins.v1", playback: "OpenInstaCine.PlaybackAssists.v1")
+        // Produced by the actual pre-extraction Snapshot codec at 1c3d29c.
+        // Canonical key order makes byte comparison independent of JSONEncoder's key ordering.
+        let legacy = try XCTUnwrap(Data(base64Encoded: "eyJjcnVzaENsaXBDb21wZW5zYXRpb24iOjAsImRlc3F1ZWV6ZUN1c3RvbSI6dHJ1ZSwiZGVzcXVlZXplQ3VzdG9tRmFjdG9yIjoxLjcxLCJkZXNxdWVlemVGYWN0b3IiOjEuNzEsImRlc3F1ZWV6ZUhvcml6b250YWwiOnRydWUsImZhbHNlQ29sb3JSZWM3MDkiOnRydWUsImZhbHNlQ29sb3JSZWZlcmVuY2UiOnRydWUsImZhbHNlQ29sb3JTY2FsZSI6IkNpbmVTdG9wIiwiZ3JpZERpYWdvbmFsIjpmYWxzZSwiZ3JpZFBoaSI6ZmFsc2UsImdyaWRUaGlyZHMiOnRydWUsImd1aWRlQXNwZWN0IjoiMi4zOToxIiwiZ3VpZGVGYW1pbHkiOiJGaWxtIiwiZ3VpZGVNYXNrIjpmYWxzZSwibHV0QXJtZWQiOnRydWUsImx1dEV4cG9zdXJlU3RvcHMiOi0xLjUsIm1pcnJvckhvcml6b250YWwiOmZhbHNlLCJtaXJyb3JWZXJ0aWNhbCI6dHJ1ZSwicGVha2luZ0NvbG9yIjoiUmVkIiwicGVha2luZ1NlbnNpdGl2aXR5IjoiTWVkIiwic2VsZWN0ZWRHdWlkZXMiOlsiMi4zOToxIl0sInNwbGl0Q29tcGFyaXNvbiI6ZmFsc2UsInNwbGl0VmVydGljYWwiOnRydWUsInRvb2xzIjpbIkxVVCIsIlBFQUsiLCJXQVZFIiwiR1VJREVTIiwiTUlSUk9SIiwiUExBWSJdLCJ6ZWJyYUhpZ2hsaWdodCI6dHJ1ZSwiemVicmFIaWdobGlnaHRDb2xvciI6IldoaXRlIiwiemVicmFIaWdobGlnaHRJUkUiOjk5LCJ6ZWJyYU1pZHRvbmUiOnRydWUsInplYnJhTWlkdG9uZUNvbG9yIjoiQW1iZXIiLCJ6ZWJyYU1pZHRvbmVJUkUiOjU1fQ=="))
+        let canonicalLegacy = try canonical(legacy)
+        storage.set(legacy, forKey: keys.assist)
+        let restored = LiveAssistState(looks: MonitorLUTLooks(), storage: storage, keys: keys,
+            cleanPinCases: LiveAssistTool.cleanPinCases)
+        XCTAssertEqual(storage.data(forKey: keys.assist), legacy, "Opening must not rewrite the historical blob")
+        XCTAssertEqual(try canonical(XCTUnwrap(restored.encodedSnapshot())), canonicalLegacy)
+        XCTAssertTrue(restored.instantReview)
+        XCTAssertEqual(restored.falseColorScale, .stops)
+        XCTAssertEqual(restored.lutExposureStops, -1.5)
+        XCTAssertFalse(restored.isOn(.magnification))
+    }
+    func testHistoricalMissingFieldsKeepTheirOriginalFallbacks() throws {
+        let domain = "opc-assist-native-legacy." + UUID().uuidString
+        let storage = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { storage.removePersistentDomain(forName: domain) }
+        let keys = MonitorAssistPreferenceKeys(assist: "OpenInstaCine.Assist.v1",
+            cleanPins: "OpenInstaCine.CleanViewPins.v1", playback: "OpenInstaCine.PlaybackAssists.v1")
+        let fixture = try XCTUnwrap(Data(base64Encoded: "eyJjcnVzaENsaXBDb21wZW5zYXRpb24iOjAsImRlc3F1ZWV6ZUN1c3RvbSI6dHJ1ZSwiZGVzcXVlZXplQ3VzdG9tRmFjdG9yIjoxLjcxLCJkZXNxdWVlemVGYWN0b3IiOjEuNzEsImRlc3F1ZWV6ZUhvcml6b250YWwiOnRydWUsImZhbHNlQ29sb3JSZWM3MDkiOnRydWUsImZhbHNlQ29sb3JSZWZlcmVuY2UiOnRydWUsImZhbHNlQ29sb3JTY2FsZSI6IkNpbmVTdG9wIiwiZ3JpZERpYWdvbmFsIjpmYWxzZSwiZ3JpZFBoaSI6ZmFsc2UsImdyaWRUaGlyZHMiOnRydWUsImd1aWRlQXNwZWN0IjoiMi4zOToxIiwiZ3VpZGVGYW1pbHkiOiJGaWxtIiwiZ3VpZGVNYXNrIjpmYWxzZSwibHV0QXJtZWQiOnRydWUsImx1dEV4cG9zdXJlU3RvcHMiOi0xLjUsIm1pcnJvckhvcml6b250YWwiOmZhbHNlLCJtaXJyb3JWZXJ0aWNhbCI6dHJ1ZSwicGVha2luZ0NvbG9yIjoiUmVkIiwicGVha2luZ1NlbnNpdGl2aXR5IjoiTWVkIiwic2VsZWN0ZWRHdWlkZXMiOlsiMi4zOToxIl0sInNwbGl0Q29tcGFyaXNvbiI6ZmFsc2UsInNwbGl0VmVydGljYWwiOnRydWUsInRvb2xzIjpbIkxVVCIsIlBFQUsiLCJXQVZFIiwiR1VJREVTIiwiTUlSUk9SIiwiUExBWSJdLCJ6ZWJyYUhpZ2hsaWdodCI6dHJ1ZSwiemVicmFIaWdobGlnaHRDb2xvciI6IldoaXRlIiwiemVicmFIaWdobGlnaHRJUkUiOjk5LCJ6ZWJyYU1pZHRvbmUiOnRydWUsInplYnJhTWlkdG9uZUNvbG9yIjoiQW1iZXIiLCJ6ZWJyYU1pZHRvbmVJUkUiOjU1fQ=="))
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: fixture) as? [String: Any])
+        for key in ["falseColorRec709", "desqueezeCustom", "desqueezeCustomFactor", "lutExposureStops",
+            "crushClipCompensation", "mirrorHorizontal", "mirrorVertical"] { json.removeValue(forKey: key) }
+        json["tools"] = ["PLAY", "MAG", "UNKNOWN"]
+        let legacy = try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
+        storage.set(legacy, forKey: keys.assist)
+        let state = LiveAssistState(looks: MonitorLUTLooks(), storage: storage, keys: keys,
+            cleanPinCases: LiveAssistTool.cleanPinCases)
+        XCTAssertEqual(storage.data(forKey: keys.assist), legacy)
+        XCTAssertTrue(state.instantReview && state.desqueezeCustom && state.mirrorHorizontal)
+        XCTAssertFalse(state.isOn(.magnification) || state.falseColorRec709 || state.mirrorVertical)
+        XCTAssertEqual(state.desqueezeCustomFactor, 1.71)
+        XCTAssertEqual(state.lutExposureStops, 0)
+        XCTAssertEqual(state.crushClipCompensation, .zero)
+        XCTAssertEqual(LiveAssistTool.toolbarCases.count, 17)
+        XCTAssertEqual(LiveAssistTool.settingsCases.count, 18)
+        XCTAssertEqual(MonitorAssistTool.allCases.count, 18)
+    }
+    private func canonical(_ data: Data) throws -> Data {
+        try JSONSerialization.data(withJSONObject: JSONSerialization.jsonObject(with: data), options: [.sortedKeys])
+    }
 }

@@ -1,7 +1,10 @@
 import AVFoundation
 import CoreImage
 import CoreVideo
-import OpenPocketViewCore
+import MonitorUI
+import OpenCineApple
+import OpenCineCameraControls
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine
@@ -11,8 +14,11 @@ import XCTest
 /// tests pin the plumbing, throttle, layer handoff, and effect compositing.
 @MainActor
 final class LiveFrameSampleTests: XCTestCase {
+    /// This test's monitored source (XCTest makes a fresh one per test).
+    private let ceiling = ScopeExposureCeiling()
+
     func testVideoFallbackStillInfersLogFromTap() async {
-        let engine = LiveAssistEngine()
+        let engine = LiveAssistEngine(configuration: DeclaredDJIMonitorFixture.assistConfiguration)
         var effects = LiveImageEffects()
         effects.histogram = true
         let sampled = expectation(description: "Unknown video scope sample")
@@ -32,7 +38,7 @@ final class LiveFrameSampleTests: XCTestCase {
         var effects = assist.effects
         effects.histogram = true
         effects.waveform = true
-        let engine = LiveAssistEngine()
+        let engine = LiveAssistEngine(configuration: DeclaredDJIMonitorFixture.assistConfiguration)
         let sampled = expectation(description: "Photo scope sample")
         let buffer = ScopeTestBuffers.makeBGRA { x, _ in x < 64 ? 16 : 247 }
         engine.updatePolicy(effects: effects, transfer: .rec709)
@@ -47,7 +53,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testImageInspectorReceivesLatestRawPictureWithAllScopesOff() async throws {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         let effects = LiveImageEffects().withInspectorDemand(.peaking)
         decoder.attach(sampleBus: bus, effects: { effects }, transfer: { .dlog2 })
@@ -71,7 +77,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testFailedPresentationDoesNotEmitPictureHeartbeat() async throws {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         decoder.effects.histogram = true
         decoder.unlockHardwareDecoder()
@@ -94,7 +100,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testHandleDecodedFramePublishesScopes() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.histogram = true
@@ -131,7 +137,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testHandleDecodedFrameIncrementsGenerationEachCall() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.histogram = true
@@ -192,7 +198,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testLUTOffAfterDecodedFrameDoesNotFlushOrHoldIDR() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         let feed = CIFeedView(frame: CGRect(x: 0, y: 0, width: 64, height: 64))
         decoder.processedFeed = feed
@@ -350,7 +356,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testLUTOnlyPresentDoesNotTickScopeGeneration() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         let cube = BuiltInLook.mono.cube()
         var fx = LiveImageEffects()
@@ -373,10 +379,42 @@ final class LiveFrameSampleTests: XCTestCase {
         XCTAssertEqual(bus.publishedScopes, 0)
     }
 
+    // MARK: - Per-source exposure ceiling (STATE-01)
+
+    /// Two cameras each own a ceiling. One camera's ISO and tap ratchet must never move
+    /// the other's WAVE 100, zebra or clip lamps (a process-wide ceiling did).
+    func testTwoSourcesKeepIndependentExposureCeilings() async {
+        var fx = LiveImageEffects()
+        fx.waveform = true
+        func feed(_ bus: LiveFrameSampleBus, max: UInt8, iso: Int? = nil) -> HevcDecoder {
+            let decoder = HevcDecoder()
+            decoder.attach(sampleBus: bus, effects: { fx }, transfer: { .dlog2 })
+            decoder.effects = fx
+            decoder.incomingTransfer = .dlog2
+            if let iso { bus.exposureCeiling.setISO(iso) }
+            decoder.handleDecodedFrame(
+                ScopeTestBuffers.makeBGRA { x, _ in x < 64 ? 78 : max },
+                effects: fx, transfer: .dlog2)
+            return decoder
+        }
+        let a = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        let b = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        let decoders = [feed(a, max: 233, iso: 800), feed(b, max: 160)]
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline, a.publishedScopes < 1 || b.publishedScopes < 1 {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(a.bundle.clipByte, 233, "camera A ratchets its own ISO 800 ceiling")
+        XCTAssertEqual(b.bundle.clipByte, 247, "camera B keeps the reference ceiling")
+        XCTAssertEqual(b.exposureCeiling.resolvedISO(), ScopeExposureCeiling.referenceEI)
+        XCTAssertEqual(a.exposureCeiling.clipByte(transfer: .dlog2), 233)
+        XCTAssertEqual(decoders.count, 2)
+    }
+
     // MARK: - Transfer plumbing
 
     func testDLog2TransferRidesWithSample() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.histogram = true
@@ -405,7 +443,9 @@ final class LiveFrameSampleTests: XCTestCase {
         XCTAssertEqual(MonitorTransfer.resolved(nil, colorMode: nil), .rec709)
         XCTAssertEqual(MonitorTransfer.resolved(nil, colorMode: .dLog2), .dlog2)
         XCTAssertEqual(MonitorTransfer.resolved(.dlog, colorMode: .normal), .dlog, "status wins")
-        for transfer in MonitorTransfer.allCases {
+        // The Nikon curves are shared curves, not DJI wire modes: no ColorMode to round-trip.
+        let noWireMode: Set<MonitorTransfer> = [.srgb, .nlog, .log3G10]
+        for transfer in MonitorTransfer.allCases where !noWireMode.contains(transfer) {
             XCTAssertEqual(MonitorTransfer(transfer.colorMode), transfer, "wire round trip")
         }
     }
@@ -436,8 +476,8 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testDLog2TapSignaturePromotesDefaultRec709Transfer() async {
-        let bus = LiveFrameSampleBus()
-        let decoder = HevcDecoder()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        let decoder = HevcDecoder(assistConfiguration: DeclaredDJIMonitorFixture.assistConfiguration)
         var fx = LiveImageEffects()
         fx.waveform = true
         decoder.attach(sampleBus: bus, effects: { fx }, transfer: { .rec709 })
@@ -457,11 +497,13 @@ final class LiveFrameSampleTests: XCTestCase {
             "16/247 tap is D-Log2 paper black + live ceiling; Rec.709 WAVE is the screenshot shelf")
         let plot = WaveformAxis.plotRect(in: CGSize(width: 250, height: 153))
         XCTAssertEqual(
-            WaveformAxis.traceY(16, transfer: bus.bundle.transfer, plot),
+            WaveformAxis.traceY(
+                16, transfer: bus.bundle.transfer, clipByte: bus.bundle.clipByte, plot),
             WaveformAxis.scaleLineY(0, plot),
             accuracy: 0.1)
         XCTAssertEqual(
-            WaveformAxis.traceY(247, transfer: bus.bundle.transfer, plot),
+            WaveformAxis.traceY(
+                247, transfer: bus.bundle.transfer, clipByte: bus.bundle.clipByte, plot),
             WaveformAxis.scaleLineY(100, plot),
             accuracy: 0.1)
     }
@@ -470,12 +512,12 @@ final class LiveFrameSampleTests: XCTestCase {
 
     func testMoreScopesAndHeatSlowTheTapNeverSpeedItUp() {
         XCTAssertGreaterThan(
-            PocketScopeSampler.minInterval(activeScopeCount: 3, thermalState: .nominal),
-            PocketScopeSampler.minInterval(activeScopeCount: 2, thermalState: .nominal),
+            ScopeSampler.minInterval(activeScopeCount: 3, thermalState: .nominal),
+            ScopeSampler.minInterval(activeScopeCount: 2, thermalState: .nominal),
             "more than two scopes go slower, not faster")
         XCTAssertGreaterThan(
-            PocketScopeSampler.minInterval(activeScopeCount: 1, thermalState: .serious),
-            PocketScopeSampler.minInterval(activeScopeCount: 1, thermalState: .nominal),
+            ScopeSampler.minInterval(activeScopeCount: 1, thermalState: .serious),
+            ScopeSampler.minInterval(activeScopeCount: 1, thermalState: .nominal),
             "thermal tiers shed the interval, never the sampling density")
     }
 
@@ -485,18 +527,19 @@ final class LiveFrameSampleTests: XCTestCase {
         // WAVE / PARADE / HISTO ride ``WaveformAxis`` (0 / paper-IRE / 100).
         let plot = WaveformAxis.plotRect(in: CGSize(width: 250, height: 153))
         for transfer in MonitorTransfer.allCases {
-            let table = WaveformAxis.levelTable(for: transfer)
+            let table = WaveformAxis.levelTable(
+                for: transfer, clipByte: ceiling.clipByte(transfer: transfer))
             let bytes: [UInt8] = [0, 16, 78, 128, 200, 255]
             let points = bytes.map {
                 ScopePoint(xRatio: 0.5, yRatio: 0.5, red: $0, green: $0, blue: $0, luma: $0)
             }
-            let capacity = ScopeTraceMetal.maxVertexCount(
+            let capacity = MonitorScopeTraceMetal.maxVertexCount(
                 points: points.count, mode: .waveform(.rgb))
-            var vertices = [ScopeTraceMetal.Vertex](
-                repeating: ScopeTraceMetal.Vertex(position: .zero, size: 0, color: .zero),
+            var vertices = [MonitorScopeTraceMetal.Vertex](
+                repeating: MonitorScopeTraceMetal.Vertex(position: .zero, size: 0, color: .zero),
                 count: capacity)
             let written = vertices.withUnsafeMutableBufferPointer { out in
-                ScopeTraceMetal.fillVertices(
+                MonitorScopeTraceMetal.fillVertices(
                     out, from: 0, points: points, mode: .waveform(.rgb), rect: plot,
                     opacity: 1, levelTable: table)
             }
@@ -514,7 +557,9 @@ final class LiveFrameSampleTests: XCTestCase {
             }
             for byte in bytes {
                 XCTAssertEqual(
-                    WaveformAxis.traceY(byte, transfer: transfer, plot),
+                    WaveformAxis.traceY(
+                        byte, transfer: transfer, clipByte: ceiling.clipByte(transfer: transfer),
+                        plot),
                     WaveformAxis.plotY(Double(table[Int(byte)]), plot),
                     accuracy: 0.01)
             }
@@ -527,16 +572,18 @@ final class LiveFrameSampleTests: XCTestCase {
         for _ in 0..<16 {
             bytes.append(contentsOf: [code, code, code, 255])
         }
-        let wave = PocketScopeSampler.sample(
+        let wave = ScopeSampler.sample(
             bytes: bytes, width: 16, height: 1, bytesPerRow: 64,
-            transfer: .dlog2, includePoints: true, includeVectorPoints: false,
+            transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: true,
+            includeVectorPoints: false,
             look: BuiltInLook.mono.cube(), previous: .empty)
         XCTAssertFalse(wave.samples.points.isEmpty)
         XCTAssertTrue(wave.vectorscopePoints.isEmpty, "WAVE/PARADE must not walk the monitor cube")
         XCTAssertEqual(wave.revision, 1)
-        let vector = PocketScopeSampler.sample(
+        let vector = ScopeSampler.sample(
             bytes: bytes, width: 16, height: 1, bytesPerRow: 64,
-            transfer: .dlog2, includePoints: false, includeVectorPoints: true,
+            transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: false,
+            includeVectorPoints: true,
             look: nil, previous: wave)
         XCTAssertTrue(
             vector.samples.points.isEmpty, "points stay out of the bundle when WAVE is off")
@@ -552,12 +599,14 @@ final class LiveFrameSampleTests: XCTestCase {
         for _ in 0..<16 {
             bytes.append(contentsOf: [code, code, code, 255])
         }
-        let plain = PocketScopeSampler.sample(
+        let plain = ScopeSampler.sample(
             bytes: bytes, width: 16, height: 1, bytesPerRow: 64,
-            transfer: .dlog2, includePoints: true, look: nil, previous: .empty)
-        let looked = PocketScopeSampler.sample(
+            transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: true,
+            look: nil, previous: .empty)
+        let looked = ScopeSampler.sample(
             bytes: bytes, width: 16, height: 1, bytesPerRow: 64,
-            transfer: .dlog2, includePoints: true, look: BuiltInLook.mono.cube(),
+            transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: true,
+            look: BuiltInLook.mono.cube(),
             previous: .empty)
         XCTAssertEqual(plain.samples, looked.samples, "the look must not leak into WAVE/HISTO")
         let peak =
@@ -576,9 +625,10 @@ final class LiveFrameSampleTests: XCTestCase {
         for _ in 0..<16 {
             bytes.append(contentsOf: [code, code, code, 255])
         }
-        let bundle = PocketScopeSampler.sample(
+        let bundle = ScopeSampler.sample(
             bytes: bytes, width: 16, height: 1, bytesPerRow: 64,
-            transfer: .dlog2, includePoints: true, look: nil, previous: .empty)
+            transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), includePoints: true,
+            look: nil, previous: .empty)
         XCTAssertEqual(
             bundle.samples.histogramLuma[16], bundle.samples.points.count,
             "every sampled pixel lands in native bin 16")
@@ -589,10 +639,11 @@ final class LiveFrameSampleTests: XCTestCase {
         XCTAssertEqual(displayPeak, 0, accuracy: 2, "black anchor sits on the WAVE 0 bucket")
         let plot = WaveformAxis.plotRect(in: CGSize(width: 250, height: 153))
         XCTAssertEqual(
-            WaveformAxis.traceY(16, transfer: .dlog2, plot),
+            WaveformAxis.traceY(
+                16, transfer: .dlog2, clipByte: ceiling.clipByte(transfer: .dlog2), plot),
             WaveformAxis.scaleLineY(0, plot),
             accuracy: 0.5)
-        let histoPlot = HistogramAssist.plotRect(in: ScopePanelSize.histogram)
+        let histoPlot = HistogramAssist.plotRect(in: MonitorScopePanelSize.histogram)
         XCTAssertEqual(
             HistogramAssist.plotX(Double(displayPeak) / 255 * 100, in: histoPlot),
             HistogramAssist.ireX(0, in: histoPlot),
@@ -638,7 +689,7 @@ final class LiveFrameSampleTests: XCTestCase {
         let buffer = try XCTUnwrap(
             Self.makeLiveLikeBuffer(width: 64, height: 48),
             "need a 10-bit / IOSurface / 420v buffer")
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.histogram = true
@@ -662,7 +713,7 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testHandleDecodedFramePublishesScopesFrom420v() async {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoder = HevcDecoder()
         var fx = LiveImageEffects()
         fx.histogram = true
@@ -691,13 +742,13 @@ final class LiveFrameSampleTests: XCTestCase {
     // MARK: - Bake
 
     func testBakeSizeKeepsSourceAspectAndClampsToDrawable() {
-        let fourK = FeedFrameBaker.bakeSize(
+        let fourK = MonitorFrameBaker.bakeSize(
             source: CGSize(width: 3840, height: 2160),
             drawable: CGSize(width: 1920, height: 1080))
         XCTAssertEqual(fourK.width, 1920, accuracy: 1)
         XCTAssertEqual(fourK.height, 1080, accuracy: 1)
 
-        let smaller = FeedFrameBaker.bakeSize(
+        let smaller = MonitorFrameBaker.bakeSize(
             source: CGSize(width: 1280, height: 720),
             drawable: CGSize(width: 1920, height: 1080))
         XCTAssertEqual(smaller.width, 1280, accuracy: 1)
@@ -710,7 +761,7 @@ final class LiveFrameSampleTests: XCTestCase {
     /// IOSurface BGRA, then 8-bit 420v.
     private static func makeLiveLikeBuffer(width: Int, height: Int) -> CVPixelBuffer? {
         func usable(_ buffer: CVPixelBuffer) -> CVPixelBuffer? {
-            PocketScopeSampler.copyBGRA(buffer, maxWidth: 200) == nil ? nil : buffer
+            ScopeSampler.copyBGRA(buffer, maxWidth: 200) == nil ? nil : buffer
         }
         if let ten = ScopeTestBuffers.makeX420(
             width: width, height: height,

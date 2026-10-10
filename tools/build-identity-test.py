@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regression checks for reporting build identity against real Git file selection."""
 import importlib.util
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -60,6 +61,116 @@ class BuildIdentityTests(unittest.TestCase):
         before = self.identity()
         (self.root / "Sources/Core.swift").unlink()
         self.assertNotEqual(before, self.identity())
+
+    def test_sibling_shared_ui_package_changes_ios_identity_only(self):
+        shared_ui = self.root / "OpenCine"
+        nested = self.root / "app"
+        subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
+        (nested / "Sources").mkdir()
+        (nested / "Sources/Core.swift").write_text("let value = 1\n")
+        subprocess.run(["git", "init", "--quiet", str(shared_ui)], check=True)
+        (shared_ui / "Package.swift").write_text("// package\n")
+        (shared_ui / "Sources/MonitorUI").mkdir(parents=True)
+        (shared_ui / "Sources/MonitorUI/Theme.swift").write_text("let accent = 1\n")
+        ios = module.identity(nested, "ios", "Debug")
+        android = module.identity(nested, "android", "Debug")
+        (shared_ui / "Sources/MonitorUI/Theme.swift").write_text("let accent = 2\n")
+        self.assertNotEqual(ios, module.identity(nested, "ios", "Debug"))
+        self.assertEqual(android, module.identity(nested, "android", "Debug"))
+
+    def test_sibling_shared_android_ui_changes_android_identity_only(self):
+        shared_ui = self.root / "OpenCine"
+        nested = self.root / "app"
+        subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
+        (nested / "Sources").mkdir()
+        (nested / "Sources/Core.swift").write_text("let value = 1\n")
+        subprocess.run(["git", "init", "--quiet", str(shared_ui)], check=True)
+        (shared_ui / "Android/monitor-ui").mkdir(parents=True)
+        (shared_ui / "Android/monitor-ui/Theme.kt").write_text("val accent = 1\n")
+        ios = module.identity(nested, "ios", "Debug")
+        android = module.identity(nested, "android", "Debug")
+        (shared_ui / "Android/monitor-ui/Theme.kt").write_text("val accent = 2\n")
+        self.assertEqual(ios, module.identity(nested, "ios", "Debug"))
+        self.assertNotEqual(android, module.identity(nested, "android", "Debug"))
+        relative = Path(os.path.relpath(nested))
+        self.assertEqual(module.identity(nested, "android", "Debug"), module.identity(relative, "android", "Debug"))
+
+    def test_stage_script_changes_android_identity_only(self):
+        shared = self.root / "OpenCine"
+        nested = self.root / "app"
+        subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
+        (nested / "Sources").mkdir()
+        (nested / "Sources/Core.swift").write_text("let value = 1\n")
+        subprocess.run(["git", "init", "--quiet", str(shared)], check=True)
+        (shared / "scripts").mkdir()
+        (shared / "scripts/android-stage-swift-core.sh").write_text("echo 1\n")
+        ios = module.identity(nested, "ios", "Debug")
+        android = module.identity(nested, "android", "Debug")
+        (shared / "scripts/android-stage-swift-core.sh").write_text("echo 2\n")
+        self.assertEqual(ios, module.identity(nested, "ios", "Debug"))
+        self.assertNotEqual(android, module.identity(nested, "android", "Debug"))
+
+    def test_sibling_core_package_changes_both_identities(self):
+        core = self.root / "OpenCine"
+        nested = self.root / "app"
+        subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
+        (nested / "Sources").mkdir()
+        (nested / "Sources/Core.swift").write_text("let value = 1\n")
+        subprocess.run(["git", "init", "--quiet", str(core)], check=True)
+        (core / "Package.swift").write_text("// package\n")
+        (core / "Sources/OpenCineMedia").mkdir(parents=True)
+        (core / "Sources/OpenCineMedia/Curve.swift").write_text("let grey = 1\n")
+        ios = module.identity(nested, "ios", "Debug")
+        android = module.identity(nested, "android", "Debug")
+        (core / "Sources/OpenCineMedia/Curve.swift").write_text("let grey = 2\n")
+        self.assertNotEqual(ios, module.identity(nested, "ios", "Debug"))
+        self.assertNotEqual(android, module.identity(nested, "android", "Debug"))
+
+    def test_sibling_core_android_build_changes_android_identity_only(self):
+        core = self.root / "OpenCine"
+        nested = self.root / "app"
+        subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
+        (nested / "Sources").mkdir()
+        (nested / "Sources/Core.swift").write_text("let value = 1\n")
+        subprocess.run(["git", "init", "--quiet", str(core)], check=True)
+        (core / "Android/core").mkdir(parents=True)
+        (core / "Android/core/Session.kt").write_text("val epoch = 1\n")
+        ios = module.identity(nested, "ios", "Debug")
+        android = module.identity(nested, "android", "Debug")
+        (core / "Android/core/Session.kt").write_text("val epoch = 2\n")
+        self.assertEqual(ios, module.identity(nested, "ios", "Debug"))
+        self.assertNotEqual(android, module.identity(nested, "android", "Debug"))
+
+    def test_sibling_insta360_package_changes_ios_identity_only(self):
+        luna = self.root / "OpenCine"
+        nested = self.root / "app"
+        subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
+        (nested / "Sources").mkdir()
+        (nested / "Sources/Core.swift").write_text("let value = 1\n")
+        subprocess.run(["git", "init", "--quiet", str(luna)], check=True)
+        (luna / "Package.swift").write_text("// package\n")
+        (luna / "Sources/Insta360Apple").mkdir(parents=True)
+        (luna / "Sources/Insta360Apple/Backend.swift").write_text("let settle = 1\n")
+        ios = module.identity(nested, "ios", "Debug")
+        android = module.identity(nested, "android", "Debug")
+        (luna / "Sources/Insta360Apple/Backend.swift").write_text("let settle = 2\n")
+        self.assertNotEqual(ios, module.identity(nested, "ios", "Debug"))
+        self.assertEqual(android, module.identity(nested, "android", "Debug"))
+
+    def test_sibling_insta360_android_build_changes_android_identity_only(self):
+        luna = self.root / "OpenCine"
+        nested = self.root / "app"
+        subprocess.run(["git", "init", "--quiet", str(nested)], check=True)
+        (nested / "Sources").mkdir()
+        (nested / "Sources/Core.swift").write_text("let value = 1\n")
+        subprocess.run(["git", "init", "--quiet", str(luna)], check=True)
+        (luna / "Android/insta360-luna").mkdir(parents=True)
+        (luna / "Android/insta360-luna/LunaBackend.kt").write_text("val settle = 1\n")
+        ios = module.identity(nested, "ios", "Debug")
+        android = module.identity(nested, "android", "Debug")
+        (luna / "Android/insta360-luna/LunaBackend.kt").write_text("val settle = 2\n")
+        self.assertEqual(ios, module.identity(nested, "ios", "Debug"))
+        self.assertNotEqual(android, module.identity(nested, "android", "Debug"))
 
     def test_ios_version_configuration_changes_identity(self):
         self.write("ios/Config/Version.xcconfig", "CURRENT_PROJECT_VERSION = 1\n")

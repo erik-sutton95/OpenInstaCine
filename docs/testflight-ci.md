@@ -20,10 +20,9 @@ Every successful archive runs `tools/sentry-verify-ios-dsn.py --require`: an
 archive without a real `https` DSN fails, even with symbol uploads off. See
 [`sentry-deployment.md`](sentry-deployment.md).
 
-The `ci_scripts/` hooks are synced (renamed) from OpenPocketCine. The helpers they
-call (`tools/sentry-*`, `scripts/ios-release-notes*.sh`) are OpenInstaCine copies
-retargeted to the `openinstacine-*` Sentry projects; `scripts/sync-openpocketcine.sh`
-never overwrites them and warns when upstream changes them. `ios/TestFlight/` and
+The `ci_scripts/` hooks and the helpers they call (`tools/sentry-*`,
+`scripts/ios-release-notes*.sh`) are maintained in this app and target its
+`openinstacine-*` Sentry projects. `ios/TestFlight/` and
 `ios/Config/Version.xcconfig` are OpenInstaCine owned too.
 
 Local dry run (a throwaway clone, so nothing local is overwritten):
@@ -57,7 +56,7 @@ A local `just ios-run` with automatic signing registers both.
 `scripts/ios-release-notes-check.sh` enforces the format: either `New features`
 with 1 to 4 bullets, or `New and changed` / `Fixes` / `What to test`; no free
 text, no commit titles, no implementation jargon, 2000 characters, 200 per
-bullet (caps in `scripts/tester-notes-limits.sh`). Each pull request that changes
+bullet (caps in `../OpenCine/scripts/tester-notes-limits.sh`). Each pull request that changes
 the iOS app replaces the file with that build's window (CI enforces it):
 
 ```bash
@@ -67,7 +66,7 @@ just testflight-notes      # check and print
 
 ## Versions
 
-`MARKETING_VERSION` equals Android `openpocketcine.versionName` (currently
+`MARKETING_VERSION` equals Android `openinstacine.versionName` (currently
 `0.1.0`). Testers see `0.1.0 (build)`. Bump only for a new train
 ([`RELEASE.md`](RELEASE.md)). `just ios-version`.
 

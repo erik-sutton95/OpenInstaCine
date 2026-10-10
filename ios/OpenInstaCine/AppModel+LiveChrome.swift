@@ -1,0 +1,130 @@
+import MonitorPresentation
+import MonitorUI
+import OpenCineAppKit
+import OpenCineCameraControls
+import OpenCineCameraVocabulary
+import OpenInstaViewCore
+import SwiftUI
+
+typealias FieldMonitorStatusChrome = LiveStatusChrome<AppModel>
+typealias FieldMonitorAssistPalette = LiveAssistPalette<AppModel, AssistToolIcon>
+typealias FieldMonitorGauges = LiveTelemetryGauges<AppModel>
+typealias LiveTopPickerHost = LiveTopSheetHost<AppModel>
+typealias ChromeEditBadgeLayer = ChromeEditBadges<AppModel>
+typealias ChromeEditBanner = ChromeEditDoneBanner<AppModel>
+typealias LiveSystemChrome = LiveSystemRail<AppModel, LiveRecordButton, LiveDispToggle>
+typealias LiveFocusResetButton = FocusResetButton<AppModel>
+typealias LiveAutoExposureUnlockButton = AutoExposureUnlockButton<AppModel>
+typealias LiveHeadTrackCalibrateButton = HeadTrackCalibrateButton<LiveDesign>
+typealias LivePortraitAspectToggle = PortraitAspectToggle<LiveDesign>
+typealias LiveZoomPinchWell = FeedGestureWell<AppModel>
+typealias LiveZoomChip = ZoomChip<AppModel>
+typealias MonitorRecoveryOverlay = SessionRecoveryOverlay<AppModel>
+
+extension LiveSystemRail where Host == AppModel, Record == LiveRecordButton, Display == LiveDispToggle {
+    init(
+        locked: Binding<Bool>, layout: FieldMonitorLayout, capturePresented: Bool, visible: Bool,
+        interactive: Bool
+    ) {
+        self.init(
+            locked: locked, layout: layout, capturePresented: capturePresented, visible: visible,
+            interactive: interactive
+        ) {
+            LiveRecordButton(diameter: $0)
+        } display: {
+            LiveDispToggle(size: $0)
+        }
+    }
+}
+
+/// The shared capture strip with this app's face metering tile after EXPOSURE.
+struct LiveCameraControlBar: View {
+    var columns = 6
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        CaptureControlBar<AppModel, LunaMeteringTile>(columns: columns) {
+            LunaMeteringTile(session: model.session)
+        }
+    }
+}
+
+extension LiveAssistPalette where Host == AppModel, Icon == AssistToolIcon {
+    init(
+        layout: LiveMonitorLayout, isLocked: Bool, otherOverlayPresented: Bool = false,
+        expanded: Binding<Bool>, onExpansionActivityChange: @escaping (Bool) -> Void = { _ in }
+    ) {
+        self.init(
+            layout: layout, isLocked: isLocked, otherOverlayPresented: otherOverlayPresented,
+            expanded: expanded, onExpansionActivityChange: onExpansionActivityChange
+        ) { AssistToolIcon(tool: $0, size: nil) }
+    }
+}
+
+extension SessionRecoveryOverlay where Host == AppModel {
+    static func progressDetail(_ phase: ConnectionPhase) -> String {
+        switch phase {
+        case .idle, .scanning: "Looking for your camera…"
+        case .connectingGatt, .pairing: "Connecting to your camera…"
+        case .awaitingApproval: "Approve on the camera screen if asked."
+        case .readingWifiCreds, .joiningWifi: "Rejoining camera Wi-Fi…"
+        case .openingDatalink: "Restoring the camera connection…"
+        case .live: "Waiting for a new live picture…"
+        case .failed: "Connection attempt failed. Trying again…"
+        }
+    }
+}
+
+extension View {
+    func chromeEditable(_ section: PocketDispChrome.Section, editing mode: PocketDispMode?)
+        -> some View
+    {
+        modifier(ChromeEditableModifier<AppModel>(section: section, mode: mode))
+    }
+}
+
+/// The shared live chrome on this app's session: the status clock follows the camera's elapsed
+/// seconds, and the timecode readout shows whenever its DISP section is on.
+extension AppModel: LiveChromeHost {
+    var liveStatus: MonitorStatusPresentation {
+        control.statusPresentation(elapsedSeconds: session.status.recordElapsedSec)
+    }
+    var timecodeAvailable: Bool { true }
+    var liveSignalBars: Int { session.liveSignalBars }
+    var liveFPS: String { session.liveFPS }
+    var gimbalPanelOpen: Bool { liveGimbalPanel != .none }
+    /// One camera, no Multiview: nothing borrows the session and there is no grid to return to.
+    var multiviewBorrowed: Bool { false }
+    var multiviewExit: (() -> Void)? { nil }
+    func openSettings() { shell.open(.settings) }
+    func openMedia() { shell.open(.media) }
+    func resetFocusPoint() { session.resetFocusPoint() }
+    func unlockAutoExposure() { session.unlockAutoExposure() }
+
+    var zoomFactor: Double { session.zoomReadout }
+    var zoomCycleOrigin: Double {
+        session.zoomPinchPreview ?? session.zoomOptimistic ?? session.status.zoomFactor
+            ?? session.zoomStop
+    }
+    var zoomPinchPreview: Double? { session.zoomPinchPreview }
+    /// The chip label tops out at this body's zoom ceiling.
+    var zoomCeiling: Double { session.zoomCeiling }
+    var zoomTapStops: MonitorZoomTapStops { OsmoMonitorPresentation.zoomTapStops(session) }
+    var zoomStops: [Double] { session.zoomStops }
+    func cycleZoom(to ratio: Double) { session.setZoom(ratio) }
+    func zoomPinchWillBegin() {}
+    var canLockAutoExposure: Bool { session.canLockAutoExposure }
+    func lockAutoExposure() -> Bool { session.lockAutoExposure() }
+    func showControlNote(_ note: String) { session.controlNote = note }
+    var tapFocusPoint: CGPoint? {
+        guard session.supportsTapFocus, case .focus = session.focusOverlay else { return nil }
+        return session.focusPoint
+    }
+    func handleFeedTap(at point: CGPoint) { session.handleFeedTap(at: point) }
+    func startTracking(_ box: TrackingBox) { session.startTracking(box) }
+    var sessionRecovery: SessionRecoveryState { session.sessionRecovery }
+    var sessionRecoveryCardGraceElapsed: Bool { session.sessionRecoveryCardGraceElapsed }
+    var recoveryDeviceName: String { session.recoveryDeviceName }
+    var recoveryProgressDetail: String { MonitorRecoveryOverlay.progressDetail(session.phase) }
+    func retrySessionRecovery() { session.retrySessionRecovery() }
+}

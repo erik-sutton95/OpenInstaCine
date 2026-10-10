@@ -1,38 +1,125 @@
 import CoreVideo
+import Insta360Apple
 import MonitorPresentation
+import MonitorUI
 import Observation
-import OpenPocketViewCore
+import OpenCineAppKit
+import OpenCineAppKitApple
+import OpenCineApple
+import OpenCineCameraControls
+import OpenCineCore
+import OpenCineFrameIO
+import OpenCineMedia
+import OpenCineRelay
+import OpenCineRelayApple
+import OpenCineWatch
+import OpenInstaViewCore
 import SwiftUI
 import UIKit
 
 /// App-level session object (OpenZCine `NativeAppModel` analogue). Owns the existing
-/// `CameraSession` connection spine and the saved-camera list. Does not rewrite DUML.
+/// `CameraSession` connection spine; the shared shell (`ShellModel`) owns navigation, covers and
+/// the monitor's camera over the shared cameras model. Does not rewrite DUML.
 @MainActor
 @Observable
 final class AppModel {
     var session: CameraSession
+    @ObservationIgnored let playbackAudioSession = MonitorPlaybackAudioSession()
+    /// Saved cameras, nearby sightings, pairing and connect attempts (SHELL-02): the shared
+    /// flow over the Luna integration, which connects through `session`.
+    let cameras: CamerasModel
+    @ObservationIgnored let integration: LunaIntegration
+    /// Root navigation, covers and the monitor lifetime (SHELL-03): binds each connected camera's
+    /// common session to the shared controls (`session.control`).
+    let shell: ShellModel
+    /// The shared common controls of the camera on the monitor.
+    var control: MonitorControlModel { shell.control }
+    /// Why Bluetooth discovery is not running (off or not allowed); the pair wizard shows it as
+    /// its failure.
+    var discoveryFailure: ConnectionFailure?
+
     init(session: CameraSession? = nil) {
-        self.session = session ?? CameraSession()
+        #if targetEnvironment(simulator)
+            if session == nil, MonitorUIReview.isActive { MonitorUIReview.resetMediaFavorites() }
+        #endif
+        let mediaStorage = MonitorMediaCacheStorage()
+        let session = session ?? CameraSession(backend: Self.makeBackend(), mediaStorage: mediaStorage)
+        self.session = session
+        var port: any LunaConnectPort = session
+        var defaults = UserDefaults.standard
+        #if targetEnvironment(simulator)
+            if MonitorUIReview.isActive { (port, defaults) = MonitorUIReview.cameras() }
+        #endif
+        integration = LunaIntegration(port: port)
+        cameras = CamerasModel(
+            integrations: [AppIntegration(integration, slots: IntegrationSlots(nearbyCard: Self.nearbyCard))],
+            store: Self.camerasStore(defaults))
+        shell = ShellModel(cameras: cameras, control: session.control)
+        integration.onDiscoveryFailure = { [weak self] in self?.discoveryFailure = $0 }
+        // One active/inactive per change, however many OS signals report it.
+        shell.onSceneActivity = { [weak self] active in
+            guard let self else { return }
+            self.assist.inspectorSceneActive = active
+            if active { self.session.noteSceneBecameActive() } else { self.session.noteSceneBecameInactive() }
+        }
     }
+
+    /// A nearby Luna as the cameras page and pair page have always shown it.
+    static func nearbyCard(_ camera: NearbyCamera) -> NearbyCardCopy {
+        NearbyCardCopy(name: camera.name, subtitle: "Insta360 · nearby", status: "Needs approval on the camera")
+    }
+
+    /// The saved cameras: the shared document `OpenInstaCine.Cameras`, merged on every launch with
+    /// the records older builds read and write (`OpenInstaCine.SavedCameras`), which it keeps
+    /// mirrored. Wi-Fi passwords and the camera approval stay in the Keychain, untouched.
+    static func camerasStore(_ defaults: UserDefaults = .standard) -> SavedCamerasStore {
+        SavedCamerasStore(
+            document: .userDefaults(defaults, key: "OpenInstaCine.Cameras"),
+            legacy: .init(
+                data: .userDefaults(defaults, key: "OpenInstaCine.SavedCameras"),
+                codec: BodyRecordsV0(integration: LunaCameraSession.integration, dates: .secondsSince2001),
+                source: "OpenInstaCine.SavedCameras"))
+    }
+
+    /// Saved cameras, most recently connected first.
+    var savedCameras: [OpenCineCore.SavedCamera] {
+        cameras.saved.sorted { ($0.lastConnected ?? .distantPast) > ($1.lastConnected ?? .distantPast) }
+    }
+
+    /// The composition root's one backend per camera connection. Simulator has no Bluetooth
+    /// or hotspot API but shares the Mac's network: with the Mac on the camera Wi-Fi, the
+    /// simulator app talks to the real camera.
+    static func makeBackend() -> LunaCameraBackend {
+        #if targetEnvironment(simulator)
+            LunaCameraBackend(useExistingNetwork: true, configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO())
+        #else
+            LunaCameraBackend(configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO())
+        #endif
+    }
+
+    /// The app's names for the Luna integration. The keychain service is the one OpenInstaCine
+    /// has always used: changing it would orphan saved camera authorizations and Wi-Fi.
+    static let lunaConfiguration = LunaIntegrationConfiguration(
+        keychainService: "org.opencine.openinstacine.camera", appName: "OpenInstaCine",
+        logPrefix: "OpenInstaCine")
     @ObservationIgnored let watchRelay = WatchRelay()
     @ObservationIgnored private var watchRelayActivated = false
-    var multiviewExit: (() -> Void)?
+    @ObservationIgnored private(set) var watchCommandSource: LunaCommandAdmission?
+    @ObservationIgnored private(set) var watchSourceSession: LunaCameraSession?
+    @ObservationIgnored private(set) var watchSourceEpoch: ControlEpoch?
     /// Live view-space X flip: TT180 extra-mirror XOR MIRROR assist.
     var livePictureViewFlip: Bool {
         GimbalStick.liveViewFlip(
             poseViewFlip: session.gimbalPoseViewFlip,
             assistMirror: assist.mirrorsHorizontally)
     }
-    var savedCameras: [SavedCamera] = SavedCameraStore.load()
-    /// Operator tapped “Pair new camera” from the saved list.
-    var isPairingNewCamera = false
     var showsLaunchSplash = true
     /// Long-press on the tap-focus box locks it: feed taps no longer move focus.
     var focusBoxLocked = false
     var assist = LiveAssistState()
     /// Decoded-frame scopes. Filled by `HevcDecoder.handleDecodedFrame` — not camera DUML.
-    var frameSamples = LiveFrameSampleBus()
-    @ObservationIgnored var inspectorPreview = AssistInspectorImageRenderer()
+    var frameSamples = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+    @ObservationIgnored var inspectorPreview = MonitorInspectorImageRenderer()
     @ObservationIgnored let liveBackdrop = MonitorVideoBackdropRenderer()
     @ObservationIgnored let playbackBackdrop = MonitorVideoBackdropRenderer()
     /// Monitor tools follow the displayed source; watcher scopes must never read the camera bus.
@@ -56,16 +143,16 @@ final class AppModel {
         let raw = session.status.colorMode
         let photo = session.status.isPhoto
         assist.evMeterFromPicture = !session.reportsMeteredEV
-        assist.cameraHasAudio = session.supportsAudio
+        assist.cameraHasAudio = OsmoMonitorPresentation.capabilities(session).audio
         assist.syncLUT(
             to: raw,
             family: session.bodyFamily,
             cameraName: session.connectedCamera?.model.name,
+            lookProfile: session.connectedCamera?.model.captureProfile?.looks ?? LunaShellMapping.lookProfile,
             isPhoto: photo)
         session.decoder.incomingColorMode = LiveMonitorColorScience.colorMode(
             isPhoto: photo, colorMode: raw)
     }
-    var homePanel: AppPanel?
     var captureSheet: CaptureSheet?
     var captureDrum: CaptureDrumPresentation?
     var keepScreenAwake: Bool = OperatorPrefs.keepScreenAwake {
@@ -74,13 +161,13 @@ final class AppModel {
     var hdrDisplay: Bool = OperatorPrefs.hdrDisplay {
         didSet {
             OperatorPrefs.hdrDisplay = hdrDisplay
-            LiveHDRDisplay.setEnabled(hdrDisplay)
-            LiveHDRDisplay.setScreenCaptured(screenCaptured)
+            LiveHDRDisplay.app.setEnabled(hdrDisplay)
+            LiveHDRDisplay.app.setScreenCaptured(screenCaptured)
         }
     }
     /// Screen recording / AirPlay. HDR present drops to SDR so the file is not boosted.
     var screenCaptured = false {
-        didSet { LiveHDRDisplay.setScreenCaptured(screenCaptured) }
+        didSet { LiveHDRDisplay.app.setScreenCaptured(screenCaptured) }
     }
     var hdrDisplayActive: Bool { hdrDisplay && !screenCaptured }
     var cacheFullResolution: Bool = OperatorPrefs.cacheFullResolution {
@@ -106,7 +193,7 @@ final class AppModel {
     }
 
     /// Live SET / STOP chip. SET starts tracking and locks forward; STOP ends it.
-    var headTrackControlTitle = LiveHeadTrackCalibrateButton.calibrateTitle
+    var headTrackControlTitle = HeadphoneMotionBridge.calibrateTitle
     /// Raw AirPods attitude / gyro / SET-relative look. Empty when Head Tracking is off.
     var headTrackImuReadout = ""
     /// SET-relative (or first-sample) yaw/pitch for the live axis rings. `nil` without IMU.
@@ -175,21 +262,29 @@ final class AppModel {
             deadzone: GimbalStick.deadzoneFromPercent(virtualJoystickDeadzonePercent),
             curve: virtualJoystickResponseCurve)
     }
-    var dispLive = OperatorPrefs.dispLive {
-        didSet { OperatorPrefs.dispLive = dispLive }
+    @ObservationIgnored lazy var operatorSession = MonitorOperatorSessionModel(
+        shell: shell, assist: assist, display: OperatorPrefs.display)
+    var dispLive: PocketDispChrome {
+        get { operatorSession.live }
+        set { operatorSession.live = newValue }
     }
-    var dispClean = OperatorPrefs.dispClean {
-        didSet { OperatorPrefs.dispClean = dispClean }
+    var dispClean: PocketDispChrome {
+        get { operatorSession.clean }
+        set { operatorSession.clean = newValue }
     }
-    var operatorSettingsTab: OperatorSettingsTab = .link
-    /// Live-monitor Media / Settings overlay. Distinct from `homePanel` (startup cover).
-    var liveOperatorPanel: LiveOperatorPanel?
-    /// DISP mode whose chrome the operator is editing on the monitor, or `nil` when live.
-    var chromeEditorMode: PocketDispMode?
-    /// Section Display settings should reopen on after Done.
-    var chromeEditorReturnMode: PocketDispMode?
-    /// False for a beat after live mounts so the connect tap cannot hit Settings / Media.
-    var liveChromeInteractive = true
+    var operatorSettingsTab: MonitorSettingsTab {
+        get { operatorSession.settingsTab }
+        set { operatorSession.settingsTab = newValue }
+    }
+    var chromeEditorMode: PocketDispMode? {
+        get { operatorSession.editingMode }
+        set { operatorSession.editingMode = newValue }
+    }
+    var chromeEditorReturnMode: PocketDispMode? {
+        get { operatorSession.returnedMode }
+        set { operatorSession.returnedMode = newValue }
+    }
+    var liveChromeInteractive: Bool { operatorSession.interactive }
     var portraitFeedAspect: PortraitFeedAspect = OperatorPrefs.portraitFeedAspect {
         didSet { OperatorPrefs.portraitFeedAspect = portraitFeedAspect }
     }
@@ -206,8 +301,16 @@ final class AppModel {
     var frameioConnecting = false
     var frameioUser: FrameioUser?
     var delivery = MediaDeliveryCoordinator()
-    var relayHost = WatcherRelayHost()
-    private var relayStateTask: Task<Void, Never>?
+    var relayHost = WatcherRelayHost(
+        versionMismatchReason: WatcherRelayJoin.versionMismatchReason,
+        logSubsystem: "com.opencapture.openinstacine", journal: { ControlLiveLog.line($0) })
+    @ObservationIgnored private var relaySource: UUID?
+    @ObservationIgnored private var relaySessionID: CameraSessionID?
+    private var admitsRelaySource: Bool {
+        shareThisFeed && relaySource != nil && relaySource == shell.monitor?.id
+            && relaySessionID != nil && relaySessionID == shell.monitor?.session.id
+            && relaySessionID == shell.control.session?.id
+    }
     var relayBrowser = WatcherRelayBrowser()
     var relayClient = WatcherRelayClient()
     var isWatchingFeed = false
@@ -223,13 +326,13 @@ final class AppModel {
         if status == .live, showsWatcherBrowse {
             isWatchingFeed = true
             showsWatcherBrowse = false
-            homePanel = nil
+            shell.dismissCover()
         }
     }
 
     var showsWatcherBrowse = false
     var shareThisFeed: Bool = OperatorPrefs.shareThisFeed
-    var sharePasscode: String = WatcherRelayKeychain.hostPasscode
+    var sharePasscode: String = WatcherRelayKeychain.app.hostPasscode
     var controlRequestsAllowed: Bool = OperatorPrefs.controlRequests {
         didSet { OperatorPrefs.controlRequests = controlRequestsAllowed }
     }
@@ -241,33 +344,53 @@ final class AppModel {
     }
     var watcherRecordConfirm = false
     var watcherRecordRequest: RecordConfirmationContext?
+    var watcherRecordDelivery: WatcherRelayCommandDelivery?
+    @ObservationIgnored var watcherRecordAdmission: LunaCommandAdmission?
+    @ObservationIgnored var watcherRecordEditor: MonitorControlModel.RecordEditor?
+    var admitsWatcherRecordDelivery: Bool {
+        guard let delivery = watcherRecordDelivery, admitsRelaySource,
+            let target = session.lunaSession,
+            watcherRecordAdmission?.admits(target.commandOwner) == true
+        else { return false }
+        return relayHost.admits(delivery)
+    }
     var watcherRecordContext: RecordConfirmationContext {
         RecordConfirmationContext(
-            mode: session.status.shootingMode, recording: session.status.isRecording,
+            mode: session.status.shootingMode, recording: session.control.isRecording,
             locked: session.isLocked, busy: session.controlBusy, phase: session.phase)
     }
-    var internetHopActive = false
-    @ObservationIgnored private var internetHopSSID: String?
-    @ObservationIgnored private var liveChromeArmTask: Task<Void, Never>?
+    var internetHop = FrameioInternetHop()
+    var internetHopActive: Bool { internetHop.token != nil }
+    @ObservationIgnored private var internetHopSession: CameraSession?
 
-    var isOnCameraAccessPoint: Bool { WiFiJoiner.isCameraPathReady() }
+    /// On the Luna's own network (192.168.42.x), from the integration (SHELL-02 D10).
+    var isOnCameraAccessPoint: Bool { session.backend.isOnCameraNetwork }
 
-    func beginInternetHop() {
-        internetHopActive = true
-        internetHopSSID = session.joinedSSID ?? session.cachedSSID
-        if let ssid = internetHopSSID { WiFiJoiner.leave(ssid: ssid) }
+    @discardableResult func beginInternetHop() -> FrameioInternetHop.Token {
+        let token = internetHop.begin()
+        internetHopSession = session
+        if let ssid = session.joinedSSID ?? session.cachedSSID { WiFiJoiner.leave(ssid: ssid) }
+        return token
     }
 
-    func endInternetHop() {
-        internetHopActive = false
-        Task { await session.rejoinSoftAPAfterInternetHop() }
+    func transferInternetHop(_ token: FrameioInternetHop.Token) -> FrameioInternetHop.Token? {
+        internetHop.transfer(token)
     }
 
-    func waitForInternetPath(timeoutSeconds: Double) async -> Bool {
+    func endInternetHop(_ token: FrameioInternetHop.Token) {
+        guard internetHop.end(token) else { return }
+        let returningSession = internetHopSession
+        internetHopSession = nil
+        Task { await returningSession?.rejoinSoftAPAfterInternetHop() }
+    }
+
+    func waitForInternetPath(timeoutSeconds: Double, token: FrameioInternetHop.Token) async -> Bool {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
-            if Task.isCancelled { return false }
-            if !isOnCameraAccessPoint, await Self.canReachInternet() { return true }
+            if Task.isCancelled || !internetHop.owns(token) { return false }
+            if !isOnCameraAccessPoint, await Self.canReachInternet() {
+                return !Task.isCancelled && internetHop.owns(token)
+            }
             try? await Task.sleep(for: .milliseconds(400))
         }
         return false
@@ -281,80 +404,30 @@ final class AppModel {
         return (try? await URLSession.shared.data(for: request)) != nil
     }
 
-    var currentDispMode: PocketDispMode { assist.clean ? .clean : .live }
+    var currentDispMode: PocketDispMode { operatorSession.mode }
+    var dispChrome: PocketDispChrome { operatorSession.chrome }
+    var isEditingChrome: Bool { operatorSession.isEditing }
 
-    var dispChrome: PocketDispChrome {
-        chrome(for: currentDispMode)
-    }
+    func chrome(for mode: PocketDispMode) -> PocketDispChrome { operatorSession.chrome(for: mode) }
 
-    var isEditingChrome: Bool { chromeEditorMode != nil }
-
-    func chrome(for mode: PocketDispMode) -> PocketDispChrome {
-        switch mode {
-        case .live: dispLive
-        case .clean: dispClean
-        }
-    }
-
-    /// Whether `section` mounts right now: switched on, or force-mounted while that
-    /// mode's chrome is being edited. Settings stays reachable if both modes hid it.
     func chromeSectionMounts(_ section: PocketDispChrome.Section) -> Bool {
-        if section == .timecode, !session.supportsTimecode { return false }
-        if let mode = chromeEditorMode, mode == currentDispMode,
-            PocketDispChrome.isConfigurable(section, in: mode)
-        {
-            return true
-        }
-        if section == .railSettings, !dispLive.railSettings, !dispClean.railSettings {
-            return true
-        }
-        return dispChrome.isVisible(section)
+        if section == .timecode, !OsmoMonitorPresentation.capabilities(session).timecode { return false }
+        return operatorSession.mounts(section)
     }
 
     func toggleChrome(_ section: PocketDispChrome.Section, for mode: PocketDispMode) {
-        switch mode {
-        case .live: dispLive.toggle(section)
-        case .clean: dispClean.toggle(section)
-        }
+        operatorSession.toggle(section, in: mode)
     }
 
-    /// Leaves Settings and switches the monitor to `mode` so badges land on the real thing.
     func beginChromeEditing(_ mode: PocketDispMode) {
-        liveOperatorPanel = nil
         liveGimbalPanel = .none
-        setDisplayMode(clean: mode == .clean)
-        chromeEditorMode = mode
+        operatorSession.beginEditing(mode)
     }
 
-    /// Done returns to Display settings on the section that was being edited.
-    func endChromeEditing() {
-        chromeEditorReturnMode = chromeEditorMode
-        chromeEditorMode = nil
-        operatorSettingsTab = .display
-        liveOperatorPanel = .settings
-    }
+    func endChromeEditing() { operatorSession.finishEditing() }
 
-    var shouldShowWizard: Bool {
-        CameraStartupPolicy.launchDestination(savedCameras: savedCameras) == .addCamera
-            || isPairingNewCamera
-    }
-
-    var isLive: Bool {
-        #if targetEnvironment(simulator)
-            if let screen = MonitorUIReview.screen {
-                return screen != "cameras" && screen != "pair"
-            }
-        #endif
-        if session.holdsMonitor { return true }
-        if case .live = session.phase { return true }
-        #if targetEnvironment(simulator)
-            // No camera in Simulator: LiveViewScreen plays the D-Log2 clip when one is
-            // configured. Without it the real camera (Mac on its Wi-Fi) drives the phase.
-            return SimulatorLiveFeed.isConfigured
-        #else
-            return false
-        #endif
-    }
+    /// The monitor shows a camera (the shell's monitor lifetime, recovery included).
+    var isLive: Bool { shell.monitor != nil }
 
     var isBusy: Bool {
         switch session.phase {
@@ -363,108 +436,35 @@ final class AppModel {
         }
     }
 
-    var isScanning: Bool {
-        if case .scanning = session.phase { true } else { false }
-    }
-
     func prepareStartup() {
         #if targetEnvironment(simulator)
             if MonitorUIReview.isActive {
                 MonitorUIReview.prepare(self)
                 return
             }
+            // No camera in Simulator: the monitor plays the D-Log2 clip when one is configured.
+            // Without it the real camera (Mac on its Wi-Fi) connects through the cameras page.
+            if SimulatorLiveFeed.isConfigured { MonitorUIReview.presentSimulatedMonitor(self) }
         #endif
-        LiveHDRDisplay.setEnabled(hdrDisplay)
-        savedCameras = SavedCameraStore.load()
-        switch CameraStartupPolicy.launchDestination(savedCameras: savedCameras) {
-        case .addCamera:
-            isPairingNewCamera = true
-            session.startScan()
-        case .savedCameras:
-            isPairingNewCamera = false
-            session.startScan()
-        }
+        LiveHDRDisplay.app.setEnabled(hdrDisplay)
     }
 
-    func pairNewCamera() {
-        isPairingNewCamera = true
-        session.startScan()
-    }
-
-    func cancelPairing() {
-        session.disconnect()
-        isPairingNewCamera = false
-        session.startScan()
-    }
-
-    func reconnect(_ camera: SavedCamera) {
-        reconnect(camera, setup: camera.preferredSetup)
-    }
-
-    func reconnect(_ camera: SavedCamera, setup: CameraConnectionSetup) {
-        // Switching setups is a new connection, never a live-session no-op.
-        if session.connectedCamera?.id == camera.id, session.connectionSetup != setup {
-            session.disconnect()
-        }
-        savedCameras = SavedCameras.startingStation(setup, for: camera.id, in: savedCameras)
-        SavedCameraStore.save(savedCameras)
-        session.connectionSetup = setup
-        session.reconnect(to: camera.id)
-    }
-
-    /// Password goes to the Keychain entries Multiview also reads; the name stays per camera.
-    func addSetup(
-        _ setup: CameraConnectionSetup, ssid: String, password: String, to camera: SavedCamera
-    ) {
-        guard setup.movesCamera else { return }
-        MultiviewNetworkStore.save(ssid: ssid, password: password, hotspot: setup == .phoneHotspot)
-        savedCameras = SavedCameras.setting(setup, ssid: ssid, for: camera.id, in: savedCameras)
-        SavedCameraStore.save(savedCameras)
-        guard let updated = savedCameras.first(where: { $0.id == camera.id }) else { return }
-        reconnect(updated, setup: setup)
-    }
-
-    func forgetSetup(_ setup: CameraConnectionSetup, of camera: SavedCamera) {
-        savedCameras = SavedCameras.setting(setup, ssid: nil, for: camera.id, in: savedCameras)
-        SavedCameraStore.save(savedCameras)
-    }
-
-    /// "Scan with the camera" in Add setup. Stamped first: the scan moves the camera to
-    /// station role, so a lost reset is repaired by the next Camera Wi-Fi connect.
-    func scanNetworks(
-        with camera: SavedCamera, onFound: @escaping @MainActor (String) -> Void
-    ) async throws {
-        guard let found = session.found.first(where: { $0.id == camera.id }) else { return }
-        savedCameras = SavedCameras.startingStation(.wifi, for: camera.id, in: savedCameras)
-        SavedCameraStore.save(savedCameras)
-        try await MultiviewProvisioner.scanNetworks(found, onFound: onFound)
-    }
-
-    func forget(_ camera: SavedCamera) {
-        session.forgetWifiCreds(for: camera)
-        savedCameras = SavedCameras.removing(camera.id, from: savedCameras)
-        SavedCameraStore.save(savedCameras)
-        if savedCameras.isEmpty {
-            isPairingNewCamera = true
-            session.startScan()
-        }
-    }
-
-    func rename(_ camera: SavedCamera, to name: String?) {
-        savedCameras = SavedCameras.renaming(camera.id, to: name, in: savedCameras)
-        SavedCameraStore.save(savedCameras)
-    }
+    /// Connects a saved camera over its preferred setup (debug and stress drivers).
+    func reconnect(_ camera: OpenCineCore.SavedCamera) { cameras.connect(camera) }
 
     /// Connect shows the monitor — never leftover Operator Setup, Media, or Edit view.
     func setShareThisFeed(_ on: Bool) {
-        guard !session.isMultiviewBorrowed else { return }
         shareThisFeed = on
         OperatorPrefs.shareThisFeed = on
         if on {
             startRelayHost()
         } else {
-            relayStateTask?.cancel()
-            relayStateTask = nil
+            relaySource = nil
+            relaySessionID = nil
+            watcherRecordDelivery = nil
+            watcherRecordAdmission = nil
+            watcherRecordEditor = nil
+            watcherRecordConfirm = false
             relayHost.stop()
             session.decoder.onIdentityFrame = nil
             session.decoder.onIdentityOrientation = nil
@@ -472,10 +472,13 @@ final class AppModel {
     }
 
     func startRelayHost() {
-        guard isLive, shareThisFeed, !session.isMultiviewBorrowed else { return }
-        WatcherRelayKeychain.hostPasscode = sharePasscode
+        guard isLive, shareThisFeed else { return }
+        WatcherRelayKeychain.app.hostPasscode = sharePasscode
         let name = UIDevice.current.name
         let camera = session.connectedCamera?.name ?? ""
+        relaySource = shell.monitor?.id
+        relaySessionID = shell.monitor?.session.id
+        relayHost.onCommand = { [weak self] delivery in self?.handleWatcherRelayCommand(delivery) }
         relayHost.start(
             hostName: name,
             cameraName: camera,
@@ -491,30 +494,20 @@ final class AppModel {
         session.decoder.onIdentityOrientation = relayHost.orientationSink()
         session.decoder.onIdentityOrientation?(session.decoder.presentedPictureFlip ?? false)
         session.decoder.onIdentityFrame = relayHost.frameSink()
-        relayStateTask?.cancel()
-        updateRelayState()
-        relayStateTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(200))
-                guard !Task.isCancelled, let self, self.shareThisFeed, self.isLive else { return }
-                if self.relayHost.encoderFailed {
-                    self.setShareThisFeed(false)
-                    self.session.controlNote = "Sharing could not start"
-                    return
-                }
-                self.updateRelayState()
-            }
-        }
+        relayHost.pollState({ [weak self] in self?.relayState() }, onFailure: { [weak self] in
+            self?.setShareThisFeed(false)
+            self?.session.controlNote = "Sharing could not start"
+        })
     }
 
-    private func updateRelayState() {
-        guard shareThisFeed, isLive else { return }
+    private func relayState() -> WatcherRelayState? {
+        guard admitsRelaySource else { return nil }
         let s = session.status
         let state = WatcherRelayState(
             isRecording: s.isRecording,
             format: s.videoResolution?.label ?? "",
-            color: (s.isPhoto ? ColorMode.normal : s.colorMode)?.label ?? "",
-            zoom: CamFov.displayLabel(factor: session.zoomReadout),
+            color: (s.isPhoto ? ColorMode.normal : s.colorMode)?.label(in: session.profile) ?? "",
+            zoom: CamFov.displayLabel(factor: session.zoomReadout, ceiling: session.zoomCeiling),
             liveFPS: session.liveFPS,
             batteryPercent: s.batteryPercent,
             cameraName: session.connectedCamera?.name ?? "",
@@ -528,7 +521,7 @@ final class AppModel {
                 zoomHundredths: session.zoomStops.map { Int(($0 * 100).rounded()) }),
             cameraModel: session.connectedCamera?.model.name,
             isNano: session.bodyFamily == .nano)
-        relayHost.update(state: state)
+        return state
     }
 
     func openWatcherBrowse() {
@@ -546,17 +539,17 @@ final class AppModel {
     }
 
     func joinWatcher(_ host: WatcherRelayDiscovery) {
-        let code = WatcherRelayKeychain.rememberedPasscode(forHost: host.name)
+        let code = WatcherRelayKeychain.app.rememberedPasscode(forHost: host.name)
         relayClient.join(
             endpoint: host.endpoint,
             hostName: host.name,
             passcode: code,
-            watcherID: WatcherRelayKeychain.installID,
+            watcherID: WatcherRelayKeychain.app.installID,
             deviceName: UIDevice.current.name)
     }
 
     func retryWatcherPasscode(_ code: String) {
-        WatcherRelayKeychain.rememberPasscode(code, forHost: relayClient.hostTitle)
+        WatcherRelayKeychain.app.rememberPasscode(code, forHost: relayClient.hostTitle)
         relayClient.retryPasscode(code)
     }
 
@@ -567,116 +560,122 @@ final class AppModel {
         relayBrowser.stop()
     }
 
-    func handleWatcherRelayCommand(_ command: WatcherRelayCommand, from watcherID: String?) {
-        guard let allowed = relayHost.applyCommand(command, from: watcherID) else { return }
+    func handleWatcherRelayCommand(_ delivery: WatcherRelayCommandDelivery) {
+        guard admitsRelaySource, relayHost.admits(delivery) else { return }
+        guard let target = session.lunaSession, target.id == relaySessionID else { return }
+        let admission = LunaCommandAdmission(
+            owner: target.commandOwner, isCurrent: relayHost.capturedCommandAdmission(for: delivery))
+        guard admission.isCurrent else { return }
+        let allowed = delivery.command
         switch allowed {
         case .toggleRecording:
             guard !session.isLocked, !session.controlBusy else { return }
             if recordConfirmationEnabled, !session.status.isPhoto {
+                guard let editor = session.control.recordEditor() else { return }
                 watcherRecordRequest = watcherRecordContext
+                watcherRecordDelivery = delivery
+                watcherRecordAdmission = admission
+                watcherRecordEditor = editor
                 watcherRecordConfirm = true
             } else {
-                session.pressShutter()
+                session.pressShutter(admission: admission)
             }
         case .tapFocus(let x, let y, let w, let h):
             let nx = w > 0 ? Double(x) / Double(w) : 0.5
             let ny = h > 0 ? Double(y) / Double(h) : 0.5
-            session.markFocus(at: CGPoint(x: nx, y: ny))
+            session.markFocus(at: CGPoint(x: nx, y: ny), admission: admission)
         case .setISO(let raw):
             if let idx = IsoIndex(rawValue: UInt8(clamping: raw)) {
-                session.setISO(idx)
+                session.setISO(idx, admission: admission)
             }
         case .setShutterDenom(let denom):
-            session.setShutterDenom(denom)
+            session.setShutterDenom(denom, admission: admission)
         case .setWhiteBalance(let mode, let kelvin, let tint):
             if mode == 0 {
-                session.setWhiteBalanceAuto(tint: tint)
+                session.setWhiteBalanceAuto(tint: tint, admission: admission)
             } else {
-                session.setWhiteBalanceCustom(kelvin: kelvin, tint: tint)
+                session.setWhiteBalanceCustom(kelvin: kelvin, tint: tint, admission: admission)
             }
         case .setColor(let raw):
             if let mode = ColorMode(rawValue: UInt8(clamping: raw)) {
-                session.setColorMode(mode)
+                session.setColorMode(mode, admission: admission)
             }
         case .setZoom(let hundredths):
-            session.setZoom(Double(hundredths) / 100.0)
+            session.setZoom(Double(hundredths) / 100.0, admission: admission)
         }
     }
 
+    func confirmWatcherRecording() {
+        guard let request = watcherRecordRequest,
+            request == watcherRecordContext, admitsWatcherRecordDelivery, request.canConfirm,
+            request.recording != nil, let editor = watcherRecordEditor,
+            let admission = watcherRecordAdmission
+        else { return }
+        watcherRecordRequest = nil
+        watcherRecordDelivery = nil
+        watcherRecordEditor = nil
+        watcherRecordAdmission = nil
+        session.commitRecording(from: editor, admission: admission)
+    }
+
+    /// The monitor's camera changed (shown, replaced or gone): the app's own chrome and relay
+    /// follow. The shell already dropped covers and retired the old camera's controls.
+    func noteMonitorChanged() {
+        session.configureMediaLibrary(service: shell.monitor?.camera.services[(any CameraMediaService).self])
+        if isLive { noteBecameLive() } else { noteLeftLive() }
+    }
+
     func noteBecameLive() {
-        homePanel = nil
-        liveOperatorPanel = nil
-        chromeEditorMode = nil
-        chromeEditorReturnMode = nil
+        operatorSession.synchronize(source: shell.monitor?.id)
         captureSheet = nil
-        liveChromeInteractive = false
-        liveChromeArmTask?.cancel()
-        liveChromeArmTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(550))
-            guard !Task.isCancelled else { return }
-            self?.liveChromeInteractive = true
-        }
-        persistConnectedCameraIfNeeded()
         if shareThisFeed { startRelayHost() }
         relayBrowser.stop()
     }
 
     /// A dropped link must not keep Operator Setup or Edit view around for the next connect.
     func noteLeftLive() {
-        liveChromeArmTask?.cancel()
-        liveChromeArmTask = nil
-        liveChromeInteractive = true
-        liveOperatorPanel = nil
-        chromeEditorMode = nil
-        chromeEditorReturnMode = nil
+        operatorSession.close()
         captureSheet = nil
-        relayStateTask?.cancel()
-        relayStateTask = nil
+        watchRelay.retireSource()
+        watchCommandSource = nil
+        watchSourceSession = nil
+        watchSourceEpoch = nil
+        relaySource = nil
+        relaySessionID = nil
+        watcherRecordDelivery = nil
+        watcherRecordAdmission = nil
+        watcherRecordEditor = nil
         relayHost.stop()
         session.decoder.onIdentityFrame = nil
         session.decoder.onIdentityOrientation = nil
         watcherRecordConfirm = false
     }
 
-    func persistConnectedCameraIfNeeded() {
-        guard case .live = session.phase, let found = session.connectedCamera else { return }
-        if let ssid = session.joinedSSID {
-            if CameraWifiResolution.isSSIDOwnedByAnotherCamera(
-                ssid, cameraId: found.id, saved: savedCameras)
-            {
-                return
-            }
-            if CameraBodyFamily.ssidConflictsWithBody(
-                ssid: ssid, modelId: found.modelId, advertisedName: found.name)
-            {
-                return
-            }
+    /// The app's own link gave up while the monitor showed it, outside recovery (a reconnect
+    /// that failed, Bluetooth off): the monitor closes as it always did.
+    func noteLinkPhase() {
+        if case .live = session.phase, let monitor = shell.monitor {
+            session.configureMediaLibrary(service: monitor.camera.services[(any CameraMediaService).self])
         }
-        var record = SavedCamera(
-            id: found.id,
-            advertisedName: found.name,
-            modelName: found.model.name,
-            lastSSID: session.joinedSSID,
-            lastConnectedAt: Date(),
-            modelId: found.modelId
-        )
-        record.lastSetup = session.connectionSetup
-        savedCameras = SavedCameras.upserting(record, into: savedCameras)
-        SavedCameraStore.save(savedCameras)
-        isPairingNewCamera = false
+        guard isLive, !session.holdsMonitor else { return }
+        switch session.phase {
+        case .idle, .failed: shell.close()
+        default: break
+        }
     }
 
     func beginMediaBrowse() { session.beginMediaBrowse() }
     func endMediaBrowse() { session.endMediaBrowse() }
-    func refreshMedia() { Task { await session.refreshMedia() } }
+    func noteMediaCoverChanged(from old: ShellModel.Cover?, to new: ShellModel.Cover?) {
+        if old == .media, new != .media { session.endMediaBrowse() }
+    }
+    func refreshMedia() { session.refreshMedia() }
 
+    /// Closes the monitor's camera (never a camera command), then the app's link.
     func disconnect() {
         focusBoxLocked = false
+        shell.close()
         session.disconnect()
-        frameSamples.reset()
-        if CameraStartupPolicy.launchDestination(savedCameras: savedCameras) == .savedCameras {
-            session.startScan()
-        }
     }
 
     /// Recovery card: leave the held frame for the saved-camera list.
@@ -704,6 +703,16 @@ final class AppModel {
                 ?? WatchCommandResult(
                     accepted: false, isRecording: false, error: WatchRelayCopy.connectFirst)
         }
+        watchRelay.onAdmittedToggleRecord = { [weak self] admission in
+            self?.watchShutter(photo: false, watchAdmission: admission)
+                ?? WatchCommandResult(
+                    accepted: false, isRecording: false, error: WatchRelayCopy.connectFirst)
+        }
+        watchRelay.onAdmittedCapture = { [weak self] admission in
+            self?.watchShutter(photo: true, watchAdmission: admission)
+                ?? WatchCommandResult(
+                    accepted: false, isRecording: false, error: WatchRelayCopy.connectFirst)
+        }
         watchRelay.onReachabilityChanged = { [weak self] in
             guard let self else { return }
             self.session.decoder.needsWatchPreview = self.watchRelay.hasCompanion
@@ -727,6 +736,19 @@ final class AppModel {
     }
 
     func publishWatchState() {
+        let target = session.lunaSession
+        let commandSource = target.map {
+            LunaCommandAdmission(owner: $0.commandOwner, isCurrent: { true })
+        }
+        let epoch = target?.current.epoch
+        if watchSourceSession !== target || watchSourceEpoch != epoch
+            || watchCommandSource?.source != commandSource?.source
+        {
+            watchRelay.retireSource()
+        }
+        watchSourceSession = target
+        watchSourceEpoch = epoch
+        watchCommandSource = commandSource
         watchRelay.ingestState(
             WatchRelayState.snapshot(
                 status: session.status,
@@ -744,6 +766,12 @@ final class AppModel {
     }
 
     private func watchShutter(photo: Bool) -> WatchCommandResult {
+        watchShutter(photo: photo, watchAdmission: nil)
+    }
+
+    private func watchShutter(photo: Bool, watchAdmission: RelayWatchCommandAdmission?)
+        -> WatchCommandResult
+    {
         let recording = session.status.isRecording
         if session.controlBusy || session.isBrowsingMedia {
             return WatchCommandResult(
@@ -762,15 +790,24 @@ final class AppModel {
             return WatchCommandResult(
                 accepted: false, isRecording: recording, error: WatchRelayCopy.switchToVideo)
         }
-        session.pressShutter()
+        if let watchAdmission {
+            guard watchAdmission.isCurrent, let shown = watchCommandSource,
+                let target = watchSourceSession, target === session.lunaSession,
+                watchSourceEpoch == target.current.epoch, shown.admits(target.commandOwner)
+            else {
+                publishWatchState()
+                return WatchCommandResult(
+                    accepted: false, isRecording: recording, error: WatchRelayCopy.cameraChanged)
+            }
+            let admission = LunaCommandAdmission(
+                owner: shown.owner, isCurrent: { shown.isCurrent && watchAdmission.isCurrent })
+            session.pressShutter(admission: admission)
+        } else {
+            session.pressShutter()
+        }
         publishWatchState()
         return WatchCommandResult(accepted: true, isRecording: recording, error: nil)
     }
-}
-
-enum LiveOperatorPanel: Equatable {
-    case media
-    case settings
 }
 
 struct AppRoot: View {
@@ -783,22 +820,17 @@ struct AppRoot: View {
             WatcherLiveView()
                 .environment(model)
                 .transition(.opacity)
-        } else if model.isLive {
-            LiveViewScreen()
-                .environment(model)
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
         } else {
             LinkExperience()
                 .environment(model)
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
         }
     }
 
     var body: some View {
         ZStack {
-            ZCBackground()
+            MonitorTheme.background.ignoresSafeArea()
             #if targetEnvironment(simulator)
-                if MonitorMediaReview.isActive {
+                if MonitorMediaReview.isActive && !MonitorMediaReview.usesProductionShell {
                     MonitorMediaReviewView()
                 } else {
                     primaryExperience
@@ -813,15 +845,8 @@ struct AppRoot: View {
                     .zIndex(100)
             }
 
-            if model.homePanel != nil, !model.isLive, !model.isWatchingFeed {
-                AppPanelHost()
-                    .environment(model)
-                    .transition(.opacity)
-                    .zIndex(80)
-            }
-
             if model.showsWatcherBrowse, !model.isLive {
-                ZCBackground()
+                MonitorTheme.background
                     .ignoresSafeArea()
                     .overlay {
                         WatcherBrowseView()
@@ -831,13 +856,18 @@ struct AppRoot: View {
             }
         }
         .environment(model)
-        .environment(\.font, LiveType.text(16))
+        #if DEBUG && targetEnvironment(simulator)
+        .overlay(alignment: .topLeading) {
+            if MonitorMediaReview.usesProductionShell { MonitorPlaybackReviewFacts(model: model) }
+        }
+        #endif
+        .environment(\.font, MonitorTheme.font(16))
         .environment(
             \.monitorHDRChromeGain,
-            model.hdrDisplayActive ? CGFloat(LiveHDRDisplay.presentGain) : 1
+            model.hdrDisplayActive ? CGFloat(LiveHDRDisplay.app.presentGain) : 1
         )
         .background {
-            HDRChromeHost(enabled: model.hdrDisplayActive).allowsHitTesting(false)
+            HDRChromeHost(display: .app, enabled: model.hdrDisplayActive).allowsHitTesting(false)
         }
         .onReceive(
             NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)
@@ -847,13 +877,13 @@ struct AppRoot: View {
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showReliabilityPrompt) {
             ReliabilityConsentPrompt { enabled in
-                ReliabilityReporting.setConsent(enabled)
+                AppDiagnostics.reporting.setConsent(enabled)
                 showReliabilityPrompt = false
             }.environment(model)
         }
         .task {
             while !Task.isCancelled {
-                ProblemReporting.shared.tick()
+                AppDiagnostics.problemReporting.tick()
                 try? await Task.sleep(for: .seconds(2))
             }
         }
@@ -864,7 +894,7 @@ struct AppRoot: View {
                 if let reviewID = ProcessInfo.processInfo.environment["OPV_CONSENT_REVIEW_ID"],
                     UUID(uuidString: reviewID) != nil
                 {
-                    ReliabilityReportingConsent.defaults = UserDefaults(
+                    AppDiagnostics.consent.defaults = UserDefaults(
                         suiteName: "opc.consent.review.\(reviewID)")!
                 }
             #endif
@@ -890,27 +920,18 @@ struct AppRoot: View {
             withAnimation(.easeOut(duration: LaunchSplashTiming.fadeOutDuration)) {
                 model.showsLaunchSplash = false
             }
-            if ReliabilityReporting.isAvailable && !ReliabilityReportingConsent.hasDecision {
+            if AppDiagnostics.reporting.isAvailable && !AppDiagnostics.consent.hasDecision {
                 showReliabilityPrompt = true
             }
         }
         .onChange(of: model.gimbalAnalogHeld) { _, held in
             if held { model.relayHost.reclaimControl() }
         }
-        .onChange(of: model.isLive) { _, live in
-            if live {
-                model.noteBecameLive()
-            } else {
-                model.noteLeftLive()
-            }
+        .onChange(of: model.shell.cover) { old, new in
+            model.noteMediaCoverChanged(from: old, to: new)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .opcWatcherRelayCommand)) { note in
-            let command = note.userInfo?["command"] as? WatcherRelayCommand
-            let id = note.userInfo?["watcherID"] as? String
-            if let command {
-                model.handleWatcherRelayCommand(command, from: id)
-            }
-        }
+        .onChange(of: model.shell.monitor?.id) { _, _ in model.noteMonitorChanged() }
+        .onChange(of: model.session.phase) { _, _ in model.noteLinkPhase() }
         .modifier(WatcherRecordConfirmation(model: model))
         .confirmationDialog(
             "Allow \(model.relayHost.pendingControlRequest?.name ?? "a watcher") to control the camera?",
@@ -924,32 +945,11 @@ struct AppRoot: View {
             Button("Deny", role: .cancel) { model.relayHost.denyControl() }
         }
         .onAppear { model.assist.inspectorSceneActive = scenePhase == .active }
+        // The shell reports each change once (`AppModel.shell.onSceneActivity`).
         .onChange(of: scenePhase) { _, phase in
-            ProblemReporting.shared.tick()
-            model.assist.inspectorSceneActive = phase == .active
-            switch phase {
-            case .active:
-                model.session.noteSceneBecameActive()
-            case .inactive, .background:
-                model.session.noteSceneBecameInactive()
-            @unknown default:
-                break
-            }
+            AppDiagnostics.problemReporting.tick()
         }
-        // scenePhase can miss a Control Center / app-switcher bounce.
-        // UIKit notifications are the same signals OpenZCine uses.
-        .onReceive(
-            NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)
-        ) { _ in
-            model.assist.inspectorSceneActive = false
-            model.session.noteSceneBecameInactive()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
-        ) { _ in
-            model.assist.inspectorSceneActive = true
-            model.session.noteSceneBecameActive()
-        }
+        .monitorShellSceneActivity(model.shell)
     }
 }
 
@@ -969,33 +969,26 @@ private struct WatcherRecordConfirmation: ViewModifier {
                     model.session.status.isRecording ? "Stop" : "Start",
                     role: model.session.status.isRecording ? .destructive : nil
                 ) {
-                    guard model.watcherRecordRequest == model.watcherRecordContext,
-                        model.watcherRecordContext.canConfirm
-                    else { return }
-                    model.watcherRecordRequest = nil
-                    model.session.pressShutter()
+                    model.confirmWatcherRecording()
                 }
-                Button("Cancel", role: .cancel) {}
+                Button("Cancel", role: .cancel) {
+                    model.watcherRecordRequest = nil
+                    model.watcherRecordDelivery = nil
+                    model.watcherRecordEditor = nil
+                    model.watcherRecordAdmission = nil
+                }
             }
             .onChange(of: model.watcherRecordContext) { _, _ in
                 model.watcherRecordConfirm = false
                 model.watcherRecordRequest = nil
+                model.watcherRecordDelivery = nil
+                model.watcherRecordEditor = nil
+                model.watcherRecordAdmission = nil
             }
     }
 }
 
-/// Connection home: first-pair wizard, or saved cameras. Mirrors OpenZCine `LinkExperience`.
-struct LinkExperience: View {
-    @Environment(AppModel.self) private var model
-    var body: some View {
-        GeometryReader { proxy in
-            if model.shouldShowWizard {
-                ConnectionSetupView(compact: proxy.size.width < 640)
-            } else {
-                SavedCamerasView(compact: proxy.size.width < 640)
-            }
-        }
-        .background(StartupColors.background.ignoresSafeArea())
-        .foregroundStyle(StartupColors.ink)
-    }
+extension LiveHDRDisplay {
+    /// This app's HDR display state, read by the feed, scopes and chrome.
+    static let app = LiveHDRDisplay()
 }

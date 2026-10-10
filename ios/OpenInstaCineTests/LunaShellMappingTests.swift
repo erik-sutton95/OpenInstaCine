@@ -1,5 +1,7 @@
 import Insta360Protocol
-import OpenPocketViewCore
+import OpenCineCameraControls
+import OpenCineCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine
@@ -16,6 +18,33 @@ final class LunaShellMappingTests: XCTestCase {
         // Round trip: the SET value for a shown format is the value the camera reported.
         let fourK25 = try XCTUnwrap(table.first { $0.key.chipLabel == "4K · 25p" })
         XCTAssertEqual(fourK25.value, 48)
+    }
+
+    /// ISO steps exactly as on Insta main, which always sorted the list by value. The shared
+    /// stepping sorts only when 160 is listed; Insta's lists are ascending, so both agree.
+    func testIsoSteppingMatchesMain() {
+        func mainStepped(from current: IsoIndex, stops: Int, available: [IsoIndex]) -> IsoIndex? {
+            let list = available.filter { $0 != .auto && ($0 != .iso160 || current == .iso160) }
+                .sorted { ($0.isoValue ?? 0) < ($1.isoValue ?? 0) }
+            guard current != .auto, let index = list.firstIndex(of: current) else { return nil }
+            let next = index + stops
+            guard list.indices.contains(next), next != index else { return nil }
+            return list[next]
+        }
+        let lists = [
+            LunaShellMapping.isoIndices, ColorMode.iLog.isoIndices, ColorMode.dolbyVision.isoIndices,
+            ColorMode.normal.isoIndices, LunaShellMapping.isoIndices.filter { $0 != .iso160 },
+        ]
+        for available in lists {
+            for current in IsoIndex.allCases {
+                for stops in [-2, -1, 1, 2] {
+                    XCTAssertEqual(
+                        IsoIndex.stepped(from: current, stops: stops, available: available),
+                        mainStepped(from: current, stops: stops, available: available),
+                        "\(current) \(stops) in \(available)")
+                }
+            }
+        }
     }
 
     func testColorAndModeRoundTrip() {
@@ -55,7 +84,7 @@ final class LunaShellMappingTests: XCTestCase {
             box += Data([0x25]) + withUnsafeBytes(of: Float(0.27).bitPattern.littleEndian) { Data($0) }
             return try LunaTrackFrame(Data([0x10, state, 0x22, UInt8(box.count)]) + box)
         }
-        let session = CameraSession(borrowing: HevcDecoder())
+        let session = CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
         session.applyTrackFrame(try frame(state: 5, x: 0.4))
         XCTAssertFalse(session.isTrackingActive, "idle before any lock is ignored")
         session.applyTrackFrame(try frame(state: 2, x: 0.4))
@@ -110,24 +139,6 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertNil(CaptureLists.focusOption(from: status))
     }
 
-    func testHeadTrackReferenceFitsRateAndAcceleration() {
-        XCTAssertNil(CameraSession.headTrackReference([], at: 1))
-        // yaw = 5 + 30 t + 20 t² (rate 30 + 40 t, accel 40), still pitch, every 40 ms.
-        let samples = (0..<7).map { i -> HeadTrackSample in
-            let t = Double(i) * 0.04
-            return HeadTrackSample(t: 10 + t, yaw: 5 + 30 * t + 20 * t * t, pitch: 3)
-        }
-        let head = CameraSession.headTrackReference(samples, at: 10.24 + 0.05)
-        XCTAssertEqual(head?.yawRate ?? 0, 30 + 40 * 0.24, accuracy: 1e-6)
-        XCTAssertEqual(head?.yawAccel ?? 0, 40, accuracy: 1e-6)
-        XCTAssertEqual(head?.yaw ?? 0, 5 + 30 * 0.29 + 20 * 0.29 * 0.29, accuracy: 1e-6)
-        XCTAssertEqual(head?.pitchRate ?? 1, 0, accuracy: 1e-9)
-        // Two samples: a straight line. A stale head holds, with no rate to feed forward.
-        let line = [HeadTrackSample(t: 1, yaw: 0, pitch: 0), HeadTrackSample(t: 1.04, yaw: 2, pitch: 0)]
-        XCTAssertEqual(CameraSession.headTrackReference(line, at: 1.14)?.yaw ?? 0, 2 + 50 * 0.1, accuracy: 1e-6)
-        XCTAssertEqual(CameraSession.headTrackReference(line, at: 9), HeadTrackReference(yaw: 2, pitch: 0))
-    }
-
     func testTimeOfDayTimecode() {
         // 2026-09-30 08:51:10.54 UTC, Stockholm (UTC+2).
         let t = 1_790_758_270.54
@@ -140,11 +151,6 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: 3600, timeZoneSeconds: -7200, fps: 24), "23:00:00:00")
     }
 
-    func testCameraNaming() {
-        XCTAssertEqual(LunaCameraNames.title(advertised: "XBQFN7"), "Luna Ultra XBQFN7")
-        XCTAssertEqual(LunaCameraNames.title(advertised: "Luna Ultra XBQFN7"), "Luna Ultra XBQFN7")
-    }
-
     func testInsta360FilenameDates() {
         let file = MediaFile(
             path: "/storage_internal/DCIM/Camera01/VID_20260916_123456_00_001.mp4",
@@ -152,48 +158,99 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertEqual(file.filenameTimestamp, "20260916123456")
         XCTAssertEqual(MediaHTTP.proxyPaths(file).first?.hasSuffix(".lrv"), true)
     }
-
-    func testProgrammedMovePathInterpolatesLegsAndCurve() throws {
-        let a = GimbalWaypoint(yawDeg: 0, pitchDeg: 0, zoom: 1)
-        let b = GimbalWaypoint(yawDeg: 40, pitchDeg: 10, zoom: 1)
-        let c = GimbalWaypoint(yawDeg: 40, pitchDeg: 30, zoom: 1)
-        var take = GimbalProgram(a: a, b: b, durationAB: 4, durationBC: 2)
-        XCTAssertEqual(CameraSession.programDuration(take), 4)
-        XCTAssertEqual(CameraSession.programPose(take, at: 1)?.yawDeg ?? .nan, 10, accuracy: 1e-9)
-        XCTAssertEqual(CameraSession.programPose(take, at: 9), b)
-        take.c = c
-        take.smoothness = 0
-        XCTAssertEqual(CameraSession.programDuration(take), 6)
-        XCTAssertEqual(CameraSession.programPose(take, at: 5)?.pitchDeg ?? .nan, 20, accuracy: 1e-9)
-        XCTAssertEqual(CameraSession.programPose(take, at: 6), c)
-        // Smoothness rounds the B corner: the path no longer passes through B.
-        take.smoothness = 1
-        let corner = try XCTUnwrap(CameraSession.programPose(take, at: 4))
-        XCTAssertGreaterThan(GimbalMoveEngine.angularDistance(corner, b), 1)
-        XCTAssertEqual(CameraSession.programPose(take, at: 6), c)
-    }
 }
 
 @MainActor
 final class PictureEVMeterTests: XCTestCase {
+    private static let ilog = PictureEVContext(
+        device: "CAM-1", transfer: .ilog, profile: "i-log", metering: "matrix")
+
+    private func freshDefaults(_ name: String) -> UserDefaults {
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+
     func testLearnsTheAutoExposurePlacementAndReadsManualAgainstIt() {
-        let defaults = UserDefaults(suiteName: "PictureEVMeterTests")!
-        defaults.removePersistentDomain(forName: "PictureEVMeterTests")
-        let meter = PictureEVMeter(defaults: defaults)
+        let meter = PictureEVMeter(defaults: freshDefaults("PictureEVMeterTests"))
+        let ilog = Self.ilog
         // Seeded: auto at EV 0 with the I-Log median 1.3 stops under grey reads 0.
-        XCTAssertEqual(meter.stops(picture: -1.3, transfer: .ilog, evComp: nil, now: 0), 0, accuracy: 1e-9)
+        let first = meter.stops(picture: -1.3, context: ilog, evComp: nil, now: 0)
+        XCTAssertEqual(try XCTUnwrap(first.value), 0, accuracy: 1e-9)
+        XCTAssertEqual(first.origin, .imageEstimated)
         // Auto at EV 0 in a scene the camera places at -0.8: the offset follows.
         var t = 0.0
         while t < 20 {
             t += 0.04
-            _ = meter.stops(picture: -0.8, transfer: .ilog, evComp: 0, now: t)
+            _ = meter.stops(picture: -0.8, context: ilog, evComp: 0, now: t)
         }
-        XCTAssertEqual(meter.offset(for: .ilog), -0.8, accuracy: 0.01)
+        XCTAssertEqual(meter.offset(for: ilog), -0.8, accuracy: 0.01)
         // Manual, one stop darker than auto chose: reads -1.0; the offset holds.
-        XCTAssertEqual(meter.stops(picture: -1.8, transfer: .ilog, evComp: nil, now: t + 1), -1.0, accuracy: 0.01)
-        XCTAssertEqual(meter.offset(for: .ilog), -0.8, accuracy: 0.01)
+        let manual = meter.stops(picture: -1.8, context: ilog, evComp: nil, now: t + 1)
+        XCTAssertEqual(try XCTUnwrap(manual.value), -1.0, accuracy: 0.01)
+        XCTAssertEqual(meter.offset(for: ilog), -0.8, accuracy: 0.01)
         // Rec.709 has no seed.
-        XCTAssertEqual(meter.stops(picture: 0.4, transfer: .rec709, evComp: nil, now: t + 2), 0.4, accuracy: 1e-9)
+        var rec709 = ilog
+        rec709.transfer = .rec709
+        let plain = meter.stops(picture: 0.4, context: rec709, evComp: nil, now: t + 2)
+        XCTAssertEqual(try XCTUnwrap(plain.value), 0.4, accuracy: 1e-9)
+    }
+
+    /// Existing installs keep their v1 per-transfer offsets: they seed every new v2 key of the
+    /// same transfer, v1 is never written or removed, and running it again changes nothing.
+    func testV1OffsetsSeedNewKeysIdempotentlyAndSurvive() {
+        let defaults = freshDefaults("PictureEVMeterMigrationTests")
+        let legacy: [String: Double] = [MonitorTransfer.ilog.rawValue: -0.6]
+        defaults.set(legacy, forKey: PictureEVMeter.legacyDefaultsKey)
+        var otherCamera = Self.ilog
+        otherCamera.device = "CAM-2"
+        var faceMetering = Self.ilog
+        faceMetering.metering = "face"
+
+        for run in 0..<2 {
+            let meter = PictureEVMeter(defaults: defaults)
+            XCTAssertEqual(meter.offset(for: otherCamera), -0.6, accuracy: 1e-9, "run \(run)")
+            XCTAssertEqual(meter.offset(for: faceMetering), -0.6, accuracy: 1e-9, "run \(run)")
+            meter.save()
+            XCTAssertEqual(
+                defaults.dictionary(forKey: PictureEVMeter.legacyDefaultsKey) as? [String: Double], legacy)
+        }
+
+        // Learning one context writes only its v2 key; the others still read v1.
+        let learner = PictureEVMeter(defaults: defaults)
+        var t = 0.0
+        while t < 20 {
+            t += 0.04
+            _ = learner.stops(picture: -1.0, context: Self.ilog, evComp: 0, now: t)
+        }
+        learner.save()
+        let stored = defaults.dictionary(forKey: PictureEVMeter.defaultsKey) as? [String: Double] ?? [:]
+        XCTAssertEqual(Set(stored.keys), [Self.ilog.key])
+        let reread = PictureEVMeter(defaults: defaults)
+        XCTAssertEqual(reread.offset(for: Self.ilog), -1.0, accuracy: 0.01)
+        XCTAssertEqual(reread.offset(for: otherCamera), -0.6, accuracy: 1e-9)
+        XCTAssertEqual(defaults.dictionary(forKey: PictureEVMeter.legacyDefaultsKey) as? [String: Double], legacy)
+    }
+
+    /// A source saves only its own keys, so a second source's learning is never overwritten.
+    func testTwoSourcesSharingStorageKeepTheirOwnOffsets() {
+        let defaults = freshDefaults("PictureEVMeterSourcesTests")
+        var second = Self.ilog
+        second.device = "CAM-2"
+        let a = PictureEVMeter(defaults: defaults)
+        let b = PictureEVMeter(defaults: defaults)
+        var t = 0.0
+        while t < 20 {
+            t += 0.04
+            _ = a.stops(picture: -0.4, context: Self.ilog, evComp: 0, now: t)
+            _ = b.stops(picture: -2.2, context: second, evComp: 0, now: t)
+        }
+        a.save()
+        b.save()
+        a.save()
+        let reread = PictureEVMeter(defaults: defaults)
+        XCTAssertEqual(reread.offset(for: Self.ilog), -0.4, accuracy: 0.01)
+        XCTAssertEqual(reread.offset(for: second), -2.2, accuracy: 0.01)
     }
 }
 

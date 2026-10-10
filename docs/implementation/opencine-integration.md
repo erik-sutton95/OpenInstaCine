@@ -1,0 +1,428 @@
+# OpenCine integration candidate
+
+Branch `opencine/integration` combines every local OpenCine candidate for OpenInstaCine so it
+can be reviewed and device-tested once. Local only: nothing is pushed, and it cannot build in
+CI until the OpenCine repository is published (see the end of this page).
+
+Since 2026-10-02 every shared package lives in one platform repository, OpenCine (`../OpenCine`,
+pinned by one line in `opencine-pins.txt`): one `OpenCine` path package in `ios/project.yml` and
+`Package.swift`, one Android included build `../../../OpenCine/Android` named `opencine`. The
+sections below record the work packages as they landed; the repository names they cite
+(OpenCineUI, OpenCineCore, OpenCineInsta360 and their `opencinecore`/`opencineinsta360` builds) are
+the former repositories, now areas of OpenCine with the same product names and coordinates.
+
+## What it combines
+
+| Work package | Source branch | Head |
+| --- | --- | --- |
+| CORE-02 Luna: ISO, shutter, white balance and record through OpenCineCore `CameraSession` | `opencine/core-02-luna` | 04f6413 |
+| STATE-01 Luna: per-session ownership, profile, zoom ceiling and EV calibration; CORE-01b adoption | `opencine/state-01-luna` (contains core-02-luna) | 7353aa7 |
+| UI-03: design system from OpenCineUI (`MonitorUI`, `MonitorPresentation`, Android `monitor-ui`) | `opencine/ui-03-shared-ui` | ede16d7 |
+| MEDIA-01: LUT, curve, scope, shutter angle and frame timing math from OpenCineMedia | `opencine/media-01` | f579e8f |
+| OPTIONAL-02: gimbal programs and head-track math from OpenCineMotion (`MotionCapabilities.lunaUltra`) | `opencine/motion` | 1b67ba7 |
+| OPTIONAL-02: watcher relay wire v1, control lease and pacing from OpenCineRelay | `opencine/relay` | 0aaac91 |
+| MEDIA-02 step 4: VideoToolbox decoder runtime and decoded-frame leases from OpenCineApple (stacked) | `opencine/apple` | see `git log` |
+| CORE-API: Kotlin shell contract and Luna adapter from OpenCineInsta360 `Android/` | `opencine/core-api-shared` | 9f5ee09 |
+| MEDIA-02 step 3: Android Vulkan renderer from OpenCineCore `:vulkan` | on this branch | e3e03ce |
+| RELEASE-01: sync narrowed to the iOS shell; three unreachable core types dropped | on this branch | 705d316, 764da0e |
+| SHELL-01 step 6: live monitor laid out from the Luna integration's capability projection | `opencine/shell-01` | see `git log` |
+
+### Merged branches
+
+Merged into `opencine/integration` with `--no-ff` on 2026-10-02, in this order:
+
+- `opencine/motion` 1b67ba7 (merge c5c70da)
+- `opencine/relay` 0aaac91 (merge 32aef1b; `Package.swift`, the Android Swift staging inputs,
+  `ios/project.yml` and pins merged as a union)
+
+- `opencine/core-api-shared` 9f5ee09 (merge cc9de6f; only `opencine-pins.txt` conflicted, resolved
+  to each sibling's current main; `settings.gradle.kts` includes `opencinecore`,
+  `opencineinsta360` and OpenCineUI once each; build identity hashes the union)
+
+Pins then (before the consolidation into OpenCine): OpenCineUI 54bcbb3, OpenCineCore 23adfdf
+(motion, relay, Apple runtime, harness fixes, `:vulkan`; README-only on top of 7a17350), OpenCineInsta360 f8f4c27 (Swift
+products plus `Android/` shell contract and Luna adapter, harness fixes).
+
+Base is `opencine/state-01-luna`; the other two are merged with `--no-ff`. Pinned siblings
+(`opencine-pins.txt`): OpenCineUI 54bcbb3, OpenCineCore 8c2415c (contains the MEDIA-01
+commit 248b858 the media branch pinned). `ios/project.yml` names both packages by path;
+Android included the OpenCineUI and OpenCineCore Android builds (the latter named
+`opencinecore`). The root `Package.swift` took OpenCineMedia from the same OpenCineCore checkout
+the app project named, so Xcode saw one package identity. `tools/build-identity.py` hashed both siblings on both platforms
+(OpenCineCore `Package.swift` and `Sources`, plus `Android` for Android builds).
+
+### Shared native bridge helpers (SHELL-04)
+
+The Android Swift facade now imports OpenCineJNISupport for JNI strings, arrays
+and method lookup. The app-local CJNI header target is removed. Native class
+names, exported methods and runtime-library packaging stay compatible. Native
+staging and build identity include the helper sources, so a shared helper edit
+rebuilds the app library. This changes no saved data or credential namespace.
+
+Automated Android native probes cover strings, null/empty arrays, LUT bytes and
+float arrays; exported Java symbol sets are compared with the prior app binary.
+Camera transport and live-picture checks remain in the device checklist.
+
+### Shared Frame.io client (SHELL-03 I5c, first increment)
+
+The iOS app directly consumes OpenCineFrameIO for PKCE and token exchange/refresh, response
+models, account/workspace/project requests, upload parts and completion polling. The copied
+FrameioService is removed. The app supplies its Info.plist identity, browser presentation,
+Keychain adapter, destination preferences and internet-hop lifetime.
+The Keychain service `OpenInstaCine.frameio`, account `oauth-token`, accessibility and existing
+saved-token JSON remain unchanged. Progress still reaches callers on MainActor. API/upload
+requests retain the 12-second timeout without waiting for connectivity; browser token exchange
+retains URLSession.shared. The common client also preserves an existing refresh token when IMS
+omits its replacement and rejects invalid resource identifiers/file inputs before HTTPS.
+
+Both-architecture simulator build-for-testing, the actual saved-token JSON compatibility test
+and the two existing delivery-hop lifetime tests pass. This is a local candidate; real Adobe
+sign-in, upload, camera network return and physical-device behavior remain untested. Frame.io
+remains an iOS-only feature in this app. The batch adoption below is a separate increment;
+adopting this client does not complete the full delivery migration.
+
+### Shared native exporter (SHELL-03 I5c, second increment)
+
+The iOS app now consumes `OpenCineApple.MonitorMediaExporter` for native encoding, full-raster
+LUT baking, preset/fallback selection, progress, output readiness and optional JSON sidecars.
+The identical Pocket/Insta exporter donor is replaced here by the existing Documents/exports
+filename adapter and source-curve/metadata mapping. Initial preparation remains at 2%; native
+progress and sidecar naming/JSON policy remain unchanged. The shared module receives a sampled
+cube and explicit metadata key/value instead of importing a camera integration.
+
+The same five native export regression tests pass against both the original and migrated
+both-architecture products, including actual encoded pixels and embedded curve metadata.
+Shared copy/sidecar fixtures, the full shared Swift suite and strict concurrency checks pass.
+This is a local candidate, with the published/canonical app pin unchanged. Physical-device
+export and cloud delivery remain untested; route and delivery UI ownership remain subsequent
+increments.
+
+### Shared Frame.io batch (SHELL-03 I5c, third increment)
+
+The actual upload path now uses `OpenCineFrameIO.FrameioDelivery` for item sequencing and
+partial results. The app supplies its existing export/upload callbacks and overlay progress
+mapping (export 0-45%, upload 45-100%). Conversion-ineligible clips remain skipped; single-clip
+errors and multi-clip summaries retain their original messages. History is absent and export
+cleanup remains the existing app policy. Cancellation now terminates the batch immediately,
+matching the cache stage, instead of counting a failed clip and continuing.
+
+Both-architecture build-for-testing passes. A scratch comparison executes the exact extracted
+old and new app loop bodies against the checked shared implementation: eight scripted cases
+retain identical outcomes, item order and progress, and two cancellation cases stop at the
+current clip. This comparison uses typed export/upload substitutes; real cloud delivery,
+network handoff, native callback scheduling and physical behavior remain untested by it.
+The prior native exporter and preflight proofs keep their original source attribution.
+The token ownership below is separate from popup/overlay composition, which remains pending.
+
+### Owned internet handoff (SHELL-03 I5c, fourth increment)
+
+The app uses `OpenCineFrameIO.FrameioInternetHop` to transfer an approved popup handoff into the
+accepted delivery before closing the popup. Close, preflight failure, cancellation and normal
+completion release only their own token. A stale transferred request is rejected; a request
+without a token never adopts someone else's active handoff. Late route-ready/project-list
+results are ignored after token replacement. Native leave/rejoin stays in the app, with the
+original camera session captured for rejoin.
+
+Four shared ownership scenarios, the full shared Swift suite and strict concurrency checks
+pass. Both-architecture app build-for-testing and six actual app lifetime tests pass, covering
+transfer, stale completion, unrelated handoffs and preflight exits. The fixtures perform no
+network switch. Physical leave/rejoin, an already-running native rejoin, real Adobe delivery
+and popup interaction remain untested. Existing Android sources/manifests and saved credentials
+are unchanged; delivery UI composition and multi-camera route admission remain later slices.
+
+### Shared delivery panel (SHELL-03 I5c, fifth increment)
+
+The actual iOS destination/options popup, compact delivery overlay and Android native-share
+popup now compose OpenCine's mirrored delivery values and native panel. The shared panel owns
+the header, destination rows, optional export controls, project/network section and fixed
+footer; this app projects its existing source facts and receives typed actions. Destination
+artwork is the bounded app slot. Configuration, project polling/alerts, internet-hop ownership,
+native sharing and export callbacks stay here. The existing delivery runner, popup begin/close
+runtime and Android delivery operation retain their prior bytes. This retires 739 net product
+source lines across the three app UI files.
+
+The shared Swift suite and strict checks, both-architecture app build-for-testing, and actual
+Android app unit/lint/debug/release/test packaging pass. Two permanent native rendering
+regressions prove that the action footer remains visible at both constrained card heights and
+known progress remains visible beside a network-switch spinner. The original six route lifetime
+tests retain their source and separate prior passing evidence. Compile and rendered fixtures
+use simulated source facts, with no upload or network switch. Android adopts the shared panel's
+export heading and native segmented/material controls; actual Android input, physical delivery,
+Adobe sign-in/upload and camera leave/rejoin remain untested. The app pin has not moved.
+
+The temporary Pocket source-sync script excluded the adopted delivery/export adapters and
+their native regressions, alongside the existing Frame.io folder exclusion, so upstream changes
+to these owned paths were reported for review and could not overwrite this shared-owner adoption.
+The script has since been retired (see RELEASE-01 below).
+
+## What changes for users
+
+Nothing is meant to look different. The parity lane (2026-10-06) checked every difference below
+against `main` (35b6f33b). Each is marked: restored to `main`, kept fix (`main`'s behavior was a
+defect: data loss, security or privacy, a wrong-camera or blind action, or a check that could
+never work), or already matched `main`. Copy that used an em dash on `main` now uses a period or
+comma (iPhone `main`'s punctuation for the same lines). Underneath:
+
+- Command path: ISO, shutter, white balance and record go through one OpenCineCore session per
+  camera. A change holds until the camera reports it. A refused or unsent write says "ISO was
+  not applied by the camera." and one the camera does not take reverts silently, on both
+  platforms (restored to `main`; iPhone counts only those toward Link Health again). A write
+  held back after the camera state changed keeps the shared copy (kept fix: wrong-camera guard).
+  With no timecode yet iPhone VoiceOver reads "Timecode not available" (kept fix, accessibility:
+  `main` read the "--:--:--" placeholder).
+- Session isolation: each connection owns its backend, labels, media route, zoom ceiling (iPhone
+  readouts reach 15x and the Android zoom chip stops at 12x: already matched `main`) and learned
+  picture EV calibration. Old v1 EV offsets seed the new per-camera keys and are never rewritten.
+- Shared UI and media: theme, Sora, icons and page layouts come from OpenCineUI; LUT, I-Log
+  curve, scope and false-colour math come from OpenCineMedia. Screenshots matched before and
+  after on the simulator.
+- Capability-driven layout (SHELL-01): the live monitor shows what the connected Luna declares
+  through OpenCine (`LunaCameraSession.layout`): gimbal and head tracking from its motion,
+  host-derived timecode, no audio levels, no iris. The app keeps only clip delete, clip star and
+  the internet hop. The iPhone Clean view settings offer the AUDIO pin, as on `main`
+  (restored to `main`; Android `main` hid it too, already matched). With no
+  camera connected, iPhone Settings shows the gimbal, joystick, head-tracking, zoom chip and
+  timecode rows (restored to `main`; Android lists Timecode and needs a camera for gimbal and
+  zoom, as on `main`). No Multiview entry: the app qualifies no multicam budget.
+- Shared connection flow (SHELL-02): the cameras page, the pair page, connect progress and
+  failures come from OpenCine's app shell (`OpenCineAppKit` `CamerasScreen` / `PairScreen` /
+  `CamerasModel`, Android `:appkit`) over the Luna integration (`LunaIntegration`, which connects
+  through the app's session). Saved cameras move to a versioned document (iOS UserDefaults
+  `OpenInstaCine.Cameras`, Android prefs `openpocketcine.cameras`/`document`) merged on every
+  launch with the old records (`OpenInstaCine.SavedCameras`, `openpocketcine.saved-cameras`/
+  `records-json`), which stay mirrored so an older build still reads current cameras. Keychain,
+  Keystore, approval identity, media and EV keys are untouched. The pages look and read as on
+  `main` (restored): the four Luna pair pages (find, approve, join camera Wi-Fi, open the video
+  link) with their bodies, instruction cards, check list, live phase label and failure banner;
+  Pair on a nearby card connects it at once; a nearby card reads "Insta360 · nearby" and "Needs
+  approval on the camera" (Android `main` showed the DJI fork's "Pocket · ..." family name; it
+  now uses iPhone `main`'s words: kept fix); the connecting card's Wi-Fi caption is the phase
+  label; Bluetooth off or not ready says so with Try again, and a missing Bluetooth permission
+  offers Open Settings, in `main`'s words; a setup chip's menu has no Rename setup. Android's
+  offline card reads "Not found. Power it on to reconnect" (iPhone `main`'s words; Android
+  `main` used an em dash). Kept fixes: one undecodable saved record no longer empties the list
+  on the next save (data loss); Android Forget also drops the camera's saved Wi-Fi, as iOS always
+  did (privacy); iOS "on the camera network" now tests the Luna's 192.168.42.x (`main`'s
+  192.168.2.x test never matched, so "Leave camera Wi-Fi?" never appeared before Frame.io).
+  Accepted earlier: a saved camera that still carries a hotspot setup connects from that chip
+  over the camera's own Wi-Fi without `main`'s "Turn on Personal Hotspot" prompt (no Insta
+  camera could add a hotspot setup on `main`, and Luna joined its own Wi-Fi after the prompt
+  anyway; only the simulator review data reached it).
+- Operator Setup (Android) comes from OpenCine's `camera-controls` (`OperatorSetupScreen`; the
+  app supplies its copy, stores and pages). View Assist and Display show `main`'s rows (restored
+  to `main`). System > App Information reads "Charcoal" and "Insta360 / BLE + Wi-Fi" with iPhone
+  `main`'s help (kept fix: Android `main` showed the DJI fork's "DJI Black" and DUML copy).
+  Clean view pins, System buttons and the zebra threshold sliders have screen-reader names, and
+  the System buttons take touches across 48 dp around the unchanged capsule (kept fix,
+  accessibility).
+- Operator Setup (iPhone) uses OpenCine's settings page. Display shows `main`'s rows (caption,
+  Edit view, one switch per item, then the pins), Sharing's "Show Wi-Fi code" link is yellow
+  again (the move drew it white) and landscape View Assist keeps the tools in one column with EV
+  Meter and LUT beside them (restored to `main`).
+- Android colour dots in the zebra and peaking options show the colour each overlay paints (kept
+  fix: "Amber", "Cyan" and peaking "Blue" drew the app's yellow accent; iPhone already did).
+
+## Physical device checklist (Luna Ultra, iOS and Android)
+
+Nothing below has run on hardware.
+
+1. Install over a build that learned an I-Log picture EV: the meter starts at the old value,
+   then learns per camera; it keys separately for Matrix/Face metering and I-Log/Standard.
+2. Look: yellow accent with dark text on yellow, Sora, Lucide icons on first launch, cameras,
+   pair, settings, live and media screens. Mode, colour and gimbal names are Luna names
+   (TimeShift, Standard, Roll Lock).
+3. ISO Auto, 400, 800 confirms in under 4 s; shutter then ISO quickly (and the reverse) neither
+   reverts; a manual ISO the camera refuses says "ISO ... was not applied by the camera."; one it
+   accepts but does not apply reverts silently, as on `main`.
+4. WB Kelvin confirms within 6 s; WB Auto confirms; AE Lock and AWB Lock work.
+5. Record start and stop: the lamp waits for capture status; stop with file save under 10 s;
+   start on the camera button, then app Record sends Stop; a fresh connect before capture status
+   refuses; timelapse record; watch and watcher-relay record.
+6. Mode change, then ISO/WB lands in the new bank.
+7. Wi-Fi drop mid-write shows "link dropped", recovers, and controls work; reconnect makes old
+   controls stale; a stream restart (album return, stall repair) during an ISO write still
+   confirms it.
+8. Zoom chip and dial reach and show 15x.
+9. Media album thumbnails, playback and download from 192.168.42.1; LUT preview, false colour,
+   waveform/parade and I-Log display match the previous build.
+10. Live View diagnostics copy works before and after connect.
+11. OPTIONAL-02 motion: gimbal programs, head tracking and joystick moves behave as on the
+    previous build (head tracking keeps the inherited reach, pan -48 to 225, tilt -44 to 70).
+12. OPTIONAL-02 relay: a watcher on the previous build watches this build and the reverse, on two
+    iPhones; a version mismatch is denied with the usual copy. Wire bytes are unchanged (golden v1
+    tests).
+13. MEDIA-02 step 4 (iPhone): first connect shows a picture; LUT, scopes, zebra, false colour,
+    HDR panel and upscaler toggles never black the well; background return keeps the picture;
+    Face AF tracks. Compare glass-to-glass latency, memory over 30 min live with LUT and WAVE, and
+    thermal state after 20 min against `opencine/integration` without this branch.
+14. SHELL-01 (iPhone and Android, against `opencine/integration` without `opencine/shell-01`):
+    the joystick, gimbal sheet, motion overlay and head tracking (iPhone) appear and move the
+    head; no AUDIO tile, assist or meter anywhere live (the iPhone Clean view settings still
+    offer the AUDIO pin, Android's do not, both as on `main`); the live timecode runs
+    time of day and matches the camera clock after connect; zoom chip and FOCUS tile as before,
+    no APERTURE; record start and stop from the record button with and without confirmation.
+
+15. SHELL-02 (iPhone and Android): first pair from an empty install (approve on the camera, join
+    its Wi-Fi, picture); reconnect a saved camera with no new approval; quick join from saved
+    Wi-Fi (camera powered on after a while, Bluetooth advert not seen yet); on iPhone Bluetooth
+    off shows main's error with Try again and Bluetooth not allowed with Open Settings; on Android
+    the pair page's primary action turns Bluetooth on or asks for the permission; the list fills
+    after returning; Pair on a
+    nearby card goes straight to "Approve on the camera"; Cancel during each step; forget (the camera's Wi-Fi password goes with it, the
+    approval stays: re-pair without a new Allow); a failed connect shows the same copy as before
+    ("The camera didn't respond in time..."). Upgrade from the current TestFlight or Play build
+    keeps every camera, name and Wi-Fi; downgrade to it shows them too, an edit there (rename,
+    forget) survives the next upgrade.
+
+16. SHELL-03 I-1 (iPhone and Android): connect a saved camera from the cameras page: the monitor
+    appears with the picture; open Settings, then Media, and close each: the picture is still
+    there and live (no reconnect, no black frame, no second "Starting the picture"); ISO, shutter,
+    white balance (Auto and Kelvin) and EV edits from the drums confirm as before; record start
+    and stop from the record button with and without confirmation (the lamp waits for the camera);
+    rotate the phone with Settings open and closed; background the app and return (the picture
+    comes back once); Disconnect from Settings returns to the cameras page and the camera keeps
+    recording if it was; connect a second camera after closing the first (replace camera): no
+    note or edit from the first appears; close the app while recording: the camera keeps
+    recording.
+
+17. Cameras-page follow-up (iPhone and Android, physical check untested): press and hold
+    the Luna's Camera Wi-Fi chip: no Rename setup (as on main). The empty first-pair and
+    saved-camera screens show no Privacy or Terms links (as on main); Settings opens both.
+    Installing an older build, editing the camera name, and upgrading again must keep the
+    saved Wi-Fi, favorites and approval identity.
+
+Known limits: two Luna cameras at once cannot be tested (LunaWiFi joins one camera access point,
+192.168.42.x); the two-session gate is simulated only. Android reports no serial on this path,
+so EV keys use the connected camera id.
+
+## SHELL-02 candidate verification
+
+The candidate pins OpenCine `399c3c7` for the shared connection flow. Automated checks on
+2026-10-02 pass: `just check`, 595 root Swift tests, `just android-check` (695 monitor tests,
+including six saved-camera migration cases), and the iOS suite on private iPhone 16 Pro and
+iPad Pro 13-inch simulators (500 tests each: 499 pass, one existing missing D-Log2 cube skip).
+The handbook builds with 27 pages.
+
+The migration fixtures exercise import, repeated import, legacy decoding after edits,
+downgrade edits merged on upgrade, malformed record preservation and an unknown future
+document version. The iOS model test also reconnects a saved camera without a fresh discovery
+advertisement. Simulator installation of the previous and new binaries preserves saved
+records across upgrade, downgrade and another upgrade after legacy edits.
+
+Before/after simulated camera and pairing screens cover saved plus nearby cameras, empty,
+connecting, approval, network join, video link and failure states on iPhone and Android, with
+saved cameras and approval on iPad. The visible differences are listed above; Android's
+optional iOS appearance switch remains unchanged. The shared connection model's Android
+scope is cancelled when the activity closes so its discovery and connection collectors end
+with the monitor. Physical pairing, reconnect, cancellation, recovery and credential
+preservation remain **untested**, pending checklist item 15.
+
+## SHELL-03 slice I-1: shared root, monitor lifetime and common controls
+
+The app root is OpenCine's `AppShell` over `ShellModel` (Swift and Compose): the cameras and pair
+pages, the monitor, and the Settings and Media covers. The shell owns the connected camera's
+common session: `LunaIntegration`'s attempt session is bound when it connects, closed once when
+the operator leaves the monitor (never a camera command, so a recording continues) and replaced
+cleanly by the next camera. ISO, shutter, white balance and record go through the shared
+`MonitorControlModel` (the one snapshot subscription, coalesced edits, record start or stop from
+a fresh report, late outcomes of a previous camera dropped). The app's own reconnects of the same
+camera (foreground, internet hop, saved Wi-Fi) keep that session. Scene activity reaches the
+session once per change.
+
+Deleted from the app: the session's own Core subscription, pending edits and record operation
+(iOS `CameraSessionCore`, Android `PocketCameraSession`/`CoreControl`), `homePanel`,
+`liveOperatorPanel`, the pairing flag, the enter/leave-live cleanup and duplicated scene
+handlers. Temporary until later slices: the existing `LiveViewScreen` is the shell's monitor slot
+and still draws Settings and Media over itself; the capture drums map this app's values
+(`IsoIndex`, shutter denominators, Kelvin) through the session's adapters into the shared model;
+the shared readouts are still projected into `CameraStatus` for the views that read it; the
+Android launcher still installs its backend factory (`MonitorConfiguration.install`).
+
+Simulated review: `OPV_UI_REVIEW_SCREEN=sequence` (iOS) and the debug `ShellReviewActivity`
+(Android) step cameras, live, Settings, live, Media, live, cameras in one launch and log the
+monitor host count: one host for the whole live period, disposed once on close. Physical
+behavior is **untested** (checklist item 16).
+
+## MEDIA-02 step 4: Apple runtime
+
+Branch `opencine/apple` (on this candidate) runs `HevcDecoder` on OpenCineCore's `OpenCineApple`
+`VideoToolboxDecoder` (display layer, format, VT session, sample buffers, error ledger, generation
+fence). `HevcDecoder` keeps the presentation policy; its only API change is `onSourceFrame`, which
+lends a `DecodedFrameLease`. The refactor is identical to OpenPocketCine's, so the sync script (since
+retired) carried it. App-side: the log subsystem, `SimulatorLiveFeed.isConfigured` and the watch preview guard.
+Pins OpenCineCore on its `apple` branch until that merges to Core main.
+
+## MEDIA-02 step 3: Android Vulkan renderer
+
+`libopc_vulkan.so` (C++, CMake, 15 shaders) and its JNI facade `feed.OpcVulkan` come from
+OpenCineCore's `:vulkan` module (`com.opencapture.opencine:vulkan`, substituted from the
+`opencinecore` included build), as in OpenPocketCine a76488ad. The deleted `:monitor` copy was
+byte-identical to OpenPocketCine's pre-move renderer (with the #482 upright-raster fix); the
+facade keeps its fully qualified name. Debug APK before and after: same 22 native libraries, one
+`libopc_vulkan.so` of the same size with the same 786 dynamic symbols (21 `Java_` exports) and
+the same NEEDED list. `LiveVulkanSession`, the present gate, crash guard and window attach stay in
+`:monitor`. The present-batch regression runs in OpenCineCore
+(`scripts/android-vulkan-sync-test.sh`); this app never had a recipe for it.
+
+Device check (Android, Luna): live picture through Vulkan with LUT, scopes, peaking and the glass
+backdrop; background return, rotation and surface recreation keep the picture.
+
+## RELEASE-01: source sync retired
+
+The former Pocket presentation-shell sync, overlay script and sync-commit stamp have been
+retired. Shared composition now consumes OpenCine package products. Common changes belong
+in their owning OpenCine package and reach this app through a reviewed dependency adoption.
+See `openpocketcine-foundation.md` for the current ownership workflow.
+
+## Risks before merging
+
+- Frame.io's iOS client comes from OpenCineFrameIO; app-specific credential storage
+  and browser presentation remain here.
+- The Kotlin `ScopeExposureCeiling` risk listed here before is closed: each feed owns its
+  ceiling since 7bdb55c.
+
+## VENDOR-03: Luna integration package
+
+Branch `opencine/vendor-03-luna` (on this candidate) takes `Adapters/Insta360Protocol`,
+`Adapters/Insta360Apple` and `Sources/MonitorContracts` (folded into `Insta360Apple`) from the sibling
+package OpenCineInsta360 (pinned in `opencine-pins.txt`). The XcodeGen `Insta360Apple` framework
+target is gone; the app links the package products. `AppModel.lunaConfiguration` keeps the keychain
+service `org.opencine.openinstacine.camera` (saved camera authorization and Wi-Fi stay readable)
+and the account names are unchanged. Device check: a phone with a camera saved by the previous
+build reconnects over its saved Wi-Fi without new Bluetooth approval.
+
+The Kotlin side moved too (CORE-API): `:core-api` and `luna-adapter` are gone from `Apps/Android`.
+OpenCineInsta360 `Android/` builds `com.opencapture.opencine:insta360-shell` (the shell contract:
+`CameraBackend`, `CameraControls`, `CameraMediaStore`, `CoreSessionSource`, `ConnectionPhase`,
+`CameraReadout` and the other Luna-shaped values, package `com.opencapture.opencine.insta360.shell`)
+and `com.opencapture.opencine:insta360-luna` (`LunaBackend`, `LunaCameraSession`, package
+`com.opencapture.opencine.insta360.luna`), substituted from the included build `opencineinsta360`
+(the OpenCineInsta360 Android build, pinned with the Swift package; now OpenCine `Android/`). `:monitor` depends on the
+contract, `:app` on the adapter. `BrandIdentity` is app-owned and now lives next to
+`MonitorConfiguration`; the legacy `CameraSession` seam (phase/startScan/disconnect) is retired.
+The SharedPreferences name `openinstacine.client-identity` stays the `LunaBackend` default (pinned
+by a package test). The library builds with compileSdk 37 and needs no AAR-metadata exemption.
+Device check: a phone that approved the camera with the previous build reconnects without a new
+approval on the camera screen.
+
+## SHELL-01: common lens commands
+
+Luna zoom and AF-S/AF-C now reach the connected `LunaCameraSession` through
+OpenCine's common setting commands. The configured connection ceiling describes
+zoom; the iOS pinch still coalesces latest values at its existing 80 ms cadence.
+Product Showcase stays in the typed Luna extension. Camera reports alone populate
+the shared lens observations; acknowledgement does not confirm a write.
+
+Physical checks on iOS and Android remain **untested**: pinch/slider/chip zoom
+ramps and settles at every offered stop, configured maximum refuses values above
+the ceiling, AF-S/AF-C match camera readback, Product Showcase keeps its dedicated
+label, recovery rejects old queued controls, and disconnect never stops recording.
+Repeat with a saved camera installed before this change. Simulator/manual-clock
+tests establish admission and receipt behavior only.
+
+## Publishing prerequisite
+
+The OpenCine repository must exist before CI, Xcode Cloud or another machine can build this
+branch: `scripts/checkout-opencine.sh` fetches the pinned SHA from it. Follow
+`OpenCine/atlas/docs/PUBLISH.md`, then replace the path package and included build with a url +
+version pin and Maven coordinates.

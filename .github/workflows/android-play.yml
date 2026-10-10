@@ -38,10 +38,10 @@ on:
     branches: [main]
     paths:
       - "Apps/Android/**"
-      - "Sources/OpenPocketViewCore/**"
-      - "Sources/OpenPocketCineAndroidFacade/**"
-      - "Sources/CJNI/**"
+      - "Sources/OpenInstaViewCore/**"
+      - "Sources/OpenInstaCineAndroidFacade/**"
       - "Package.swift"
+      - "opencine-pins.txt"
       - "scripts/android-*.sh"
       - "scripts/ci-install-swift-android.sh"
       - "justfile"
@@ -74,6 +74,14 @@ jobs:
           java-version: "21"
 
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      # OpenCine candidate wiring. Apps/Android/settings.gradle.kts includes ../../../OpenCine/Android
+      # (monitor-ui, core, media, vulkan, the Insta360 shell contract and Luna adapter; their tests run
+      # in OpenCine's CI), and the Swift Android core links OpenCineMedia from ../OpenCine: one sibling
+      # checkout pinned by SHA in opencine-pins.txt. Works only once that remote exists (owner/URL
+      # not final).
+      - name: Check out pinned OpenCine next to the repository
+        run: scripts/checkout-opencine.sh
 
       - name: Set up Android NDK 27
         uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
@@ -150,7 +158,7 @@ jobs:
           base="${{ vars.ANDROID_VERSION_CODE_BASE }}"
           base="${base:-0}"
           echo "VERSION_CODE=$((base + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "VERSION_NAME=$(sed -n 's/^openpocketcine.versionName=//p' Apps/Android/gradle.properties)" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=$(sed -n 's/^openinstacine.versionName=//p' Apps/Android/gradle.properties)" >> "$GITHUB_ENV"
 
       - name: Require Sentry Android DSN
         # Presence only. Invalid DSN shape is handled in Apps/Android Gradle/SDK.

@@ -1,8 +1,11 @@
 #if targetEnvironment(simulator)
     import Foundation
+    import CryptoKit
     import MonitorPresentation
     import MonitorUI
-    import OpenPocketViewCore
+    import OpenCineCore
+    import OpenCineMedia
+    import OpenInstaViewCore
     import SwiftUI
     import UIKit
 
@@ -13,8 +16,131 @@
         static let pathPrefix = "UI-REVIEW/"
         static var isActive: Bool {
             guard let screen = MonitorUIReview.screen else { return false }
-            return ["media-fixture", "media-list", "media-selection", "playback"].contains(screen)
+            return ["media-fixture", "media-list", "media-selection", "media-owned", "media-owned-playback", "playback"].contains(screen)
         }
+
+        static var usesActualLibrary: Bool { MonitorUIReview.screen == "media-owned" }
+        static var usesProductionShell: Bool { MonitorUIReview.screen == "media-owned-playback" }
+
+        #if DEBUG
+            /// SIMULATED offline input to the actual app factory. The production gallery is
+            /// rendered with its actual common owner, never the standalone catalog fixture.
+            static func prepareOwnedIndex() {
+                if usesProductionShell {
+                    do { try prepareOwnedPlaybackIndex() }
+                    catch { assertionFailure("Could not prepare actual-player input: \(error)") }
+                    return
+                }
+                guard usesActualLibrary else { return }
+                let directory = cacheRoot
+                let index = directory.appendingPathComponent("index.json")
+                guard !FileManager.default.fileExists(atPath: index.path) else { return }
+                do {
+                    let renderer = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32))
+                    let image = renderer.image { context in
+                        UIColor.systemGreen.setFill()
+                        context.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+                    }
+                    guard let bytes = image.jpegData(compressionQuality: 0.8) else { return }
+                    let files = (1...2).map { value in MediaFile(
+                        path: "UI-REVIEW/IMG_20261003_14000\(value)_00_00\(value).JPG",
+                        thumbPath: "UI-REVIEW/IMG_20261003_14000\(value)_00_00\(value).JPG",
+                        sizeBytes: UInt64(bytes.count), resolution: "32x32") }
+                    let originals = directory.appendingPathComponent("files", isDirectory: true)
+                    try FileManager.default.createDirectory(at: originals, withIntermediateDirectories: true)
+                    for file in files {
+                        try bytes.write(to: originals.appendingPathComponent(file.path.replacingOccurrences(of: "/", with: "_")))
+                    }
+                    let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+                    try encoder.encode(files).write(to: index)
+                } catch { assertionFailure("Could not prepare the isolated owned-gallery fixture: \(error)") }
+            }
+
+            private struct PlaybackInput: Decodable {
+                let name: String
+                let path: String
+                let reference: String
+                let sha256: String
+                let reference_sha256: String
+                let size: Int
+                let duration: Int
+                let width: Int
+                let height: Int
+                let fps: Int
+            }
+            private struct PlaybackManifest: Decodable { let files: [PlaybackInput] }
+            private enum InputError: Error { case missing, invalid }
+
+            /// Ordinary legacy addresses deliberately avoid the standalone UI-REVIEW shortcut.
+            private static func prepareOwnedPlaybackIndex() throws {
+                let environment = ProcessInfo.processInfo.environment
+                guard let manifestPath = environment["OPV_SIM_FEED_MANIFEST"] else { throw InputError.missing }
+                let manifest = try JSONDecoder().decode(PlaybackManifest.self,
+                    from: Data(contentsOf: URL(fileURLWithPath: manifestPath)))
+                guard manifest.files.count == 2 else { throw InputError.invalid }
+                let directory = cacheRoot
+                guard !FileManager.default.fileExists(atPath: directory.appendingPathComponent("index.json").path) else { return }
+                let codec = LunaMediaCatalogCodec(source: nil, shotColor: { _ in nil })
+                var files: [MediaFile] = []
+                for (index, input) in manifest.files.enumerated() {
+                    let key = index == 0 ? "OPV_SIM_FEED_CLIP" : "OPV_SIM_FEED_CLIP_B"
+                    guard let path = environment[key], path == input.path,
+                        input.name == (index == 0 ? "A" : "B"), input.duration == 12,
+                        input.width == 640, input.height == 360, input.fps == 24 else { throw InputError.invalid }
+                    let data = try Data(contentsOf: URL(fileURLWithPath: path))
+                    let reference = try Data(contentsOf: URL(fileURLWithPath: input.reference))
+                    func hash(_ bytes: Data) -> String { SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() }
+                    guard data.count == input.size, hash(data) == input.sha256,
+                        hash(reference) == input.reference_sha256,
+                        let jpeg = UIImage(data: reference)?.jpegData(compressionQuality: 0.9) else { throw InputError.invalid }
+                    let chronology = 2 - index
+                    let suffix = String(format: "14000%d_00_00%d", chronology, chronology)
+                    let file = MediaFile(path: "DCIM/VID_20261003_\(suffix).MP4",
+                        thumbPath: "DCIM/IMG_20261003_\(suffix).JPG", sizeBytes: UInt64(data.count),
+                        durationSeconds: input.duration, resolution: "640x360", fps: input.fps,
+                        proxyPath: index == 0 ? "DCIM/LRV_20261003_\(suffix).LRV" : nil)
+                    let record = try codec.decode(JSONEncoder().encode([file]))[0]
+                    for address in record.address.representations.values {
+                        let url = directory.appendingPathComponent(address)
+                        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try data.write(to: url)
+                    }
+                    guard let thumbnailAddress = record.address.thumbnail else { throw InputError.invalid }
+                    let thumbnail = directory.appendingPathComponent(thumbnailAddress)
+                    try FileManager.default.createDirectory(at: thumbnail.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try jpeg.write(to: thumbnail)
+                    files.append(file)
+                }
+                let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+                try encoder.encode(files).write(to: directory.appendingPathComponent("index.json"))
+            }
+
+            /// One SIMULATED source; catalog is complete and unsupported operations stay absent.
+            static let playbackService = OwnedPlaybackService()
+            @MainActor final class OwnedPlaybackService: CameraMediaService {
+                let browse = OwnedPlaybackBrowse()
+                var opens = 0
+                var sessionID: OpenCineCore.CameraSessionID { browse.binding.session }
+                func openBrowse() async -> any CameraMediaBrowse { opens += 1; return browse }
+            }
+            @MainActor final class OwnedPlaybackBrowse: CameraMediaBrowse {
+                let binding = MediaBrowseBinding(session: .init(), epoch: .init(1))
+                var thumbnails: (any CameraMediaThumbnailService)? { nil }
+                var transfers: (any CameraMediaTransferService)? { nil }
+                var deletion: (any CameraMediaDeleteService)? { nil }
+                var closes = 0
+                func catalog() async -> any MediaCatalogCursor { OwnedPlaybackCursor() }
+                func close() async { closes += 1 }
+            }
+            @MainActor private final class OwnedPlaybackCursor: MediaCatalogCursor {
+                var done = false
+                func next() async -> MediaCatalogDelta? {
+                    guard !done else { return nil }; done = true
+                    return .init(complete: true)
+                }
+                func close() { done = true }
+            }
+        #endif
 
         private static let sourceURL: URL? = {
             guard let path = ProcessInfo.processInfo.environment["OPV_SIM_FEED_CLIP"],
@@ -133,6 +259,10 @@
 
         var body: some View {
             GeometryReader { geometry in
+                if MonitorMediaReview.usesActualLibrary {
+                    MediaLibraryView(safeArea: OperatorPanelMetrics.resolvedDeviceSafeArea(
+                        geometry.safeAreaInsets, window: windowGeometry.safeArea))
+                } else {
                 MonitorMediaCatalog(
                     brand: "Review camera",
                     safeArea: OperatorPanelMetrics.resolvedDeviceSafeArea(
@@ -170,6 +300,7 @@
                 } filters: {
                     EmptyView()
                 }
+                }
             }
             .ignoresSafeArea().preferredColorScheme(.dark)
             .onAppear {
@@ -178,6 +309,9 @@
                         cacheError = error.localizedDescription
                     }
                 #endif
+                // The shared playback owner admits player actions only while the library
+                // browses, which the real Media page starts on open (MediaLibraryStub).
+                model.session.beginMediaBrowse()
                 if MonitorUIReview.screen == "media-list" { layout = .list }
                 if MonitorUIReview.screen == "media-selection" {
                     selected = [MonitorMediaReview.file(0).id, MonitorMediaReview.file(2).id]
@@ -204,7 +338,7 @@
 
         private func handle(_ action: MonitorMediaAction) {
             switch action {
-            case .back: model.liveOperatorPanel = nil
+            case .back: model.shell.dismissCover()
             case .refresh: break
             case .cycleSort: ascending.toggle()
             case .category(let id): category = id

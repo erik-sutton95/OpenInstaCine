@@ -1,16 +1,16 @@
 import MonitorUI
+import OpenCineAppKit
 import SwiftUI
 
 @main
 struct OpenInstaCineApp: App {
     init() {
         #if DEBUG
-            MultiviewUIReview.prepareIfRequested()
-            ReliabilityReportingVerification.prepareIfRequested()
+            AppDiagnostics.verification.prepareIfRequested()
         #endif
-        ReliabilityReporting.install()
+        AppDiagnostics.reporting.install()
         #if DEBUG
-            ReliabilityReportingVerification.runIfRequested()
+            AppDiagnostics.verification.runIfRequested()
         #endif
         OpenInstaCineBrand.apply()
         MonitorTheme.prepareResources()
@@ -31,8 +31,6 @@ struct OpenInstaCineApp: App {
         #if DEBUG
             if ReliabilityReportingVerification.mode != nil {
                 Text("Reliability verification")
-            } else if MultiviewUIReview.isActive {
-                MultiviewUIReviewRoot()
             } else {
                 AppRoot()
             }

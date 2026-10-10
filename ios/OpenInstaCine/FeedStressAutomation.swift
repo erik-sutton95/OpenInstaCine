@@ -1,7 +1,8 @@
 import CoreFoundation
 import Darwin
 import Foundation
-import OpenPocketViewCore
+import OpenCineCameraControls
+import OpenInstaViewCore
 import UIKit
 import os
 
@@ -14,6 +15,12 @@ enum FeedStressAutomation {
     private static let enabled = ProcessInfo.processInfo.environment["OPV_FEED_STRESS"] == "1"
 
     static var isEnabled: Bool { enabled }
+
+    /// Debug stress log token. A Luna session records `live` or `none`.
+    /// The seam does not reconnect a saved camera.
+    static func reconnectRecord(phaseIsLive: Bool) -> String {
+        phaseIsLive ? "live" : "none"
+    }
 
     static var injectionDidActivate: Bool {
         #if DEBUG
@@ -400,8 +407,8 @@ enum FeedStressAutomation {
                 return true
             }
             guard first else { return }
-            FeedIncidentRuntime.noteTestSource(.faultInjection)
-            ReliabilityReporting.noteCurrentTestSource(.faultInjection)
+            AppDiagnostics.incidents.noteTestSource(.faultInjection)
+            AppDiagnostics.reporting.noteCurrentTestSource(.faultInjection)
         }
 
         func snapshotLine() -> String {
@@ -527,7 +534,7 @@ enum FeedStressAutomation {
                 return "unknown"
             }()
             captureBaselineIfNeeded()
-            reconnectPocket4ProIfNeeded()
+            recordReconnect()
             lock.withLock { state in
                 state.recording = recording
                 if family != "unknown" { state.cameraFamily = family }
@@ -551,29 +558,12 @@ enum FeedStressAutomation {
         }
 
         @MainActor
-        private func reconnectPocket4ProIfNeeded() {
+        private func recordReconnect() {
             guard !reconnectAttempted else { return }
             guard let model = AppModelDiagnosticsAnchor.model else { return }
-            if model.session.phase == .live {
-                reconnectAttempted = true
-                lock.withLock { $0.reconnect = "live" }
-                return
-            }
-            let matches = model.savedCameras.filter(Self.isPocket4Pro)
-            if matches.count != 1 {
-                reconnectAttempted = true
-                lock.withLock { $0.reconnect = matches.isEmpty ? "none" : "ambiguous" }
-                return
-            }
             reconnectAttempted = true
-            lock.withLock { $0.reconnect = "requested" }
-            model.reconnect(matches[0])
-        }
-
-        private static func isPocket4Pro(_ camera: SavedCamera) -> Bool {
-            if let id = camera.modelId, id == 0x0022 { return true }
-            let name = camera.modelName.lowercased().replacingOccurrences(of: " ", with: "")
-            return name.contains("pocket4p") || name.contains("4pro")
+            let record = FeedStressAutomation.reconnectRecord(phaseIsLive: model.session.phase == .live)
+            lock.withLock { $0.reconnect = record }
         }
 
         @MainActor

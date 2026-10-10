@@ -17,21 +17,22 @@ pattern, retain their attribution.
 ## CubeLUT parser
 
 - **Source:** adapted from [OpenZCine](https://github.com/erik-sutton95/OpenZCine)
-- **Used for:** portable `.cube` LUT parsing in `Sources/MonitorCore/CubeLUT.swift`
+- **Used for:** portable `.cube` LUT parsing, now in the OpenCineMedia product of the
+  OpenCine package (`Sources/OpenCineMedia/CubeLUT.swift` there)
 - **License:** Apache License 2.0 (same as this project)
 
 ## Sora
 
 - **Homepage:** <https://github.com/sora-xor/sora-font>
 - **Used for:** shared Apple and Android UI type
-- **License:** SIL Open Font License 1.1 (full text in `Shared/Apple/MonitorUI/Resources/Fonts/OFL-Sora.txt`)
+- **License:** SIL Open Font License 1.1 (full text in OpenCineUI `Sources/MonitorUI/Resources/Fonts/OFL-Sora.txt`)
 - **Copyright:** 2019 The Sora Project Authors
 
 ## IBM Plex Sans
 
 - **Homepage:** <https://github.com/IBM/plex>
 - **Used for:** shared Apple and Android UI type
-- **License:** SIL Open Font License 1.1 (full text in `Shared/Apple/MonitorUI/Resources/Fonts/OFL-IBMPlexSans.txt`)
+- **License:** SIL Open Font License 1.1 (full text in `ios/OpenInstaCine/Resources/Fonts/OFL-IBMPlexSans.txt`)
 - **Copyright:** 2017 IBM Corp. with Reserved Font Name "Plex"
 
 ## Protocol references (not distributed)
@@ -50,9 +51,9 @@ project (see [NOTICE](NOTICE), the
 
 - **Homepage:** <https://github.com/lucide-icons/lucide>
 - **Used for:** HUD and chrome glyphs on iOS and Android (`OpcIcon`). Vendored SVGs live in
-  `Shared/Apple/MonitorUI/Resources/Icons/lucide/` and
-  `Apps/Android/monitor/src/main/assets/icons/lucide/`; Android also ships VectorDrawables under
-  `Apps/Android/monitor/src/main/res/drawable/opc_lucide_*.xml`.
+  OpenCineUI `Sources/MonitorUI/Resources/Icons/lucide/` and
+  OpenCineUI `Android/monitor-ui/src/main/assets/icons/lucide/`; Android also ships VectorDrawables under
+  OpenCineUI `Android/monitor-ui/src/main/res/drawable/opc_lucide_*.xml`.
 - **License:** ISC (full text in those `LICENSE.txt` files). Some glyphs in this set are derived
   from [Feather](https://github.com/feathericons/feather) and are additionally MIT
   (`aperture`, `check`, `chevron-down`, `chevron-left`, `chevron-right`, `chevron-up`, `circle`,
@@ -98,6 +99,16 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Field Monitor View Assist icons
+
+- **Used for:** the View Assist tool glyphs extracted from the approved Field Monitor
+  design, including Tabler-derived path artwork.
+- **Homepage:** <https://github.com/tabler/tabler-icons>
+- **License:** MIT. The full license accompanies the SVGs in
+  OpenCineUI `Sources/MonitorUI/Resources/Icons/assist/LICENSE-Tabler.txt` and
+  OpenCineUI `Android/monitor-ui/src/main/assets/icons/assist/LICENSE-Tabler.txt`.
+- **Copyright:** 2020-2026 Paweł Kuna.
 
 ## Official DJI Rec.709 cubes
 
@@ -159,4 +170,5 @@ with the resolved artifacts. This list of vendored-code/resource notices is not 
 be a complete release dependency bill of materials.
 
 Font license copies are also bundled with Android in
-`Apps/Android/monitor/src/main/assets/OFL-Sora.txt` and `OFL-IBMPlexSans.txt`.
+OpenCineUI `Android/monitor-ui/src/main/assets/OFL-Sora.txt` and
+`Apps/Android/monitor/src/main/assets/OFL-IBMPlexSans.txt`.

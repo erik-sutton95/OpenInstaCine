@@ -1,9 +1,10 @@
 import AuthenticationServices
 import Foundation
+import OpenCineFrameIO
 import UIKit
 
 /// Drives the Adobe IMS OAuth (PKCE) sign-in via `ASWebAuthenticationSession`, exchanges the
-/// authorization code for a token, and persists it to the Keychain. `@MainActor` — it presents UI.
+/// authorization code for a token, and persists it to the Keychain. `@MainActor` presents UI.
 @MainActor
 final class FrameioAuthCoordinator: NSObject, ASWebAuthenticationPresentationContextProviding {
     private let config: FrameioConfiguration
@@ -22,10 +23,11 @@ final class FrameioAuthCoordinator: NSObject, ASWebAuthenticationPresentationCon
 
         let callbackURL = try await present(authorizeURL, redirect: redirect)
         let code = try FrameioOAuth.parseRedirect(callbackURL, expectedState: state)
-        let token = try await exchange(
-            FrameioOAuth.tokenExchangeRequest(config: config, code: code, verifier: pkce.verifier))
-        FrameioTokenStore.save(StoredFrameioToken(token: token, receivedAt: Date()))
-        return token
+        // Preserve the browser exchange's URLSession.shared policy. Interactive API and
+        // upload calls use the shared client's separate 12-second request transport.
+        return try await FrameioClients.make(
+            config: config, transport: FrameioURLSessionTransport(session: .shared)
+        ).completeSignIn(code: code, verifier: pkce.verifier)
     }
 
     func signOut() {
@@ -71,15 +73,6 @@ final class FrameioAuthCoordinator: NSObject, ASWebAuthenticationPresentationCon
                 continuation.resume(throwing: FrameioError.notConfigured)
             }
         }
-    }
-
-    private func exchange(_ request: URLRequest) async throws -> FrameioToken {
-        let (data, response) = try await URLSession.shared.data(for: request)
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-            throw FrameioError.http(
-                http.statusCode, String(decoding: data.prefix(500), as: UTF8.self))
-        }
-        return try JSONDecoder().decode(FrameioToken.self, from: data)
     }
 
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession)

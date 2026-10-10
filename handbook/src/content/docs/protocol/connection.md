@@ -20,10 +20,10 @@ BLE scan → GATT connect → key exchange → owner approval → read Wi-Fi cre
 7. **[UCD2 over TCP](../ucd2-transport/).** Port **6666**: preface, greeting, heartbeats, authorization check, then live view. Frames are [UCD2](../ucd2-frame/) with protobuf bodies.
 8. **[Live view](../live-view/)** rides the same TCP socket; **[media](../media/)** is HTTP on port 80 while the control session is open.
 
-Framing, crypto and messages live in the Foundation-only Swift package
-`Adapters/Insta360Protocol/`. Platform adapters own Bluetooth, crypto, the Wi-Fi
-join and sockets: `Adapters/Insta360Apple/` on iOS, `Apps/Android/luna-adapter/`
-on Android.
+Framing, crypto and messages live in the Foundation-only Swift product
+`Insta360Protocol` of the OpenCine package. Platform adapters own Bluetooth, crypto, the Wi-Fi
+join and sockets: `Insta360Apple` on iOS and `insta360-luna` on Android, both in the
+OpenCine package.
 
 ## Evidence levels
 

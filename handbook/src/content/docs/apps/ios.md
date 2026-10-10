@@ -1,19 +1,40 @@
 ---
 title: iOS app
-description: SwiftUI iPhone and iPad shell shared with OpenPocketCine, with a Luna Ultra backend. Physical device for BLE and camera Wi-Fi.
+description: App-owned SwiftUI iPhone and iPad app on OpenCine's shared shell, with a Luna Ultra backend. Physical device for BLE and camera Wi-Fi.
 ---
 
-The iOS app is a universal iPhone and iPad SwiftUI shell in
-`ios/OpenInstaCine/`. It is the OpenPocketCine monitor with a yellow accent and
-a Luna Ultra backend in place of the DJI link, and it is the daily driver.
-Generate the Xcode project with XcodeGen: see [Setup](../../guides/setup/).
+The iOS app is a universal iPhone and iPad SwiftUI app in `ios/OpenInstaCine/`: app-owned
+code on OpenCine's shared shell (`OpenCineAppKit`), no longer synced from OpenPocketCine.
+It is the OpenPocketCine monitor with a yellow accent and a Luna Ultra backend in place of
+the DJI link, and it is the daily driver. Generate the Xcode project with XcodeGen: see [Setup](../../guides/setup/).
 
 Luna-specific code lives in `CameraSession.swift`, `CameraSessionControls.swift`,
 `CameraMedia.swift` (Luna extension), `LunaShellMapping.swift`,
 `LunaThumbnailImage.swift`, `OpenInstaCineBrand.swift`,
-`OsmoCameraPageAdapter.swift` and `OsmoMonitorPresentation.swift`. The `Osmo*`
-names are kept so shared call sites bind unchanged. Everything else in
-`ios/OpenInstaCine` is the shared shell.
+`CamerasExperience.swift` and `OsmoMonitorPresentation.swift`. Cameras and pairing
+use OpenCine's shared app shell; the app supplies its Luna integration and
+pairing tips. The remaining monitor screens still live in the app.
+
+## Pairing and saved cameras
+
+With no saved camera, the app opens **Pair camera**. Choose the Luna and tap
+**Continue**, approve the phone on the camera, and accept the Wi-Fi join prompt.
+The progress rail follows Bluetooth, camera Wi-Fi, the video link and the first
+picture. **Cancel** returns to camera discovery.
+
+With a saved camera, reconnect from **Your cameras**. Pairing a nearby camera
+opens the pair page with that camera selected. When Bluetooth is off or access
+is denied, the pairing page offers **Open Settings** and resumes discovery when
+you return.
+
+Press and hold a saved setup chip and choose **Rename setup** to label that
+connection. Clear the name to use its default title again. Renaming keeps the
+camera and its saved Wi-Fi details. **Privacy** and **Terms** are in Settings.
+
+Upgrading preserves saved cameras, custom names and Wi-Fi details. The saved
+list remains readable by earlier builds; renaming or forgetting a camera in an
+earlier build is reconciled on the next upgrade. Forgetting removes that
+camera's saved Wi-Fi credentials while retaining the phone's approval identity.
 
 ## Field Monitor interface
 

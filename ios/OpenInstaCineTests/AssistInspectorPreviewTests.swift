@@ -1,12 +1,16 @@
 import CoreImage
 import CoreVideo
-import OpenPocketViewCore
+import OpenCineApple
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine
 
 @MainActor
 final class AssistInspectorPreviewTests: XCTestCase {
+    /// This test's monitored source (XCTest makes a fresh one per test).
+    private let ceiling = ScopeExposureCeiling()
+
     func testInspectorRequestsSamplingWithoutEnablingPictureEffects() {
         let original = LiveImageEffects()
         let image = original.withInspectorDemand(.peaking)
@@ -84,7 +88,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
         assist.falseColor = false
         assist.zebra = true
         let preview = AssistInspectorPreviewPolicy.imageEffects(
-            assist: assist, tool: .peaking, transfer: .dlog2)
+            assist: assist, tool: .peaking, transfer: .dlog2, ceiling: ceiling)
         XCTAssertTrue(preview.peaking)
         XCTAssertFalse(preview.zebra)
         XCTAssertFalse(preview.falseColor)
@@ -94,8 +98,69 @@ final class AssistInspectorPreviewTests: XCTestCase {
         XCTAssertTrue(assist.zebra)
     }
 
+    func testRetiredSourceCannotPublishThroughNativeInspectorOwner() async throws {
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        let firstLease = bus.openSource(.live)
+        bus.publish(firstLease, source: try Self.buffer(width: 8, height: 8), transfer: .dlog2, bundle: nil)
+        let frame = try XCTUnwrap(bus.inspectorFrame)
+        let started = InspectorPreviewTestSignal("Native inspector accepted source A")
+        let release = DispatchSemaphore(value: 0)
+        let clock = InspectorPreviewTestClock()
+        let reference = try Self.referenceImage()
+        let renderer = MonitorInspectorImageRenderer(now: { clock.now }, operation: { _, _ in
+            started.signal()
+            XCTAssertEqual(release.wait(timeout: .now() + 10), .success)
+            return reference
+        })
+        let owner = UUID()
+        renderer.activate(owner: owner)
+        let work = Task { await renderer.render(owner: owner, source: frame) { LiveImageEffects() } }
+        defer { work.cancel(); release.signal() }
+        try await started.wait()
+        let successor = bus.openSource(.live)
+        bus.publish(successor, source: try Self.buffer(width: 16, height: 8), transfer: .rec709, bundle: nil)
+        release.signal()
+        let retired = await work.value
+        XCTAssertNil(retired, "Retiring the actual source must discard native work without a view callback")
+        XCTAssertFalse(frame.isCurrent)
+        XCTAssertEqual(bus.inspectorFrame?.transfer, .rec709)
+        clock.now = 200_000_000
+        release.signal()
+        let resumed = await renderer.render(owner: owner, source: try XCTUnwrap(bus.inspectorFrame)) { LiveImageEffects() }
+        XCTAssertNotNil(resumed, "A successor source reuses the retained native worker")
+    }
+
+    func testCoveredLiveFrameCannotReachInspectorEvenWhileItsLeaseIsActive() async throws {
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
+        let live = bus.openSource(.live)
+        bus.publish(live, source: try Self.buffer(width: 8, height: 8), transfer: .rec709, bundle: nil)
+        let frame = try XCTUnwrap(bus.inspectorFrame)
+        let renderer = MonitorInspectorImageRenderer()
+        let owner = UUID()
+        renderer.activate(owner: owner)
+        let playback = bus.openSource(.playback)
+        XCTAssertTrue(live.isActive)
+        XCTAssertNil(bus.inspectorFrame, "A cold playback source cannot borrow the hidden camera picture")
+        var preparations = 0
+        let hidden = await renderer.render(owner: owner, source: frame) {
+            preparations += 1
+            return LiveImageEffects()
+        }
+        XCTAssertNil(hidden)
+        XCTAssertEqual(preparations, 0, "Refused source work cannot prepare an inspector cube")
+        bus.closeSource(playback)
+        let stale = await renderer.render(owner: owner, source: frame) { LiveImageEffects() }
+        XCTAssertNil(stale, "Returning live cannot revive a previously captured source epoch")
+        let current = try XCTUnwrap(bus.inspectorFrame)
+        let resumed = await renderer.render(owner: owner, source: current) { LiveImageEffects() }
+        XCTAssertNotNil(resumed)
+        let result = try XCTUnwrap(resumed)
+        bus.closeSource(live)
+        XCTAssertFalse(renderer.isCurrent(result), "A completed native result loses authority with its actual source")
+    }
+
     func testPreviewImageIsBoundedBeforeRendering() async throws {
-        let renderer = AssistInspectorImageRenderer()
+        let renderer = MonitorInspectorImageRenderer()
         let owner = UUID()
         renderer.activate(owner: owner)
         let buffer = try Self.buffer(width: 640, height: 360)
@@ -110,20 +175,20 @@ final class AssistInspectorPreviewTests: XCTestCase {
         assist.lutEnabled = false
         assist.splitComparison = false
         let beforeSplit = AssistInspectorPreviewPolicy.imageOptions(
-            assist: assist, tool: .lut, transfer: .rec709)
+            assist: assist, tool: .lut, transfer: .rec709, ceiling: ceiling)
         assist.splitComparison = true
         let afterSplit = AssistInspectorPreviewPolicy.imageOptions(
-            assist: assist, tool: .lut, transfer: .rec709)
+            assist: assist, tool: .lut, transfer: .rec709, ceiling: ceiling)
         XCTAssertNotEqual(beforeSplit, afterSplit)
         XCTAssertTrue(afterSplit.splitComparison)
         XCTAssertEqual(afterSplit.lutDimension, 0, "Observation must not prepare a preview LUT")
 
         assist.desqueezeFactor = 1.33
         let beforeStretch = AssistInspectorPreviewPolicy.imageOptions(
-            assist: assist, tool: .desqueeze, transfer: .rec709)
+            assist: assist, tool: .desqueeze, transfer: .rec709, ceiling: ceiling)
         assist.desqueezeFactor = 2
         let afterStretch = AssistInspectorPreviewPolicy.imageOptions(
-            assist: assist, tool: .desqueeze, transfer: .rec709)
+            assist: assist, tool: .desqueeze, transfer: .rec709, ceiling: ceiling)
         XCTAssertNotEqual(beforeStretch, afterStretch)
         XCTAssertEqual(afterStretch.desqueezeFactor, 2)
     }
@@ -136,7 +201,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
         assist.configureTool = .lut
         XCTAssertEqual(assist.effects.lutDimension, 0)
         let preview = AssistInspectorPreviewPolicy.imageEffects(
-            assist: assist, tool: .lut, transfer: .rec709)
+            assist: assist, tool: .lut, transfer: .rec709, ceiling: ceiling)
         XCTAssertGreaterThan(preview.lutDimension, 1)
         XCTAssertFalse(preview.lutRGBA.isEmpty)
         XCTAssertFalse(assist.lutEnabled)
@@ -154,7 +219,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
             CIContext().createCGImage(
                 CIImage(color: .white).cropped(to: CGRect(x: 0, y: 0, width: 1, height: 1)),
                 from: CGRect(x: 0, y: 0, width: 1, height: 1)))
-        let renderer = AssistInspectorImageRenderer(
+        let renderer = MonitorInspectorImageRenderer(
             now: { clock.now },
             operation: { _, _ in
                 if invocations.increment() == 1 {
@@ -205,12 +270,12 @@ final class AssistInspectorPreviewTests: XCTestCase {
         let clock = InspectorPreviewTestClock()
         let invocations = InspectorRenderInvocationCounter()
         var preparations = 0
-        let prepare: @MainActor () -> LiveImageEffects = {
+        let prepare: @MainActor @Sendable () -> LiveImageEffects = {
             preparations += 1
             return LiveImageEffects()
         }
         let reference = try Self.referenceImage()
-        let renderer = AssistInspectorImageRenderer(
+        let renderer = MonitorInspectorImageRenderer(
             now: { clock.now },
             operation: { _, _ in
                 _ = invocations.increment()
@@ -252,7 +317,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
         let sourceStarted = InspectorPreviewTestSignal("Source render started")
         let invocations = InspectorRenderInvocationCounter()
         let reference = try Self.referenceImage()
-        let renderer = AssistInspectorImageRenderer(
+        let renderer = MonitorInspectorImageRenderer(
             now: { clock.now },
             operation: { _, _ in
                 if invocations.increment() == 1 {
@@ -289,21 +354,21 @@ final class AssistInspectorPreviewTests: XCTestCase {
     }
 
     func testPlaybackPreviewWaitsForTheClipAndNeverFallsBackToCameraSource() throws {
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let camera = try Self.buffer(width: 8, height: 8)
         let clip = try Self.buffer(width: 16, height: 8)
-        bus.publish(source: camera, transfer: .rec709, colorMode: .normal, bundle: nil)
-        bus.usesPlaybackSource = true
+        let live = bus.openSource(.live)
+        bus.publish(live, source: camera, transfer: .rec709, reportedTransfer: .rec709, bundle: nil)
+        let playback = bus.openSource(.playback)
         XCTAssertNil(bus.inspectorSource)
-        bus.playbackSourcePixelBuffer = clip
-        bus.playbackSourceTransfer = .dlog2
+        bus.publish(playback, source: clip, transfer: .dlog2, bundle: nil)
         XCTAssertTrue(bus.inspectorSource?.buffer === clip)
         XCTAssertEqual(bus.inspectorSource?.transfer, .dlog2)
-        bus.clearPlaybackSource()
+        bus.clearPlaybackSource(playback)
         XCTAssertNil(bus.inspectorSource)
-        bus.usesPlaybackSource = false
+        bus.closeSource(playback)
         XCTAssertTrue(bus.inspectorSource?.buffer === camera)
-        bus.reset()
+        bus.closeSource(live)
         XCTAssertNil(bus.inspectorSource)
     }
 

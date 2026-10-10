@@ -1,29 +1,28 @@
 import CoreGraphics
 import Foundation
+import Insta360Apple
 import Insta360Protocol
-import OpenPocketViewCore
+import OpenCineCore
+import OpenCineMotion
+import OpenInstaViewCore
 
-/// Held gimbal stick streamed as Luna `GIMBAL_CONTROL` MOVE (cmd 226) at a fixed rate.
+/// The operator's held gimbal stick; `LunaMotionService` streams its MOVEs.
 struct LunaStickStream {
-    /// Official app range: sint32 ±99 on each VirtualRC axis.
-    static let fullScale = 99.0
-    static let interval: Duration = .milliseconds(50)
-    var pan: Int32 = 0
-    var tilt: Int32 = 0
     var lastPan = 0.0
     var lastTilt = 0.0
     var isHeld = false
-    var task: Task<Void, Never>?
 
     mutating func reset() {
-        task?.cancel()
-        task = nil
-        pan = 0
-        tilt = 0
         lastPan = 0
         lastTilt = 0
         isHeld = false
     }
+}
+
+struct LunaQueuedZoomWrite {
+    let factor: Double
+    let session: LunaCameraSession?
+    let admission: LunaCommandAdmission?
 }
 
 extension CameraSession {
@@ -37,10 +36,6 @@ extension CameraSession {
     /// Matrix / Face Priority metering (option 46), shown in the Exposure sheet.
     var supportsFaceMetering: Bool { true }
     var supportsAperture: Bool { false }
-    /// Luna phone protocol exposes no audio channel setting or meters.
-    var supportsAudio: Bool { false }
-    /// Luna reports no timecode; the REC timer carries elapsed time.
-    var supportsTimecode: Bool { true }
     /// Luna sends no metered EV; the EV meter reads the picture.
     var reportsMeteredEV: Bool { false }
     /// Auto ISO ceiling and native-ISO hop are Osmo camcap features; Luna has neither.
@@ -48,14 +43,17 @@ extension CameraSession {
     /// DJI camcap hop to the log curve's native ISO on a color change; the ISO sheet hides its toggle.
     var supportsNativeIsoHop: Bool { false }
     /// Luna media browse runs over HTTP next to the live socket.
-    var hasControlLink: Bool { backend.isControlReady }
+    /// The connection's Luna session: every request goes through it, and its admission is this
+    /// facade's control link (it flips with the backend's handshake). Tests set the override.
+    var lunaSession: LunaCameraSession? { lunaSessionOverride ?? backend.session }
+    var hasControlLink: Bool { lunaSession?.admitsControl == true }
     var bodyFamily: CameraBodyFamily { .other }
     var colorModes: [ColorMode] { LunaShellMapping.colorModes }
 
     var currentShootingMode: ShootingMode? { ShootingMode.fromStatus(status.shootingMode) }
 
-    private var canSendControl: Bool {
-        guard case .live = phase, backend.isControlReady else {
+    var canSendControl: Bool {
+        guard case .live = phase, hasControlLink else {
             controlNote = "Connect the camera to use its controls."
             return false
         }
@@ -66,25 +64,88 @@ extension CameraSession {
         return true
     }
 
+    /// Every camera request goes through the connection's Luna session, which sends only while it
+    /// is ready and owned (the Insta360 rule: commands only through `LunaCameraSession`).
+    func sendLuna(_ request: LunaRequest, timeout: Duration? = nil) async throws -> Data {
+        guard let session = lunaSession else { throw CancellationError() }
+        return try await session.control(request, timeout: timeout)
+    }
+
+    func sendLuna(
+        _ request: LunaRequest, through session: LunaCameraSession,
+        admission: LunaCommandAdmission, timeout: Duration? = nil
+    ) async throws -> Data {
+        try await session.control(request, admission: admission, timeout: timeout)
+    }
+
     /// Sends one Luna request off the main flow. Failure reverts through `onFail`.
     func sendControl(
         _ name: String, _ build: () throws -> LunaRequest, refresh: Bool = true,
         onFail: (@MainActor () -> Void)? = nil, onSuccess: (@MainActor (Data) -> Void)? = nil
     ) {
+        sendControl(name, build, through: nil, suppliedAdmission: nil, refresh: refresh,
+            onFail: onFail, onSuccess: onSuccess)
+    }
+
+    @discardableResult
+    func sendControl(
+        _ name: String, _ build: () throws -> LunaRequest, admission: LunaCommandAdmission,
+        refresh: Bool = true, onFail: (@MainActor () -> Void)? = nil,
+        onSuccess: (@MainActor (Data) -> Void)? = nil
+    ) -> Task<Void, Never>? {
+        guard let target = lunaSession, admission.admits(target.commandOwner) else { onFail?(); return nil }
+        return sendControl(name, build, through: target, suppliedAdmission: admission, refresh: refresh,
+            onFail: onFail, onSuccess: onSuccess)
+    }
+
+    @discardableResult
+    private func sendControl(
+        _ name: String, _ build: () throws -> LunaRequest, through target: LunaCameraSession?,
+        suppliedAdmission admission: LunaCommandAdmission?, refresh: Bool = true,
+        onFail: (@MainActor () -> Void)? = nil, onSuccess: (@MainActor (Data) -> Void)? = nil,
+        onUnsent: (@MainActor () -> Void)? = nil
+    ) -> Task<Void, Never>? {
+        // This snapshot uses only the native owner, not the operator's expiring receipt.
+        // Already-entered work finishes; its facade publication still belongs to this source.
+        let source = target.map { LunaCommandAdmission(owner: $0.commandOwner, isCurrent: { true }) }
+        let epoch = target?.current.epoch
         let request: LunaRequest
         do { request = try build() } catch {
             controlNote = "\(name): \(error.localizedDescription)"
             onFail?()
-            return
+            return nil
         }
-        Task { @MainActor [weak self] in
+        return Task { @MainActor [weak self] in
             guard let self else { return }
+            @MainActor func mayPublish() -> Bool {
+                guard let admission else { return true }
+                return target === self.lunaSession && source?.source == admission.source
+                    && source?.admits(target?.commandOwner) == true && target?.current.epoch == epoch
+            }
             do {
-                let reply = try await self.backend.send(request)
+                let reply: Data
+                if let admission {
+                    guard let target else { throw LunaCommandAdmissionError.expired }
+                    reply = try await self.sendLuna(request, through: target, admission: admission)
+                } else {
+                    reply = try await self.sendLuna(request)
+                }
+                guard mayPublish() else { return }
                 ControlLiveLog.line("control: \(name) ok")
                 onSuccess?(reply)
-                if refresh { self.scheduleSettingsRefresh() }
+                // A success callback may synchronously replace the producer too.
+                guard mayPublish() else { return }
+                if refresh {
+                    if admission != nil, let target, let source, let epoch {
+                        self.scheduleSettingsRefresh(through: target, source: source, epoch: epoch)
+                    } else { self.scheduleSettingsRefresh() }
+                }
             } catch {
+                guard mayPublish() else { return }
+                if error is LunaCommandAdmissionError, admission != nil {
+                    if let onUnsent { onUnsent() } else { onFail?() }
+                    return
+                }
                 ControlLiveLog.line("control: \(name) failed \(error.localizedDescription)")
                 self.noteCommandFailure()
                 self.controlNote = "\(name) was not applied by the camera."
@@ -95,8 +156,19 @@ extension CameraSession {
 
     /// One settings read shortly after a burst of writes (drums send many).
     func scheduleSettingsRefresh() {
-        LunaRefreshDebounce.shared.schedule { [weak self] in
+        refreshDebounce.schedule { [weak self] in
             await self?.backend.refreshSettings()
+        }
+    }
+
+    private func scheduleSettingsRefresh(
+        through target: LunaCameraSession, source: LunaCommandAdmission, epoch: ControlEpoch
+    ) {
+        refreshDebounce.schedule { [weak self] in
+            guard let self, self.lunaSession === target, source.admits(target.commandOwner),
+                target.current.epoch == epoch
+            else { return }
+            await self.backend.refreshSettings()
         }
     }
 
@@ -105,51 +177,58 @@ extension CameraSession {
     // MARK: - Record / photo
 
     /// Rec lamp: start/stop video, or take a still in Photo. Record never lies: the
-    /// lamp holds `controlBusy` until capture status confirms.
+    /// lamp holds `controlBusy` until the Core session reports the outcome.
     func pressShutter() {
-        guard canSendControl else { return }
-        let photo = currentShootingMode?.isPhoto == true
-        controlBusy = true
-        if photo {
-            pins.photoInFlight = true
-            controlNote = "Photo"
-            sendControl(
-                "Photo", { try LunaProtocol.takePicture(mode: .normal) }, refresh: false,
-                onFail: { [weak self] in
-                    self?.pins.photoInFlight = false
-                    self?.controlBusy = false
-                },
-                onSuccess: { [weak self] _ in
-                    self?.pins.photoInFlight = false
-                    self?.controlBusy = false
-                    Task { await self?.refreshMediaAfterCapture() }
-                })
-            return
+        pressShutter(suppliedAdmission: nil)
+    }
+
+    @discardableResult
+    func pressShutter(admission: LunaCommandAdmission) -> Task<Void, Never>? {
+        pressShutter(suppliedAdmission: admission)
+    }
+
+    @discardableResult
+    private func pressShutter(suppliedAdmission admission: LunaCommandAdmission?) -> Task<Void, Never>? {
+        let target: LunaCameraSession?
+        if let admission {
+            guard let captured = lunaSession, admission.admits(captured.commandOwner) else { return nil }
+            target = captured
+        } else { target = nil }
+        let photoSource = target.map { LunaCommandAdmission(owner: $0.commandOwner, isCurrent: { true }) }
+        let photoEpoch = target?.current.epoch
+        guard canSendControl else { return nil }
+        guard currentShootingMode?.isPhoto == true else {
+            if let admission { toggleRecording(admission: admission) }
+            else { toggleRecording() }
+            return nil
         }
-        let starting = !status.isRecording
-        let luna = currentShootingMode.flatMap(LunaShellMapping.lunaShootingMode) ?? .video
-        pins.recording = CameraValuePin(starting, now: pinNow, settle: 4)
-        sendControl(
-            starting ? "Record" : "Stop",
-            {
-                starting
-                    ? try LunaProtocol.startCaptureRequest(for: luna)
-                    : try LunaProtocol.stopCaptureRequest(for: luna)
-            },
-            refresh: false,
+        controlBusy = true
+        pins.photoInFlight = true
+        controlNote = "Photo"
+        return sendControl(
+            "Photo", { try LunaProtocol.takePicture(mode: .normal) }, through: target,
+            suppliedAdmission: admission, refresh: false,
             onFail: { [weak self] in
-                self?.pins.recording = nil
+                self?.pins.photoInFlight = false
                 self?.controlBusy = false
             },
             onSuccess: { [weak self] _ in
-                guard let self else { return }
-                if starting { self.recordStartedAt = Date() }
-                self.status.isRecording = starting
-                if !starting {
-                    self.recordStartedAt = nil
-                    self.status.recordElapsedSec = 0
-                    Task { await self.refreshMediaAfterCapture() }
-                }
+                self?.pins.photoInFlight = false
+                self?.controlBusy = false
+                if admission != nil {
+                    Task { @MainActor [weak self] in
+                        guard let self, self.lunaSession === target,
+                            photoSource?.admits(target?.commandOwner) == true,
+                            target?.current.epoch == photoEpoch
+                        else { return }
+                        await self.refreshMediaAfterCapture()
+                    }
+                } else { Task { await self?.refreshMediaAfterCapture() } }
+            }, onUnsent: { [weak self] in
+                guard let self, self.lunaSession === target,
+                    admission?.source == target?.commandOwner.source
+                else { return }
+                self.pins.photoInFlight = false
                 self.controlBusy = false
             })
     }
@@ -168,11 +247,11 @@ extension CameraSession {
         if previous != wire { next.clearModeDependentCapabilities() }
         next.shootingMode = wire
         status = next
-        backend.functionMode = luna.functionMode.rawValue
+        // The backend's settings bank follows the camera's reported mode, not this request.
         formatTable = [:]
         pins.format = nil
         sendControl(
-            mode.label, { try luna.request() },
+            mode.label(in: profile), { try luna.request() },
             onFail: { [weak self] in
                 guard let self else { return }
                 self.pins.shootingMode = nil
@@ -185,93 +264,12 @@ extension CameraSession {
 
     // MARK: - Exposure
 
-    private var currentISO: Int? {
-        guard let index = status.isoIndex, index != .auto else { return nil }
-        return index.isoValue
-    }
-
-    private var currentShutterSeconds: Double? {
-        status.shutterDenom > 0 ? 1 / Double(status.shutterDenom) : nil
-    }
-
-    /// Luna has one exposure message: program + ISO + shutter. The shell's
-    /// independent ISO / shutter drums map onto its four programs.
-    private func sendExposure(iso: Int?, shutterSeconds: Double?, name: String) {
-        let program: LunaExposureProgram
-        switch (iso, shutterSeconds) {
-        case (nil, nil): program = .automatic
-        case (.some, nil): program = .isoPriority
-        case (nil, .some): program = .shutterPriority
-        case (.some, .some): program = .manual
-        }
-        let mode = backend.functionMode
-        sendControl(
-            name,
-            {
-                try LunaProtocol.setVideoExposure(
-                    program: program, iso: iso.map(UInt64.init), shutterSeconds: shutterSeconds,
-                    functionMode: mode)
-            },
-            onFail: { [weak self] in
-                self?.pins.isoIndex = nil
-                self?.pins.shutterDenom = nil
-                self?.pins.expoMode = nil
-            })
-    }
-
-    func setISO(_ index: IsoIndex) {
-        guard canSendControl else { return }
-        pins.isoIndex = CameraValuePin(index, now: pinNow)
-        status.isoIndex = index
-        status.iso = index.isoValue ?? status.iso
-        let iso = index == .auto ? nil : index.isoValue
-        let shutter = status.expoMode == .manual ? currentShutterSeconds : nil
-        let mode: ExpoMode = (iso == nil && shutter == nil) ? .auto : .manual
-        pins.expoMode = CameraValuePin(mode, now: pinNow)
-        status.expoMode = mode
-        LunaExposureCoalescer.shared.submit(key: "exposure") { [weak self] in
-            self?.sendExposure(iso: iso, shutterSeconds: shutter, name: "ISO \(index.label)")
-        }
-    }
-
-    func setShutterDenom(_ denom: Int) {
-        guard canSendControl else { return }
-        pins.shutterDenom = CameraValuePin(denom, now: pinNow)
-        status.shutterDenom = denom
-        pins.expoMode = CameraValuePin(.manual, now: pinNow)
-        status.expoMode = .manual
-        let iso = currentISO
-        LunaExposureCoalescer.shared.submit(key: "exposure") { [weak self] in
-            self?.sendExposure(
-                iso: iso, shutterSeconds: 1 / Double(max(1, denom)), name: "1/\(denom)")
-        }
-    }
-
-    func setExpoMode(_ mode: ExpoMode) {
-        guard canSendControl else { return }
-        autoExposureLock = nil
-        pins.expoMode = CameraValuePin(mode, now: pinNow)
-        status.expoMode = mode
-        if mode == .auto {
-            pins.isoIndex = CameraValuePin(.auto, now: pinNow)
-            status.isoIndex = .auto
-            sendExposure(iso: nil, shutterSeconds: nil, name: "Auto exposure")
-            return
-        }
-        // Manual needs a shutter: keep the current one, else the 180° default.
-        let fps = max(status.fps, 25)
-        let denom = status.shutterDenom > 0 ? status.shutterDenom : fps * 2
-        pins.shutterDenom = CameraValuePin(denom, now: pinNow)
-        status.shutterDenom = denom
-        sendExposure(iso: currentISO, shutterSeconds: 1 / Double(denom), name: "Manual exposure")
-    }
-
     func setEv(_ ev: EvComp) {
         guard canSendControl else { return }
         pins.ev = CameraValuePin(ev, now: pinNow)
         status.evComp = ev
         let mode = backend.functionMode
-        LunaExposureCoalescer.shared.submit(key: "ev") { [weak self] in
+        exposureCoalescer.submit(key: "ev") { [weak self] in
             self?.sendControl(
                 "EV \(ev.label)", { try LunaProtocol.setExposureBias(Double(ev.thirds) / 3, functionMode: mode) },
                 onFail: { [weak self] in self?.pins.ev = nil })
@@ -344,45 +342,9 @@ extension CameraSession {
 
     // MARK: - White balance
 
-    func setWhiteBalanceAuto(tint: Int? = nil) {
-        autoWhiteBalanceLock = nil
-        fireWhiteBalance(.auto(tint: 0))
-    }
-
-    func setWhiteBalanceCustom(kelvin: Int, tint: Int) {
-        let wb = WhiteBalance.custom(kelvin: min(max(kelvin, 2_000), 10_000), tint: 0)
-        // Custom from AWB Lock keeps the locked value; the camera is already there.
-        if autoWhiteBalanceLock != nil, status.whiteBalance == wb {
-            autoWhiteBalanceLock = nil
-            return
-        }
-        autoWhiteBalanceLock = nil
-        fireWhiteBalance(wb)
-    }
-
-    private func fireWhiteBalance(_ wb: WhiteBalance) {
-        guard canSendControl else { return }
-        // fw 1.1.15 applies kelvin 3.5 to 3.9 s after the SET.
-        pins.whiteBalance = CameraValuePin(wb, now: pinNow, settle: 5)
-        status.whiteBalance = wb
-        if wb.mode == .custom { status.whiteBalanceKelvin = wb.kelvin }
-        status.whiteBalanceTint = 0
-        let mode = backend.functionMode
-        LunaExposureCoalescer.shared.submit(key: "wb") { [weak self] in
-            self?.sendControl(
-                wb.mode == .auto ? "WB Auto" : "WB \(wb.kelvin)K",
-                {
-                    wb.mode == .auto
-                        ? try LunaProtocol.setWhiteBalanceAuto(functionMode: mode)
-                        : try LunaProtocol.setWhiteBalanceKelvin(UInt64(wb.kelvin), functionMode: mode)
-                },
-                onFail: { [weak self] in self?.pins.whiteBalance = nil })
-        }
-    }
-
     // MARK: - Focus mode and metering
 
-    func setFocusMode(_ mode: FocusMode) {
+    func setFocusMode(_ mode: OpenInstaViewCore.FocusMode) {
         setFocusOption(mode == .single ? .single : .continuousDefault)
     }
 
@@ -399,6 +361,18 @@ extension CameraSession {
         pins.focus = CameraValuePin(option, now: pinNow, settle: 3)
         status.focusMode = option.focusMode
         status.focusTrack = option.track
+        if af == .single || af == .continuous {
+            guard let common = backend.session else {
+                pins.focus = nil
+                return
+            }
+            let focus: OpenCineCore.FocusMode = af == .single ? .single : .continuous
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if !(await submitLens(.focusMode(focus), through: common)) { pins.focus = nil }
+            }
+            return
+        }
         let mode = backend.functionMode
         sendControl(
             "Focus \(option.chip)", { try LunaProtocol.setAFMode(af, functionMode: mode) },
@@ -419,14 +393,11 @@ extension CameraSession {
 
     // MARK: - Aperture, audio (not exposed by Luna's phone protocol)
 
-    func setApertureStrategy(_ strategy: ApertureStrategy) {}
-    func setAudioChannel(_ channel: AudioChannel) {}
-    func setVocalBoost(_ boost: VocalBoost) {}
-    func setWindNR(_ value: WindNoiseReduction) {}
-    func setDirectionalAudio(_ value: DirectionalAudio) {}
+    func setApertureStrategy(_ strategy: ApertureStrategy) {
+        controlNote = "Aperture control unavailable"
+    }
     func refreshFocusTrack() async {}
     func clearGlamourIfEnabled() async {}
-    func refreshAudioState() async {}
 
     // MARK: - Format and color
 
@@ -471,24 +442,54 @@ extension CameraSession {
     }
 
     func setColorMode(_ mode: ColorMode) {
-        guard canSendControl else { return }
+        setColorMode(mode, suppliedAdmission: nil)
+    }
+
+    @discardableResult
+    func setColorMode(
+        _ mode: ColorMode, admission: LunaCommandAdmission
+    ) -> Task<Void, Never>? {
+        setColorMode(mode, suppliedAdmission: admission)
+    }
+
+    @discardableResult
+    private func setColorMode(
+        _ mode: ColorMode, suppliedAdmission admission: LunaCommandAdmission?
+    ) -> Task<Void, Never>? {
+        let target: LunaCameraSession?
+        if let admission {
+            guard let captured = lunaSession, admission.admits(captured.commandOwner) else { return nil }
+            target = captured
+        } else { target = nil }
+        guard canSendControl else { return nil }
         if status.isRecording, mode != status.colorMode {
             controlNote = ControlHud.recordingColorLockNote
-            return
+            return nil
         }
-        guard colorModes.contains(mode) else { return }
+        guard colorModes.contains(mode) else { return nil }
         let previous = status.colorMode
-        pins.color = CameraValuePin(mode, now: pinNow, settle: 3)
+        let pin = CameraValuePin(mode, now: pinNow, settle: 3)
+        pins.color = pin
         status.colorMode = mode
         applyDecoderColorScience()
         let luna = LunaShellMapping.lunaColorMode(mode)
         let functionMode = backend.functionMode
-        sendControl(
-            mode.label, { try LunaProtocol.setColorMode(luna, functionMode: functionMode) },
+        return sendControl(
+            mode.label(in: profile), { try LunaProtocol.setColorMode(luna, functionMode: functionMode) },
+            through: target, suppliedAdmission: admission,
             onFail: { [weak self] in
-                self?.pins.color = nil
-                self?.status.colorMode = previous
-                self?.applyDecoderColorScience()
+                guard let self else { return }
+                if admission != nil {
+                    guard self.lunaSession === target, self.pins.color?.id == pin.id else { return }
+                }
+                self.pins.color = nil
+                self.status.colorMode = previous
+                self.applyDecoderColorScience()
+            }, onUnsent: { [weak self] in
+                guard let self, self.lunaSession === target, self.pins.color?.id == pin.id else { return }
+                self.pins.color = nil
+                self.status.colorMode = previous
+                self.applyDecoderColorScience()
             })
     }
 
@@ -504,13 +505,13 @@ extension CameraSession {
     var zoomReadout: Double {
         CamFov.readout(
             live: status.zoomFactor, preview: zoomPinchPreview, fallback: zoomStop,
-            optimistic: zoomOptimistic)
+            optimistic: zoomOptimistic, ceiling: zoomCeiling)
     }
 
     var zoomDialReadout: Double {
         CamFov.continuousReadout(
             live: status.zoomFactor, preview: zoomPinchPreview, fallback: zoomStop,
-            optimistic: zoomOptimistic)
+            optimistic: zoomOptimistic, ceiling: zoomCeiling)
     }
 
     func updateZoomPinch(magnification: Double) {
@@ -534,6 +535,17 @@ extension CameraSession {
     }
 
     func setZoom(_ factor: Double) {
+        setZoom(factor, suppliedAdmission: nil)
+    }
+
+    func setZoom(_ factor: Double, admission: LunaCommandAdmission) {
+        setZoom(factor, suppliedAdmission: admission)
+    }
+
+    private func setZoom(_ factor: Double, suppliedAdmission admission: LunaCommandAdmission?) {
+        if let admission {
+            guard let target = lunaSession, admission.admits(target.commandOwner) else { return }
+        }
         guard supportsZoom else { return }
         guard !isLocked else {
             controlNote = "Zoom locked"
@@ -543,13 +555,24 @@ extension CameraSession {
         zoomPinchPreview = nil
         zoomPin = CameraValuePin(target, now: Date.timeIntervalSinceReferenceDate)
         zoomStop = target
-        controlNote = "Zoom \(CamFov.displayLabel(factor: target))"
-        queueZoomWrite(target)
+        controlNote = "Zoom \(CamFov.displayLabel(factor: target, ceiling: zoomCeiling))"
+        queueZoomWrite(target, suppliedAdmission: admission)
     }
 
     func setZoomSlider(_ factor: Double) {
+        setZoomSlider(factor, suppliedAdmission: nil)
+    }
+
+    func setZoomSlider(_ factor: Double, admission: LunaCommandAdmission) {
+        setZoomSlider(factor, suppliedAdmission: admission)
+    }
+
+    private func setZoomSlider(_ factor: Double, suppliedAdmission admission: LunaCommandAdmission?) {
+        if let admission {
+            guard let target = lunaSession, admission.admits(target.commandOwner) else { return }
+        }
         guard !isLocked else { return }
-        queueZoomWrite(min(max(factor, 1), zoomMax))
+        queueZoomWrite(min(max(factor, 1), zoomMax), suppliedAdmission: admission)
     }
 
     /// DJI slew has no Luna equivalent; the hold disc drives absolute factors.
@@ -558,20 +581,65 @@ extension CameraSession {
 
     /// Latest-wins at ~12 Hz: the camera lens cannot follow a 60 Hz pinch.
     private func queueZoomWrite(_ factor: Double) {
-        guard case .live = phase, backend.isControlReady else { return }
-        pendingZoomWrite = factor
+        queueZoomWrite(factor, suppliedAdmission: nil)
+    }
+
+    private func queueZoomWrite(_ factor: Double, suppliedAdmission admission: LunaCommandAdmission?) {
+        let target: LunaCameraSession?
+        if let admission {
+            guard let captured = lunaSession, admission.admits(captured.commandOwner) else { return }
+            target = captured
+        } else { target = nil }
+        guard case .live = phase, hasControlLink else { return }
+        pendingZoomWrite = .init(factor: factor, session: target, admission: admission)
         guard zoomWriteTask == nil else { return }
+        zoomWriteRevision &+= 1
+        let revision = zoomWriteRevision
         zoomWriteTask = Task { @MainActor [weak self] in
-            while let self, let next = self.pendingZoomWrite {
+            while let self, self.zoomWriteRevision == revision, !Task.isCancelled,
+                let next = self.pendingZoomWrite
+            {
                 self.pendingZoomWrite = nil
-                let mode = self.backend.functionMode
-                if let request = try? LunaProtocol.setZoomScale(next, functionMode: mode) {
-                    _ = try? await self.backend.send(request)
-                }
+                _ = await self.submitLens(.zoom(next.factor), through: next.session, admission: next.admission)
                 try? await Task.sleep(for: .milliseconds(80))
             }
-            self?.zoomWriteTask = nil
-            self?.scheduleSettingsRefresh()
+            guard let self, self.zoomWriteRevision == revision else { return }
+            self.zoomWriteTask = nil
+            self.scheduleSettingsRefresh()
+        }
+    }
+
+    /// Preserves the app's existing lens pacing while using the connection's common receipts.
+    /// Product Showcase stays on the integration-owned extension above.
+    private func submitLens(
+        _ value: OpenCineCore.SettingValue, through session: LunaCameraSession? = nil,
+        admission: LunaCommandAdmission? = nil
+    ) async -> Bool {
+        guard let common = session ?? backend.session else { return false }
+        let source = admission.map { _ in LunaCommandAdmission(owner: common.commandOwner, isCurrent: { true }) }
+        let epoch = common.current.epoch
+        let command = CameraCommand(.set(value), preconditions: CommandPreconditions(common.current))
+        let receipt: CommandReceipt
+        if let admission {
+            guard session != nil, admission.admits(common.commandOwner) else { return false }
+            receipt = await common.submit(command, admission: admission)
+        } else {
+            receipt = await common.submit(command)
+        }
+        if let admission {
+            guard lunaSession === common, source?.source == admission.source,
+                source?.admits(common.commandOwner) == true, common.current.epoch == epoch
+            else { return false }
+        }
+        switch receipt.stage {
+        case .accepted, .awaitingObservation, .confirmed:
+            if let source { scheduleSettingsRefresh(through: common, source: source, epoch: epoch) }
+            else { scheduleSettingsRefresh() }
+            return true
+        default:
+            noteCommandFailure()
+            controlNote = "\(value.key == .zoom ? "Zoom" : "Focus") was not applied by the camera."
+            return false
         }
     }
 
@@ -579,7 +647,7 @@ extension CameraSession {
 
     var canSetGimbalConfiguration: Bool {
         hasGimbal && !isLocked && phase == .live && gimbalControlSceneActive && !holdsMonitor
-            && !sessionRecovery.isRecovering && backend.isControlReady
+            && !sessionRecovery.isRecovering && hasControlLink
     }
 
     /// Stream MOVE while the on-screen stick is held. `x`/`y` are −1…1 (right / up).
@@ -604,42 +672,23 @@ extension CameraSession {
         let tiltValue = magnitude < dead ? 0 : y
         if assistMirror { panValue = -panValue }
         // Ease-in curve: fine control near centre, full speed at the rim.
-        func shaped(_ v: Double) -> Int32 {
-            let curved = linear ? v : v * abs(v)
-            return Int32((curved * scale * LunaStickStream.fullScale).rounded())
-        }
-        gimbalStick.pan = shaped(panValue)
-        gimbalStick.tilt = shaped(tiltValue)
+        func shaped(_ v: Double) -> Double { (linear ? v : v * abs(v)) * scale }
         gimbalStick.lastPan = panValue
         gimbalStick.lastTilt = tiltValue
         if !gimbalStick.isHeld {
             gimbalStick.isHeld = true
             ControlLiveLog.line("control: gimbal stick stream")
-            startStickStream()
         }
-    }
-
-    private func startStickStream() {
-        gimbalStick.task?.cancel()
-        gimbalStick.task = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                guard let self, self.gimbalStick.isHeld else { return }
-                let pan = self.gimbalStick.pan
-                let tilt = self.gimbalStick.tilt
-                if let request = try? LunaProtocol.gimbalMove(upDown: tilt, leftRight: pan) {
-                    _ = try? await self.backend.send(request, timeout: .seconds(2))
-                }
-                try? await Task.sleep(for: LunaStickStream.interval)
-            }
-        }
+        motion.hold(pan: shaped(panValue), tilt: shaped(tiltValue))
     }
 
     func endGimbalStick(cancelMove: Bool = false) {
         guard gimbalStick.isHeld else { return }
         gimbalStick.reset()
+        motion.endHold()
         ControlLiveLog.line("control: gimbal stick rest")
-        guard backend.isControlReady else { return }
-        Task { _ = try? await backend.send(LunaProtocol.gimbalReleaseRequest()) }
+        guard hasControlLink else { return }
+        Task { [weak self] in await self?.motion.release() }
     }
 
     func performGimbalDoubleTap() {
@@ -701,10 +750,6 @@ extension CameraSession {
     /// fw 1.1.15: 30 Hz follows a moving target with ~60 ms lag and is visibly smoother
     /// than 20 Hz (~70 ms) or 10 Hz (~120 ms, steppy).
     static let gimbalSetInterval: Duration = .milliseconds(33)
-    /// fw 1.1.15 reach: pitch -57.3...+90; yaw is one arc from about -125 through ±180
-    /// to -58.5 (gap centred near -92, like the shell's `HeadTrack.Reach`), and SET_ANGLE
-    /// takes yaw in -180...180 and routes around the stop itself.
-    static let gimbalPitchRange = -57.0...90.0
 
     func startGimbalAnglePoll() {
         gimbalAnglePoll?.cancel()
@@ -712,7 +757,7 @@ extension CameraSession {
             while !Task.isCancelled {
                 guard let self else { return }
                 // Head tracking reads GET_ANGLE itself on every tick.
-                if case .live = self.phase, self.backend.isControlReady, !self.isSteeringHead {
+                if case .live = self.phase, self.hasControlLink, !self.isSteeringHead {
                     await self.readGimbalAngle()
                 }
                 try? await Task.sleep(for: Self.gimbalAnglePollInterval)
@@ -722,22 +767,14 @@ extension CameraSession {
 
     @discardableResult
     func readGimbalAngle(timeout: Duration = .seconds(1)) async -> LunaGimbalAngle? {
-        guard let request = try? LunaProtocol.gimbalGetAngleRequest(),
-            let reply = try? await backend.send(request, timeout: timeout),
-            let angle = try? LunaGimbalAngle(response: reply)
-        else { return nil }
+        guard let angle = await motion.readAngle(timeout: timeout) else { return nil }
         gimbalAngle = (angle, ProcessInfo.processInfo.systemUptime)
         return angle
     }
 
     /// Fire and forget: the camera re-targets on every SET_ANGLE (latest wins).
     func sendGimbalAngle(_ target: GimbalWaypoint) {
-        let yaw = remainder(target.yawDeg, 360)  // unwrapped shell yaw back to ±180
-        let pitch = min(max(target.pitchDeg, Self.gimbalPitchRange.lowerBound), Self.gimbalPitchRange.upperBound)
-        guard let request = try? LunaProtocol.gimbalSetAngle(pitch: Float(pitch), yaw: Float(yaw))
-        else { return }
-        let backend = self.backend
-        Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
+        Task { [weak self] in await self?.motion.aim(at: target) }
     }
 
     #if DEBUG
@@ -788,8 +825,7 @@ extension CameraSession {
                 let now = ProcessInfo.processInfo.systemUptime
                 if now - started > 8 { break }
                 if now - started > 0.3, let reading = self.gimbalAngle, reading.at > started + 0.2,
-                    abs(remainder(Double(reading.angle.yaw) - aim.target.yawDeg, 360)) <= 0.5,
-                    abs(Double(reading.angle.pitch) - aim.target.pitchDeg) <= 0.5
+                    LunaMotionService.hasReached(reading.angle, aim.target)
                 { break }
                 try? await Task.sleep(for: Self.gimbalSetInterval)
             }
@@ -798,10 +834,8 @@ extension CameraSession {
         return token
     }
 
-    /// Head tracking steers with the stick (MOVE), not SET_ANGLE: fw 1.1.15 re-plans every
-    /// SET as its own start-stop move, so a SET stream judders at the send rate (about 11
-    /// deg/s rms at 30 Hz against 0.05 for the stick). Each tick reads GET_ANGLE, then
-    /// commands the head's own rate plus a pull toward its exact angle.
+    /// Head tracking steers with the stick (`LunaHeadTrackSteering`): each tick reads
+    /// GET_ANGLE, then sends the stick toward the AirPods head.
     private func steerHeadTrack(token: UInt64) async {
         isSteeringHead = true
         // Angles are read back to back beside the loop, so a slow or lost reply never
@@ -817,126 +851,58 @@ extension CameraSession {
             isSteeringHead = false
             reader.cancel()
         }
-        var rate = (yaw: 0.0, pitch: 0.0)  // modelled camera rate from the sent stick
-        var last = ProcessInfo.processInfo.systemUptime
+        var steering = LunaHeadTrackSteering(now: ProcessInfo.processInfo.systemUptime)
         while !Task.isCancelled {
             guard let aim = gimbalAim, aim.token == token, canSetGimbalConfiguration, !gimbalStick.isHeld
             else { break }
             let now = ProcessInfo.processInfo.systemUptime
+            let tuning = LunaHeadTrackSteering.Tuning(
+                panDegPerSec: Self.stickPanDegPerSec, tiltDegPerSec: Self.stickTiltDegPerSec,
+                gain: Self.headTrackGain, accelFeed: Self.headTrackAccelFeed)
             var pan: Int32 = 0
             var tilt: Int32 = 0
             // No reading for 0.3 s: stop rather than steer blind.
             if let reading = gimbalAngle, now - reading.at < 0.3 {
-                let head = Self.headTrackReference(headTrackSamples, at: now + Self.headTrackLead)
-                    ?? HeadTrackReference(yaw: aim.target.yawDeg, pitch: aim.target.pitchDeg)
-                // The reading was taken about half a round trip before it arrived; the
-                // head has kept turning since.
-                let age = now - reading.at + Self.angleReadLatency
-                let yaw = GimbalWaypoint.unwrapYaw(Double(reading.angle.yaw)) + rate.yaw * age
-                let pitch = Double(reading.angle.pitch) + rate.pitch * age
-                let wantPitch = min(max(head.pitch, Self.gimbalPitchRange.lowerBound), Self.gimbalPitchRange.upperBound)
-                // Feed the head's rate forward, plus its acceleration times the stick's ease-in
-                // lag so the camera speeds up in step with the head instead of trailing it.
-                let lag = Self.stickLagSeconds * Self.headTrackAccelFeed
-                let yawRate = head.yawRate + head.yawAccel * lag + Self.headTrackGain * (head.yaw - yaw)
-                let pitchRate = head.pitchRate + head.pitchAccel * lag + Self.headTrackGain * (wantPitch - pitch)
-                pan = Int32(min(max((yawRate / Self.stickPanDegPerSec).rounded(), -99), 99))
-                tilt = Int32(min(max((pitchRate / Self.stickTiltDegPerSec).rounded(), -99), 99))
+                let head =
+                    OpenInstaViewCore.HeadTrack.reference(headTrackSamples, at: now + Self.headTrackLead, fitWindow: Self.headTrackFitWindow)
+                    ?? OpenInstaViewCore.HeadTrack.Reference(yaw: aim.target.yawDeg, pitch: aim.target.pitchDeg)
+                let step = steering.step(
+                    yaw: GimbalWaypoint.unwrapYaw(Double(reading.angle.yaw)), pitch: Double(reading.angle.pitch),
+                    readAt: reading.at, toward: head, now: now, tuning: tuning)
+                pan = step.pan
+                tilt = step.tilt
                 #if DEBUG
-                    headTrackLog.append([now, head.yaw, wantPitch, yaw, pitch, Double(pan), Double(tilt)])
+                    headTrackLog.append([now, head.yaw, step.wantPitch, step.yaw, step.pitch, Double(pan), Double(tilt)])
                     if headTrackLog.count > 1500 { headTrackLog.removeFirst(300) }
                 #endif
             }
-            if let request = try? LunaProtocol.gimbalMove(upDown: tilt, leftRight: pan) {
-                let backend = self.backend
-                Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
-            }
-            let k = 1 - exp(-(now - last) / Self.stickLagSeconds)
-            last = now
-            rate.yaw += (Double(pan) * Self.stickPanDegPerSec - rate.yaw) * k
-            rate.pitch += (Double(tilt) * Self.stickTiltDegPerSec - rate.pitch) * k
+            Task { [weak self, pan, tilt] in await self?.motion.steer(pan: pan, tilt: tilt) }
+            steering.sent(pan: pan, tilt: tilt, now: now, tuning: tuning)
             try? await Task.sleep(for: .seconds(Self.headTrackTick))
         }
         // A fresh task: this one is usually cancelled here, and a cancelled send never goes
         // out, which left the head coasting on the last stick value.
-        guard backend.isControlReady, gimbalAim?.token == token || gimbalAim == nil, !gimbalStick.isHeld else { return }
+        guard hasControlLink, gimbalAim?.token == token || gimbalAim == nil, !gimbalStick.isHeld else { return }
         // Again shortly after, in case a last MOVE still in flight lands behind the first.
         Task { @MainActor [weak self] in
             for attempt in 0..<2 {
                 guard let self, attempt == 0 || (self.gimbalAim == nil && !self.gimbalStick.isHeld) else { return }
-                _ = try? await self.backend.send(LunaProtocol.gimbalReleaseRequest())
+                await self.motion.release()
                 try? await Task.sleep(for: .milliseconds(150))
             }
         }
     }
 
-    /// Stick rate per VirtualRC unit and its ease-in lag, fw 1.1.15. The gyro reads 0.635
-    /// and 0.54 deg/s per unit at steady speed; these are what tracked a 20° sine best
-    /// against GET_ANGLE (lag 0.02 s, 8% overshoot).
-    nonisolated(unsafe) static var stickPanDegPerSec = 0.75
-    nonisolated(unsafe) static var stickTiltDegPerSec = 0.64
-    static let stickLagSeconds = 0.23
-    /// GET_ANGLE round trip is 20 to 40 ms on the camera AP; half of it, roughly.
-    static let angleReadLatency = 0.015
-    /// Live-tunable head tracking feel (debug remote `headTune`).
+    /// Live-tunable head tracking feel (debug remote `headTune`); defaults are the Luna's.
+    nonisolated(unsafe) static var stickPanDegPerSec = LunaHeadTrackSteering.Tuning().panDegPerSec
+    nonisolated(unsafe) static var stickTiltDegPerSec = LunaHeadTrackSteering.Tuning().tiltDegPerSec
     /// Pull toward the head's exact angle (1/s).
-    nonisolated(unsafe) static var headTrackGain = 4.0
+    nonisolated(unsafe) static var headTrackGain = LunaHeadTrackSteering.Tuning().gain
     /// How far ahead of the newest AirPods sample the head is aimed (covers link latency).
     nonisolated(unsafe) static var headTrackLead = 0.0
     nonisolated(unsafe) static var headTrackTick = 0.033
-    nonisolated(unsafe) static var headTrackAccelFeed = 1.0
+    nonisolated(unsafe) static var headTrackAccelFeed = LunaHeadTrackSteering.Tuning().accelFeed
     nonisolated(unsafe) static var headTrackFitWindow = 0.3
-
-    /// Head angle at `time` with its rate (deg/s) and acceleration (deg/s²), from a
-    /// quadratic least-squares fit of the last 250 ms of samples (a line with fewer than
-    /// four), carried on past the newest sample; after 0.2 s without one it holds.
-    static func headTrackReference(_ samples: [HeadTrackSample], at time: Double) -> HeadTrackReference? {
-        guard let newest = samples.last else { return nil }
-        let recent = samples.filter { newest.t - $0.t <= Self.headTrackFitWindow }
-        let xs = recent.map { $0.t - newest.t }
-        func fit(_ ys: [Double]) -> (value: Double, rate: Double, accel: Double) {
-            let n = Double(xs.count)
-            var s = [Double](repeating: 0, count: 5)
-            var sy = [0.0, 0.0, 0.0]
-            for (x, y) in zip(xs, ys) {
-                var power = 1.0
-                for k in 0..<5 {
-                    s[k] += power
-                    if k < 3 { sy[k] += power * y }
-                    power *= x
-                }
-            }
-            func det3(_ m: [[Double]]) -> Double {
-                m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-                    + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
-            }
-            if xs.count >= 4 {
-                let m = [[s[0], s[1], s[2]], [s[1], s[2], s[3]], [s[2], s[3], s[4]]]
-                let d = det3(m)
-                if abs(d) > 1e-12 {
-                    func solve(_ column: Int) -> Double {
-                        var c = m
-                        for row in 0..<3 { c[row][column] = sy[row] }
-                        return det3(c) / d
-                    }
-                    return (solve(0), solve(1), 2 * solve(2))
-                }
-            }
-            let denominator = n * s[2] - s[1] * s[1]
-            guard xs.count >= 2, abs(denominator) > 1e-12 else { return (ys.last ?? 0, 0, 0) }
-            let rate = (n * sy[1] - s[1] * sy[0]) / denominator
-            return ((sy[0] - rate * s[1]) / n, rate, 0)
-        }
-        // A stale head (no sample for 0.2 s) holds its last angle instead of drifting on.
-        guard time - newest.t <= 0.2 else { return HeadTrackReference(yaw: newest.yaw, pitch: newest.pitch) }
-        let yaw = fit(recent.map(\.yaw))
-        let pitch = fit(recent.map(\.pitch))
-        let h = max(time - newest.t, 0)
-        return HeadTrackReference(
-            yaw: yaw.value + yaw.rate * h + yaw.accel * h * h / 2,
-            pitch: pitch.value + pitch.rate * h + pitch.accel * h * h / 2,
-            yawRate: yaw.rate, pitchRate: pitch.rate, yawAccel: yaw.accel, pitchAccel: pitch.accel)
-    }
 
     private func finishGimbalAim(token: UInt64) {
         guard gimbalAim?.token == token else { return }
@@ -966,7 +932,7 @@ extension CameraSession {
         let luna = LunaShellMapping.lunaGimbalMode(mode)
         let functionMode = backend.functionMode
         sendControl(
-            "Gimbal \(mode.label)", { try LunaProtocol.setGimbalMode(luna, functionMode: functionMode) },
+            "Gimbal \(mode.label(in: profile))", { try LunaProtocol.setGimbalMode(luna, functionMode: functionMode) },
             onFail: { [weak self] in
                 self?.pins.gimbalMode = nil
                 self?.gimbalMode = previous
@@ -1015,7 +981,7 @@ extension CameraSession {
         gimbalAim = (target, token)
         let t = measuredAt ?? ProcessInfo.processInfo.systemUptime
         if t > headTrackSamples.last?.t ?? -.infinity {
-            headTrackSamples.append(HeadTrackSample(t: t, yaw: target.yawDeg, pitch: target.pitchDeg))
+            headTrackSamples.append(OpenInstaViewCore.HeadTrack.Sample(t: t, yaw: target.yawDeg, pitch: target.pitchDeg))
             headTrackSamples.removeAll { t - $0.t > 1 }
             #if DEBUG
                 headSampleLog.append([t, target.yawDeg, target.pitchDeg])
@@ -1094,23 +1060,7 @@ extension CameraSession {
             && gimbalProgram.canRun
     }
 
-    /// Target pose `time` seconds into a take: the shell's rounded-corner curve for
-    /// A·B·C with smoothness, straight legs otherwise.
-    nonisolated static func programPose(_ take: GimbalProgram, at time: TimeInterval) -> GimbalWaypoint? {
-        guard let a = take.a, let b = take.b else { return nil }
-        if let curve = GimbalProgramCurve(program: take) { return curve.position(at: time) }
-        if time < take.durationAB || take.c == nil {
-            return GimbalMoveEngine.lerp(a, b, u: min(max(time / take.durationAB, 0), 1))
-        }
-        return GimbalMoveEngine.lerp(b, take.c!, u: min((time - take.durationAB) / take.durationBC, 1))
-    }
-
-    nonisolated static func programDuration(_ take: GimbalProgram) -> TimeInterval {
-        take.durationAB + (take.c == nil ? 0 : take.durationBC)
-    }
-
-    /// Countdown while the head goes to A, then stream the path at the SET rate.
-    /// Loop plays the take backwards and forwards until stopped.
+    /// The shared owner executes the take; the adapter captures this connection and epoch.
     func runProgrammedMove() {
         guard gimbalControlSceneActive, hasGimbal, !isLocked else { return }
         if gimbalMoveRunning {
@@ -1121,67 +1071,43 @@ extension CameraSession {
             controlNote = reason
             return
         }
-        guard canRunProgrammedMove, let a = gimbalProgram.a, gimbalAngle != nil else {
+        guard canRunProgrammedMove, gimbalAngle != nil else {
             controlNote = gimbalProgram.canRun ? ControlHud.gimbalPoseNotReady : ControlHud.programmedMoveNeedAB
             return
         }
-        let take = gimbalProgram
+        guard let source = programmedMoveSource() else {
+            controlNote = "Connect the camera to use its controls."
+            return
+        }
         controlNote = nil
         stopGimbalAim()
         endGimbalStick(cancelMove: true)
-        gimbalMoveRunning = true
-        gimbalMovePaused = false
-        gimbalMoveCanPause = false
-        gimbalMoveClock = 0
-        gimbalMoveTask?.cancel()
-        gimbalMoveTask = Task { @MainActor [weak self] in
-            self?.sendGimbalAngle(a)
-            for remaining in (1...3).reversed() {
-                guard let self, !Task.isCancelled, self.gimbalMoveRunning else { return }
-                self.gimbalStartCountdown = remaining
-                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+        programmedMove.onChange = { [weak self] state in
+            guard let self else { return }
+            self.programmedMoveState = state
+            if state.failure != nil {
+                self.controlNote = "Programmed move was not applied by the camera."
+                ControlLiveLog.line("gimbal-move: rejected")
             }
-            guard let self, !Task.isCancelled, self.gimbalMoveRunning else { return }
-            self.gimbalStartCountdown = nil
-            self.gimbalMoveCanPause = true
-            ControlLiveLog.line("gimbal-move: start \(take.summary) duration=\(Self.programDuration(take))")
-            let duration = Self.programDuration(take)
-            var last = ProcessInfo.processInfo.systemUptime
-            var reverse = false
-            var loggedAt = 0.0
-            while !Task.isCancelled, self.gimbalMoveRunning {
-                guard case .live = self.phase, self.gimbalControlSceneActive else {
-                    self.cancelProgrammedMove()
-                    return
-                }
-                let now = ProcessInfo.processInfo.systemUptime
-                if !self.gimbalMovePaused { self.gimbalMoveClock += now - last }
-                last = now
-                if self.gimbalMoveClock >= duration {
-                    guard take.loop else { break }
-                    self.gimbalMoveClock -= duration
-                    reverse.toggle()
-                }
-                if !self.gimbalMovePaused,
-                    let target = Self.programPose(
-                        take, at: reverse ? duration - self.gimbalMoveClock : self.gimbalMoveClock)
-                {
-                    self.sendGimbalAngle(target)
-                    if now - loggedAt >= 0.5, let reading = self.gimbalAngle {
-                        loggedAt = now
-                        ControlLiveLog.line(String(
-                            format: "gimbal-move: t=%.2f target=%.1f,%.1f live=%.1f,%.1f",
-                            self.gimbalMoveClock, target.yawDeg, target.pitchDeg,
-                            reading.angle.yaw, reading.angle.pitch))
-                    }
-                }
-                try? await Task.sleep(for: Self.gimbalSetInterval)
-            }
-            guard !Task.isCancelled, self.gimbalMoveRunning else { return }
-            if let end = Self.programPose(take, at: reverse ? 0 : duration) { self.sendGimbalAngle(end) }
-            ControlLiveLog.line("gimbal-move: done")
-            self.finishProgrammedMove()
         }
+        if !programmedMove.start(gimbalProgram, source: source, timing: LunaMotionService.programTiming) {
+            controlNote = "Programmed move is unavailable for the current camera state."
+        }
+    }
+
+    /// One immutable motion binding. Its wire service cannot look up a later backend session.
+    func programmedMoveSource() -> MotionProgramSession.Source? {
+        guard let session = lunaSession, session.admitsControl else { return nil }
+        let epoch = session.current.epoch
+        let generation = connectGeneration
+        let isCurrent: @MainActor @Sendable () -> Bool = { [weak self] in
+            guard let self else { return false }
+            return self.lunaSession === session && self.connectGeneration == generation
+                && self.phase == .live && self.gimbalControlSceneActive
+                && session.admitsControl && session.current.epoch == epoch
+        }
+        let service = LunaMotionService(session: { isCurrent() ? session : nil })
+        return MotionProgramSession.Source(motion: service, isCurrent: isCurrent)
     }
 
     func restartProgrammedMove() {
@@ -1192,23 +1118,14 @@ extension CameraSession {
 
     func pauseOrResumeProgrammedMove() {
         guard gimbalControlSceneActive, !isLocked, gimbalMoveRunning, gimbalMoveCanPause else { return }
-        // The head settles on the last target (one 33 ms tick ahead); re-sending the
-        // GET pose, ~70 ms stale, stepped it back.
-        gimbalMovePaused.toggle()
+        if gimbalMovePaused { _ = programmedMove.resume() }
+        else { _ = programmedMove.pause() }
         controlNote = nil
     }
 
     func cancelProgrammedMove() {
-        gimbalMoveTask?.cancel()
-        finishProgrammedMove()
-    }
-
-    private func finishProgrammedMove() {
-        gimbalMoveTask = nil
-        gimbalStartCountdown = nil
-        gimbalMoveRunning = false
-        gimbalMovePaused = false
-        gimbalMoveCanPause = false
+        programmedMove.cancel()
+        programmedMoveState = programmedMove.state
     }
 
     // MARK: - Focus and tracking
@@ -1251,26 +1168,37 @@ extension CameraSession {
     }
 
     func markFocus(at normalized: CGPoint) {
+        markFocus(at: normalized, suppliedAdmission: nil)
+    }
+
+    func markFocus(at normalized: CGPoint, admission: LunaCommandAdmission) {
+        markFocus(at: normalized, suppliedAdmission: admission)
+    }
+
+    private func markFocus(at normalized: CGPoint, suppliedAdmission admission: LunaCommandAdmission?) {
+        if let admission {
+            guard let target = lunaSession, admission.admits(target.commandOwner) else { return }
+        }
         guard supportsTapFocus else { return }
-        if isTrackingActive { cancelSubjectTracking() }
+        if isTrackingActive {
+            if let admission { cancelSubjectTracking(admission: admission) }
+            else { cancelSubjectTracking() }
+        }
         lastTapFocusAt = Date()
         faceBox = nil
         let x = min(max(Double(normalized.x), 0), 1)
         let y = min(max(Double(normalized.y), 0), 1)
         focusPoint = CGPoint(x: x, y: y)
         guard canSendControl else { return }
-        // fw 1.1.15 official ROI with the camera upright, centred on the tap:
-        // 0.1545 × 0.271…0.275 of the 16:9 preview (square on the sensor). The
-        // smaller 0.0869 × 0.1545 box was captured with the camera lying on its side.
-        let w = 0.1545
-        let h = 0.2727
-        let left = min(max(x - w / 2, 0), 1 - w)
-        let top = min(max(y - h / 2, 0), 1 - h)
-        let mode = backend.functionMode
-        sendControl(
-            "Focus",
-            { try LunaProtocol.setTapFocus(x: left, y: top, width: w, height: h, functionMode: mode) },
-            refresh: false)
+        do {
+            if let admission {
+                try subjectTracking.focus(x: x, y: y, admission: admission, finished: controlFinished("Focus", admission: admission))
+            } else {
+                try subjectTracking.focus(x: x, y: y, finished: controlFinished("Focus"))
+            }
+        } catch {
+            controlNote = "Focus: \(error.localizedDescription)"
+        }
     }
 
     /// Drag-to-track → Luna Deep Track (cmd 237) with the operator's rectangle.
@@ -1280,85 +1208,78 @@ extension CameraSession {
             return
         }
         guard canSendControl else { return }
-        searchBox = box
-        subjectBox = nil
-        isTracking = false
-        trackingSawLock = false
         faceBox = nil
-        let left = min(max(box.centerX - box.width / 2, 0), 1)
-        let top = min(max(box.centerY - box.height / 2, 0), 1)
-        let width = min(box.width, 1 - left)
-        let height = min(box.height, 1 - top)
-        sendControl(
-            "Track",
-            { try LunaProtocol.openTracking(x: left, y: top, width: width, height: height) },
-            refresh: false,
-            onFail: { [weak self] in self?.clearLocalTracking() })
+        do {
+            try subjectTracking.start(
+                .init(x: box.x, y: box.y, width: box.width, height: box.height),
+                finished: controlFinished("Track"))
+        } catch {
+            controlNote = "Track: \(error.localizedDescription)"
+        }
     }
 
-    /// Stream-borne Deep Track state (media 0x85, every frame): tracking moves the
-    /// green subject box with the camera's box; lost shows the last box white, like
-    /// the search box, until the camera reacquires (it may pick a new subject) or the
-    /// operator cancels; idle after a lock means the camera ended tracking.
+    /// Stream-borne Deep Track state (media 0x85, every frame), read by the Luna owner. A
+    /// tracking frame also drops the face box.
     func applyTrackFrame(_ frame: LunaTrackFrame) {
-        let box = TrackingBox(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
-        switch frame.state {
-        case .tracking:
-            isTracking = true
-            trackingSawLock = true
-            lastSubjectPushAt = Date()
-            searchBox = nil
-            faceBox = nil
-            subjectBox = box
-        case .lost:
-            guard trackingSawLock else { return }
-            // Not `isTracking`: FocusOverlayPolicy would draw the search box as a green subject.
-            isTracking = false
-            subjectBox = nil
-            searchBox = box
-        case .idle:
-            // Idle frames also arrive between cmd 237 and the lock; only a lock ending counts.
-            if trackingSawLock { clearLocalTracking() }
-        case nil:
-            break
-        }
+        if frame.state == .tracking { faceBox = nil }
+        subjectTracking.ingest(frame)
     }
 
     /// The camera reports the end of tracking on notification 8315 (cancel).
     func applyTrackingState(_ state: UInt64) {
-        switch state {
-        case 1, 2:
-            isTracking = true
-            trackingSawLock = true
-            lastSubjectPushAt = Date()
-            if let search = searchBox {
-                subjectBox = TrackingBox.subject(from: search)
-                searchBox = nil
-            }
-        default:
-            if trackingSawLock || searchBox != nil { clearLocalTracking() }
-        }
+        subjectTracking.ingest(trackingState: state)
     }
 
     func cancelSubjectTracking() {
-        let had = isTrackingActive
-        clearLocalTracking()
-        guard had, backend.isControlReady else { return }
-        sendControl("Track clear", { LunaProtocol.cancelTrackingRequest }, refresh: false)
+        subjectTracking.cancel(finished: controlFinished("Track clear"))
+    }
+
+    func cancelSubjectTracking(admission: LunaCommandAdmission) {
+        subjectTracking.cancel(admission: admission, finished: controlFinished("Track clear", admission: admission))
     }
 
     func clearLocalTracking() {
-        searchBox = nil
-        subjectBox = nil
-        isTracking = false
-        trackingSawLock = false
-        lastSubjectPushAt = nil
+        subjectTracking.clear()
+    }
+
+    func showTracking(_ snapshot: LunaSubjectTracking.Snapshot) {
+        searchBox = snapshot.searchBox.map(TrackingBox.init)
+        subjectBox = snapshot.subjectBox.map(TrackingBox.init)
+        isTracking = snapshot.tracking
+    }
+
+    /// An owner-sent request's outcome, reported like `sendControl` without a settings refresh.
+    func controlFinished(_ name: String) -> @MainActor @Sendable (Error?) -> Void {
+        { [weak self] error in
+            guard let self else { return }
+            guard let error else {
+                ControlLiveLog.line("control: \(name) ok")
+                return
+            }
+            ControlLiveLog.line("control: \(name) failed \(error.localizedDescription)")
+            self.noteCommandFailure()
+            self.controlNote = "\(name) was not applied by the camera."
+        }
+    }
+
+    /// Refusing an unsent supplied operation is not a camera failure. An entered outcome may
+    /// still finish, but it publishes only to the same actual native source.
+    func controlFinished(
+        _ name: String, admission: LunaCommandAdmission
+    ) -> @MainActor @Sendable (Error?) -> Void {
+        let target = lunaSession
+        let finish = controlFinished(name)
+        return { [weak self] error in
+            guard let self, let target, self.lunaSession === target,
+                admission.source == target.commandOwner.source,
+                !(error is LunaCommandAdmissionError)
+            else { return }
+            finish(error)
+        }
     }
 
     func noteFrameTooSmall() {
-        searchBox = nil
-        subjectBox = nil
-        isTracking = false
+        subjectTracking.clearBoxes()
         controlNote = "Frame Too Small"
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(ControlHud.toastHoldSeconds))
@@ -1433,10 +1354,9 @@ extension CameraSession {
     }
 }
 
-/// Coalesces rapid drum edits into one send per key per ~120 ms (latest wins).
+/// Coalesces rapid drum edits into one send per key per ~120 ms (latest wins). One per session.
 @MainActor
 final class LunaExposureCoalescer {
-    static let shared = LunaExposureCoalescer()
     private var pending: [String: () -> Void] = [:]
     private var scheduled: Set<String> = []
 
@@ -1454,7 +1374,6 @@ final class LunaExposureCoalescer {
 
 @MainActor
 final class LunaRefreshDebounce {
-    static let shared = LunaRefreshDebounce()
     private var task: Task<Void, Never>?
 
     func schedule(_ work: @escaping @MainActor () async -> Void) {
@@ -1467,73 +1386,31 @@ final class LunaRefreshDebounce {
     }
 }
 
-struct HeadTrackReference: Equatable {
-    var yaw: Double
-    var pitch: Double
-    var yawRate = 0.0
-    var pitchRate = 0.0
-    var yawAccel = 0.0
-    var pitchAccel = 0.0
-}
-
-/// One head-tracking target at its measurement time (uptime seconds).
-struct HeadTrackSample: Equatable {
-    var t: Double
-    var yaw: Double
-    var pitch: Double
-}
-
 // MARK: - Timecode
 
 extension CameraSession {
-    /// Capture to phone delay of a live frame at best (official-app captures: frames land
-    /// 90 to 200 ms after their camera clock stamp).
-    static let frameLatencySeconds = 0.09
-
     /// The Luna's timecode is time of day from its own clock, which the phone app is
-    /// expected to set (the camera's "Sync system time" asks for the app). Set it like the
-    /// official app does on connect, but to the millisecond.
+    /// expected to set (the camera's "Sync system time" asks for the app).
     func syncCameraClock() {
-        frameClockOffset = nil
-        lastTimecodeSecond = nil
+        frameTimecode.reset()
         Task { @MainActor [weak self] in
-            guard let self else { return }
-            let zone = TimeZone.current
-            let now = Date()
-            guard let request = try? LunaProtocol.setClockRequest(
-                unixSeconds: UInt64(now.timeIntervalSince1970),
-                timeZoneSeconds: Int32(zone.secondsFromGMT(for: now)), zone: zone.identifier),
-                (try? await self.backend.send(request, timeout: .seconds(2))) != nil
-            else { return }
-            // Stamped at send: a GET round trip on the camera AP is about 4 ms (the clock
-            // SET takes ~220 ms, but that is the camera's own processing).
-            for count: UInt32 in 0..<2 {
-                let milliseconds = UInt64((Date().timeIntervalSince1970 * 1000).rounded())
-                if let request = try? LunaProtocol.syncTimeAccurateRequest(unixMilliseconds: milliseconds, count: count) {
-                    _ = try? await self.backend.send(request, timeout: .seconds(2))
-                }
-            }
+            guard let session = self?.lunaSession, await session.syncClock() else { return }
             ControlLiveLog.line("luna: camera clock synced")
         }
     }
 
-    /// Timecode of the live frame just received. Frame stamps run on a camera clock that
-    /// does not follow its time of day (MEDIA_TIME jumped 2380 s when the camera time was
-    /// set; the frame clock did not), so frames are pinned to the phone clock by their
-    /// earliest arrival. With the camera clock synced to the phone, that is the camera's
-    /// timecode. The HUD shows HH:MM:SS, so the status only changes once a second.
+    /// Timecode of the live frame just received. The HUD shows HH:MM:SS, so the status only
+    /// changes once a second.
     func noteFrameClock(_ milliseconds: UInt64) {
         #if DEBUG
             lastFrameClock = milliseconds
         #endif
-        let seen = Date().timeIntervalSince1970 - Double(milliseconds) / 1000 - Self.frameLatencySeconds
-        let offset = min(frameClockOffset ?? seen, seen)
-        frameClockOffset = offset
-        let wall = Double(milliseconds) / 1000 + offset
-        let second = Int(wall.rounded(.down))
-        guard second != lastTimecodeSecond else { return }
-        lastTimecodeSecond = second
-        status.timecode = LunaShellMapping.timecode(
-            unixSeconds: wall, timeZoneSeconds: TimeZone.current.secondsFromGMT(), fps: status.fps)
+        guard
+            let timecode = frameTimecode.note(
+                frameClock: milliseconds, arrival: Date().timeIntervalSince1970,
+                timeZoneSeconds: TimeZone.current.secondsFromGMT(), fps: status.fps)
+        else { return }
+        status.timecode = LunaShellMapping.timecodeText(timecode)
+        (coreSession as? LunaCameraSession)?.ingest(timecode: timecode)
     }
 }

@@ -13,42 +13,18 @@ packages:
   Sentry:
     url: https://github.com/getsentry/sentry-cocoa
     exactVersion: 9.24.0
-  OpenPocketViewCore:
+  OpenInstaViewCore:
     path: ..
-  Insta360Protocol:
-    path: ../Adapters/Insta360Protocol
+  # The OpenCine platform package: common camera contracts (OpenCineCore), portable media math
+  # (OpenCineMedia, also re-exported by OpenInstaViewCore, whose Package.swift names the same
+  # ../OpenCine checkout), shared UI 2.0 (MonitorUI, MonitorPresentation) and the Insta360 Luna
+  # integration (Insta360Protocol, Insta360Apple). Candidate: a sibling checkout of OpenCine next
+  # to this repository, pinned in opencine-pins.txt. Switch to url + exactVersion once it is
+  # published. The app and tests call OpenCineMedia directly, so they link the product themselves.
+  OpenCine:
+    path: ../../OpenCine
 
 targets:
-  # Luna wire I/O: CoreBluetooth, camera Wi-Fi, TCP 6666, screen KCP.
-  Insta360Apple:
-    type: framework
-    platform: iOS
-    configFiles:
-      Debug: Config/Version.xcconfig
-      Release: Config/Version.xcconfig
-    sources:
-      - path: ../Adapters/Insta360Apple/Sources/Insta360Apple
-        group: Insta360Apple
-      - path: ../Adapters/Insta360Apple/Sources/CKcp
-        group: Insta360Apple
-        excludes:
-          - module.modulemap
-          - LICENSE
-    dependencies:
-      - package: OpenPocketViewCore
-        product: MonitorContracts
-      - package: Insta360Protocol
-        product: Insta360Protocol
-    settings:
-      base:
-        SWIFT_VERSION: "5.0"
-        PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.insta360apple
-        CLANG_ENABLE_MODULES: YES
-        GENERATE_INFOPLIST_FILE: YES
-        DEVELOPMENT_TEAM: "4V4EGQ6LZA"
-        CODE_SIGN_STYLE: Automatic
-        SKIP_INSTALL: YES
-
   OpenInstaCine:
     type: application
     platform: iOS
@@ -61,17 +37,44 @@ targets:
     dependencies:
       - package: Sentry
         product: Sentry
-      - package: OpenPocketViewCore
-        product: OpenPocketViewCore
-      - package: OpenPocketViewCore
+      - package: OpenInstaViewCore
+        product: OpenInstaViewCore
+      - package: OpenCine
+        product: OpenCineMedia
+      - package: OpenCine
+        product: OpenCineCameraVocabulary
+      - package: OpenCine
+        product: OpenCineMotion
+      - package: OpenCine
+        product: OpenCineAppKitApple
+      - package: OpenCine
+        product: OpenCineCameraControls
+      - package: OpenCine
+        product: OpenCineRelay
+      - package: OpenCine
+        product: OpenCineRelayApple
+      - package: OpenCine
+        product: OpenCineWatch
+      - package: OpenCine
+        product: OpenCineFrameIO
+      - package: OpenCine
         product: MonitorUI
-      - package: OpenPocketViewCore
+      - package: OpenCine
         product: MonitorPresentation
-      - package: OpenPocketViewCore
-        product: MonitorContracts
-      - package: Insta360Protocol
+      - package: OpenCine
         product: Insta360Protocol
-      - target: Insta360Apple
+      - package: OpenCine
+        product: Insta360Apple
+      - package: OpenCine
+        product: OpenCineCore
+      # The shared app shell (SHELL-02): saved-camera store, cameras model and the cameras and
+      # pair screens over the Luna integration.
+      - package: OpenCine
+        product: OpenCineAppKit
+      # Apple media runtime (OpenCine plan MEDIA-02): the VideoToolbox decoder runtime under
+      # HevcDecoder and decoded-frame leases. iOS app only; the watch never decodes live video.
+      - package: OpenCine
+        product: OpenCineApple
       - target: OpenInstaCineWatch
         embed: true
         codeSign: true
@@ -94,7 +97,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: OpenInstaCine/OpenInstaCine.entitlements
         GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) CI_SILENCE_GL_DEPRECATION=1"
         OTHER_SWIFT_FLAGS: "$(inherited) -Xcc -DCI_SILENCE_GL_DEPRECATION"
-        # Same team as OpenZCine — it already has the Hotspot Configuration capability.
+        # Same team as OpenZCine, which already has the Hotspot Configuration capability.
         DEVELOPMENT_TEAM: "4V4EGQ6LZA"
         CODE_SIGN_STYLE: Automatic
         GENERATE_INFOPLIST_FILE: YES
@@ -111,18 +114,16 @@ targets:
         INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
         INFOPLIST_KEY_UIStatusBarHidden: YES
         # YES so SwiftUI `.statusBarHidden` can hide the iPad system bar after launch.
-        # `UIStatusBarHidden~ipad` lives in Info-Frameio.plist — INFOPLIST_KEY cannot
+        # `UIStatusBarHidden~ipad` lives in Info-Frameio.plist; INFOPLIST_KEY cannot
         # spell a `~ipad` variant.
         INFOPLIST_KEY_UIViewControllerBasedStatusBarAppearance: YES
-        # Space-separated — a colon list becomes one invalid string and iOS stays portrait-only.
+        # Use spaces: a colon list becomes one invalid string and iOS stays portrait-only.
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone: YES
         # Native iPad resizing lets UIKit report window-control exclusions.
         # Do not request UIRequiresFullScreen compatibility scaling: it keeps a
         # fixed scene size underneath the system window buttons on iPadOS 26.
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "OpenInstaCine uses Bluetooth to find your Insta360 Luna, ask it for approval, and hand off to its Wi-Fi."
         INFOPLIST_KEY_NSMotionUsageDescription: "OpenInstaCine uses headphone motion so AirPods can aim the gimbal."
         # iOS names the current Wi-Fi only to apps with precise location (Add setup › Wi-Fi).
@@ -130,7 +131,6 @@ targets:
         INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "OpenInstaCine connects to cameras over local Wi-Fi to receive video and control them, and can share the live picture with nearby OpenInstaCine phones."
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "OpenInstaCine saves clips you choose to Photos."
-        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: YES
         INFOPLIST_FILE: OpenInstaCine/Info-Frameio.plist
     configFiles:
       Debug: OpenInstaCine/Frameio.xcconfig
@@ -143,10 +143,33 @@ targets:
       - OpenInstaCineTests
     dependencies:
       - target: OpenInstaCine
-      - package: OpenPocketViewCore
-        product: OpenPocketViewCore
-      - package: Insta360Protocol
+      - package: OpenInstaViewCore
+        product: OpenInstaViewCore
+      - package: OpenCine
+        product: OpenCineMedia
+      # Original shared-math calibration fixtures explicitly select their DJI source profile.
+      - package: OpenCine
+        product: OpenCineDJI
+      - package: OpenCine
+        product: OpenCineCameraVocabulary
+      - package: OpenCine
+        product: OpenCineMotion
+      - package: OpenCine
+        product: OpenCineRelay
+      - package: OpenCine
+        product: OpenCineRelayApple
+      - package: OpenCine
         product: Insta360Protocol
+      # Also provides the Insta360Apple module; Xcode then shares one Insta360Apple
+      # framework between the app and this bundle instead of a second static copy.
+      - package: OpenCine
+        product: Insta360AppleTestSupport
+      - package: OpenCine
+        product: OpenCineCore
+      # OpenCineAppKit comes from the host app: linking it here too would make it a framework
+      # with a second MonitorUI (a second theme accent) inside.
+      - package: OpenCine
+        product: OpenCineApple
     settings:
       base:
         SWIFT_VERSION: "5.0"
@@ -163,8 +186,11 @@ targets:
     sources:
       - OpenInstaCineWatch
     dependencies:
-      - package: OpenPocketViewCore
-        product: OpenPocketViewCore
+      - package: OpenInstaViewCore
+        product: OpenInstaViewCore
+      # The wrist monitor and its WatchConnectivity client (OpenCineWatch).
+      - package: OpenCine
+        product: OpenCineWatch
     configFiles:
       Debug: OpenInstaCineWatch/Watch.xcconfig
       Release: OpenInstaCineWatch/Watch.xcconfig
@@ -192,6 +218,9 @@ targets:
       - OpenInstaCineUITests
     dependencies:
       - target: OpenInstaCine
+      # The UI tests every app shares (OpenCine OpenCineAppUITesting).
+      - package: OpenCine
+        product: OpenCineAppUITesting
     settings:
       base:
         SWIFT_VERSION: "5.0"

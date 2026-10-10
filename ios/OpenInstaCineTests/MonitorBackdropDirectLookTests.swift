@@ -1,7 +1,8 @@
 import CoreImage
 import CoreVideo
 import MonitorPresentation
-import OpenPocketViewCore
+import OpenCineApple
+import OpenInstaViewCore
 import XCTest
 
 @testable import MonitorUI
@@ -18,7 +19,7 @@ final class MonitorBackdropDirectLookTests: XCTestCase {
         lut.lutRGBA = cube.rgbaComponents.withUnsafeBytes { Data($0) }
         for effects in [LiveImageEffects(), lut] {
             let source = Self.colorBars()
-            let looks = AssistInspectorImageRenderer()
+            let looks = MonitorInspectorImageRenderer()
             let renderer = MonitorBackdropRenderer()
             let canvas = CGSize(width: 440, height: 300)
             let frame = CGRect(x: 20, y: 40, width: 400, height: 225)

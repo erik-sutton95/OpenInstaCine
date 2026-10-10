@@ -4,14 +4,13 @@
 "area:core":
   - changed-files:
       - any-glob-to-any-file:
-          - "Sources/OpenPocketViewCore/**/*"
+          - "Sources/OpenInstaViewCore/**/*"
           - "Sources/Monitor*/**/*"
 
 "area:protocol":
   - changed-files:
       - any-glob-to-any-file:
-          - "Adapters/**/*"
-          - "Apps/Android/luna-adapter/**/*"
+          - "opencine-pins.txt"
           - "docs/protocol-notes.md"
           - "docs/research/**/*"
           - "docs/implementation/luna-*.md"
@@ -31,8 +30,8 @@
 "area:live-view":
   - changed-files:
       - any-glob-to-any-file:
-          - "Sources/OpenPocketViewCore/Hevc*.swift"
-          - "Sources/OpenPocketViewCore/Feed*.swift"
+          - "Sources/OpenInstaViewCore/Hevc*.swift"
+          - "Sources/OpenInstaViewCore/Feed*.swift"
           - "ios/OpenInstaCine/Hevc*.swift"
           - "ios/OpenInstaCine/LiveView*.swift"
           - "ios/OpenInstaCine/VideoView.swift"
@@ -50,16 +49,14 @@
 "area:control":
   - changed-files:
       - any-glob-to-any-file:
-          - "Adapters/Insta360Protocol/Sources/Insta360Protocol/LunaControl.swift"
-          - "Apps/Android/luna-adapter/src/main/kotlin/**/LunaControl.kt"
-          - "Sources/OpenPocketViewCore/CameraControl.swift"
+          - "Sources/OpenInstaViewCore/CameraControl.swift"
           - "ios/OpenInstaCine/CameraSession*.swift"
 
 "area:media":
   - changed-files:
       - any-glob-to-any-file:
-          - "Sources/OpenPocketViewCore/Media*.swift"
-          - "Sources/OpenPocketViewCore/*LUT*.swift"
+          - "Sources/OpenInstaViewCore/Media*.swift"
+          - "Sources/OpenInstaViewCore/*LUT*.swift"
           - "Sources/MonitorUI/Media/**/*"
           - "ios/OpenInstaCine/Media*.swift"
           - "ios/OpenInstaCine/*LUT*.swift"
@@ -88,6 +85,5 @@
   - changed-files:
       - any-glob-to-any-file:
           - "Apps/Android/**/*"
-          - "Sources/OpenPocketCineAndroidFacade/**/*"
-          - "Sources/CJNI/**/*"
+          - "Sources/OpenInstaCineAndroidFacade/**/*"
           - "scripts/android-*.sh"

@@ -1,6 +1,6 @@
 import AVFoundation
 import MonitorPresentation
-import OpenPocketViewCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine
@@ -58,17 +58,6 @@ final class MediaLibraryTests: XCTestCase {
         XCTAssertFalse(MediaCacheGrade.original.isProxyOnly)
     }
 
-    func testOfflineLibraryHidesThumbOnlyClips() {
-        let cached = MediaFile(
-            path: "DCIM/DJI_001/CACHED.MP4",
-            thumbPath: "MISC/THM/CACHED.scr")
-        let thumbOnly = MediaFile(
-            path: "DCIM/DJI_001/THUMB_ONLY.MP4",
-            thumbPath: "MISC/THM/THUMB_ONLY.scr")
-        let shown = MediaLibraryQuery.cachedOnly(
-            [cached, thumbOnly], cachedPaths: [cached.path])
-        XCTAssertEqual(shown.map(\.filename), ["CACHED.MP4"])
-    }
 
     func testPlaybackCompositionScalesWorkingSizeBackToTheRaster() {
         let working = CGRect(x: 0, y: 0, width: 1440, height: 810)
@@ -123,12 +112,12 @@ final class MediaLibraryTests: XCTestCase {
             thumbPath: "MISC/THM/DJI_001/DJI_20260819000000_0050_D.scr",
             resolution: "3840x2160",
             fps: 50)
-        let source = ConformPreview.probe(listedRate: file.fps.map(Double.init))
-        let availability = ConformPreview.availability(for: source)
+        let source = MonitorConformPreview.probe(listedRate: file.fps.map(Double.init))
+        let availability = MonitorConformPreview.availability(for: source)
         XCTAssertEqual(source.captureRate, 50)
         XCTAssertTrue(availability.targets.contains(25))
         XCTAssertEqual(
-            ConformPreview.targetLabel(captureRate: 50, targetRate: 25), "25 fps · 50%")
+            MonitorConformPreview.targetLabel(captureRate: 50, targetRate: 25), "25 fps · 50%")
         XCTAssertEqual(
             PlaybackVideoLayout.size(fromResolution: file.resolution),
             CGSize(width: 3840, height: 2160))

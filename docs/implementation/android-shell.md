@@ -8,12 +8,12 @@ Implemented 2026-09-11 from OpenPocketCine baseline `9c4e7334ca4d935c5d467abecaf
 | --- | --- |
 | `:app` | Thin OpenInstaCine launcher, application ID `com.opencapture.openinstacine`, brand identity and yellow `#FFCF00` accent, backend selection. |
 | `:monitor` | One copy of the inherited complete Compose presentation, Android resources, MediaCodec/GLES/Vulkan presentation, Swift JNI bridge, scopes/assists, local cache and playback, settings and legal screens. Android library, not another branded application. |
-| `:core-api` | Platform-independent Kotlin `CameraBackend`, lifecycle/connection phases, discovery, capability and snapshot models, and Annex-B access-unit flow. |
-| `:luna-adapter` | Android BLE/GATT, per-installation authorization identity, UCD2 framing/crypto/protobuf, Wi-Fi network acquisition and network-bound TCP preview. No Compose dependency. |
+| OpenCineInsta360 `insta360-shell` (was `:core-api`) | Platform-independent Kotlin `CameraBackend`, lifecycle/connection phases, discovery, capability and snapshot models, and Annex-B access-unit flow. |
+| OpenCineInsta360 `insta360-luna` (was `:luna-adapter`) | Android BLE/GATT, per-installation authorization identity, UCD2 framing/crypto/protobuf, Wi-Fi network acquisition and network-bound TCP preview. No Compose dependency. |
 
 The thin launcher installs `MonitorConfiguration` before any shared model is constructed. The presentation session consumes the injected backend's flows and feeds the same `HevcDecoder` used by all monitor tools. BLE and TCP frames never enter a Compose screen. Camera commands are not implemented in the presentation session.
 
-`OpenPocketCineAndroid`, the JNI package namespace, and historical class names remain compatibility names so the native bridge continues to load. The root Swift package's `MonitorCore` extraction is linked into the staged JNI product. Generic model/policy migration is incremental: legacy Osmo helper, media DTO, LUT identifiers and protocol policy files remain in the inherited library for source/test compatibility, but the Luna session does not instantiate `BleLink` or `DatalinkDriver` or send DUML. Camera media remains capability-gated; its legacy API is not a validated generic media backend. OpenPocketCine and OpenZCine have not yet been changed to consume these modules.
+`OpenInstaCineAndroid`, the JNI package namespace, and historical class names remain compatibility names so the native bridge continues to load. The root Swift package's `MonitorCore` extraction is linked into the staged JNI product. Generic model/policy migration is incremental: legacy Osmo helper, media DTO, LUT identifiers and protocol policy files remain in the inherited library for source/test compatibility, but the Luna session does not instantiate `BleLink` or `DatalinkDriver` or send DUML. Camera media remains capability-gated; its legacy API is not a validated generic media backend. OpenPocketCine and OpenZCine have not yet been changed to consume these modules.
 
 ## Shell parity
 
@@ -42,8 +42,8 @@ From `Apps/Android`:
 ```sh
 JAVA_HOME=/opt/homebrew/opt/openjdk ./gradlew \
   :app:assembleDebug \
-  :monitor:testDebugUnitTest :luna-adapter:testDebugUnitTest \
-  :app:lintDebug :monitor:lintDebug :luna-adapter:lintDebug
+  :monitor:testDebugUnitTest \
+  :app:lintDebug :monitor:lintDebug
 ```
 
 The build stages Swift automatically via `:monitor:stageSwiftCore` and `scripts/android-stage-swift-core.sh`. It requires the matching Swift 6.3.3 toolchain, installed `swift-6.3.3-RELEASE_android` SDK, Android SDK 36, NDK 28.2.13676358, CMake 3.22.1 and Java 17 or newer. This workstation uses Homebrew JDK 26. The local SDK path belongs in ignored `local.properties`, not source control. Current ABI is **arm64-v8a**, min API 29, target API 36.

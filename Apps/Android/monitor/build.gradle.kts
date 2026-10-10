@@ -12,11 +12,11 @@ val repositoryRoot = rootProject.projectDir.parentFile.parentFile
 val stageSwiftCoreScript = repositoryRoot.resolve("scripts/android-stage-swift-core.sh")
 
 val resolvedVersionCode: Int =
-    (findProperty("versionCode") ?: property("openpocketcine.versionCode")).toString().toInt()
-val resolvedVersionName: String = property("openpocketcine.versionName").toString()
+    (findProperty("versionCode") ?: property("openinstacine.versionCode")).toString().toInt()
+val resolvedVersionName: String = property("openinstacine.versionName").toString()
 
 android {
-    namespace = "com.opencapture.openpocketcine"
+    namespace = "com.opencapture.openinstacine.monitor"
     compileSdk = 36
 
     defaultConfig {
@@ -31,21 +31,9 @@ android {
         ndk {
             abiFilters += supportedAndroidAbi
         }
-        externalNativeBuild {
-            cmake {
-                arguments += "-DANDROID_STL=c++_static"
-            }
-        }
     }
 
     ndkVersion = "28.2.13676358"
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
 
     buildTypes {
         release {
@@ -165,7 +153,23 @@ val stageSwiftCore =
         workingDir = repositoryRoot
         inputs.files(
             fileTree(repositoryRoot) {
-                include("Package.swift", "Package.resolved", "Sources/**", "Adapters/OsmoCompatibility/Sources/**")
+                include("Package.swift", "Package.resolved", "Sources/**")
+            },
+            // OpenCineMedia, OpenCineMotion, OpenCineRelay (and OpenCineCore, which they depend on): the root
+            // Package.swift takes them from the sibling OpenCine checkout.
+            fileTree(repositoryRoot.resolve("../OpenCine")) {
+                include(
+                    "Package.swift",
+                    "Sources/OpenCineMedia/**",
+                    "Sources/OpenCineMotion/**",
+                    "Sources/OpenCineRelay/**",
+                    "Sources/MonitorPresentation/**",
+                    "Sources/OpenCineCameraVocabulary/**",
+                    "Sources/OpenCineCore/**",
+                    "Sources/OpenCineJNISupport/**",
+                    "Sources/OpenCineJNI/**",
+                    "scripts/android-stage-swift-core.sh",
+                )
             },
             stageSwiftCoreScript,
         )
@@ -196,8 +200,23 @@ afterEvaluate {
 }
 
 dependencies {
-    api(project(":core-api"))
-    api(project(":monitor-ui"))
+    // Insta360 shell contract (CameraBackend, controls, media, values); brings OpenCineCore core.
+    api(libs.opencine.insta360.shell)
+    // The Luna session's layout projection and host-derived timecode (SHELL-01).
+    implementation(libs.opencine.insta360.luna)
+    // Cameras and pairing pages, the connection model and the saved-camera store (SHELL-02).
+    implementation(libs.opencine.appkit)
+    // Capture sheets, live chrome and gimbal views over the camera vocabulary (camera-controls).
+    implementation("com.opencapture.opencine:camera-controls:0.1.0-SNAPSHOT")
+    api(libs.opencine.monitor.ui)
+    implementation("com.opencapture.opencine:media:0.1.0-SNAPSHOT")
+    implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT")
+    implementation("com.opencapture.opencine:native-runtime:0.1.0-SNAPSHOT")
+    implementation("com.opencapture.opencine:platform:0.1.0-SNAPSHOT")
+    // Live-view MediaCodec decoder (HevcDecoder), shared with OpenPocketCine.
+    implementation("com.opencapture.opencine:decoder:0.1.0-SNAPSHOT")
+    // libopc_vulkan.so and its JNI facade (feed.OpcVulkan), built by OpenCineCore's `:vulkan` module.
+    implementation("com.opencapture.opencine:vulkan:0.1.0-SNAPSHOT")
 
     implementation(platform(libs.compose.bom))
     api(libs.androidx.activity.compose)
@@ -220,8 +239,11 @@ dependencies {
     androidTestImplementation("androidx.test:core:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation(libs.kotlin.test.junit)
+    androidTestImplementation(testFixtures("com.opencapture.opencine:core:0.1.0-SNAPSHOT"))
 
     testImplementation(libs.kotlin.test.junit)
+    // Original cross-source calibration fixtures select DJI explicitly in tests only.
+    testImplementation("com.opencapture.opencine:dji:0.1.0-SNAPSHOT")
     testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
@@ -236,7 +258,8 @@ listOf("Debug", "Release").forEach { variant ->
         outputs.dir(marker)
         doLast { marker.get().asFile.mkdirs() }
     }
-    tasks.matching { it.name == "bundle${variant}LocalLintAar" }.configureEach { dependsOn(prepare) }
+    tasks.matching { it.name == "bundle${variant}LocalLintAar" || it.name == "bundle${variant}Aar" }
+        .configureEach { dependsOn(prepare) }
 }
 
 abstract class LocalReliabilityDsnValueSource :

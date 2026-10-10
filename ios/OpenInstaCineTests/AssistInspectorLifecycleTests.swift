@@ -1,5 +1,6 @@
 import CoreImage
 import CoreVideo
+import OpenCineApple
 import SwiftUI
 import XCTest
 
@@ -24,7 +25,7 @@ final class AssistInspectorLifecycleTests: XCTestCase {
             CIContext().createCGImage(
                 CIImage(color: .white).cropped(to: CGRect(x: 0, y: 0, width: 1, height: 1)),
                 from: CGRect(x: 0, y: 0, width: 1, height: 1)))
-        let renderer = AssistInspectorImageRenderer(
+        let renderer = MonitorInspectorImageRenderer(
             now: { clock.now },
             operation: { _, _ in
                 let invocation = work.begin()
@@ -52,8 +53,9 @@ final class AssistInspectorLifecycleTests: XCTestCase {
                 kCFAllocatorDefault, 8, 8, kCVPixelFormatType_32BGRA,
                 [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &source),
             kCVReturnSuccess)
-        model.monitorSamples.publish(
-            source: try XCTUnwrap(source), transfer: .rec709, colorMode: .normal, bundle: nil)
+        let sourceLease = model.monitorSamples.openSource(.live)
+        model.monitorSamples.publish(sourceLease,
+            source: try XCTUnwrap(source), transfer: .rec709, reportedTransfer: .rec709, bundle: nil)
         let size = CGSize(width: 874, height: 402)
         let probe = InspectorLifecycleProbe()
         let host = UIHostingController(
@@ -66,7 +68,7 @@ final class AssistInspectorLifecycleTests: XCTestCase {
         defer {
             release.signal()
             model.assist.configureTool = nil
-            model.monitorSamples.reset()
+            model.monitorSamples.closeSource(sourceLease)
             window.isHidden = true
             window.rootViewController = nil
         }
@@ -131,13 +133,14 @@ final class AssistInspectorLifecycleTests: XCTestCase {
             memset(base, 128, CVPixelBufferGetBytesPerRow(buffer) * 180)
         }
         CVPixelBufferUnlockBaseAddress(buffer, [])
-        model.monitorSamples.publish(
-            source: buffer, transfer: .rec709, colorMode: .normal, bundle: nil)
+        let sourceLease = model.monitorSamples.openSource(.live)
+        model.monitorSamples.publish(sourceLease,
+            source: buffer, transfer: .rec709, reportedTransfer: .rec709, bundle: nil)
         var publicationCount = 0
         let publication = Task { @MainActor in
             while !Task.isCancelled {
-                model.monitorSamples.publish(
-                    source: buffer, transfer: .rec709, colorMode: .normal, bundle: nil)
+                model.monitorSamples.publish(sourceLease,
+                    source: buffer, transfer: .rec709, reportedTransfer: .rec709, bundle: nil)
                 publicationCount += 1
                 do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
             }
@@ -151,7 +154,7 @@ final class AssistInspectorLifecycleTests: XCTestCase {
         defer {
             publication.cancel()
             model.assist.configureTool = nil
-            model.monitorSamples.reset()
+            model.monitorSamples.closeSource(sourceLease)
             window.isHidden = true
             window.rootViewController = nil
         }

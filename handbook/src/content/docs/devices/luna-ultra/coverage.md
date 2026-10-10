@@ -47,8 +47,8 @@ Color Recovery on the Luna.
    recorded with; the UI does not show it yet.
 4. **Poll rate.** OpenInstaCine polls about ten times as often as the official
    app. No cost has been measured.
-5. **Re-verification after shell syncs.** Each OpenPocketCine sync is re-checked
-   on the camera: live picture, false color over I-Log and the pairing hints.
+5. **Re-verification after OpenCine updates.** The shells are no longer synced from
+   OpenPocketCine; each adopted OpenCine revision is re-checked on the camera: live picture, false color over I-Log and the pairing hints.
 
 The feature-by-feature parity table is
 [`docs/implementation/luna-ios-status.md`](https://github.com/erik-sutton95/OpenInstaCine/blob/main/docs/implementation/luna-ios-status.md).

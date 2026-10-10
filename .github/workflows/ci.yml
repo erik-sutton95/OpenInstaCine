@@ -29,6 +29,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # The app's release-note scripts delegate to the pinned shared validators.
+      - name: Check out pinned OpenCine for shared metadata checks
+        run: scripts/checkout-opencine.sh
+
       - name: Gitleaks
         # Digest-pinned for reproducibility. Update the version manually when needed. v8.30.1
         uses: docker://ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
@@ -58,7 +62,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           changed_files="$(git log --diff-merges=combined --format= --name-only "$BASE_SHA..HEAD" | sort -u)"
-          production_files="$(grep -E '^(Sources/|Adapters/|ios/|Package\.swift$|scripts/ios-)' <<< "$changed_files" | grep -vE '^(scripts/ios-release-notes|Adapters/[^/]+/Tests/|ios/OpenInstaCine(UI)?Tests/|ios/LunaOfficialUITests/|ios/ci_scripts/)' || true)"
+          production_files="$(grep -E '^(Sources/|ios/|Package\.swift$|opencine-pins\.txt$|scripts/ios-)' <<< "$changed_files" | grep -vE '^(scripts/ios-release-notes|ios/OpenInstaCine(UI)?Tests/|ios/LunaOfficialUITests/|ios/ci_scripts/)' || true)"
           if [[ -n "$production_files" ]]; then
             if ! grep -Fxq 'ios/TestFlight/WhatToTest.en-US.txt' <<< "$changed_files"; then
               echo "Update ios/TestFlight/WhatToTest.en-US.txt with the this-build window." >&2
@@ -72,7 +76,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           changed_files="$(git log --diff-merges=combined --format= --name-only "$BASE_SHA..HEAD" | sort -u)"
-          production_files="$(grep -E '^(Apps/Android/|Sources/OpenPocketViewCore/|Sources/OpenPocketCineAndroidFacade/|Sources/CJNI/|Package\.swift$|scripts/android-|scripts/ci-install-swift-android\.sh$)' <<< "$changed_files" | grep -vE '^(scripts/android-release-notes|Apps/Android/[^/]+/src/(test|androidTest|debug)/)' || true)"
+          production_files="$(grep -E '^(Apps/Android/|Sources/OpenInstaViewCore/|Sources/OpenInstaCineAndroidFacade/|Package\.swift$|scripts/android-|scripts/ci-install-swift-android\.sh$)' <<< "$changed_files" | grep -vE '^(scripts/android-release-notes|Apps/Android/[^/]+/src/(test|androidTest|debug)/)' || true)"
           if [[ -n "$production_files" ]]; then
             if ! grep -Fxq 'Apps/Android/Play/WhatToTest.en-US.txt' <<< "$changed_files"; then
               echo "Update Apps/Android/Play/WhatToTest.en-US.txt with the this-build window." >&2
@@ -116,17 +120,19 @@ jobs:
             code:
               - 'Sources/**'
               - 'Tests/**'
-              - 'Adapters/**'
               - 'ios/**'
               - 'Package.swift'
+              - 'opencine-pins.txt'
+              - 'scripts/checkout-opencine.sh'
               - 'justfile'
               - '.github/workflows/ci.yml'
             android:
               - 'Apps/Android/**'
-              - 'Sources/OpenPocketViewCore/**'
-              - 'Sources/OpenPocketCineAndroidFacade/**'
-              - 'Sources/CJNI/**'
+              - 'Sources/OpenInstaViewCore/**'
+              - 'Sources/OpenInstaCineAndroidFacade/**'
               - 'Package.swift'
+              - 'opencine-pins.txt'
+              - 'scripts/checkout-opencine.sh'
               - 'scripts/android-*.sh'
               - 'scripts/ci-install-swift-android.sh'
               - 'justfile'
@@ -151,6 +157,13 @@ jobs:
           xcode-version: latest-stable
       - name: Install native tooling
         run: brew install just xcodegen || true
+      # Candidate (OpenCine): ios/project.yml takes MonitorUI and MonitorPresentation, OpenCineCore
+      # plus OpenCineMedia (also Package.swift), and Insta360Protocol plus Insta360Apple
+      # (`just core-test` tests them) from ../OpenCine, one sibling checkout pinned by SHA in
+      # opencine-pins.txt. Works only once that repository is published. Delete when the app pins
+      # it by url + version.
+      - name: Check out pinned OpenCine next to the repository
+        run: scripts/checkout-opencine.sh
       - name: Swift packages
         run: just core-test
       - name: iOS unit tests
@@ -170,6 +183,13 @@ jobs:
           distribution: temurin
           java-version: "21"
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      # OpenCine candidate wiring. Apps/Android/settings.gradle.kts includes ../../../OpenCine/Android
+      # (monitor-ui, core, media, vulkan, the Insta360 shell contract and Luna adapter; their tests run
+      # in OpenCine's CI), and the Swift Android core links OpenCineMedia from ../OpenCine: one sibling
+      # checkout pinned by SHA in opencine-pins.txt. Works only once that remote exists (owner/URL
+      # not final).
+      - name: Check out pinned OpenCine next to the repository
+        run: scripts/checkout-opencine.sh
       # The install script needs NDK 27 for the Swift Android SDK sysroot.
       - name: Set up Android NDK 27
         uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
@@ -182,7 +202,7 @@ jobs:
         working-directory: Apps/Android
         env:
           SWIFT_ANDROID_SDK_ID: swift-6.3.3-RELEASE_android
-        run: ./gradlew :app:assembleDebug :monitor:testDebugUnitTest :luna-adapter:testDebugUnitTest :app:lintDebug :monitor:lintDebug :luna-adapter:lintDebug
+        run: ./gradlew :app:assembleDebug :monitor:testDebugUnitTest :app:lintDebug :monitor:lintDebug
 
   handbook:
     name: Handbook

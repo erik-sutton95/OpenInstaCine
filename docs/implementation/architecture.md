@@ -1,6 +1,8 @@
 # Implemented architecture and migration boundary
 
-Date: 2026-09-11. This describes the source currently in OpenInstaCine. The
+Date: 2026-09-11. The ownership table and diagram were updated on 2026-10-01
+(OpenCineUI adoption, UI-03) to name the current paths and products; the rest of
+this page is the 2026-09-11 extraction review. The
 [shared-engine standard](../SHARED-MONITOR-ENGINE.md) is the long-term contract;
 the older [integration inventory](../shared-engine-integration.md) and platform
 inventories describe the baseline and planning inputs, not completed sibling
@@ -12,38 +14,58 @@ and renderer implementations. [Baseline provenance](baseline-provenance.json)
 records original paths and source hashes. OpenPocketCine and OpenZCine were
 read as references and were not modified by this extraction.
 
+## Shared settings migration, 2026-10-03
+
+The actual operator page now uses OpenCine's `MonitorSettingsPage`, common settings controls,
+touch/safety section and HDR panel section on SwiftUI and Compose. Common stored choices
+forward through `MonitorOperatorPreferences` with the existing app domains and keys intact.
+Swift preference code moved from `LiveAssists.swift` to `OperatorPreferences.swift`; the
+remaining assist values retain their original storage behavior. The Pocket sync script, since
+retired, excluded these migrated files so a sync could not restore the deleted implementations.
+
+Cache presentation, app information, project/legal, support and diagnostics sections also
+use the shared settings views. Cache IO/confirmation, legal routes, reporting consent,
+diagnostic export/deletion and privacy policy remain app callbacks. Android app information
+now receives this app's actual protocol and theme copy. Native input/action/display controls
+are shared rather than copied implementations.
+
+Remaining display, assist, link/controller and delivery sections still live in this app and
+will migrate separately. The ownership table below records the earlier extraction baseline.
+The settings migration preserves Android's existing Sharing placeholder and iOS's existing
+sharing support. Simulator rendering and automated checks do not qualify physical devices.
+
 ## Ownership and dependencies
 
 | Owner / location | Responsibility and current dependencies |
 | --- | --- |
-| `Apps/Apple/OpenInstaCine` | App identity, yellow palette, assets, entitlements, configuration and backend construction. Instantiates `MonitorAppRoot` with `LunaCameraBackend` |
-| `Shared/Apple/MonitorUI` | SwiftUI screens, shared presentation `CameraSession`, VideoToolbox/Metal processing, scopes/assists, settings, local cache/player, delivery and diagnostics. Depends on `MonitorContracts` and the `OpenPocketViewCore` compatibility product |
-| `Sources/MonitorContracts` | Foundation-only Apple backend seam: capabilities, discovery, phases, information/status, encoded frames, semantic control intents, media descriptors and network handoff |
-| `Sources/MonitorCore` | Foundation-only shared math/policies: transfer/scopes, cube processing, layout, presentation gates, standardized NAL helpers, cache/conform and recovery policies. No wire codec or OS I/O |
-| `Adapters/OsmoCompatibility` | Legacy `OpenPocketViewCore` module. Reexports `MonitorCore` and retains Osmo models, DUML codecs/control values and mixed compatibility helpers |
-| `Adapters/Insta360Protocol` | Independent Swift package for UCD2, bounded reassembly/checksum, protobuf, scheme-3 envelopes and verified Luna read/live commands. Foundation only, no network/BLE/crypto implementation |
-| `Adapters/Insta360Apple` | CoreBluetooth, CryptoKit, Keychain, hotspot join, Network.framework TCP and Luna session lifetime. Depends only on `MonitorContracts` and `Insta360Protocol` |
-| `Apps/Android/app` | Thin branded activity, app manifest and DEBUG replay selection. Installs the brand identity and Luna backend factory |
-| `Apps/Android/monitor` | Shared Compose shell, MediaCodec, Vulkan/GLES, assists, library/player, local delivery and Android integration. Depends on `:core-api` and staged native libraries |
-| `Apps/Android/core-api` | Kotlin/JVM backend discovery/lifecycle/state/capability/frame contract. Uses coroutines/flows; no Compose or Android platform types |
-| `Apps/Android/luna-adapter` | Android GATT, JCA cryptography, Wi-Fi/network-bound socket lifecycle and a Kotlin UCD2 implementation; depends on `:core-api` |
-| `Sources/OpenPocketCineAndroidFacade`, `Sources/CJNI` | Existing Swift JNI exports and Android header shim. Dynamic product `OpenPocketCineAndroid` still imports the compatibility module, which supplies the single extracted `MonitorCore` implementation |
+| `ios/OpenInstaCine` | iOS app: app-owned code on the shared OpenCine shell (`OpenCineAppKit`), no longer synced from OpenPocketCine, plus Luna presentation adapters (`CameraSession*.swift`, `LunaShellMapping.swift`, `OpenInstaCineBrand.swift`, assets). `OpenInstaCineBrand.apply()` sets `MonitorTheme.accentRGB = 0xFFCF00` before any view is built. Links `OpenInstaViewCore`, `OpenCineAppKit`, `Insta360Protocol`, `Insta360Apple` and OpenCineUI `MonitorUI` / `MonitorPresentation` |
+| OpenCineUI `MonitorUI`, `MonitorPresentation` | Shared SwiftUI design system (theme, Sora, Lucide/assist icons, canvas, pages, controls) and Foundation-only presentation/layout policy. Part of the OpenCine platform repository, a sibling checkout at `../OpenCine` that `ios/project.yml` names as a path package (candidate until a versioned release). No camera, vendor or app dependency. Its tests run in OpenCine |
+| `ios/OpenInstaCineWatch` | watchOS remote over WatchConnectivity; depends on `OpenInstaViewCore` |
+| `Sources/OpenInstaViewCore` | Portable core, forked from OpenPocketCine and OpenInstaCine-owned since RELEASE-01 (no longer synced; upstream's copy depends on OpenCineDJI), with Luna hooks (I-Log, Luna resolutions, `.lrv` proxy, per-session `CameraProfile`): color science, LUTs, media manifest, saved cameras, plus the inherited Osmo models and DUML codecs |
+| OpenCine `Sources/Insta360Protocol` | OpenCine package product for UCD2, bounded reassembly/checksum, protobuf, scheme-3 envelopes and verified Luna read/live commands. Foundation only, no network/BLE/crypto implementation |
+| OpenCine `Sources/Insta360Apple` | CoreBluetooth, CryptoKit, Keychain, hotspot join, Network.framework TCP and Luna session lifetime. `LunaCameraSession` implements OpenCineCore `CameraSession` for ISO, shutter, white balance and record (settle and readback included). An OpenCine package product linked by `ios/project.yml`; depends on `Insta360Protocol`, `CKcp`, OpenCineCore, OpenCineMotion and OpenCineMedia |
+| `Apps/Android/app` | Thin branded activity, app manifest and DEBUG replay selection. Installs the brand identity (accent `0xFFFFCF00`) and Luna backend factory through `MonitorConfiguration` |
+| `Apps/Android/monitor` | App-owned Compose code on the shared OpenCine shell (`appkit`), no longer synced from OpenPocketCine: MediaCodec, Vulkan/GLES, assists, library/player, local delivery and Android integration. Depends on OpenCine `appkit`, OpenCineInsta360 `insta360-shell`, OpenCineUI `monitor-ui`, OpenCineCore `media` and `vulkan` (`libopc_vulkan.so` and its JNI facade `feed.OpcVulkan`) and staged native libraries |
+| OpenCineUI `Android/monitor-ui` | Compose design language (theme with brand-assigned `MonitorPalette.accent`, Sora, icons, page scaffolds). Coordinate `com.opencapture.opencine:monitor-ui`, substituted from the included build `../../../OpenCine/Android` (named `opencine`) in `Apps/Android/settings.gradle.kts` |
+| OpenCineInsta360 `Android/insta360-shell` | Kotlin/JVM backend discovery/lifecycle/state/capability/frame contract (was `Apps/Android/core-api`). Uses coroutines/flows; no Compose or Android platform types. Recording, ISO, shutter and WB are not on `CameraControls`: a `CoreSessionSource` backend opens an OpenCineCore `CameraSession` for them. Coordinate `com.opencapture.opencine:insta360-shell` |
+| OpenCineInsta360 `Android/insta360-luna` | Android GATT, JCA cryptography, Wi-Fi/network-bound socket lifecycle and a Kotlin UCD2 implementation; `LunaCameraSession` is the OpenCineCore session (port of the Apple one). Was `Apps/Android/luna-adapter`. Both come from the same included build `../../../OpenCine/Android` (named `opencine`), which also builds OpenCineCore `:core` |
+| `Sources/OpenInstaCineAndroidFacade` | Swift JNI exports, using OpenCine `OpenCineJNISupport`. Dynamic product `OpenInstaCineAndroid` imports `OpenInstaViewCore` |
 
 ```mermaid
 flowchart TD
-    Apple[Apple brand app] --> UI[Shared MonitorUI]
+    Apple[iOS app] --> UI[OpenCineUI MonitorUI]
+    UI --> Presentation[OpenCineUI MonitorPresentation]
     Apple --> LunaApple[Insta360Apple adapter]
-    UI --> Contracts[MonitorContracts]
-    LunaApple --> Contracts
+    Apple --> Core[OpenInstaViewCore]
+    LunaApple --> OCCore[OpenCineCore]
     LunaApple --> Protocol[Insta360Protocol]
-    UI --> Compat[OpenPocketViewCore compatibility]
-    Compat --> Core[MonitorCore]
-    Android[Android brand app] --> Compose[Shared monitor library]
+    Android[Android app] --> Monitor[Compose shell :monitor]
     Android --> LunaAndroid[Luna Android adapter]
-    Compose --> API[Kotlin core-api]
+    Monitor --> Compose[OpenCineUI monitor-ui]
+    Monitor --> API[OpenCineInsta360 insta360-shell]
     LunaAndroid --> API
-    Compose --> JNI[Swift JNI and native renderer]
-    JNI --> Compat
+    Monitor --> JNI[Swift JNI and native renderer]
+    JNI --> Core
 ```
 
 The Apple and Android backend contracts express the same live-connection seam,
@@ -111,12 +133,34 @@ inventory is preserved in [iOS parity](ios-parity-inventory.md) and
 itself certify every interaction on every device; test and visual review
 evidence must be reported separately.
 
+## Session ownership and per-session configuration
+
+Each camera connection has exactly one owner. On iOS the composition root
+(`AppModel.makeBackend()`) creates one `LunaCameraBackend` per owner and injects
+it with `CameraSession(backend:)`; a borrowed or controls-only session is a
+lease that never rebinds the owner's callbacks or connects. On Android each
+`PocketCameraSession` creates its own backend. Mode, colour, gimbal and focus
+labels, the camera media route (host and path rules) and the zoom ceiling are
+per-session values (`CameraProfile`, `zoomCeiling`), not launch-time globals.
+The learned picture EV calibration is one meter per session, keyed by device,
+recording profile/transfer and metering, and is always image-estimated; a
+camera-reported EV wins. Its v1 per-transfer values are read only and seed new
+keys of the same transfer. The control epoch moves only when the control link
+is (re)established; a stream restart or picture format change does not touch it.
+
+Qualification limit: `LunaWiFi` assumes one joined camera access point
+(192.168.42.x) per phone. Two simultaneous Luna connections are not supported
+until that is lifted and qualified on hardware.
+
 ## What remains staged
 
-1. **Sibling adoption:** OpenPocketCine/OpenZCine still use their original
-   implementations. A later change must pin this shared engine, build their
-   Osmo/Nikon adapters and replace their screen ownership. No Nikon adapter or
-   sibling target migration is claimed here.
+1. **Sibling adoption:** the design system (`MonitorUI`, `MonitorPresentation`,
+   Android `monitor-ui`) is now one implementation in OpenCineUI, consumed by
+   OpenPocketCine and OpenInstaCine candidate branches. Media, motion, relay,
+   the Apple decode runtime and the Android Vulkan renderer come from OpenCineCore.
+   The former Pocket source-sync workflow has been retired (see
+   `openpocketcine-foundation.md`). Remaining legacy app owners migrate through
+   reviewed OpenCine contracts and actual app adapters.
 2. **Compatibility models:** `MonitorLUT`, `MediaFile`, status/control enums,
    saved-camera records and several rendering bridges still use inherited
    names/types. Native view facades translate where needed. Osmo wire bytes
@@ -125,8 +169,8 @@ evidence must be reported separately.
    Metal, CoreVideo, Android renderers, native media storage and delivery
    services remain platform implementations. The complete delivery queue has
    not been moved into Foundation-only code.
-4. **JNI compatibility:** The old `com.opencapture.openpocketcine` internal
-   package, JNI symbols and `OpenPocketCineAndroid` library name remain so the
+4. **JNI compatibility:** The old `com.opencapture.openinstacine.monitor` internal
+   package, JNI symbols and `OpenInstaCineAndroid` library name remain so the
    inherited decoder/LUT/assist calls load correctly. The installed brand app
    ID is `com.opencapture.openinstacine`. Rename both sides together later.
 5. **Profiles/assets:** Some inherited color/profile catalog machinery and DJI
@@ -140,9 +184,8 @@ evidence must be reported separately.
    strict codec tests, a native adapter mapping and real-camera validation
    before enabling its shared UI operation.
 
-The shared-core [extraction report](shared-core-extraction.md) lists precise
-file-level debts. Boundary tests prevent DUML/UCD2 wire APIs from being added
-back to `MonitorCore`, `MonitorContracts` or shared Apple screens. The current
+The superseded shared-core [extraction report](shared-core-extraction.md) recorded
+the 2026-09-11 file-level debts. The current
 Gradle module split and inherited dependency metadata workaround remain
 visible in build files rather than hidden in generated binaries.
 
@@ -152,18 +195,17 @@ visible in build files rather than hidden in generated binaries.
 | --- | --- |
 | Python Mac live viewer, [measured report](../mac-preview.md) | Real own-client BLE/auth/Wi-Fi/TCP live preview on Luna firmware v1.0.288, including acknowledged stop and reconnect |
 | `swift test` | Shared portable behavior, compatibility/JNI facade helpers and module-boundary checks; 609 passed at extraction |
-| `swift test --package-path Adapters/Insta360Protocol` | 24 sanitized fixture, malformed frame, fragmentation, checksum and protobuf/envelope tests |
+| `swift test --package-path ../OpenCine --filter Insta360ProtocolTests` | Sanitized fixture, malformed frame, fragmentation, checksum and protobuf/envelope tests |
 | Android JVM tests/build/lint | 462 inherited monitor tests and 9 Luna tests reported passing; arm64 APK/native staging and lint. Does not exercise physical Android radio/network permissions |
 | Apple UI suite and native builds | 413 UI tests completed, one optional fixture skip, no failures. Simulator Debug, unsigned iOS Release and Catalyst Debug builds succeeded; private replay review does not prove native camera association |
 | Apple Simulator / Android emulator LOCAL REPLAY | Decoding, real-image scopes, presentation and shared UI from private recorded footage. Does not connect to a camera |
 | Native physical-device run | Still required for first-install Bluetooth/Local Network/Wi-Fi consent, feed startup and sustained reconnect. No phone actions were performed during this implementation review |
 
-See the root [README](../../README.md#build-and-review) for commands. Apple uses
-`xcodegen --spec Apps/Apple/project.yml`, `just apple-build`, and UUID-explicit
-`just apple-test`, `just apple-simulator` and `just apple-replay`. Android uses
-`Apps/Android/gradlew -p Apps/Android` with `:app:assembleDebug`,
-`:monitor:testDebugUnitTest`, `:luna-adapter:testDebugUnitTest` and each module's
-`lintDebug`. The final [acceptance report](acceptance.md) records verification
+See the root [README](../../README.md#build-from-source) for commands. Apple uses
+`just ios-generate`, `just ios-build` and `just ios-test`, with OpenCine checked
+out at `../OpenCine`. Android uses `just android-check`: `:app:assembleDebug`,
+`:monitor:testDebugUnitTest` and each module's `lintDebug` (the Luna adapter's tests run in
+OpenCine: `cd ../OpenCine/Android && ./gradlew :insta360-luna:test`). The final [acceptance report](acceptance.md) records verification
 after subsequent integration changes. The completed Apple test run is logged
 privately in `.local/apple-ui-tests-final.log`.
 

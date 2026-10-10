@@ -2,19 +2,79 @@ import CoreImage
 import Metal
 import QuartzCore
 import XCTest
+import OpenCineApple
 import os
 
 @testable import OpenInstaCine
 
 @MainActor
+private final class TestPresentationOptions {
+    var value = MonitorPresentationOptions(upscaler: .lanczos)
+}
+
+@MainActor
 final class FeedPresentationTests: XCTestCase {
+    func testNativeHostKeepsItsLayerWhenOperatorDisplayChoicesChange() {
+        let options = TestPresentationOptions()
+        let host = MonitorPictureHost(frame: CGRect(x: 0, y: 0, width: 64, height: 48),
+            options: { _ in options.value })
+        host.layoutSubviews()
+        let layer = host.layer
+        let generation = host.debugPresentGeneration
+        options.value.hdr = true
+        options.value.hdrGain = 2
+        options.value.upscaler = .spatial
+        host.layoutSubviews()
+        XCTAssertTrue(host.layer === layer)
+        XCTAssertEqual((layer as? CAMetalLayer)?.pixelFormat, .rgba16Float)
+        XCTAssertTrue(layer.wantsExtendedDynamicRangeContent)
+        XCTAssertGreaterThan(host.debugPresentGeneration, generation)
+        options.value.hdr = false
+        host.layoutSubviews()
+        XCTAssertTrue(host.layer === layer)
+        XCTAssertEqual((layer as? CAMetalLayer)?.pixelFormat, .bgra8Unorm)
+        XCTAssertFalse(layer.wantsExtendedDynamicRangeContent)
+    }
+
+    func testRetiredModelCompletionCannotPublishOrReleaseTheNewSession() throws {
+        var state = MonitorAsyncFrameState()
+        let old = try XCTUnwrap(state.reserve(slot: 0).ticket)
+        state.reset()
+        let successor = try XCTUnwrap(state.reserve(slot: 1).ticket)
+        XCTAssertFalse(state.complete(old))
+        XCTAssertNil(state.readyIndex)
+        XCTAssertNil(state.reserve(slot: 2).ticket, "Old completion must not release the new flight")
+        XCTAssertTrue(state.complete(successor))
+        XCTAssertEqual(state.readyIndex, 1)
+        let next = try XCTUnwrap(state.reserve(slot: 2).ticket)
+        XCTAssertFalse(state.complete(successor), "Repeated completion must not release another frame")
+        XCTAssertNil(state.reserve(slot: 0).ticket)
+        XCTAssertTrue(state.complete(next))
+        XCTAssertEqual(state.readyIndex, 2)
+    }
+
+    func testModelFailureLeavesHeldOutputAndAllowsTheNextRetry() throws {
+        var state = MonitorAsyncFrameState()
+        let first = try XCTUnwrap(state.reserve(slot: 0).ticket)
+        XCTAssertTrue(state.complete(first))
+        let failed = try XCTUnwrap(state.reserve(slot: 1).ticket)
+        XCTAssertTrue(state.complete(failed, failure: "refused"))
+        let report = state.reserve(slot: 2)
+        XCTAssertEqual(report.failure, "refused")
+        XCTAssertNil(report.ticket)
+        XCTAssertEqual(report.readyIndex, 0)
+        let retry = try XCTUnwrap(state.reserve(slot: 2).ticket)
+        XCTAssertTrue(state.complete(retry))
+        XCTAssertEqual(state.readyIndex, 2)
+    }
+
     func testRecoveryKeepsHeldPictureButOldGPUCompletionCannotProveNewSourcePresented() async throws
     {
         let feed = try makeFeed()
         let decoder = HevcDecoder()
         decoder.effects.desqueezeFactor = 1.33
         decoder.processedFeed = feed
-        let session = CameraSession(borrowing: decoder)
+        let session = CameraSession(backend: AppModel.makeBackend(), borrowing: decoder)
         defer { decoder.reset() }
         let drawable = try TestFeedDrawable(layer: feed.layer as! CAMetalLayer)
         feed.presentOperations.acquire = { _ in drawable }
@@ -60,8 +120,42 @@ final class FeedPresentationTests: XCTestCase {
         replacement.withLock { $0 }?(false)
     }
 
+    func testRuntimeReplacementRejectsPreviousOwnerGPUCompletion() async throws {
+        let feed = try makeFeed()
+        let drawable = try TestFeedDrawable(layer: feed.layer as! CAMetalLayer)
+        let retired = MonitorLiveVideoRuntime()
+        retired.processedFeed = feed
+        let submitted = expectation(description: "Previous owner submitted GPU work")
+        let oldCompletion = OSAllocatedUnfairLock<(@Sendable (Bool) -> Void)?>(initialState: nil)
+        feed.presentOperations.acquire = { _ in drawable }
+        feed.presentOperations.submit = { _, _, completed in
+            oldCompletion.withLock { $0 = completed }
+            submitted.fulfill()
+        }
+        XCTAssertTrue(feed.display(picture, timeNs: 10))
+        await fulfillment(of: [submitted], timeout: 3)
+        let successor = MonitorLiveVideoRuntime()
+        successor.processedFeed = feed
+        retired.close()
+        try XCTUnwrap(oldCompletion.withLock { $0 })(true)
+        await MainActor.run {}
+        await Task.yield()
+        XCTAssertFalse(feed.hasPresentedFrame, "Old GPU work cannot claim the replacement's picture")
+        XCTAssertNil(feed.lastPresentedTimeNs)
+        XCTAssertNil(successor.health.lastPresentedAt)
+
+        let current = expectation(description: "Replacement owner presents")
+        feed.onSuccessfulPresent = { current.fulfill() }
+        feed.presentOperations.submit = { _, _, completed in completed(true) }
+        XCTAssertTrue(feed.display(picture, timeNs: 20))
+        await fulfillment(of: [current], timeout: 3)
+        XCTAssertEqual(feed.lastPresentedTimeNs, 20)
+        XCTAssertEqual(feed.presentedFrames, 1, "Old completion releases its flight without counting a new present")
+        successor.close()
+    }
+
     func testPresentationJournalReportsSilenceAfterAWindowOfPicture() throws {
-        var metrics = FeedPresentationMetrics(startedAt: 0)
+        var metrics = MonitorPresentationMetrics(startedAt: 0)
         for tick in 1...25 { metrics.notePresented(at: Double(tick) / 25) }
         let rolling = try XCTUnwrap(metrics.drain(at: 1))
         XCTAssertEqual(rolling.gpuFramesPerSecond, 25, accuracy: 0.001)
@@ -72,7 +166,7 @@ final class FeedPresentationTests: XCTestCase {
     }
 
     func testPresentationJournalUsesActualElapsedWindowAndKeepsEarlierHitches() throws {
-        var metrics = FeedPresentationMetrics(startedAt: 0)
+        var metrics = MonitorPresentationMetrics(startedAt: 0)
         metrics.noteAcquire(milliseconds: 450)
         metrics.noteGPUCompletion(milliseconds: 180)
         for tick in 1...50 { metrics.notePresented(at: Double(tick) / 25) }
@@ -359,12 +453,12 @@ final class FeedPresentationTests: XCTestCase {
     func testBilinearPresentsAtSourceSizeAndOtherUpscalersKeepThePanel() {
         let panel = CGSize(width: 2796, height: 1290)
         let source = CGSize(width: 1280, height: 720)
-        for upscaler in [FeedUpscaler.off, .lanczos] {
+        for upscaler in [MonitorUpscaler.off, .lanczos] {
             XCTAssertEqual(
                 CIFeedView.presentDrawableSize(
                     source: source, panel: panel, upscaler: upscaler, hdr: false), source)
         }
-        for upscaler in [FeedUpscaler.spatial, .superResolution] {
+        for upscaler in [MonitorUpscaler.spatial, .superResolution] {
             XCTAssertEqual(
                 CIFeedView.presentDrawableSize(
                     source: source, panel: panel, upscaler: upscaler, hdr: false), panel)

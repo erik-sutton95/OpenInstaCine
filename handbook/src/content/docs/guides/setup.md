@@ -12,6 +12,9 @@ just check        # hygiene: lab parser tests, release-note checks, whitespace
 just core-test    # shared core and Luna protocol package (swift test)
 ```
 
+Both apps also need the shared OpenCine platform repository checked out next to
+this repository, at `../OpenCine` (`scripts/checkout-opencine.sh` fetches the pinned commit).
+
 Shared protocol logic is tested without a camera. Pairing and live view need a
 **physical** phone and an **Insta360 Luna Ultra on firmware 1.1.15**. The
 first connection asks you to approve the phone on the camera's touchscreen.
@@ -43,7 +46,7 @@ From the repo root:
 
 ```bash
 just android-build    # debug APK
-just android-check    # debug APK, unit tests and lint for app, monitor and luna-adapter
+just android-check    # debug APK, unit tests and lint for app and monitor
 ```
 
 The app is **arm64-v8a only**, Android 10 or newer. The debug build is named
@@ -92,12 +95,12 @@ added. `tools/LunaProbe` is a Swift command-line client over the same protocol
 package, used for the firmware 1.1.15 verification. Details:
 [`docs/mac-preview.md`](https://github.com/erik-sutton95/OpenInstaCine/blob/main/docs/mac-preview.md).
 
-## Shared shell with OpenPocketCine
+## Shared OpenCine shell
 
-The monitor UI is shared with [OpenPocketCine](https://openpocketcine.app/).
-`just sync-openpocketcine` re-copies the iOS shell from a sibling
-`../OpenPocketCine` checkout and leaves the Luna files alone. The contract
-between the two apps is
+The monitor UI is shared with [OpenPocketCine](https://openpocketcine.app/)
+through the OpenCine dependency at `../OpenCine`. Check out its pinned revision
+with `scripts/checkout-opencine.sh`; common changes are made in that repository.
+The contract between the two apps is
 [`docs/SHARED-MONITOR-ENGINE.md`](https://github.com/erik-sutton95/OpenInstaCine/blob/main/docs/SHARED-MONITOR-ENGINE.md).
 
 ## This handbook

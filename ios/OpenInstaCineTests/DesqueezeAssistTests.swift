@@ -1,9 +1,15 @@
 import CoreImage
+import MonitorPresentation
+import OpenCineCameraControls
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine
 
+@MainActor
 final class DesqueezeAssistTests: XCTestCase {
+    /// This test's monitored source (XCTest makes a fresh one per test).
+    private let ceiling = ScopeExposureCeiling()
     private let keys = [
         "OpenInstaCine.Assist.v1", "OpenInstaCine.PlaybackAssists.v1",
         "OpenInstaCine.CleanViewPins.v1",
@@ -27,23 +33,6 @@ final class DesqueezeAssistTests: XCTestCase {
             }
         }
         super.tearDown()
-    }
-
-    func testPresetsAndHundredthStepsDoNotSelectANeighboringPreset() {
-        XCTAssertEqual(DesqueezeRatio.allCases.map(\.factor), [1.1, 1.2, 1.33, 1.5, 1.6, 1.8, 2])
-        for step in 100...200 {
-            let factor = Double(step) / 100
-            XCTAssertEqual(DesqueezeAssist.snap(factor), factor, accuracy: 0.000_001)
-        }
-        XCTAssertNil(DesqueezeRatio.matching(1.32))
-        XCTAssertNil(DesqueezeRatio.matching(1.34))
-        XCTAssertEqual(DesqueezeAssist.snap(1.337), 1.34)
-        XCTAssertEqual(DesqueezeAssist.snap(1.005), 1.01)
-        XCTAssertEqual(DesqueezeAssist.snap(1.335), 1.34)
-        XCTAssertEqual(DesqueezeAssist.snap(0.5), 1)
-        XCTAssertEqual(DesqueezeAssist.snap(3), 2)
-        XCTAssertEqual(DesqueezeAssist.snap(.nan), 1.33)
-        XCTAssertEqual(DesqueezeAssist.snap(.infinity), 1.33)
     }
 
     func testCustomChoiceSurvivesPresetCrossingsAndRestart() {
@@ -100,24 +89,6 @@ final class DesqueezeAssistTests: XCTestCase {
         XCTAssertEqual(LiveAssistState().playbackEffects.desqueezeFactor, 2)
     }
 
-    func testHorizontalAndVerticalFitTheEntireCorrectedRaster() {
-        let source = CGSize(width: 1920, height: 1080)
-        let viewport = CGRect(x: 20, y: 10, width: 800, height: 600)
-        var fx = LiveImageEffects()
-        fx.desqueezeFactor = 2
-        let wide = DesqueezeAssist.presentationRect(sourceSize: source, in: viewport, effects: fx)
-        XCTAssertEqual(wide.width, 800)
-        XCTAssertEqual(wide.height, 225)
-        XCTAssertEqual(wide.midX, viewport.midX)
-        XCTAssertEqual(wide.midY, viewport.midY)
-        fx.desqueezeHorizontal = false
-        let tall = DesqueezeAssist.presentationRect(sourceSize: source, in: viewport, effects: fx)
-        XCTAssertEqual(tall.height, 600)
-        XCTAssertEqual(tall.width, 533.333_333, accuracy: 0.000_1)
-        XCTAssertEqual(tall.midX, viewport.midX)
-        XCTAssertEqual(tall.midY, viewport.midY)
-    }
-
     func testFramingMatchesCorrectedSquareInsideLiveRasterAndHonorsCleanPins() {
         let assist = LiveAssistState()
         assist.desqueeze = true
@@ -162,7 +133,7 @@ final class DesqueezeAssistTests: XCTestCase {
     }
 
     func testPlaybackZoomReclampsAfterChangingDirection() {
-        var zoom = AnchoredPinchZoom()
+        var zoom = MonitorPlaybackZoom()
         zoom.pinchChanged(
             magnification: 3, startAnchor: .center, size: CGSize(width: 800, height: 225))
         zoom.panChanged(translation: CGSize(width: 900, height: 900))
@@ -196,15 +167,15 @@ final class DesqueezeAssistTests: XCTestCase {
         assist.desqueezeFactor = 2
         assist.gradesClip = true
         var preview = AssistInspectorPreviewPolicy.imageOptions(
-            assist: assist, tool: .grid, transfer: .rec709)
+            assist: assist, tool: .grid, transfer: .rec709, ceiling: ceiling)
         XCTAssertEqual(preview.desqueezeFactor, 1)
         assist.togglePlayback(.desqueeze)
         preview = AssistInspectorPreviewPolicy.imageOptions(
-            assist: assist, tool: .grid, transfer: .rec709)
+            assist: assist, tool: .grid, transfer: .rec709, ceiling: ceiling)
         XCTAssertEqual(preview.desqueezeFactor, 2)
         assist.togglePlayback(.desqueeze)
         preview = AssistInspectorPreviewPolicy.imageOptions(
-            assist: assist, tool: .desqueeze, transfer: .rec709)
+            assist: assist, tool: .desqueeze, transfer: .rec709, ceiling: ceiling)
         XCTAssertEqual(
             preview.desqueezeFactor, 2, "The selected inspector previews an inactive tool")
         XCTAssertFalse(assist.isPlaybackVisible(.desqueeze))

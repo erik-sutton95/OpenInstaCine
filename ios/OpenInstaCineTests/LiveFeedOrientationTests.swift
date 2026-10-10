@@ -1,15 +1,17 @@
 import CoreImage
 import Metal
-import OpenPocketViewCore
+import OpenCineApple
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine
 
-/// LUT / peaking / false colour / zebra share `needsGPUFeed` → `FeedFrameBaker` →
+/// LUT / peaking / false colour / zebra share `needsGPUFeed` → `MonitorFrameBaker` →
 /// texel-for-texel blit. A leftover `scaleY: -1` anywhere in that chain inverted
 /// all four versus the clean HEVC layer. `LiveFeedPresent` is gone — the present
 /// is now a plain blit — so the testable seam is the baker's texture orientation.
 final class LiveFeedOrientationTests: XCTestCase {
+    private let mapper = PocketFalseColorMap()
     func testGPUAssistsShareOneFeedFlag() {
         XCTAssertTrue(Self.peaking.needsGPUFeed)
         XCTAssertTrue(Self.zebra.needsGPUFeed)
@@ -50,7 +52,7 @@ final class LiveFeedOrientationTests: XCTestCase {
     }
 
     func testCompositorKeepsVerticalMarkerForEveryGPUAssist() {
-        Self.warmFalseColorCubes()
+        warmFalseColorCubes()
         let source = Self.verticalMarker()
         XCTAssertTrue(Self.bandEdgeIsOnCITop(source))
         for (name, fx) in [
@@ -59,7 +61,7 @@ final class LiveFeedOrientationTests: XCTestCase {
             ("false color", Self.falseColor),
             ("LUT", Self.lut),
         ] {
-            let output = LiveMonitorCompositor.apply(to: source, effects: fx)
+            let output = LiveMonitorCompositor.apply(to: source, effects: fx, mapper: mapper)
             XCTAssertEqual(output.extent, source.extent, "\(name) must not change extent")
             // Luma is the wrong proxy here: IRE false colour remaps paper white/black
             // onto WAVE bands whose luma can invert while the raster stays upright.
@@ -73,7 +75,7 @@ final class LiveFeedOrientationTests: XCTestCase {
             ("zebra overlay", Self.zebra),
             ("false color overlay", Self.falseColor),
         ] {
-            let overlay = LiveMonitorCompositor.assistOverlay(from: source, effects: fx)
+            let overlay = LiveMonitorCompositor.assistOverlay(from: source, effects: fx, mapper: mapper)
             XCTAssertEqual(overlay.extent, source.extent, "\(name) must not change extent")
         }
     }
@@ -86,7 +88,7 @@ final class LiveFeedOrientationTests: XCTestCase {
         var fx = Self.lut
         fx.splitComparison = true
         fx.splitVertical = true
-        let output = LiveMonitorCompositor.apply(to: red, effects: fx)
+        let output = LiveMonitorCompositor.apply(to: red, effects: fx, mapper: mapper)
         XCTAssertEqual(output.extent, red.extent, "50/50 must not change feed extent")
         let context = CIContext(options: [.cacheIntermediates: false])
         let logHalf = Self.meanRGB(
@@ -105,7 +107,7 @@ final class LiveFeedOrientationTests: XCTestCase {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw XCTSkip("Metal required")
         }
-        let baker = FeedFrameBaker(device: device)
+        let baker = MonitorFrameBaker(device: device)
         let source = Self.verticalMarker()
         let drawable = CGSize(width: 64, height: 64)
         let done = expectation(description: "bake")
@@ -167,12 +169,16 @@ final class LiveFeedOrientationTests: XCTestCase {
 
     /// False colour cubes are async. Earlier tests in a full suite already warm
     /// them; isolation still needs a short wait so IRE paint actually runs.
-    private static func warmFalseColorCubes() {
-        PocketFalseColorMap.warm(scale: .ire, mode: .normal)
+    private func warmFalseColorCubes() {
+        // Unstamped effects (the compositor here) read the reference ceiling.
+        let clip = ScopeExposureCeiling.referenceClipByte(transfer: .rec709)
+        mapper.warm(scale: .ire, mode: .normal, rec709: false, clipByte: clip)
         let deadline = Date().addingTimeInterval(5)
         while Date() < deadline {
-            if PocketFalseColorMap.overlayPaintData(scale: .ire, mode: .normal) != nil,
-                PocketFalseColorMap.overlayWeightData(scale: .ire, mode: .normal) != nil
+            if mapper.overlayPaintData(
+                scale: .ire, mode: .normal, rec709: false, clipByte: clip) != nil,
+                mapper.overlayWeightData(
+                    scale: .ire, mode: .normal, rec709: false, clipByte: clip) != nil
             {
                 return
             }
@@ -213,7 +219,7 @@ final class LiveFeedOrientationTests: XCTestCase {
         return CGFloat(bestRow) > e.height / 2
     }
 
-    /// CI top-center maps to Metal y = 0 (`FeedFrameBaker.metalOriginTransform`).
+    /// CI top-center maps to Metal y = 0 (`MonitorFrameBaker.metalOriginTransform`).
     private static func metalTopIsBrighter(texture: MTLTexture, device: MTLDevice) -> Bool {
         guard let queue = device.makeCommandQueue(),
             let commandBuffer = queue.makeCommandBuffer(),

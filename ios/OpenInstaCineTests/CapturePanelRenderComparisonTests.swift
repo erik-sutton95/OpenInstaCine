@@ -1,5 +1,6 @@
 import MonitorPresentation
-import OpenPocketViewCore
+import OpenCineCameraControls
+import OpenInstaViewCore
 import SwiftUI
 import XCTest
 
@@ -7,11 +8,16 @@ import XCTest
 
 @MainActor
 final class CapturePanelRenderComparisonTests: XCTestCase {
+    /// main's strip showed an ISO, shutter or white balance request at once.
+    func testStripShowsARequestAtOnce() {
+        XCTAssertTrue(AppModel().captureStripShowsPendingEdits)
+    }
+
     /// Renders both production hosts. Tap keeps the full details drawer; hold
     /// is the compact dial at the same bottom-center well.
     func testTappedISOWhiteBalanceAndFocusKeepFullDetailsWhileHoldIsCompact() async throws {
         let model = AppModel()
-        model.session = CameraSession(borrowing: HevcDecoder())
+        model.session = CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
         var status = CameraStatus()
         status.expoMode = .manual
         status.colorMode = .normal
@@ -24,6 +30,11 @@ final class CapturePanelRenderComparisonTests: XCTestCase {
         status.focusMode = .continuous
         status.focusTrack = .subjectLock
         model.session.status = status
+        #if targetEnvironment(simulator)
+            // The production drawers now use common reports/descriptors. Bind the same
+            // isolated, report-decoding SIMULATED session used by rendered UI reviews.
+            model.control.bind(MonitorUIReview.simulatedSession(status: status))
+        #endif
         let size = CGSize(width: 874, height: 402)
         let host = UIHostingController(
             rootView: CaptureComparisonCanvas(model: model, held: false, size: size))
@@ -36,6 +47,7 @@ final class CapturePanelRenderComparisonTests: XCTestCase {
             model.captureDrum = nil
             window.isHidden = true
             window.rootViewController = nil
+            model.control.unbind()
             model.session.disconnect()
         }
         let background = try CaptureComparisonPixels(await render(host.view))

@@ -1,7 +1,8 @@
 # Luna iOS status
 
 State of the iOS app on branch `feat/openpocketcine-parity`: the OpenPocketCine
-shell (commit `9e306c91`, synced 2026-09-29) with a yellow accent and a Luna Ultra backend, camera
+shell (commit `9e306c91`, last synced 2026-09-29; it is now app-owned code on the shared OpenCine
+shell, `OpenCineAppKit`, and no longer synced) with a yellow accent and a Luna Ultra backend, camera
 firmware v1.1.15. Rows are derived from the code; live results are listed
 separately below.
 
@@ -71,7 +72,7 @@ Parity values:
 | Multiview | Hidden-not-supported | Entry removed from the camera list (`SavedCamerasView.swift`); stages DJI bodies over RTMP |
 | Wi-Fi / Hotspot setups | Hidden-not-supported | `canAddSetup: false`; Luna only connects over its own AP |
 | Color Recovery | Not yet | Screen protocol code exists (`LunaScreenRecovery.swift`, [luna-color-recovery.md](luna-color-recovery.md)); not exposed in the UI |
-| Android | Luna-adapted, phone-verified | `Apps/Android` runs the OpenPocketCine shell (`9e306c91`) against a real Luna on a Samsung S25 since 2026-09-30; remaining gaps in Android below |
+| Android | Luna-adapted, phone-verified | `Apps/Android` (the OpenPocketCine shell as of `9e306c91`, now app-owned code on the shared OpenCine `appkit` shell and no longer synced) runs against a real Luna on a Samsung S25 since 2026-09-30; remaining gaps in Android below |
 
 ## Verified live (2026-09-25)
 
@@ -229,7 +230,7 @@ extension), `LunaShellMapping.swift`, `OsmoMonitorPresentation.swift`,
 
 ## Unit test deltas vs OpenPocketCine
 
-Removed as Osmo-only (listed in `OSMO_ONLY` in `scripts/sync-openpocketcine.sh`): session internals
+Removed as Osmo-only (listed in `OSMO_ONLY` in the since-retired `scripts/sync-openpocketcine.sh`): session internals
 (DUML handshake, recovery lifecycle, dial reconciliation), multiview, per-format zoom ceiling notes,
 DJI dual-storage media retries, and `CapturePreviewTrafficTests` (counts frames on the DJI datalink
 peer, which the Luna session never uses). `CapturePanelRenderComparisonTests` checks only the ISO and
@@ -237,9 +238,10 @@ WB dials because Luna hides the AF mode panel. The full `OpenInstaCineTests` sui
 
 ## Android
 
-Updated 2026-09-29. `Apps/Android` now carries the OpenPocketCine Android shell at upstream
+Updated 2026-09-29. `Apps/Android` then carried the OpenPocketCine Android shell at upstream
 `9e306c91` (`origin/main`, synced from `c1e8f94`) with OpenInstaCine identity, the yellow
-`0xFFCF00` accent and the Luna adapter driving it. The subsections after "Android today" are the
+`0xFFCF00` accent and the Luna adapter driving it. It is now app-owned code on the shared
+OpenCine `appkit` shell and is no longer synced. The subsections after "Android today" are the
 2026-09-29 sync notes, written before the app ran on hardware.
 
 ### Android today (2026-09-30)
@@ -337,7 +339,7 @@ Gated or skipped for Luna, and why:
 Depends on the parallel engine sync (outside `Apps/Android`): the Swift facade must carry
 `exposureLockDecision`, the CineStop and 709 false color paint (ordinals 3 to 7) and the `gauge`
 / `lock-open` iOS icons. `MonitorIconCatalogTest` compares the Android SVGs with
-`Sources/MonitorUI/Resources/Icons` and fails until those two icons land there.
+the iOS icon resources (now OpenCine `Sources/MonitorUI`) and fails until those two icons land there.
 
 ### Done
 
@@ -435,8 +437,11 @@ Depends on the parallel engine sync (outside `Apps/Android`): the Swift facade m
   Android today. Face priority ships as the METER tile and the AUDIO readout is hidden.
 - Live decode on the emulator: the goldfish HEVC decoder returned a solid frame for the Luna replay
   in this run (the 2026-09-11 review got a moving picture); needs a real device.
-- There is no Android equivalent of `scripts/sync-openpocketcine.sh`; both resyncs were manual
+- Android had no equivalent of the since-retired `scripts/sync-openpocketcine.sh`; both resyncs were manual
   (upstream `app/src` mapped onto `monitor/src` and three-way merged, then the session by hand).
+  Since UI-03 (2026-10-01) `monitor-ui` is not resynced at all: it comes from the OpenCineUI
+  included build. `:monitor` is now app-owned code on the shared OpenCine `appkit` shell and is
+  no longer synced either.
 - Needs a real device after the `9e306c91` sync: CineStop and the 709 read over live I-Log, feed
   double tap to Deep Track and the 1.5 s start filter against the real 0x85 stream, shutter angle
   writes, and the Vulkan crash guard and `ImageReader` sampling on real GPUs.

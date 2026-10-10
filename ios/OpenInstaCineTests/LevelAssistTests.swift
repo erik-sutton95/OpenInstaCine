@@ -1,5 +1,5 @@
 import MonitorUI
-import OpenPocketViewCore
+import OpenInstaViewCore
 import SwiftUI
 import XCTest
 
@@ -66,7 +66,7 @@ final class GimbalDoubleTapTests: XCTestCase {
     }
 
     func testLevelDoubleTapWithoutAttitudeRefusesAndSaysSo() {
-        let session = CameraSession()
+        let session = CameraSession(backend: AppModel.makeBackend())
         session.gimbalDoubleTap = .level
         session.performGimbalDoubleTap()
         XCTAssertEqual(session.controlNote, WorldLevelSnap.noLevelData)

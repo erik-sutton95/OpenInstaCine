@@ -1,30 +1,46 @@
 ---
 title: Architecture
-description: The shared OpenPocketCine monitor core and native shells, with a portable Luna protocol package and platform adapters.
+description: OpenCine shared monitor packages, native app composition and the portable Luna integration.
 ---
 
-OpenInstaCine is the OpenPocketCine monitor with a Luna backend. The monitor
-core and shells are shared; the camera link is a separate, Foundation-only Swift
-protocol package plus platform adapters that own Bluetooth, crypto, Wi-Fi and
-sockets.
+OpenInstaCine composes OpenCine's shared monitor and app shell with the Luna
+integration. The portable camera protocol and its platform adapters own
+Bluetooth, crypto, Wi-Fi and sockets.
 
 | Layer | Path | Role |
 | --- | --- | --- |
-| Shared core | `Sources/` | OpenPocketCine monitor core (`OpenPocketViewCore`, `MonitorContracts`, `MonitorPresentation`, `MonitorUI`) with small Luna hooks: I-Log color mode, Luna resolutions, `.lrv` proxy. |
-| Luna protocol | `Adapters/Insta360Protocol/` | Portable codec: UCD2 framing and checksum, bounded reassembly, protobuf, scheme-3 envelopes, status, settings, media and control messages. Foundation only: no Bluetooth, network or crypto implementation. |
-| Luna Apple adapter | `Adapters/Insta360Apple/` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, Network.framework TCP and session lifetime. |
-| iOS app | `ios/OpenInstaCine/` | The OpenPocketCine shell plus the Luna session (`CameraSession*.swift`, `LunaShellMapping.swift`). |
+| Core | `Sources/` (app-owned `OpenInstaViewCore`, no longer synced from OpenPocketCine), OpenCine `OpenCineCore` and `OpenCineMedia` | Portable monitor logic, camera contracts and media math, with app-side Luna hooks for I-Log color mode, resolutions and `.lrv` proxy. |
+| Shared UI | OpenCine `MonitorPresentation`, `MonitorUI`, `Android/monitor-ui/` | The shared design system, in the OpenCine platform repository (sibling checkout `../OpenCine`). The app assigns the yellow accent at launch. |
+| Connection flow | OpenCine `OpenCineAppKit`, `Android/appkit/` | Cameras and pairing screens, discovery, connection progress, typed failures and saved-camera migration through `LunaIntegration`. |
+| Luna protocol | OpenCine `Sources/Insta360Protocol/` | Portable codec: UCD2 framing and checksum, bounded reassembly, protobuf, scheme-3 envelopes, status, settings, media and control messages. Foundation only: no Bluetooth, network or crypto implementation. |
+| Luna Apple adapter | OpenCine `Sources/Insta360Apple/` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, Network.framework TCP and session lifetime. |
+| iOS app | `ios/OpenInstaCine/` | App-owned code on the shared OpenCine shell (`OpenCineAppKit`), no longer synced from OpenPocketCine: Luna presentation adapters and native app services. |
 | Watch companion | `ios/OpenInstaCineWatch/` | watchOS remote; the phone stays the radio. |
-| Android app | `Apps/Android/` | OpenPocketCine's Compose shell (`:monitor`, `:monitor-ui`) with `:core-api` and a Kotlin `:luna-adapter`. |
-| Android facade | `Sources/OpenPocketCineAndroidFacade/`, `Sources/CJNI/` | JNI exports for the shared decoder, LUT and assist code. |
+| Android app | `Apps/Android/` | App-owned Compose code (`:app`, `:monitor`) on the shared OpenCine shell (`appkit`) and `monitor-ui`, no longer synced from OpenPocketCine, with the Kotlin shell contract and Luna adapter from OpenCine (`insta360-shell`, `insta360-luna`). |
+| Android facade | `Sources/OpenInstaCineAndroidFacade/` | JNI exports for the shared decoder, LUT and assist code. |
 | Lab tools | `tools/` | Python BLE and TCP research clients, the Mac live-view lab, `tools/LunaProbe` (Swift CLI) and the DEBUG remote client. |
-| Tests | `Tests/`, `Adapters/Insta360Protocol/Tests/`, `ios/OpenInstaCineTests/` | Core, protocol and app tests. |
+| Tests | `Tests/`, `ios/OpenInstaCineTests/`, `Apps/Android/monitor/src/test/`, OpenCine `Tests/` | Core, protocol and app tests, including saved-camera upgrade and downgrade fixtures on both platforms. |
 
-The shell is re-synced from OpenPocketCine with `just sync-openpocketcine`,
-which leaves the Luna files alone. Boundary tests keep DUML and UCD2 wire APIs
-out of the shared monitor modules, and the monitor engine does not import Luna
-wire types. Adding a control means extending the neutral backend contract first,
-then the Luna mapping.
+Common behavior is maintained in OpenCine and adopted through the pinned
+package dependency. The former Pocket source-sync workflow is retired.
+Boundary tests keep DUML and UCD2 wire APIs out of shared monitor modules.
+Common controls use neutral descriptors and services supplied by the integration.
+Both apps use the shared connection model and register their integrations explicitly.
+Legacy app models and native adapters remain documented while their ownership migrates.
+
+## Saved-camera compatibility
+
+The versioned document lives in `OpenInstaCine.Cameras` on iOS and
+`openpocketcine.cameras` / `document` on Android. The shared store merges the old
+records on launch and mirrors edits back to `OpenInstaCine.SavedCameras` and
+`openpocketcine.saved-cameras` / `records-json`, respectively. This preserves
+upgrade and downgrade compatibility, including names and setup identifiers.
+An undecodable record is retained without discarding the valid cameras.
+
+Credentials stay in their existing Keychain or Keystore locations. Camera IDs,
+media favorites and EV calibration keys do not change. Forget removes only the
+selected camera's Wi-Fi credentials and saved record; the phone's Luna approval
+identity stays intact.
 
 ## Luna feed path
 

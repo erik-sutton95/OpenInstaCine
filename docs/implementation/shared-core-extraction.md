@@ -1,4 +1,9 @@
-# Shared Foundation core extraction
+# Shared Foundation core extraction (superseded)
+
+This is a 2026-09-11 extraction report, kept as history. `SharedMonitorEngine`, `MonitorCore` and
+`Adapters/OsmoCompatibility` no longer exist. The portable core is now `Sources/OpenInstaViewCore`,
+an app-owned fork that is no longer synced from OpenPocketCine; shared owners live in OpenCine. See
+[architecture.md](architecture.md) for the current layout.
 
 The root `SharedMonitorEngine` package now exports a real **MonitorCore** library:
 25 Foundation-only source files, 3,677 lines of existing monitor math and policy.
@@ -18,23 +23,23 @@ Apple shell and Android JNI facade.
 New neutral consumers ────────────► MonitorCore (Foundation only)
 Camera backend contract ─────────► MonitorContracts
 
-Existing Apple/JNI imports ───────► OpenPocketViewCore compatibility module
+Existing Apple/JNI imports ───────► OpenInstaViewCore compatibility module
                                     ├── @_exported import MonitorCore
                                     └── existing Osmo wire/models/policies
 
-OpenPocketCineAndroid JNI facade ─► OpenPocketViewCore + CJNI
+OpenInstaCineAndroid JNI facade ─► OpenInstaViewCore + CJNI
 
 Insta360 native backend ─────────► Insta360Protocol + MonitorContracts
 ```
 
-`OpenPocketViewCore` remains both a product and module. Its target path is now
-`Adapters/OsmoCompatibility/Sources/OpenPocketViewCore`. `Exports.swift`
+`OpenInstaViewCore` remains both a product and module. Its target path is now
+`Adapters/OsmoCompatibility/Sources/OpenInstaViewCore`. `Exports.swift`
 reexports MonitorCore so old imports continue to resolve the same public type
 names; there is only one implementation of the extracted math. Camera-specific
 methods on those types are compatibility extensions that import MonitorCore.
 The dependency cannot point back from MonitorCore to those extensions.
 
-The root package retains `MonitorContracts`, the `OpenPocketCineAndroid` dynamic
+The root package retains `MonitorContracts`, the `OpenInstaCineAndroid` dynamic
 product, CJNI target and all JNI facade source/signatures. Swift artifacts must
 be rebuilt after the module split; this preserves source/JNI compatibility, not
 binary compatibility with previously compiled Swift modules.

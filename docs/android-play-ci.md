@@ -17,7 +17,7 @@ release.
 | Swift core + JNI `.so` | [`scripts/ci-install-swift-android.sh`](../scripts/ci-install-swift-android.sh) + `:monitor:stageSwiftCore` |
 | Package guard | fails unless `app/build.gradle.kts` still says `com.opencapture.openinstacine` |
 | Signed AAB | `./gradlew bundleRelease -PversionCode=…` with `ANDROID_KEYSTORE_*` |
-| `versionName` | `openpocketcine.versionName` in [`Apps/Android/gradle.properties`](../Apps/Android/gradle.properties) (equal to iOS) |
+| `versionName` | `openinstacine.versionName` in [`Apps/Android/gradle.properties`](../Apps/Android/gradle.properties) (equal to iOS) |
 | `versionCode` | `ANDROID_VERSION_CODE_BASE` + `github.run_number` |
 | Sentry DSN / symbols | `SENTRY_DSN_ANDROID` -> `:monitor` `BuildConfig`; `tools/sentry-upload.py --platform android` when `SENTRY_UPLOAD_ENABLED=true` |
 | Tester notes | [`Apps/Android/Play/WhatToTest.en-US.txt`](../Apps/Android/Play/WhatToTest.en-US.txt), Play "what's new" (500 characters) [`Apps/Android/Play/whatsnew/whatsnew-en-US`](../Apps/Android/Play/whatsnew/whatsnew-en-US) |

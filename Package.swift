@@ -1,52 +1,70 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// The portable, UI-free, I/O-free core for OpenPocketCine: DUML framing, UDP datalink
-// byte math, BLE advert decode, command builders, status decode, and saved-camera
+// The portable, UI-free, I/O-free core for OpenPocketCine: UDP datalink byte math,
+// BLE advert decode, status decode, and saved-camera
 // records. Pure Foundation, so it builds and tests natively on macOS (`swift test`)
 // without a device. The iOS app (ios/) imports this and supplies CoreBluetooth /
 // Network / Hotspot I/O. Android consumes the same target via a JNI facade
 // (`just android-core`) — keep this module UI-free and platform-agnostic.
+// Shared UI (MonitorPresentation, MonitorUI) comes from the OpenCine package,
+// consumed by ios/project.yml, not from this manifest.
 let package = Package(
-    name: "OpenPocketViewCore",
-    platforms: [.iOS(.v17), .macOS(.v12), .watchOS(.v10)],
+    name: "OpenInstaViewCore",
+    // macOS 13: OpenCine's minimum (host `swift test` only; no macOS app ships).
+    platforms: [.iOS(.v17), .macOS(.v13), .watchOS(.v10)],
     products: [
-        .library(name: "MonitorPresentation", targets: ["MonitorPresentation"]),
-        .library(name: "MonitorUI", targets: ["MonitorUI"]),
-        .library(name: "OpenPocketViewCore", targets: ["OpenPocketViewCore"]),
-        // Brand-neutral CameraBackend seam; Luna implements it in Adapters/Insta360Apple.
-        .library(name: "MonitorContracts", targets: ["MonitorContracts"]),
+        .library(name: "OpenInstaViewCore", targets: ["OpenInstaViewCore"]),
         // JNI facade consumed by the Android app (`just android-core`). The JNI
         // shims are `#if os(Android)`-gated; on Darwin only the wire helpers
         // compile, so iOS/macOS behavior is unchanged.
         .library(
-            name: "OpenPocketCineAndroid", type: .dynamic, targets: ["OpenPocketCineAndroidFacade"]),
+            name: "OpenInstaCineAndroid", type: .dynamic, targets: ["OpenInstaCineAndroidFacade"]),
+    ],
+    dependencies: [
+        // Portable media math (OpenCineMedia), shared gimbal motion (OpenCineMotion) and the
+        // second-screen relay wire (OpenCineRelay).
+        // The OpenCine platform package. Sibling checkout until OpenCine is published.
+        .package(path: "../OpenCine")
     ],
     targets: [
-        // Brand-neutral presentation policy and native screens. Neither target
-        // depends on the Osmo protocol core or a camera session implementation.
-        .target(name: "MonitorPresentation"),
         .target(
-            name: "MonitorUI", dependencies: ["MonitorPresentation"],
-            resources: [.process("Resources/Fonts"), .copy("Resources/Icons")]
-        ),
-        .testTarget(name: "MonitorPresentationTests", dependencies: ["MonitorPresentation"]),
-        .target(name: "MonitorContracts"),
-        .target(name: "OpenPocketViewCore"),
-        .testTarget(
-            name: "OpenPocketViewCoreTests",
-            dependencies: ["OpenPocketViewCore"],
-            exclude: ["Fixtures"]
-        ),
-        // Header-only shim exposing the NDK's <jni.h> to Swift; empty on Darwin.
-        .target(name: "CJNI"),
-        .target(
-            name: "OpenPocketCineAndroidFacade",
-            dependencies: ["OpenPocketViewCore", "CJNI"]
+            name: "OpenInstaViewCore",
+            dependencies: [
+                .product(name: "OpenCineCore", package: "OpenCine"),
+                .product(name: "OpenCineMedia", package: "OpenCine"),
+                .product(name: "OpenCineMotion", package: "OpenCine"),
+                .product(name: "OpenCineRelay", package: "OpenCine"),
+                // Camera control vocabulary shared with OpenPocketCine (re-exported).
+                .product(name: "OpenCineCameraVocabulary", package: "OpenCine"),
+                // Live chrome layout policy (`MonitorLayoutRegion`, `GimbalCluster`).
+                .product(name: "MonitorPresentation", package: "OpenCine"),
+            ]
         ),
         .testTarget(
-            name: "OpenPocketCineAndroidFacadeTests",
-            dependencies: ["OpenPocketCineAndroidFacade", "OpenPocketViewCore"]
+            name: "OpenInstaViewCoreTests",
+            // Insta360Apple: the shell reach is checked against what the Luna integration declares.
+            dependencies: [
+                "OpenInstaViewCore",
+                .product(name: "Insta360Apple", package: "OpenCine"),
+                // Original DJI calibration fixtures exercise the shared math in this test target.
+                .product(name: "OpenCineDJI", package: "OpenCine"),
+            ]
+        ),
+        .target(
+            name: "OpenInstaCineAndroidFacade",
+            dependencies: [
+                "OpenInstaViewCore",
+                .product(name: "OpenCineCameraVocabulary", package: "OpenCine"),
+                .product(name: "OpenCineJNISupport", package: "OpenCine"),
+            ]
+        ),
+        .testTarget(
+            name: "OpenInstaCineAndroidFacadeTests",
+            dependencies: [
+                "OpenInstaCineAndroidFacade", "OpenInstaViewCore",
+                .product(name: "OpenCineDJI", package: "OpenCine"),
+            ]
         ),
     ]
 )

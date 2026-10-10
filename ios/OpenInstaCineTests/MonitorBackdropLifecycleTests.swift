@@ -2,13 +2,16 @@ import CoreImage
 import CoreVideo
 import MonitorPresentation
 import MonitorUI
-import OpenPocketViewCore
+import OpenCineApple
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine
 
 @MainActor
 final class MonitorBackdropLifecycleTests: XCTestCase {
+    /// This test's monitored source (XCTest makes a fresh one per test).
+    private let ceiling = ScopeExposureCeiling()
     private let step = MonitorBackdropPolicy.minimumIntervalNanoseconds
     func testUnchangedInputSkipsNativeWorkAndPublicationWithoutResettingCadence() async throws {
         let clock = InspectorPreviewTestClock()
@@ -225,38 +228,46 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(repeated).isUnchanged)
     }
 
-    func testReusableWorkingRasterIdentityNeverSkipsNativeWork() async throws {
+    func testLeasedWorkingRasterPreservesHeldPixelsAndBackdropIdentity() async throws {
+        let raster = MonitorWorkingRaster()
+        let large = ScopeTestBuffers.makeBGRA(width: 1600, height: 64) { _, _ in 21 }
+        let held = raster.prepared(large)
+        XCTAssertEqual(CVPixelBufferGetWidth(held), 1440)
+        let before = try XCTUnwrap(LiveFrameTap.copyBGRA8(held, maxWidth: 200)).bytes
+        CVPixelBufferLockBaseAddress(large, [])
+        let bytes = try XCTUnwrap(CVPixelBufferGetBaseAddress(large)).assumingMemoryBound(to: UInt8.self)
+        for row in 0..<64 {
+            for column in 0..<1600 {
+                let pixel = bytes.advanced(by: row * CVPixelBufferGetBytesPerRow(large) + column * 4)
+                pixel[0] = 200; pixel[1] = 200; pixel[2] = 200; pixel[3] = 255
+            }
+        }
+        CVPixelBufferUnlockBaseAddress(large, [])
+        let newer = raster.prepared(large)
+        XCTAssertFalse(newer === held)
+        XCTAssertEqual(try XCTUnwrap(LiveFrameTap.copyBGRA8(held, maxWidth: 200)).bytes, before)
+        XCTAssertNotEqual(try XCTUnwrap(LiveFrameTap.copyBGRA8(newer, maxWidth: 200)).bytes, before)
+        raster.reset()
+        XCTAssertEqual(try XCTUnwrap(LiveFrameTap.copyBGRA8(held, maxWidth: 200)).bytes, before)
+
         let clock = InspectorPreviewTestClock()
         let calls = BackdropTestCounter()
         let snapshot = try makeSnapshot()
-        let large = try makeBuffer(width: 1600, height: 8)
-        let reusable = FeedWorkingRaster.prepared(large)
-        XCTAssertTrue(FeedWorkingRaster.isReusableOutput(reusable))
-        XCTAssertFalse(FeedWorkingRaster.isReusableOutput(large))
-        let source = try makeSource(buffer: reusable)
-        let renderer = MonitorVideoBackdropRenderer(
-            clock: { clock.now },
-            operation: { _, _ in
-                calls.increment()
-                return snapshot
-            })
+        let source = try makeSource(buffer: held)
+        let renderer = MonitorVideoBackdropRenderer(clock: { clock.now }, operation: { _, _ in
+            calls.increment(); return snapshot
+        })
         let owner = UUID()
         renderer.activate(owner)
         _ = await renderer.render(owner: owner, canvasSize: snapshot.canvasSize) { [source] }
-        // The real producer overwrites this output while our source retains it.
-        XCTAssertTrue(FeedWorkingRaster.prepared(large) === reusable)
         clock.now += step
-        let repeated = await renderer.render(owner: owner, canvasSize: snapshot.canvasSize) {
-            [source]
-        }
-        XCTAssertFalse(try XCTUnwrap(repeated).isUnchanged)
-        XCTAssertEqual(calls.value, 2)
+        let repeated = await renderer.render(owner: owner, canvasSize: snapshot.canvasSize) { [source] }
+        XCTAssertTrue(try XCTUnwrap(repeated).isUnchanged)
+        XCTAssertEqual(calls.value, 1)
     }
 
     func testZebraReusesAHeldSourceUntilItsExposureCeilingChanges() async throws {
-        ScopeExposureCeiling.reset()
-        defer { ScopeExposureCeiling.reset() }
-        ScopeExposureCeiling.setISO(1600)
+        ceiling.setISO(1600)
         let clock = InspectorPreviewTestClock()
         let calls = BackdropTestCounter()
         let snapshot = try makeSnapshot()
@@ -264,7 +275,7 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
         var zebra = try makeSource()
         zebra.effects.zebra = true
         zebra.effects.colorMode = .dLog2
-        let source = zebra
+        let zebraSource = zebra
         let renderer = MonitorVideoBackdropRenderer(
             clock: { clock.now },
             operation: { _, _ in
@@ -273,8 +284,11 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
             })
         let owner = UUID()
         renderer.activate(owner)
-        func render() async throws -> MonitorVideoBackdropRenderer.Result {
+        func render() async throws -> OpenInstaCine.MonitorVideoBackdropRenderer.Result {
             clock.now += step
+            // Like `HevcDecoder.backdropEffects`: each frame carries its source's own ceiling.
+            var source = zebraSource
+            source.effects.clipByte = ceiling.clipByte(transfer: .dlog2)
             let result = await renderer.render(owner: owner, canvasSize: snapshot.canvasSize) {
                 [stable, source]
             }
@@ -282,7 +296,7 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
         }
         let first = try await render()
         let held = try await render()
-        ScopeExposureCeiling.setISO(400)
+        ceiling.setISO(400)
         let moved = try await render()
         let settled = try await render()
         XCTAssertFalse(first.isUnchanged)

@@ -3,7 +3,7 @@ title: UCD2 frame
 description: UCD2 framing, checksum, the nine-byte message header, and the scheme-3 encrypted envelope used on BLE and TCP.
 ---
 
-Format and checksum are in `Adapters/Insta360Protocol/Sources/Insta360Protocol/UCD2.swift`
+Format and checksum are in `../OpenCine/Sources/Insta360Protocol/UCD2.swift`
 (tested against captured fixtures). The same frame carries every message on BLE
 and TCP. Most messages are plain; a few BLE reads use the
 [scheme-3 envelope](#scheme-3-encryption).

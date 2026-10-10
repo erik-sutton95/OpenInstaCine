@@ -2,8 +2,10 @@
     import CoreImage
     import Foundation
     import Insta360Protocol
+    import MonitorPresentation
     import Network
-    import OpenPocketViewCore
+    import OpenCineCameraControls
+    import OpenInstaViewCore
     import UIKit
 
     /// DEBUG-only remote control for on-device testing without XCUITest.
@@ -97,7 +99,7 @@
                 "phase": s.phase.label,
                 "isLive": model.isLive,
                 "found": s.found.map { ["id": $0.id.uuidString, "name": $0.name] },
-                "saved": model.savedCameras.map { ["id": $0.id.uuidString, "name": $0.displayName] },
+                "saved": model.savedCameras.map { ["id": $0.id, "name": $0.displayName] },
                 "connected": s.connectedCamera?.name ?? "",
                 "joinedSSID": s.joinedSSID != nil,
                 "liveFPS": s.liveFPS,
@@ -119,20 +121,20 @@
                 "timecode": st.timecode ?? "",
                 "frameClock": model.session.lastFrameClock,
                 "frameClockOffset": model.session.frameClockOffset ?? 0,
-                "shootingMode": s.currentShootingMode?.label ?? "\(st.shootingMode)",
+                "shootingMode": s.currentShootingMode?.label(in: s.profile) ?? "\(st.shootingMode)",
                 "expoMode": st.expoMode.map { "\($0)" } ?? "?",
                 "iso": st.isoIndex?.label ?? "?",
                 "shutter": st.shutterDenom,
                 "ev": st.evComp?.label ?? "?",
                 "wb": st.whiteBalance.map { $0.mode == .auto ? "auto" : "\($0.kelvin)K" } ?? "?",
-                "color": st.colorMode?.label ?? "?",
+                "color": st.colorMode?.label(in: s.profile) ?? "?",
                 "focusMode": CaptureLists.focusOption(from: st)?.chip ?? "?",
                 "metering": s.faceMetering.map { $0 ? "face" : "matrix" } ?? "?",
                 "format": st.videoFormat?.chipLabel ?? "?",
                 "formats": st.availableVideoFormats.map(\.chipLabel),
                 "zoom": s.zoomReadout,
                 "zoomStops": s.zoomStops,
-                "gimbalMode": s.gimbalMode.label,
+                "gimbalMode": s.gimbalMode.label(in: s.profile),
                 "pose": s.freshGimbalWaypoint.map { ["yaw": ($0.yawDeg * 10).rounded() / 10, "pitch": ($0.pitchDeg * 10).rounded() / 10] } ?? [:],
                 "gimbalSpeed": s.gimbalSpeed.label,
                 "angle": s.gimbalAngle.map { ["yaw": Double($0.angle.yaw), "pitch": Double($0.angle.pitch), "roll": Double($0.angle.roll), "age": ProcessInfo.processInfo.systemUptime - $0.at] } ?? [:],
@@ -145,8 +147,8 @@
                 "focus": [s.focusPoint.x, s.focusPoint.y],
                 "media": s.mediaFiles.count,
                 "mediaNote": s.mediaNote ?? "",
-                "homePanel": model.homePanel?.rawValue ?? "",
-                "livePanel": model.liveOperatorPanel.map { "\($0)" } ?? "",
+                "route": "\(model.shell.route)",
+                "cover": model.shell.cover.map { "\($0)" } ?? "",
                 "settingsTab": model.operatorSettingsTab.rawValue,
                 "assists": LiveAssistTool.allCases.filter { model.assist.isOn($0) }.map(\.rawValue),
             ]
@@ -161,17 +163,21 @@
             }
             func str(_ key: String) -> String? { cmd[key] as? String }
             switch name {
-            case "scan": s.startScan()
+            case "scan": model.integration.retryDiscovery()
             case "connectFirst":
-                if let camera = s.found.first { s.connect(camera) } else { return ["ok": false, "error": "none found"] }
+                if let sighting = model.cameras.nearby.first {
+                    model.cameras.connect(sighting)
+                } else {
+                    return ["ok": false, "error": "none found"]
+                }
             case "reconnect":
-                if let id = str("id").flatMap(UUID.init(uuidString:)) ?? model.savedCameras.first?.id {
-                    s.reconnect(to: id)
+                if let camera = model.savedCameras.first(where: { $0.id == str("id") }) ?? model.savedCameras.first {
+                    model.reconnect(camera)
                 }
             case "disconnect": model.disconnect()
             case "record": s.pressShutter()
             case "mode":
-                if let mode = ShootingMode.allCases.first(where: { $0.label == str("value") || "\($0)" == str("value") }) {
+                if let mode = ShootingMode.allCases.first(where: { $0.label(in: s.profile) == str("value") || "\($0)" == str("value") }) {
                     s.setShootingMode(mode)
                 }
             case "iso":
@@ -186,7 +192,7 @@
                     s.setWhiteBalanceCustom(kelvin: Int(k), tint: 0)
                 }
             case "color":
-                if let mode = ColorMode.allCases.first(where: { $0.label == str("value") || "\($0)" == str("value") }) {
+                if let mode = ColorMode.allCases.first(where: { $0.label(in: s.profile) == str("value") || "\($0)" == str("value") }) {
                     s.setColorMode(mode)
                 }
             case "format":
@@ -223,14 +229,11 @@
                 for step in steps where step.count == 3 {
                     let end = ProcessInfo.processInfo.systemUptime + step[2]
                     while ProcessInfo.processInfo.systemUptime < end {
-                        if let request = try? LunaProtocol.gimbalMove(upDown: Int32(step[1]), leftRight: Int32(step[0])) {
-                            let backend = s.backend
-                            Task { _ = try? await backend.send(request, timeout: .seconds(2)) }
-                        }
+                        Task { await s.motion.steer(pan: Int32(step[0]), tilt: Int32(step[1])) }
                         try? await Task.sleep(for: .seconds(period))
                     }
                 }
-                _ = try? await s.backend.send(LunaProtocol.gimbalReleaseRequest())
+                await s.motion.release()
             case "recenter": s.recenterGimbal()
             case "aim":
                 guard let live = s.freshGimbalWaypoint else { return ["ok": false, "error": "no pose"] }
@@ -397,16 +400,13 @@
             case "lock": s.isLocked = cmd["value"] as? Bool ?? !s.isLocked
             case "panel":
                 switch str("value") {
-                case "settings": model.liveOperatorPanel = .settings
-                case "media": model.liveOperatorPanel = .media
-                case "homeSettings": model.homePanel = .settings
-                case "homeMedia": model.homePanel = .media
-                default:
-                    model.liveOperatorPanel = nil
-                    model.homePanel = nil
+                // One cover over whichever page shows (cameras or monitor).
+                case "settings", "homeSettings": model.shell.open(.settings)
+                case "media", "homeMedia": model.shell.open(.media)
+                default: model.shell.dismissCover()
                 }
             case "settingsTab":
-                if let tab = OperatorSettingsTab.allCases.first(where: { $0.rawValue == str("value") || "\($0)" == str("value") }) {
+                if let tab = MonitorSettingsTab.allCases.first(where: { $0.rawValue == str("value") || "\($0)" == str("value") }) {
                     model.operatorSettingsTab = tab
                 }
             case "gimbalPanel":
@@ -423,7 +423,8 @@
                 }
                 if let rec709 = cmd["rec709"] as? Bool { model.assist.falseColorRec709 = rec709 }
             case "clean": model.setDisplayMode(clean: cmd["value"] as? Bool ?? !model.assist.clean)
-            case "pairNew": model.isPairingNewCamera = cmd["value"] as? Bool ?? true
+            case "pairNew":
+                if cmd["value"] as? Bool ?? true { model.shell.beginPairing() } else { model.shell.endPairing() }
             case "mediaBrowse": s.beginMediaBrowse()
             case "mediaEnd": s.endMediaBrowse()
             case "thumb":
@@ -448,6 +449,7 @@
                 guard let code = num("code") else { return ["ok": false] }
                 let body = Data(hex: str("hex") ?? "")
                 do {
+                    // Lab probe: the one request that may bypass the session (DEBUG only).
                     let reply = try await s.backend.send(LunaRequest(code: UInt16(code), body: body))
                     return ["ok": true, "reply": reply.map { String(format: "%02x", $0) }.joined()]
                 } catch {

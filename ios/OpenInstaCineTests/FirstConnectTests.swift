@@ -1,4 +1,5 @@
-import OpenPocketViewCore
+import OpenCineApple
+import OpenInstaViewCore
 import QuartzCore
 import VideoToolbox
 import XCTest
@@ -9,7 +10,7 @@ import XCTest
 final class FirstConnectTests: XCTestCase {
     func testCachedFrameRedrawDoesNotAdvanceSourceFreshness() async throws {
         let decoder = HevcDecoder()
-        let bus = LiveFrameSampleBus()
+        let bus = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         decoder.effects.histogram = true
         decoder.unlockHardwareDecoder()
         decoder.sampleBus = bus
@@ -29,6 +30,7 @@ final class FirstConnectTests: XCTestCase {
         let source = try XCTUnwrap(decoder.lastSourceFrameAt)
         let presented = try XCTUnwrap(decoder.lastPresentedAt)
         let decoded = bus.decodedFrames
+        let health = decoder.health
         let firstHeartbeats = heartbeats
         let firstCompletions = completions
         decoder.handleDecodedFrame(buffer, isNewSourceFrame: false)
@@ -39,6 +41,14 @@ final class FirstConnectTests: XCTestCase {
         XCTAssertGreaterThan(completions, firstCompletions, "Exercise the cached repaint")
         XCTAssertEqual(decoder.lastPresentedAt, presented)
         XCTAssertEqual(decoder.lastSourceFrameAt, source)
+        XCTAssertEqual(decoder.health.source, health.source)
+        XCTAssertEqual(decoder.health.lastSourceFrameAt, health.lastSourceFrameAt)
+        XCTAssertEqual(decoder.health.lastPresentedAt, health.lastPresentedAt,
+            "The aggregate's source-present time cannot advance on a cached repaint")
+        XCTAssertEqual(decoder.health.pipeline.submitted, health.pipeline.submitted)
+        XCTAssertEqual(decoder.health.pipeline.accepted, health.pipeline.accepted)
+        XCTAssertEqual(decoder.health.pipeline.output, health.pipeline.output)
+        XCTAssertEqual(decoder.health.pipeline.assistOutput, health.pipeline.assistOutput)
         XCTAssertEqual(bus.decodedFrames, decoded)
         XCTAssertEqual(heartbeats, firstHeartbeats)
         await fulfillment(of: [identity], timeout: 1)
@@ -94,14 +104,6 @@ final class FirstConnectTests: XCTestCase {
             "Pocket 4 must not inherit the Pocket 3 format poke")
         XCTAssertTrue(CameraSoftAP.shouldForceEnableAfterUDPRebuild(hadVideo: false))
         XCTAssertFalse(CameraSoftAP.shouldForceEnableAfterUDPRebuild(hadVideo: true))
-        XCTAssertFalse(CameraSoftAP.shouldIngestLiveVideo(ingestArmed: false))
-        XCTAssertTrue(
-            CameraSoftAP.shouldIngestLiveVideo(ingestArmed: true),
-            "Mimo 20260828: HEVC at join+17ms, enable at +3s")
-        XCTAssertTrue(
-            CameraSoftAP.shouldIngestLiveVideo(
-                ingestArmed: true, browsingMedia: true, operatorOverlayHeld: true),
-            "#177: overlay/browse must not drop pktType 0x02")
         XCTAssertFalse(CameraSoftAP.shouldBeginIDRHoldOnEnable(hasPresentedPicture: true))
         XCTAssertTrue(
             CameraSoftAP.shouldRunFirstPictureRecover(
@@ -212,14 +214,6 @@ final class FirstConnectTests: XCTestCase {
                 rebuildInFlight: false, secondsSinceLastRebuild: nil),
             "SET ACK late while video flows — leave the socket alone")
         XCTAssertFalse(
-            CameraSetMailbox.timeoutImpliesUplinkFailure(.launchPending),
-            "superseded shutter SET is not half-dead uplink")
-        XCTAssertTrue(CameraSetMailbox.timeoutImpliesUplinkFailure(.waitLate))
-        XCTAssertFalse(
-            CameraSetMailbox.timeoutImpliesUplinkFailure(
-                .waitLate, key: CameraSetMailbox.zoomOpcodeKey),
-            "missing 0xB8 ACK is not half-dead uplink")
-        XCTAssertFalse(
             FeedWatchdog.shouldRepeatRecoverEnable(
                 secondsSinceLastEnable: 5, secondsSinceLastRebuild: 2.6,
                 pathReady: true, lastBleNotifyAge: 0.2, hadVideo: true),
@@ -250,9 +244,6 @@ final class FirstConnectTests: XCTestCase {
             CameraSoftAP.canSendHandshake(receiveArmed: false, connectionReady: true),
             "bound-but-deaf: do not send 0x00 until receiveMessage is armed")
         XCTAssertTrue(CameraSoftAP.canSendHandshake(receiveArmed: true, connectionReady: true))
-        XCTAssertTrue(
-            CameraSoftAP.shouldRearmAfterError(isLiveConnection: true, canceled: true),
-            "spurious 89 on a live fd must not kill the handshake reader")
         XCTAssertTrue(CameraSoftAP.shouldReuseDatalink(isClosed: false))
         XCTAssertFalse(
             CameraSoftAP.shouldReuseDatalink(isClosed: true),
@@ -275,21 +266,6 @@ final class FirstConnectTests: XCTestCase {
     }
 
     func testDoNotEnableUntilWifiReady() {
-        XCTAssertFalse(
-            CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: false, displayAttached: true, alreadySent: false),
-            "first join: DHCP is not done — enable here blacks the feed")
-        XCTAssertTrue(
-            CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: true, displayAttached: true, alreadySent: false))
-        XCTAssertTrue(
-            CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: true, displayAttached: false, alreadySent: false),
-            "first boot must enable before the layer attaches")
-        XCTAssertFalse(
-            CameraSoftAP.shouldSendLiveViewEnable(
-                pathReady: true, displayAttached: true, alreadySent: true),
-            "do not spam 0x09/0xa8")
         XCTAssertTrue(
             CameraSoftAP.shouldSendLiveViewEnableAfterHandshake(alreadySent: false),
             "handshake is path proof — do not wait on getifaddrs")
@@ -376,16 +352,8 @@ final class FirstConnectTests: XCTestCase {
 
     func testRecoverKeepsLastFrameAndHoldsIDR() {
         XCTAssertFalse(
-            FeedWatchdog.shouldFlushDisplayedImage(nextFrameReady: false),
-            "do not flush to black before the next decoded frame")
-        XCTAssertFalse(
             FeedWatchdog.shouldSendRecoverEnable(pathReady: true, decoderReady: false),
             "same first-connect gate: VT/display before 0x09/0xa8")
-        XCTAssertFalse(
-            FeedWatchdog.shouldPresentSample(hasPicture: false, awaitingIDR: false, isIDR: false),
-            "do not present an empty sample")
-        XCTAssertFalse(
-            FeedWatchdog.shouldPresentSample(hasPicture: true, awaitingIDR: true, isIDR: false))
 
         let decoder = HevcDecoder()
         XCTAssertFalse(decoder.isPresentationReady, "detached layer is not ready")

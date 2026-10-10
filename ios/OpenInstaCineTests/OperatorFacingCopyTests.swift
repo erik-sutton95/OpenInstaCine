@@ -1,4 +1,8 @@
-import OpenPocketViewCore
+import MonitorUI
+import OpenCineAppKitApple
+import OpenCineCameraControls
+import OpenCineCore
+import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine
@@ -42,10 +46,10 @@ final class OperatorFacingCopyTests: XCTestCase {
             ZebraAssist.unitsHelp,
             ZebraAssist.highlightHelp,
             ZebraAssist.midtoneHelp,
-            SettingsNumberField.doneTitle,
+            MonitorSettingsNumberField.doneTitle,
             PeakingAssist.sensitivityHelp,
             PeakingAssist.colorHelp,
-            FalseColorAssist.scaleHelp,
+            FalseColorLooks.app.scaleHelp,
             FalseColorAssist.referenceHelp,
             WaveformAssist.brightnessHelp,
             ParadeAssist.brightnessHelp,
@@ -84,7 +88,7 @@ final class OperatorFacingCopyTests: XCTestCase {
             SettingsHelpCopy.recordConfirmation,
             SettingsHelpCopy.haptics,
             SettingsHelpCopy.headTracking,
-            LiveHeadTrackCalibrateButton.calibrateTitle,
+            HeadphoneMotionBridge.calibrateTitle,
             SettingsHelpCopy.joystickSensitivity,
             SettingsHelpCopy.virtualJoystickInvertPan,
             SettingsHelpCopy.virtualJoystickInvertTilt,
@@ -101,7 +105,6 @@ final class OperatorFacingCopyTests: XCTestCase {
             NDAssist.notationHelp,
             SettingsHelpCopy.themeHelp,
             SettingsHelpCopy.shareDiagnostics,
-            StartupConnectionCopy.shareDiagnostics,
             SettingsHelpCopy.sourceHelp,
             SettingsHelpCopy.linkHealth,
             SettingsHelpCopy.feedUpscaler,
@@ -148,21 +151,12 @@ final class OperatorFacingCopyTests: XCTestCase {
             LiveGimbalCopy.programmedMove,
             LiveGimbalCopy.runMove,
             LiveGimbalCopy.stopMove,
-            StartupConnectionCopy.localNetworkDenied,
-            StartupConnectionCopy.bluetoothDenied,
-            StartupConnectionCopy.bluetoothOff,
-            StartupConnectionCopy.bluetoothNotReady,
             StartupConnectionCopy.personalHotspotOn,
-            StartupConnectionCopy.pairingDeferred,
-            StartupConnectionCopy.datalinkSilent,
             StartupConnectionCopy.scanEmptyTitle,
             StartupConnectionCopy.scanEmptyHint,
             StartupConnectionCopy.preCheck,
-            StartupConnectionCopy.bluetoothTimedOut,
-            StartupConnectionCopy.bluetoothEnded,
             LocalVPNFilter.wizardBanner,
             LocalVPNFilter.liveHint,
-            LocalVPNFilter.joinWifiPhoneStep,
             WatchRelayCopy.openOnIPhone,
             WatchRelayCopy.noCamera,
             WatchRelayCopy.waitingLive,

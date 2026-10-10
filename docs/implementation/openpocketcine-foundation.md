@@ -1,106 +1,27 @@
-# OpenPocketCine foundation in OpenInstaCine
+# OpenPocketCine foundation and OpenCine ownership
 
-Date: 2026-09-17. This replaces the 2026-09-11 extraction from OpenPocketCine
-`9c4e733`. The previous `Shared/Apple/MonitorUI` + `MonitorCore` snapshot had
-already drifted from current OpenPocketCine.
+The app began with a Pocket source snapshot and Luna overlays. The copy-based
+presentation-shell workflow is retired: its sync script, overlay script,
+recipe and sync-commit stamp are removed.
 
-## Parity contract
+## Current shared dependency
 
-Until the two products share a monorepo, OpenInstaCine **vendors** the current
-OpenPocketCine shared engine and native shells, then overlays brand identity and
-the Luna adapter.
+OpenCine at the sibling path ../OpenCine supplies the shared root, controls,
+monitor presentation, operator settings, media models, native runtime and
+Luna integration products declared in this app's manifests. The revision is
+recorded in opencine-pins.txt and checked by scripts/checkout-opencine.sh.
 
-```sh
-just sync-openpocketcine
-# or: OPENPOCKETCINE_PATH=/path/to/OpenPocketCine bash scripts/sync-openpocketcine.sh [--dry-run]
-```
+Common behavior changes belong in the owning OpenCine package. Verify the
+shared contract and actual app adapters before adopting a dependency revision.
+Branding, entitlements, release configuration, secure storage and platform
+composition remain app-owned.
 
-`scripts/sync-openpocketcine.sh` is a three-way update, not a copy:
+## Remaining migration
 
-1. Builds the "renamed upstream" tree twice, in temp dirs: at the last synced
-   commit (`docs/implementation/openpocketcine-sync-commit.txt`, override with
-   `OLD_COMMIT=`) and at OpenPocketCine `HEAD` (override with `NEW_COMMIT=`).
-   Each tree is `Sources/{MonitorPresentation,MonitorUI,OpenPocketViewCore,CJNI,OpenPocketCineAndroidFacade}`,
-   `Tests/*`, four build-phase `tools/`, and `ios/` renamed to OpenInstaCine,
-   minus the `LUNA_OWNED` and `OSMO_ONLY` lists in the script, with
-   `scripts/apply-openpocketcine-overlays.py` applied.
-2. Diffs old to new (`git diff --no-index --binary`) and applies it with
-   `git apply --3way`. Our edits to upstream-derived files survive; overlaps
-   come out as conflicts and the script exits non-zero without recording the
-   new commit. Commit or stash the synced paths first (`--3way` uses the index).
-3. Engine and test dirs identical to the old upstream tree are rsynced from the
-   new one instead. Dirs with local changes print a warning and go through the
-   three-way diff.
-4. Warns when upstream changed a Luna-owned file (never applied; port by hand).
-5. Writes the new commit to `openpocketcine-sync-commit.txt`.
+Legacy app session projections and native adapters remain under review.
+Retiring the source-sync tooling does not complete their ownership migration.
+The supported Luna combinations and physical qualification limits remain
+unchanged. See [implementation architecture](architecture.md) and
+[development workflow](../DEVELOPMENT.md).
 
-`--dry-run` prints the diff stat, saves the full patch to `$TMPDIR`, and runs
-`git apply --3way --check`. It writes nothing to the repo.
-
-### Core hooks (local changes to the engine)
-
-These make `Sources/OpenPocketViewCore` (and one facade file) differ from
-upstream, so the sync takes the three-way path for them. Upstream them when
-possible. `Sources/MonitorUI` matches upstream plus the overlay script
-(`MonitorTheme.accentRGB` / `onAccent`), so it still rsyncs.
-
-| File | Hook |
-| --- | --- |
-| `OpenPocketViewCore/CameraControl.swift` | `ColorMode.iLog` / `.dolbyVision`, `IsoIndex.iso160`, `VideoResolution.luna8K/6K/4K_9x16/3K/8K_235/4K_235`, `ShootingMode.labelOverrides`, settable `CamFov.maxFactor` |
-| `OpenPocketViewCore/CameraStatus.swift` | `zoomFactorOverride` |
-| `OpenPocketViewCore/LiveColorScience.swift` | `MonitorTransfer.ilog` and the I-Log curve |
-| `OpenPocketViewCore/LogColorTransform.swift`, `CamCap.swift`, `OpenPocketCineAndroidFacade/FeedEffectsWire.swift` | exhaustive `switch` cases for `.ilog` |
-| `OpenPocketViewCore/MonitorLUT.swift` | `lunaILog` LUT source and auto-pick |
-| `OpenPocketViewCore/MediaManifest.swift` | `MediaHTTP.addressing` / settable `.host`, Insta360 filename dates, `.lrv` proxy |
-| `OpenPocketViewCore/Diagnostics.swift`, `FeedIncidentStore.swift`, `WatchRelayProtocol.swift`, `WatcherRelayMessages.swift` | brand-neutral user copy (no "OpenPocketCine") |
-| `Tests/OpenPocketViewCoreTests/MonitorLUTTests.swift`, `DiagnosticsTests.swift` | tests for the above |
-
-Do **not** edit vendored trees for product features. Change OpenPocketCine, then
-re-sync. OpenInstaCine-owned code is:
-
-| Owner | Path |
-| --- | --- |
-| Brand storefront | `Apps/Apple/OpenInstaCine`, `Apps/Android/app` |
-| Luna protocol | `Adapters/Insta360Protocol` |
-| Luna Apple I/O | `Adapters/Insta360Apple` |
-| Luna Android I/O | `Apps/Android/luna-adapter` |
-| CameraBackend contract | `Sources/MonitorContracts` |
-| Overlays / sync | `scripts/sync-openpocketcine.sh`, `scripts/apply-openpocketcine-overlays.py` |
-| Protocol research | `docs/research`, `tools/luna_*` |
-
-Accent is `MonitorTheme.accentRGB = 0xFFCF00`, set once in
-`OpenInstaCineBrand.apply()` before any view is built. Record red, false color,
-and zebra keep their semantic colors.
-
-## Camera seam
-
-`CameraSession` in the vendored shell still knows Osmo types for HUD values.
-Its scan / connect / disconnect / captured controls now dispatch through
-`CameraBackend`. `LunaCameraBackend` is the only live adapter.
-
-Captured Luna Ultra v1.0.288 operations that the adapter will send:
-
-- Live start/stop
-- Record start/stop, stills
-- ISO, shutter, EV, Standard / I-Log / Dolby Vision, WB kelvin, zoom 1–6
-- Gimbal stick / recenter / flip
-- Tap focus, Deep Track
-- Clip list / HTTP download / delete
-
-Not wired (uncaptured or proven no-op):
-
-- Color Recovery as phone photography option 73 (use the detached-screen RPC)
-- Filter `gamma_mode` 18 SET
-- Camera-side favorite / star
-- UCD2 playback transport 89–99 (official iOS player uses HTTP)
-- Watcher relay / Osmo station multiview
-- Sentry reliability uploads
-
-## Verification
-
-- `swift test --package-path Adapters/Insta360Protocol`
-- `swift test --filter MonitorPresentationTests`
-- `just apple-generate && just apple-build`
-
-Physical Luna connect, first picture, and control readback still require a
-phone on the camera AP.
+Earlier source snapshots and sync mechanics remain in this file's Git history.

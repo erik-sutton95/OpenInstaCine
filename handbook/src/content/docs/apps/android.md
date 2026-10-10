@@ -1,14 +1,14 @@
 ---
 title: Android app
-description: OpenPocketCine's Compose phone shell with a Kotlin Luna adapter. arm64-v8a only, Android 10 or newer.
+description: App-owned Compose phone app on OpenCine's shared shell, with a Kotlin Luna adapter. arm64-v8a only, Android 10 or newer.
 ---
 
-The Android app lives in `Apps/Android/`. It runs the OpenPocketCine Android
-shell with OpenInstaCine identity, the yellow accent and a Luna adapter driving
-it. It runs against a real Luna Ultra (firmware 1.1.15): pairing, camera Wi-Fi,
-live view, camera and gimbal control, and media. iOS is the daily driver, and a
-few iOS features are still missing here (below). arm64 phones, Android 10 or
-newer.
+The Android app lives in `Apps/Android/`. It is app-owned Compose code on OpenCine's
+shared shell (`appkit`), no longer synced from the OpenPocketCine Android shell, with
+OpenInstaCine identity, the yellow accent and a Luna adapter driving it. It runs against
+a real Luna Ultra (firmware 1.1.15): pairing, camera Wi-Fi, live view, camera and gimbal
+control, and media. iOS is the daily driver, and a few iOS features are still missing
+here (below). arm64 phones, Android 10 or newer.
 
 If pairing or live view fails, tap **Report a problem** on the pairing screen or
 in **Operator Setup → System**
@@ -20,6 +20,22 @@ Force quit the Insta360 app on every phone near the camera. It can hold the
 camera, and then pairing or the video link never completes. The first pairing
 step shows this as a tip, and after 20 seconds with no camera **Still looking**
 repeats it.
+
+With no saved camera, the app opens **Pair camera**. Select the Luna and tap
+**Continue**. The shared progress rail follows Bluetooth, camera Wi-Fi, the
+video link and the first picture; approve on the camera and accept Android's
+network request when prompted. **Cancel** returns to discovery. From **Your
+cameras**, reconnect a saved camera or choose a nearby camera to open the pair
+page with it selected.
+
+Press and hold a saved setup chip and choose **Rename setup** to label that
+connection. Clear the name to use its default title again. Renaming keeps the
+camera and its saved Wi-Fi details. **Privacy** and **Terms** are in Settings.
+
+Upgrading preserves saved cameras, custom names and Wi-Fi details. Earlier
+builds can still read the list, and edits made there are reconciled on the next
+upgrade. Forgetting a camera also removes its saved Wi-Fi credentials from this
+phone. The phone's approval identity is retained.
 
 ## Permissions
 
@@ -72,8 +88,8 @@ with the shared Motion Control drawer.
 ## How Swift reaches Android
 
 The shared monitor core is Swift, cross-compiled for `aarch64-unknown-linux-android29`
-and loaded through JNI (`Sources/OpenPocketCineAndroidFacade`). The Luna link is
-not: `Apps/Android/luna-adapter` is a separate Kotlin implementation of UCD2
+and loaded through JNI (`Sources/OpenInstaCineAndroidFacade`). The Luna link is
+not: `insta360-luna` (OpenCine `Android/`) is a separate Kotlin implementation of UCD2
 framing, protobuf, GATT, JCA crypto and the network-bound socket. Its request
 bytes are pinned to the same captured fixtures as the Swift package
 (`LunaControlTest`, `LunaStatusTest`).
@@ -81,13 +97,14 @@ bytes are pinned to the same captured fixtures as the Swift package
 | Module | Role |
 | --- | --- |
 | `:app` | Thin launcher `com.opencapture.openinstacine`: installs the brand, the I-Log camera look and `LunaBackend` |
-| `:monitor` | Shared Compose shell, MediaCodec, Vulkan/GLES, assists, library and player (OpenPocketCine `app/src` as a library) |
-| `:monitor-ui` | Shared Compose design language; the accent is brand-assigned |
-| `:core-api` | Kotlin backend contract: discovery, lifecycle, state, capabilities, frames, optional camera controls |
-| `:luna-adapter` | Android GATT, crypto, Wi-Fi and TCP, UCD2 and Luna messages |
+| `:monitor` | App-owned Compose code: MediaCodec, Vulkan/GLES, assists, library and player (derived from OpenPocketCine `app/src`, no longer synced) |
+| OpenCine `monitor-ui` | Shared Compose design language from the sibling OpenCine checkout (included build `opencine`); the accent is brand-assigned |
+| OpenCine `appkit` | Cameras, pairing, connection progress, failure recovery and versioned saved-camera records |
+| OpenCine `insta360-shell` | Kotlin backend contract: discovery, lifecycle, state, capabilities, frames, optional camera controls (included build) |
+| OpenCine `insta360-luna` | Android GATT, crypto, Wi-Fi and TCP, UCD2 and Luna messages; `LunaIntegration` connects the shared flow to the backend (included build) |
 
-The internal `com.opencapture.openpocketcine` package, JNI symbols and the
-`OpenPocketCineAndroid` library name remain so the inherited decoder, LUT and
+The internal `com.opencapture.openinstacine.monitor` package, JNI symbols and the
+`OpenInstaCineAndroid` library name remain so the inherited decoder, LUT and
 assist calls load. Build recipes: [Setup](../../guides/setup/#android).
 
 ## Operator surface

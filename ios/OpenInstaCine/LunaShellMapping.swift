@@ -1,19 +1,19 @@
 import Foundation
+import Insta360Apple
 import Insta360Protocol
-import OpenPocketViewCore
+import OpenCineCameraControls
+import OpenCineCore
+import OpenInstaViewCore
 
 /// Optimistic values the operator just asked for, held until the camera reports
 /// them or the settle window runs out (same `CameraValuePin` rule as the Osmo shell).
+/// ISO, shutter, white balance and record are not here: their pending state is the Core
+/// operation (CameraSessionCore.swift).
 struct LunaControlPins {
-    var isoIndex: CameraValuePin<IsoIndex>?
-    var shutterDenom: CameraValuePin<Int>?
-    var expoMode: CameraValuePin<ExpoMode>?
     var ev: CameraValuePin<EvComp>?
-    var whiteBalance: CameraValuePin<WhiteBalance>?
     var color: CameraValuePin<ColorMode>?
     var format: CameraValuePin<VideoFormat>?
     var shootingMode: CameraValuePin<Int>?
-    var recording: CameraValuePin<Bool>?
     var gimbalMode: CameraValuePin<GimbalMode>?
     var gimbalSpeed: CameraValuePin<GimbalSpeed>?
     var focus: CameraValuePin<FocusOption>?
@@ -24,13 +24,27 @@ struct LunaControlPins {
 /// Luna ↔ shared monitor vocabulary. Wire numbers stay in `Insta360Protocol`;
 /// everything the shared screens read goes through here.
 enum LunaShellMapping {
-    static let cameraModel = CameraModel(name: "Luna Ultra", datalinkPort: 0, tcpPoke: false, verified: true)
+    static let cameraModel = CameraModel(
+        name: "Luna Ultra", datalinkPort: 0, tcpPoke: false, verified: true,
+        captureProfile: CameraCaptureProfile(labels: profile, supportsFocusMode: true,
+            supportsTapFocus: true, supportsAperture: false, hasGimbal: true,
+            supportsZoom: true, zoom: CameraZoomProfile(stops: zoomChips), looks: lookProfile))
+    static let lookProfile = CameraLUTProfile(automatic: [.iLog: .iLogRec709],
+        selections: [.iLogRec709: .iLogRec709])
+
     /// Observed preview: 1280×720 HEVC at 25 fps.
     static let previewFPS: Double = 25
     /// fw 1.1.15 verified: 1.0…15.0 (values outside are ignored, not clamped).
     static let defaultZoomCeiling: Double = 15
     /// fw 1.1.15 official presets.
     static let zoomChips: [Double] = [1, 2, 3, 6, 15]
+
+    /// Luna names and media addressing for a session: every file at its own path on the camera AP.
+    static let profile = CameraLabelProfile(
+        shootingModeLabels: shootingModeLabels, colorModeLabels: [.normal: "Standard"],
+        gimbalModeLabels: gimbalModeLabels,
+        media: MediaHTTP.Route(host: "192.168.42.1", addressing: .directPath),
+        colorModes: colorModes, shootingModes: ShootingMode.allCases.filter { $0 != .livePhoto })
 
     // MARK: Shooting mode
 
@@ -95,7 +109,7 @@ enum LunaShellMapping {
     // MARK: Exposure
 
     /// Luna ISO stops offered by the official wheel.
-    static let isoValues = [100, 160, 200, 400, 800, 1600, 3200, 6400]
+    static let isoValues = LunaCameraSession.isoValues
     static let isoIndices: [IsoIndex] = [.auto] + isoValues.compactMap(isoIndex)
 
     static func isoIndex(_ iso: Int) -> IsoIndex? {
@@ -103,10 +117,7 @@ enum LunaShellMapping {
     }
 
     /// Official Video wheel, slowest last. fw 1.1.15 adds 1/15…1/5.
-    static let shutterDenoms = [
-        8000, 6400, 5000, 4000, 3200, 2500, 2000, 1600, 1250, 1000, 800, 640, 500, 400, 320, 250,
-        200, 160, 125, 100, 80, 60, 50, 40, 30, 25, 15, 10, 5,
-    ]
+    static let shutterDenoms = LunaCameraSession.shutterDenominators
 
     // MARK: Format
 
@@ -124,13 +135,13 @@ enum LunaShellMapping {
         case (2688...2720, false): return .p2_7K
         case (2688...2720, true): return .p2_7K_9x16
         case (2880...3072, true): return .p3K_9x16
-        case (3840, false) where height < 2000: return .luna4K_235
-        case (7680, false) where height < 4000: return .luna8K_235
-        case (2880...3072, false): return .luna3K
+        case (3840, false) where height < 2000: return .p4K_235
+        case (7680, false) where height < 4000: return .p8K_235
+        case (2880...3072, false): return .p3K
         case (3840, false): return .p4K
-        case (3840, true): return .luna4K_9x16
-        case (5120...5760, false): return .luna6K
-        case (7680, false): return .luna8K
+        case (3840, true): return .p4K_9x16
+        case (5120...5760, false): return .p6K
+        case (7680, false): return .p8K
         default: return unknownResolution
         }
     }
@@ -264,36 +275,16 @@ enum LunaShellMapping {
             status.isPhoto
             ? settings.stillExposure ?? settings.videoExposure
             : settings.videoExposure ?? settings.stillExposure
+        // Live readouts only (Auto may report what it chose; AE Lock reads them). The ISO,
+        // shutter and WB settings and the exposure mode come from the Core session.
         if let exposure {
-            // Stills report adaptive/full-auto programs (4, 5); only 1...3 fix a value.
-            let mode: ExpoMode =
-                switch exposure.exposureProgram {
-                case .isoPriority, .shutterPriority, .manual: .manual
-                default: .auto
-                }
-            status.expoMode = CameraValuePin.reconcile(&pins.expoMode, reported: mode, now: now) ?? mode
-            let reportedISO: IsoIndex? = exposure.iso == 0 ? .auto : isoIndex(Int(exposure.iso))
-            if let held = CameraValuePin.reconcile(&pins.isoIndex, reported: reportedISO, now: now) {
-                status.isoIndex = held
-            } else {
-                status.isoIndex = reportedISO
-            }
-            status.iso = status.isoIndex?.isoValue ?? (exposure.iso > 0 ? Int(exposure.iso) : -1)
-            let denom = exposure.shutterSeconds > 0 ? Int((1 / exposure.shutterSeconds).rounded()) : -1
+            status.iso = exposure.iso > 0 ? Int(exposure.iso) : -1
             status.shutterDenom =
-                CameraValuePin.reconcile(&pins.shutterDenom, reported: denom, now: now) ?? denom
+                exposure.shutterSeconds > 0 ? Int((1 / exposure.shutterSeconds).rounded()) : -1
         }
         if let stops = settings.exposureBiasStops {
             let ev = EvComp(thirds: Int((stops * 3).rounded()))
             status.evComp = CameraValuePin.reconcile(&pins.ev, reported: ev, now: now) ?? ev
-        }
-        if let kelvin = settings.whiteBalanceKelvin {
-            let tint = status.whiteBalanceTint ?? 0
-            let wb: WhiteBalance = kelvin == 0 ? .auto(tint: tint) : .custom(kelvin: Int(kelvin), tint: tint)
-            if kelvin > 0 { status.whiteBalanceKelvin = Int(kelvin) }
-            status.whiteBalance =
-                CameraValuePin.reconcile(&pins.whiteBalance, reported: wb, now: now) ?? wb
-            status.whiteBalanceTint = status.whiteBalance?.tint ?? tint
         }
         if let luna = settings.color {
             let color = colorMode(luna)
@@ -331,16 +322,16 @@ enum LunaShellMapping {
         stops.min { abs($0 - factor) < abs($1 - factor) } ?? 1
     }
 
-    /// Time-of-day timecode, non-drop. Frames count at the recording rate, halved above 30
-    /// (50 and 100 count 25s, 60 and 120 count 30s).
+    /// Time-of-day timecode text (`LunaFrameTimecode.timecode`).
     static func timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int) -> String {
-        var base = fps > 0 ? fps : 25
-        while base > 30 { base /= 2 }
-        let local = unixSeconds + Double(timeZoneSeconds)
-        let whole = local.rounded(.down)
-        let second = ((Int(whole) % 86_400) + 86_400) % 86_400
-        let frame = min(base - 1, Int((local - whole) * Double(base)))
-        return String(format: "%02d:%02d:%02d:%02d", second / 3600, (second / 60) % 60, second % 60, frame)
+        timecodeText(LunaFrameTimecode.timecode(unixSeconds: unixSeconds, timeZoneSeconds: timeZoneSeconds, fps: fps))
+    }
+
+    /// `HH:MM:SS:FF`, the status text the HUD reads.
+    static func timecodeText(_ timecode: CameraTimecode) -> String {
+        String(
+            format: "%02d:%02d:%02d:%02d", timecode.hours, timecode.minutes, timecode.seconds,
+            timecode.frames)
     }
 }
 
@@ -395,12 +386,9 @@ extension OperatorPrefs {
     }
 }
 
-/// How the pairing list names a Luna: the official app shows "Luna Ultra XBQFN7".
-enum LunaCameraNames {
-    static func title(advertised: String) -> String {
-        let trimmed = advertised.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty { return "Luna Ultra" }
-        if trimmed.lowercased().contains("luna") { return trimmed }
-        return "Luna Ultra \(trimmed)"
+extension TrackingBox {
+    /// The Luna owner's box is the same top-left preview fraction box.
+    init(_ box: LunaSubjectTracking.Box) {
+        self.init(x: box.x, y: box.y, width: box.width, height: box.height)
     }
 }

@@ -1,7 +1,7 @@
 # Developing OpenInstaCine
 
-Lab and build notes that used to live in the README. The shared monitor engine
-contract is [SHARED-MONITOR-ENGINE.md](SHARED-MONITOR-ENGINE.md).
+Lab and build notes that used to live in the README. [SHARED-MONITOR-ENGINE.md](SHARED-MONITOR-ENGINE.md)
+records the 2026-09-06 multi-brand design intent.
 
 The public handbook ([opencapture.org/openinstacine/docs](https://opencapture.org/openinstacine/docs/))
 is the Astro Starlight site in [`handbook/`](../handbook/README.md); update it in the
@@ -11,22 +11,28 @@ same change when protocol, app behavior or setup changes.
 
 | Path | What |
 | --- | --- |
-| `ios/` | XcodeGen project (`ios/project.yml`), app `ios/OpenInstaCine`, tests, watch app |
-| `Sources/` | Shared OpenPocketCine core (`OpenPocketViewCore`, `MonitorContracts`, `MonitorUI`, ...) with small Luna hooks (I-Log color mode, Luna resolutions, `.lrv` proxy) |
-| `Adapters/Insta360Protocol` | Portable Luna codec: UCD2 framing, protobuf, status, settings, media and control messages |
-| `Adapters/Insta360Apple` | CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport |
+| `ios/` | XcodeGen project (`ios/project.yml`), app `ios/OpenInstaCine` (app-owned code on the shared OpenCine shell, `OpenCineAppKit`), tests, watch app |
+| `Sources/` | `OpenInstaViewCore`, an app-owned fork of the OpenPocketCine core (no longer synced), with small Luna hooks (I-Log color mode, Luna resolutions, `.lrv` proxy) |
+| `../OpenCine` (sibling) | The OpenCine platform repository, pinned in `opencine-pins.txt` (check out with `scripts/checkout-opencine.sh`); `Package.swift`, `ios/project.yml` and `Apps/Android/settings.gradle.kts` reference it by path (Android: one included build named `opencine`). Products used here: the shared design system (`MonitorUI`, `MonitorPresentation`, Android `monitor-ui`); `OpenCineCore`: common camera contracts (`CameraSession`, command outcomes; Android `:core`); `OpenCineMedia`: LUT, curve (incl. I-Log), scope and false-colour math, shutter angle, frame timing, framing, re-exported by `OpenInstaViewCore`; the Luna integration: `Insta360Protocol` (portable codec) and `Insta360Apple` (CoreBluetooth pairing, CryptoKit handshake, Keychain, camera Wi-Fi join, TCP transport, `LunaCameraSession`), plus `Insta360AppleTestSupport` (FakeLuna) for app tests, and Android `insta360-shell`/`insta360-luna`. The app passes its names (keychain service, app name, log prefix) in `AppModel.lunaConfiguration` |
 | `tools/LunaProbe` | Swift CLI that drives the camera from a Mac on its Wi-Fi (used for the fw 1.1.15 verification) |
 | `tools/` | Python lab tools: BLE capture, Mac preview, DEBUG remote client |
-| `Apps/Android` | Android app on the OpenPocketCine Android shell (synced to upstream `9e306c91`); builds, not yet verified on a physical Luna |
+| `Apps/Android` | Native app composition over OpenCine `appkit`, `monitor-ui` and Luna integrations; physical Luna verification remains open |
 
 Luna-specific app code lives in `ios/OpenInstaCine/CameraSession.swift`,
 `CameraSessionControls.swift`, `CameraMedia.swift` (Luna extension),
-`LunaShellMapping.swift`, `LunaThumbnailImage.swift`, `DebugRemote.swift`,
+`LunaShellMapping.swift`, `LunaMediaCatalogCodec.swift`, `LunaNativeMediaIO.swift`, `DebugRemote.swift`,
 `OpenInstaCineBrand.swift`, `OsmoCameraPageAdapter.swift` and
 `OsmoMonitorPresentation.swift` (the `Osmo*` names are kept so shared call sites
-bind unchanged). Everything else in `ios/OpenInstaCine` is the shared shell.
-`just sync-openpocketcine` re-copies the shell from the sibling checkout and
-leaves the Luna files alone.
+bind unchanged). Common composition consumes OpenCine package products. Remaining legacy
+app models and native adapters are listed in the implementation architecture notes.
+The actual media gallery consumes `MonitorMediaLibraryModel` and its root-owned cache directly.
+The app codec preserves the existing index bytes, paths, favorite keys and typed Luna source
+records; native HTTP/JPEG adapters supply the source services. Apple keeps the existing90%
+original eligibility and Android keeps exact-size eligibility, separate from stream completion.
+Nested player covers and rotation retain the gallery owner; its outer exit retires the browse.
+Playback source/look selection and OS delivery remain application composition.
+The former Pocket source-sync workflow is retired. Change common behavior in OpenCine,
+verify its consumers, then adopt its revision through the app's pinned dependency.
 
 ## Build and run
 
@@ -38,9 +44,8 @@ Needs Xcode 26, XcodeGen and `just`. Run from the repository root.
 | `just ios-build` | Simulator build, no signing, derived data in `.local/DD` |
 | `just ios-run [device]` | Development-signed build, install and launch on a USB iPhone (devicectl id) |
 | `just ios-test` | App unit tests on the first available iPhone simulator |
-| `just core-test` | `swift test` for the shared core and `Adapters/Insta360Protocol` |
+| `just core-test` | `swift test` for this package and the OpenCine `Insta360` tests |
 | `just oic-remote ...` | DEBUG remote client (see below) |
-| `just sync-openpocketcine` | Re-sync the shell from `../OpenPocketCine` |
 | `just luna-official-xc device` | XCUITest driver for the official Insta360 app (lab captures) |
 | `just lab-setup`, `just luna-view` | Python venv and the Mac live-view lab |
 | `just android-build`, `just android-check` | Android debug APK, unit tests and lint |

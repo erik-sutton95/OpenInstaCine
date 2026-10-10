@@ -1,7 +1,10 @@
 import Foundation
+import Insta360Apple
 import MonitorPresentation
 import MonitorUI
-import OpenPocketViewCore
+import OpenCineCameraControls
+import OpenCineCore
+import OpenInstaViewCore
 import SwiftUI
 
 /// Capability translation for the Luna adapter (type name kept from the shared shell so
@@ -16,16 +19,30 @@ enum OsmoMonitorPresentation {
         MonitorZoomCaption.label(factor: session.zoomReadout, opticalStops: session.zoomStops)
     }
 
-    static func capabilities(_ session: CameraSession) -> MonitorCapabilities {
-        // Luna phone protocol: no AF-S/AF-C switch, iris, audio meters, gimbal attitude
-        // (so no head tracking) or timecode. Favorites are kept on the phone. Simulator
-        // reviews use these same gates so screenshots show what a Luna operator sees.
-        return MonitorCapabilities(
-            gimbal: session.hasGimbal, zoom: session.supportsZoom,
-            focus: session.supportsFocusMode, iris: session.supportsAperture, audio: session.supportsAudio,
-            headTracking: true, clipDelete: true, clipStar: true,
-            requiresInternetHop: true, timecode: session.supportsTimecode)
+    /// What the monitor lays out: the Luna integration's projection of the connected camera
+    /// (`LunaCameraSession.layout`): gimbal and head tracking from its motion (GET_ANGLE is the
+    /// pose), host-derived timecode, no audio levels, no iris. Only clip delete, clip star and
+    /// the internet hop are the app's, until media and connection routes carry them (SHELL-02).
+    /// No session: what this app has always offered before a camera connects (gimbal, zoom,
+    /// focus, head tracking, timecode), so Settings keeps those rows. Simulator reviews open a
+    /// session (`MonitorUIReview.prepare`), so screenshots show what a Luna operator sees.
+    static func capabilities(_ session: CameraSession) -> MonitorLayoutCapabilities {
+        (session.coreSession as? LunaCameraSession)?.layout(base: appBase) ?? unconnected
     }
+
+    private static let unconnected: MonitorLayoutCapabilities = {
+        var layout = appBase
+        (layout.gimbal, layout.zoom, layout.focus, layout.headTracking, layout.timecode) = (true, true, true, true, true)
+        return layout
+    }()
+
+    private static let appBase: MonitorLayoutCapabilities = {
+        var base = MonitorLayoutCapabilities()
+        base.clipDelete = true
+        base.clipStar = true
+        base.requiresInternetHop = true
+        return base
+    }()
 }
 
 /// Luna METER tile beside EXPOSURE (overlay hook): tap switches Matrix and Face Priority

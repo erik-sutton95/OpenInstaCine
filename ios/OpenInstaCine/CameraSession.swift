@@ -3,9 +3,16 @@ import CoreGraphics
 import Foundation
 import Insta360Apple
 import Insta360Protocol
-import MonitorContracts
+import MonitorUI
 import Observation
-import OpenPocketViewCore
+import OpenCineAppKit
+import OpenCineCameraControls
+import class OpenCineCore.LocalVPNNotice
+import struct OpenCineCore.CameraSessionID
+import struct OpenCineCore.CameraValuePin
+import OpenCineMedia
+import OpenCineMotion
+import OpenInstaViewCore
 import UIKit
 import os
 
@@ -52,24 +59,19 @@ final class CameraSession {
         }
     }
     var found: [FoundCamera] = []
-    /// A scan has run 20 s without a camera. The wizard then lists what to check.
-    var scanLooksEmpty = false
-    @ObservationIgnored private var scanHintTask: Task<Void, Never>?
     /// AE Lock pins the applied Auto exposure as Manual; cleared when status stops holding it.
     var autoExposureLock: AutoExposureLock?
     /// WB Mode AWB Lock. Cleared like `autoExposureLock` when status stops holding it.
     var autoWhiteBalanceLock: AutoWhiteBalanceLock?
     private(set) var connectedCamera: FoundCamera?
     private(set) var joinedSSID: String?
-    /// Luna has one setup: its own camera Wi-Fi. Kept for the shared saved-camera record.
-    var connectionSetup: CameraConnectionSetup = .cameraWiFi
-    private(set) var stationHost: String?
-    private(set) var stationSSID: String?
-    private(set) var setupProgress: String?
+    /// The shared connection flow's port (`LunaIntegration`) listens here: every backend event
+    /// after this session has applied it.
+    @ObservationIgnored var eventHandler: ((CameraBackendEvent) -> Void)?
 
     /// Only for the host's explicit Show Wi-Fi code sheet. Never advertised or logged.
     var watcherWiFiJoinCode: String? {
-        guard let id = connectedCamera?.id, let wifi = LunaCameraBackend.storedWiFi(cameraID: id)
+        guard let id = connectedCamera?.id, let wifi = backend.storedWiFi(cameraID: id)
         else { return nil }
         return CameraWiFiQRCode.payload(ssid: wifi.ssid, password: wifi.password)
     }
@@ -103,9 +105,25 @@ final class CameraSession {
     @ObservationIgnored private var lastIFrameRequestAt = Date.distantPast
 
     @ObservationIgnored let backend: LunaCameraBackend
-    /// Osmo multiview borrows a DUML driver. Luna has no multiview; kept nil for the
-    /// shared Multiview files that still compile against it.
-    @ObservationIgnored var datalink: DatalinkDriver?
+    /// False for a lease (borrowed decoder or controls-only editor) on another session's backend.
+    @ObservationIgnored let ownsBackend: Bool
+    /// Tests only: the Luna session requests go through instead of the backend's.
+    @ObservationIgnored var lunaSessionOverride: LunaCameraSession?
+    /// Per-integration labels and media addressing for this camera (STATE-01: no launch globals).
+    @ObservationIgnored let profile: CameraLabelProfile
+    /// This session's own drum coalescing and settings-read debounce (never shared).
+    @ObservationIgnored let exposureCoalescer = LunaExposureCoalescer()
+    @ObservationIgnored let refreshDebounce = LunaRefreshDebounce()
+    /// Learned picture EV for this source only.
+    @ObservationIgnored var pictureEV = PictureEVMeter()
+
+    /// The assumptions behind this source's picture EV: camera, recording profile, metering.
+    func pictureEVContext(transfer: MonitorTransfer) -> PictureEVContext {
+        PictureEVContext(
+            device: connectedCamera?.id.uuidString ?? "unknown", transfer: transfer,
+            profile: status.colorMode.map { String($0.rawValue) } ?? "unknown",
+            metering: faceMetering.map { $0 ? "face" : "matrix" } ?? "unknown")
+    }
     @ObservationIgnored let log = Logger(subsystem: "com.opencapture.openinstacine", category: "session")
     @ObservationIgnored var scanTask: Task<Void, Never>?
     @ObservationIgnored var runTask: Task<Void, Never>?
@@ -115,12 +133,11 @@ final class CameraSession {
     @ObservationIgnored private var expectedDisconnect = false
     @ObservationIgnored private var incidentSessionActive = false
     @ObservationIgnored private var sessionRecoveryTask: Task<Void, Never>?
-    @ObservationIgnored private var sessionRecoveryGeneration = 0
     @ObservationIgnored private var recoveryCardGraceTask: Task<Void, Never>?
-    @ObservationIgnored private var sessionDropStormGuard = SessionDropStormGuard()
+    /// Recovery decisions (admit, storm, attempts, budget). Transport and the card stay here.
+    @ObservationIgnored private var recoveryDrive = SessionRecoveryDrive()
     @ObservationIgnored private var recoveryCameraID: UUID?
     @ObservationIgnored private var needsForegroundRecover = false
-    private static let recoveryCardGrace: Duration = .seconds(2.5)
     private static let recoveryScanDeadline: Duration = .seconds(30)
     private static let recoveryAttemptDeadline: Duration = .seconds(90)
     private(set) var isReconnecting = false
@@ -131,15 +148,19 @@ final class CameraSession {
     var recoveryDeviceName = ""
     private(set) var feedRecovering = false
     private(set) var isFeedWarming = true
-    /// In-flight record / photo. UI disables the rec lamp while true.
-    var controlBusy = false
+    /// In-flight photo. A record start or stop in flight is the shared controls' `recordPending`.
+    var photoBusy = false
+    /// In-flight record or photo. UI disables the rec lamp while true.
+    var controlBusy: Bool {
+        get { photoBusy || control.recordPending }
+        set { photoBusy = newValue }
+    }
     var controlNote: String?
     var isLocked = false
-    var isMultiviewBorrowed: Bool { false }
-    /// Luna has no Multiview; kept so the shared shell compiles unchanged.
-    private(set) var isMultiviewControlsOnly = false
-    @ObservationIgnored var multiviewControlAdmission: (() -> Bool)?
-    var multiviewPose: GimbalStickMapping { GimbalStickMapping() }
+
+    /// ISO, shutter, white balance and record: the shared monitor controls, bound by the shell
+    /// to the connected camera's common session (CameraSessionCore.swift).
+    @ObservationIgnored let control = MonitorControlModel()
 
     // Luna settings bookkeeping (see LunaShellMapping).
     @ObservationIgnored var lunaSettings = LunaPhotographySettings.empty
@@ -156,10 +177,11 @@ final class CameraSession {
     var gimbalRamp: GimbalRamp = OperatorPrefs.gimbalRamp
     var gimbalDoubleTap: GimbalDoubleTap = OperatorPrefs.gimbalDoubleTap
     var gimbalProgram = GimbalProgram()
-    var gimbalMoveRunning = false
-    var gimbalMovePaused = false
-    var gimbalMoveCanPause = false
-    var gimbalStartCountdown: Int?
+    var programmedMoveState = MotionProgramSession.State()
+    var gimbalMoveRunning: Bool { programmedMoveState.progress.running }
+    var gimbalMovePaused: Bool { programmedMoveState.progress.paused }
+    var gimbalMoveCanPause: Bool { programmedMoveState.progress.canPause }
+    var gimbalStartCountdown: Int? { programmedMoveState.progress.countdown }
     private(set) var gimbalControlSceneActive = true
     private(set) var gimbalPoseViewFlip = false
     private(set) var gimbalPoseInvertPan = false
@@ -180,18 +202,19 @@ final class CameraSession {
     @ObservationIgnored var gimbalAimTask: Task<Void, Never>?
     @ObservationIgnored var gimbalAimGeneration: UInt64 = 0
     /// Head-tracking targets stamped with their AirPods measurement time (last second).
-    @ObservationIgnored var headTrackSamples: [HeadTrackSample] = []
+    @ObservationIgnored var headTrackSamples: [OpenInstaViewCore.HeadTrack.Sample] = []
     @ObservationIgnored var isSteeringHead = false
-    /// Phone wall-clock seconds minus the live frame clock (earliest arrival), reset per live start.
-    @ObservationIgnored var frameClockOffset: Double?
-    @ObservationIgnored var lastTimecodeSecond: Int?
+    /// Live frame stamps to time-of-day timecode, reset per live start.
+    @ObservationIgnored var frameTimecode = LunaFrameTimecode()
+    /// Phone wall-clock seconds minus the live frame clock (earliest arrival).
+    var frameClockOffset: Double? { frameTimecode.offset }
     @ObservationIgnored var lastFeedTap: (at: Double, x: Double, y: Double)?
     #if DEBUG
         @ObservationIgnored var lastFrameClock: UInt64 = 0
     #endif
-    /// Programmed A/B/C move runner (SET_ANGLE stream).
-    @ObservationIgnored var gimbalMoveTask: Task<Void, Never>?
-    @ObservationIgnored var gimbalMoveClock = 0.0
+    /// Shared take owner; this facade supplies the captured Luna service and eligibility.
+    @ObservationIgnored var programmedMove = MotionProgramSession()
+    var gimbalMoveClock: TimeInterval { programmedMoveState.progress.elapsed }
     var gimbalYawTenthDeg: Int16? { freshGimbalWaypoint.map { Int16(($0.yawDeg * 10).rounded()) } }
     var gimbalPitchTenthDeg: Int16? { freshGimbalWaypoint.map { Int16(($0.pitchDeg * 10).rounded()) } }
     /// Camera GET_ANGLE when fresh (handle frame, degrees, yaw unwrapped across the
@@ -223,19 +246,16 @@ final class CameraSession {
     var gimbalLimitPanSign: Double = 0
     var gimbalLimitTiltSign: Double = 0
     @ObservationIgnored var gimbalStick = LunaStickStream()
+    /// Gimbal requests (MOVE stream, release, SET_ANGLE, GET_ANGLE) on the session's control path.
+    @ObservationIgnored lazy var motion = LunaMotionService(session: { [weak self] in self?.lunaSession })
 
-    // Media
-    var mediaFiles: [MediaFile] = []
-    var mediaFetchInProgress = false
-    var mediaFetchListedCount = 0
-    var mediaNote: String?
-    var isBrowsingMedia = false
+    // The shared actual library/cache owner. Source/playback compatibility stays in CameraMedia.
+    var mediaLibrary: MonitorMediaLibraryModel<LunaMediaLibraryPayload>!
+    @ObservationIgnored var mediaLibraryKey: String?
+    @ObservationIgnored var mediaLibraryServiceID: CameraSessionID?
     private(set) var cameraGalleryOpen = false
-    var mediaDownloadProgress: [String: Double] = [:]
-    var mediaCacheRevision: UInt64 = 0
-    var mediaLocalFavorites: Set<String> = []
     @ObservationIgnored let cameraMedia: CameraMedia
-    @ObservationIgnored var lunaFiles: [String: LunaMediaFile] = [:]
+    var playbackMediaNote: String?
 
     // Focus / tracking / face AF
     var focusPoint: CGPoint = CGPoint(x: 0.5, y: 0.5)
@@ -244,8 +264,10 @@ final class CameraSession {
     var isTracking = false
     var faceBox: TrackingBox?
     private(set) var sceneFaces: [TrackingBox] = []
-    @ObservationIgnored var trackingSawLock = false
-    @ObservationIgnored var lastSubjectPushAt: Date?
+    /// Deep Track and tap focus on the connection's Luna session; the boxes above follow it.
+    @ObservationIgnored lazy var subjectTracking = LunaSubjectTracking(
+        session: { [weak self] in self?.lunaSession },
+        changed: { [weak self] in self?.showTracking($0) })
     @ObservationIgnored var lastTapFocusAt: Date?
     @ObservationIgnored var tapFocusTask: Task<Void, Never>?
     @ObservationIgnored private let faceDetector = LiveFaceDetector()
@@ -296,11 +318,11 @@ final class CameraSession {
     var zoomPinchPreview: Double?
     @ObservationIgnored var zoomPinchAnchor = 1.0
     @ObservationIgnored var lastZoomWriteAt = Date.distantPast
-    @ObservationIgnored var pendingZoomWrite: Double?
+    @ObservationIgnored var pendingZoomWrite: LunaQueuedZoomWrite?
     @ObservationIgnored var zoomWriteTask: Task<Void, Never>?
+    @ObservationIgnored var zoomWriteRevision: UInt64 = 0
     var zoomPin: CameraValuePin<Double>?
     var zoomOptimistic: Double? { zoomPin?.expected }
-    var zoomColorHopPending: Bool { false }
     /// Highest zoom the body accepts (fw 1.1.15 raised this; see LunaShellMapping).
     @ObservationIgnored var zoomCeiling = LunaShellMapping.defaultZoomCeiling
     var isFormatPinActive: Bool { pins.format != nil }
@@ -308,14 +330,21 @@ final class CameraSession {
     @ObservationIgnored let decoder: HevcDecoder
     var videoLayer: AVSampleBufferDisplayLayer { decoder.displayLayer }
 
+    /// `backend` is the one owner of its camera connection, created by the composition root
+    /// (`AppModel.makeBackend()`). A session that borrows a decoder or only edits controls is a
+    /// lease on it: it never rebinds the backend's callbacks and never connects.
     init(
+        backend: LunaCameraBackend, profile: CameraLabelProfile = LunaShellMapping.profile,
         borrowing sharedDecoder: HevcDecoder? = nil, cameraMedia: CameraMedia? = nil,
+        mediaStorage: MonitorMediaCacheStorage? = nil,
         controlsOnly: Bool = false
     ) {
-        isMultiviewControlsOnly = controlsOnly
-        self.cameraMedia = cameraMedia ?? CameraMedia()
+        ownsBackend = sharedDecoder == nil && !controlsOnly
+        self.profile = profile
+        self.cameraMedia = cameraMedia ?? CameraMedia(storage: mediaStorage)
         self.decoder = sharedDecoder ?? HevcDecoder()
-        self.backend = LunaSessionHub.backend
+        self.backend = backend
+        adoptControl()
         decoder.onPresentedFrame = { [weak self] in self?.noteLiveFrame() }
         decoder.onPictureSizeChanged = { [weak self] in
             guard let self else { return }
@@ -326,18 +355,22 @@ final class CameraSession {
                 self.isVerticalPicture = self.decoder.isVerticalPicture
             }
         }
-        decoder.onSourceFrame = { [weak self] buffer in self?.considerFaceAF(buffer) }
+        decoder.onSourceFrame = { [weak self] lease in
+            if let buffer = lease.pixelBuffer { self?.considerFaceAF(buffer) }
+        }
         // A decoder handoff (look/scope toggle) needs an IDR. Luna sends a GOP every
         // ~2 s; ask once for an I-frame so the switch is not a two-second hold.
         decoder.onHandoffNeedsIDR = { [weak self] in self?.requestKeyframe(reason: "assist VT start") }
         decoder.onParameterSetsChanged = { [weak self] in
             self?.requestKeyframe(reason: "encoder format change")
         }
+        configureMediaLibrary()
+        activateBackend()
     }
 
-    /// Only the app's live session owns backend callbacks. SwiftUI may build extra
-    /// `CameraSession` values (diagnostics); binding at scan/connect keeps ownership.
+    /// Only the backend's owner binds its callbacks (at scan/connect). A lease never does.
     func activateBackend() {
+        guard ownsBackend else { return }
         backend.eventHandler = { [weak self] in self?.receiveBackend($0) }
         backend.onDeviceStatus = { [weak self] in self?.applyDeviceStatus($0) }
         backend.onSettings = { [weak self] in self?.applySettings($0) }
@@ -348,20 +381,12 @@ final class CameraSession {
         backend.onLog = { ControlLiveLog.line($0) }
     }
 
-    // MARK: - Multiview (Osmo only). Kept so the shared Multiview files compile.
-
-    func updateMultiview(camera: FoundCamera, driver: DatalinkDriver?, status: CameraStatus) {}
-    func adoptMultiviewPose(_ pose: GimbalStickMapping) {}
-    func noteMultiviewFrame() {}
-    func receiveMultiview(_ frame: Duml.Frame) {}
-    func releaseMultiview() {}
-
     // MARK: - Discovery and connection
 
-    func startScan() { startScan(reconnect: nil) }
-
-    /// Scan for Luna cameras (BLE BE80). If `id` is set, connect as soon as it appears.
+    /// Scan for Luna cameras (BLE BE80) outside the shared flow (foreground and internet-hop
+    /// reconnects of the live camera). If `id` is set, connect as soon as it appears.
     func startScan(reconnect id: UUID?) {
+        guard ownsBackend else { return }
         activateBackend()
         connectGeneration += 1
         runTask?.cancel()
@@ -370,16 +395,6 @@ final class CameraSession {
         isReconnecting = id != nil
         phase = .scanning
         found = []
-        scanLooksEmpty = false
-        scanHintTask?.cancel()
-        scanHintTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(20))
-            guard let self, !Task.isCancelled, self.phase == .scanning, self.found.isEmpty else {
-                return
-            }
-            ControlLiveLog.line("ble: no camera after 20 s of scanning")
-            self.scanLooksEmpty = true
-        }
         scanTask?.cancel()
         let token = connectGeneration
         scanTask = Task { [weak self] in
@@ -389,10 +404,8 @@ final class CameraSession {
             } catch {
                 guard token == self.connectGeneration, !Task.isCancelled else { return }
                 // A saved camera can still reconnect over its saved Wi-Fi without BLE.
-                if let id, LunaCameraBackend.storedWiFi(cameraID: id) != nil,
-                    let saved = SavedCameraStore.load().first(where: { $0.id == id })
-                {
-                    self.connect(Self.foundCamera(saved: saved))
+                if let id, backend.storedWiFi(cameraID: id) != nil, let camera = self.knownCamera(id) {
+                    self.connect(camera)
                     return
                 }
                 self.phase = .failed(
@@ -402,23 +415,21 @@ final class CameraSession {
         }
         // Give Bluetooth a few seconds (it wakes the camera Wi-Fi); a camera that never
         // advertises can still come back over its saved Wi-Fi.
-        if let id, LunaCameraBackend.storedWiFi(cameraID: id) != nil,
-            let saved = SavedCameraStore.load().first(where: { $0.id == id })
-        {
+        if let id, backend.storedWiFi(cameraID: id) != nil, let camera = knownCamera(id) {
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(4))
                 guard let self, token == self.connectGeneration, self.reconnectTarget == id else {
                     return
                 }
-                self.connect(Self.foundCamera(saved: saved))
+                self.connect(camera)
             }
         }
     }
 
-    static func foundCamera(saved: SavedCamera) -> FoundCamera {
-        FoundCamera(
-            id: saved.id, name: saved.advertisedName ?? saved.displayName,
-            model: LunaShellMapping.cameraModel, modelId: nil)
+    /// The camera this session connected or saw, for reconnects that run without a scan hit.
+    private func knownCamera(_ id: UUID) -> FoundCamera? {
+        if let camera = connectedCamera, camera.id == id { return camera }
+        return found.first { $0.id == id }
     }
 
     func reconnect(to id: UUID) {
@@ -438,34 +449,16 @@ final class CameraSession {
         if case .live = phase, connectedCamera?.id == camera.id, !sessionRecovery.isRecovering {
             return
         }
-        activateBackend()
-        ReliabilityReporting.setCameraSessionActive(true)
-        connectGeneration += 1
-        let generation = connectGeneration
-        LocalVPNProbe.noteIfActive()
-        backend.stopScan()
-        scanTask?.cancel()
-        runTask?.cancel()
-        reconnectTarget = nil
-        isReconnecting = preserveMonitor
-        connectedCamera = camera
-        connectionTargetID = camera.id
-        if !incidentSessionActive { beginFeedIncidentSession() }
-        if !preserveMonitor {
-            statusStorage = CameraStatus()
-            publishStatusNow()
-            resetLinkHealthMeasurements()
-            decoder.reset()
-        } else {
-            decoder.flushForRecovery()
-        }
-        faceAFArmed = false
+        guard ownsBackend else { return }
+        // A reconnect of the same camera keeps the common session the shell holds: it follows
+        // the link (recovering, then a new control epoch).
+        if !preserveMonitor { resetForConnection() }
+        let generation = prepareConnection(to: camera, preserveMonitor: preserveMonitor)
         let descriptor =
             descriptors[camera.id]
             ?? MonitorCamera(
                 id: camera.id, name: camera.name, model: LunaProtocol.model,
                 capabilities: backend.capabilities)
-        phase = .connectingGatt
         runTask = Task { [weak self] in
             guard let self else { return }
             defer { if generation == self.connectGeneration { self.runTask = nil } }
@@ -488,9 +481,37 @@ final class CameraSession {
         }
     }
 
+    /// A fresh status, link health and decoder for the next connection.
+    private func resetForConnection() {
+        statusStorage = CameraStatus()
+        publishStatusNow()
+        resetLinkHealthMeasurements()
+        decoder.reset()
+    }
+
+    /// What every connect sets before the backend runs; returns its generation.
+    private func prepareConnection(to camera: FoundCamera, preserveMonitor: Bool) -> Int {
+        AppDiagnostics.reporting.setCameraSessionActive(true)
+        connectGeneration += 1
+        LocalVPNNotice.app.noteIfActive()
+        backend.stopScan()
+        scanTask?.cancel()
+        runTask?.cancel()
+        reconnectTarget = nil
+        isReconnecting = preserveMonitor
+        connectedCamera = camera
+        configureMediaLibrary()
+        connectionTargetID = camera.id
+        if !incidentSessionActive { beginFeedIncidentSession() }
+        if preserveMonitor { decoder.flushForRecovery() }
+        faceAFArmed = false
+        phase = .connectingGatt
+        return connectGeneration
+    }
+
     func disconnect() {
-        ReliabilityReporting.setCameraSessionActive(false)
-        FeedIncidentRuntime.endSession(now: ProcessInfo.processInfo.systemUptime)
+        AppDiagnostics.reporting.setCameraSessionActive(false)
+        AppDiagnostics.incidents.endSession(now: ProcessInfo.processInfo.systemUptime)
         incidentSessionActive = false
         connectGeneration += 1
         reconnectTarget = nil
@@ -508,7 +529,6 @@ final class CameraSession {
         if let ssid = joinedSSID { WiFiJoiner.leave(ssid: ssid) }
         joinedSSID = nil
         connectedCamera = nil
-        connectionSetup = .cameraWiFi
         phase = .idle
         statusFlushTask?.cancel()
         statusFlushTask = nil
@@ -523,8 +543,11 @@ final class CameraSession {
         zoomPinchPreview = nil
         zoomPin = nil
         pendingZoomWrite = nil
+        zoomWriteRevision &+= 1
         zoomWriteTask?.cancel()
+        zoomWriteTask = nil
         gimbalStick.reset()
+        motion.endHold()
         gimbalAnglePoll?.cancel()
         gimbalAnglePoll = nil
         gimbalAngle = nil
@@ -550,19 +573,7 @@ final class CameraSession {
         resetMediaSession()
     }
 
-    func forgetWifiCreds(for camera: SavedCamera) {
-        backend.forget(cameraID: camera.id)
-    }
-
     #if targetEnvironment(simulator)
-        /// UI review only: a connecting card without a camera.
-        func reviewConnecting(_ id: UUID, setup: CameraConnectionSetup, progress: String) {
-            connectionTargetID = id
-            connectionSetup = setup
-            setupProgress = progress
-            phase = .joiningWifi
-        }
-
         /// UI review only: pretend-live state for simulator screenshots.
         func reviewLive(camera: FoundCamera, status: CameraStatus) {
             connectedCamera = camera
@@ -575,11 +586,12 @@ final class CameraSession {
 
     private func receiveBackend(_ event: CameraBackendEvent) {
         guard !expectedDisconnect else { return }
+        defer { eventHandler?(event) }
         switch event {
         case .discovered(let camera):
             descriptors[camera.id] = camera
             let item = FoundCamera(
-                id: camera.id, name: LunaCameraNames.title(advertised: camera.name),
+                id: camera.id, name: LunaIntegration.title(advertised: camera.name),
                 model: LunaShellMapping.cameraModel, modelId: nil)
             if let index = found.firstIndex(where: { $0.id == item.id }) {
                 if found[index].name != item.name { found[index] = item }
@@ -611,8 +623,6 @@ final class CameraSession {
             }
         case .information(let info):
             status.firmware = info.firmware
-        case .status:
-            break
         case .joinedWiFi(let ssid):
             joinedSSID = ssid
         case .videoAccessUnit(let data, let milliseconds):
@@ -637,11 +647,11 @@ final class CameraSession {
 
     /// Luna `IFRAME_REQUEST` (105). Rate limited: the body already sends a GOP every ~2 s.
     func requestKeyframe(reason: String) {
-        guard backend.isControlReady, !isBrowsingMedia else { return }
+        guard hasControlLink, !isBrowsingMedia else { return }
         guard Date().timeIntervalSince(lastIFrameRequestAt) > 1 else { return }
         lastIFrameRequestAt = Date()
         ControlLiveLog.line("feed: I-frame request (\(reason))")
-        Task { _ = try? await backend.send(LunaRequest(code: 105, body: Data())) }
+        Task { [weak self] in _ = try? await self?.sendLuna(LunaProtocol.keyframeRequest) }
     }
 
     // MARK: - Status mapping (Luna → shared CameraStatus)
@@ -694,8 +704,19 @@ final class CameraSession {
             if faceMetering != shown { faceMetering = shown }
         }
         if let limits = settings.gimbalStatus { applyGimbalLimits(limits) }
+        applyCorePresentation(to: &next)
         status = next
         applyDecoderColorScience()
+    }
+
+    /// After a pending ISO, shutter or WB edit ends: the last Luna readouts plus the Core overlay.
+    func refreshShownSettings() {
+        var next = status
+        if !lunaSettings.types.isEmpty {
+            LunaShellMapping.apply(settings: lunaSettings, to: &next, pins: &pins, table: &formatTable)
+        }
+        applyCorePresentation(to: &next)
+        status = next
     }
 
     private func reconcileZoom(_ zoom: Double, into next: inout CameraStatus) {
@@ -713,6 +734,7 @@ final class CameraSession {
         }
     }
 
+    /// Record timer only. Recording itself is reported through the Core session.
     private func applyCapture(_ capture: LunaCaptureStatus) {
         var next = status
         let recording = capture.isRecording
@@ -720,18 +742,12 @@ final class CameraSession {
             recordStartedAt = Date().addingTimeInterval(-Double(capture.captureSeconds))
         }
         if !recording { recordStartedAt = nil }
-        if CameraValuePin.reconcile(
-            &pins.recording, reported: recording, now: Date.timeIntervalSinceReferenceDate,
-            confirms: { $0 == $1 }) == nil
-        {
-            next.isRecording = recording
-        }
         next.recordElapsedSec =
             recording
             ? max(Int(capture.captureSeconds), recordStartedAt.map { Int(Date().timeIntervalSince($0)) } ?? 0)
             : 0
         status = next
-        if pins.recording == nil, controlBusy, !pins.photoInFlight { controlBusy = false }
+        if photoBusy, !pins.photoInFlight { photoBusy = false }
     }
 
     private func applyNotification(_ note: LunaNotification) {
@@ -927,6 +943,7 @@ final class CameraSession {
     func noteSceneBecameInactive() {
         recordFeedBreadcrumb(.sceneActivity, detail: "inactive")
         gimbalControlSceneActive = false
+        cancelProgrammedMove()
         endGimbalStick(cancelMove: true)
         if case .live = phase { needsForegroundRecover = true }
     }
@@ -947,7 +964,7 @@ final class CameraSession {
             try? await Task.sleep(for: .seconds(3))
             guard let self, case .live = self.phase else { return }
             if self.hasFreshRecoveryPicture(since: started) { return }
-            if self.backend.isControlReady {
+            if self.hasControlLink {
                 try? await self.backend.restartLive()
                 try? await Task.sleep(for: .seconds(3))
                 if self.hasFreshRecoveryPicture(since: started) { return }
@@ -969,58 +986,54 @@ final class CameraSession {
     // MARK: - Session recovery (camera power cycle, Wi-Fi loss)
 
     func beginSessionRecovery(reason: String, trigger: SessionRecoveryTrigger = .bleDropped) {
-        guard SessionRecoveryPolicy.shouldBegin(trigger) else { return }
-        if case .pausedAfterRepeatedDrops = sessionRecovery { return }
-        if case .waitingForOperator = sessionRecovery { return }
-        if sessionRecoveryTask != nil { return }
+        let hasTarget = connectedCamera?.id ?? recoveryCameraID != nil
+        let began = recoveryDrive.begin(
+            trigger: trigger, hasTarget: hasTarget,
+            now: ProcessInfo.processInfo.systemUptime, current: sessionRecovery)
+        guard began != .ignored else { return }
         guard let cameraID = connectedCamera?.id ?? recoveryCameraID else { return }
-        FeedIncidentRuntime.noteUnexpectedDisconnect(now: ProcessInfo.processInfo.systemUptime)
+        AppDiagnostics.incidents.noteUnexpectedDisconnect(now: ProcessInfo.processInfo.systemUptime)
         recordFeedRepair("session", phase: .requested, reason: String(describing: trigger))
         recoveryCameraID = cameraID
-        if recoveryDeviceName.isEmpty {
-            recoveryDeviceName =
-                connectedCamera?.name
-                ?? SavedCameraStore.load().first { $0.id == cameraID }?.displayName ?? ""
-        }
-        holdsMonitor = true
+        if recoveryDeviceName.isEmpty { recoveryDeviceName = connectedCamera?.name ?? "" }
+        holdsMonitor = recoveryDrive.holdsPicture
         endGimbalStick(cancelMove: true)
         decoder.flushForRecovery()
         feedRecovering = false
-        sessionRecoveryGeneration += 1
-        let generation = sessionRecoveryGeneration
-        if sessionDropStormGuard.noteDrop(now: ProcessInfo.processInfo.systemUptime) {
-            sessionRecovery = .pausedAfterRepeatedDrops(drops: sessionDropStormGuard.dropsInWindow)
-            sessionRecoveryCardGraceElapsed = true
+        if case .started = began {
+            ControlLiveLog.line("session: drop (\(reason)) → bounded recovery")
+        }
+        sessionRecovery = recoveryDrive.state
+        sessionRecoveryCardGraceElapsed = recoveryDrive.cardGraceElapsed
+        guard case .started = began else {
             applyLinkPresentation()
             return
         }
-        ControlLiveLog.line("session: drop (\(reason)) → bounded recovery")
-        sessionRecovery = SessionRecoveryPolicy.monitor.state(afterFailedAttempts: 0)
-        sessionRecoveryCardGraceElapsed = false
+        let generation = recoveryDrive.generation
         recoveryCardGraceTask?.cancel()
         recoveryCardGraceTask = Task { [weak self] in
-            try? await Task.sleep(for: Self.recoveryCardGrace)
-            guard let self, !Task.isCancelled, self.sessionRecoveryGeneration == generation else {
-                return
-            }
+            try? await Task.sleep(for: .seconds(SessionRecoveryDrive.cardGraceSeconds))
+            guard let self, !Task.isCancelled else { return }
+            guard self.recoveryDrive.noteCardGrace(seenGeneration: generation) else { return }
             self.sessionRecoveryCardGraceElapsed = true
         }
         sessionRecoveryTask = Task { [weak self] in
             await self?.runSessionRecovery()
-            guard let self, self.sessionRecoveryGeneration == generation else { return }
+            guard let self, self.recoveryDrive.generation == generation else { return }
+            self.recoveryDrive.noteAutomaticTaskEnded(seenGeneration: generation)
             self.sessionRecoveryTask = nil
         }
         applyLinkPresentation()
     }
 
     func retrySessionRecovery() {
-        sessionDropStormGuard.reset()
+        recoveryDrive.resetStorm()
         cancelSessionRecovery(clearHoldsMonitor: false)
         beginSessionRecovery(reason: "operator retry", trigger: .operatorRetry)
     }
 
     func cancelSessionRecovery(clearHoldsMonitor: Bool = true) {
-        sessionRecoveryGeneration += 1
+        recoveryDrive.cancel(clearHold: clearHoldsMonitor)
         sessionRecoveryTask?.cancel()
         sessionRecoveryTask = nil
         recoveryCardGraceTask?.cancel()
@@ -1038,7 +1051,7 @@ final class CameraSession {
     func runSessionRecovery(
         budget: Duration = .seconds(SessionRecoveryPolicy.automaticRecoveryBudgetSeconds)
     ) async {
-        let generation = sessionRecoveryGeneration
+        let generation = recoveryDrive.generation
         let timedOut = await withTaskGroup(of: Bool.self) { group in
             group.addTask { @MainActor [weak self] in
                 await self?.runSessionRecoveryAttempts()
@@ -1052,21 +1065,19 @@ final class CameraSession {
             group.cancelAll()
             return timedOut
         }
-        guard timedOut, !Task.isCancelled, sessionRecoveryGeneration == generation else { return }
-        let attempts: Int
-        if case .retrying(let attempt, _) = sessionRecovery { attempts = attempt } else { attempts = 0 }
+        guard timedOut, !Task.isCancelled, recoveryDrive.generation == generation else { return }
         runTask?.cancel()
         backend.stopScan()
-        sessionRecovery = .waitingForOperator(attemptsMade: attempts)
+        recoveryDrive.noteBudgetExhausted(current: sessionRecovery)
+        sessionRecovery = recoveryDrive.state
         sessionRecoveryCardGraceElapsed = true
         applyLinkPresentation()
     }
 
     func runSessionRecoveryAttempts(connectAttempt: (@MainActor () async -> Bool)? = nil) async {
-        let policy = SessionRecoveryPolicy.monitor
-        var failures = 0
+        recoveryDrive.beginAttempts()
         while !Task.isCancelled {
-            let state = policy.state(afterFailedAttempts: failures)
+            let state = recoveryDrive.prepareAttempt()
             sessionRecovery = state
             applyLinkPresentation()
             guard case .retrying = state else { return }
@@ -1078,6 +1089,7 @@ final class CameraSession {
             }
             if Task.isCancelled { return }
             if recovered {
+                let failures = recoveryDrive.noteRecovered()
                 sessionRecovery = .idle
                 holdsMonitor = false
                 isReconnecting = false
@@ -1086,14 +1098,11 @@ final class CameraSession {
                 applyLinkPresentation()
                 return
             }
-            failures += 1
+            let step = recoveryDrive.noteAttemptFailed(jitter: .random(in: 0...1))
             runTask?.cancel()
             backend.stopScan()
-            guard
-                case .retry(let wait) = policy.decision(
-                    afterFailedAttempts: failures, jitter: .random(in: 0...1))
-            else {
-                sessionRecovery = policy.state(afterFailedAttempts: failures)
+            guard case .backoff(let wait) = step else {
+                sessionRecovery = recoveryDrive.state
                 applyLinkPresentation()
                 return
             }
@@ -1105,11 +1114,7 @@ final class CameraSession {
     private func attemptRecoveryConnect() async -> Bool {
         guard let id = recoveryCameraID else { return false }
         isReconnecting = true
-        let saved = SavedCameraStore.load().first { $0.id == id }
-        let camera =
-            connectedCamera ?? found.first { $0.id == id }
-            ?? saved.map(Self.foundCamera(saved:))
-        guard let camera else { return false }
+        guard let camera = knownCamera(id) else { return false }
         let started = Date()
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: Self.recoveryAttemptDeadline)
@@ -1135,7 +1140,7 @@ final class CameraSession {
     private func beginFeedIncidentSession() {
         incidentSessionActive = true
         let info = Bundle.main.infoDictionary ?? [:]
-        FeedIncidentRuntime.beginSession(
+        AppDiagnostics.incidents.beginSession(
             FeedIncidentSessionContext(
                 sessionID: UUID().uuidString,
                 appVersion: info["CFBundleShortVersionString"] as? String ?? "unknown",
@@ -1144,18 +1149,18 @@ final class CameraSession {
                 osName: "iOS", osVersion: UIDevice.current.systemVersion,
                 hardwareClass: DiagnosticCenter.machineIdentifier,
                 cameraFamily: "luna",
-                testSource: FeedIncidentOrigin.currentTestSource(),
-                buildIdentity: FeedIncidentOrigin.currentBuildIdentity()))
+                testSource: AppDiagnostics.origin.currentTestSource(),
+                buildIdentity: AppDiagnostics.origin.currentBuildIdentity()))
     }
 
     func recordFeedBreadcrumb(_ kind: FeedIncidentBreadcrumbKind, detail: String = "") {
-        FeedIncidentRuntime.recordBreadcrumb(
+        AppDiagnostics.incidents.recordBreadcrumb(
             FeedIncidentBreadcrumb(
                 monotonicAt: ProcessInfo.processInfo.systemUptime, kind: kind, detail: detail))
     }
 
     private func recordFeedRepair(_ action: String, phase: FeedRepairPhase, reason: String? = nil) {
-        FeedIncidentRuntime.recordRepair(
+        AppDiagnostics.incidents.recordRepair(
             FeedRepairRecord(
                 monotonicAt: ProcessInfo.processInfo.systemUptime, action: action, phase: phase,
                 reason: reason))
@@ -1284,7 +1289,7 @@ final class CameraSession {
         if facePriorityAcquireAt == nil { facePriorityAcquireAt = now }
         let spacing = FacePriorityExposure.interval(sinceAcquire: facePriorityAcquireAt, now: now)
         guard now.timeIntervalSince(lastFacePriorityEVAt) >= spacing else { return }
-        guard let packed = PocketScopeSampler.copyBGRA(buffer, maxWidth: PocketScopeSampler.maxWidth)
+        guard let packed = ScopeSampler.copyBGRA(buffer, maxWidth: ScopeSampler.maxWidth)
         else { return }
         lastFacePriorityEVAt = now
         let transfer = MonitorTransfer(decoder.incomingColorMode ?? .normal)
@@ -1339,15 +1344,49 @@ final class CameraSession {
     }
 }
 
-/// One Luna backend per process. SwiftUI may build and discard `CameraSession`
-/// values; they must share the single BLE central and TCP socket.
-@MainActor
-enum LunaSessionHub {
-    /// Simulator has no Bluetooth or hotspot API, but shares the Mac's network: with the
-    /// Mac joined to the camera Wi-Fi, the simulator app talks to the real camera.
-    #if targetEnvironment(simulator)
-        static let backend = LunaCameraBackend(useExistingNetwork: true)
-    #else
-        static let backend = LunaCameraBackend()
-    #endif
+/// The shared connection flow's way into this session (SHELL-02): `LunaIntegration` runs pairing
+/// and saved-camera connects through it, so the session prepares the monitor and keeps its phase,
+/// recovery and feed exactly as for its own reconnects.
+extension CameraSession: LunaConnectPort {
+    var connectedSerial: String? { backend.connectedSerial }
+    var joinedNetwork: String? { backend.joinedNetwork }
+
+    func startScan() async throws { try await backend.startScan() }
+
+    func stopScan() { backend.stopScan() }
+
+    func connect(to camera: MonitorCamera) async throws {
+        descriptors[camera.id] = camera
+        let generation = prepareConnection(
+            to: FoundCamera(id: camera.id, name: camera.name, model: LunaShellMapping.cameraModel, modelId: nil),
+            preserveMonitor: false)
+        do {
+            expectedDisconnect = true
+            backend.disconnect()
+            expectedDisconnect = false
+            try await backend.connect(to: camera)
+        } catch {
+            if generation == connectGeneration, !(error is CancellationError), phase != .idle {
+                let why = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+                ControlLiveLog.line("session: connect failed at \(phase.label): \(why)")
+                phase = .failed(why)
+                applyLinkPresentation()
+            }
+            throw error
+        }
+    }
+
+    /// The attempt's common session; the shell binds it to the monitor once it connects.
+    func openSession() -> LunaCameraSession {
+        resetForConnection()
+        let next = backend.openSession()
+        next.configureLens(zoomDomain: 1...zoomCeiling)
+        return next
+    }
+
+    func mediaService(for session: CameraSessionID) -> (any CameraMediaService)? {
+        backend.mediaService(for: session)
+    }
+
+    func forget(cameraID: UUID) { backend.forget(cameraID: cameraID) }
 }
