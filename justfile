@@ -164,8 +164,8 @@ android-sideload n:
     printf '%s\n' "$SENTRY_PROGUARD_UUID" > ".local/apk/OpenInstaCine-$version-{{n}}-sideload-mapping/sentry-proguard-uuid.txt"
     echo ".local/apk/OpenInstaCine-$version-{{n}}-sideload.apk"
 
-android-play-dispatch track="alpha" status="completed":
-    gh workflow run android-play.yml --repo erik-sutton95/OpenInstaCine --ref main --field track={{track}} --field status={{status}}
+android-play-dispatch track="Closed testing - Beta" status="completed":
+    gh workflow run android-play.yml --repo erik-sutton95/OpenInstaCine --ref main --field {{quote("track=" + track)}} --field {{quote("status=" + status)}}
 
 # Owner only: write the play-closed environment secrets from .local/ (names match android-play.yml).
 android-play-sync-secrets:

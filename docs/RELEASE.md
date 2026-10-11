@@ -117,7 +117,7 @@ Account steps no repo change can do. Values are exact.
       `ANDROID_KEY_PASSWORD`. Back both up.
 - [ ] First AAB by hand: `just android-bundle` (or dispatch the workflow without
       the service account and download the artifact), upload it in Play Console
-      to closed testing (`alpha`).
+      to the existing closed-testing track (`Closed testing - Beta`).
 - [ ] Listing from [`android-play-ci.md`](android-play-ci.md), Android
       screenshots, Data safety matching the App Privacy answers, content rating,
       target audience.
@@ -129,7 +129,8 @@ Account steps no repo change can do. Values are exact.
 
 ### GitHub (`erik-sutton95/OpenInstaCine`)
 
-- [ ] Environment `play-closed` with secrets `ANDROID_KEYSTORE_BASE64`,
+- [ ] Restrict environment `play-closed` to protected branches. Configure secrets
+      `ANDROID_KEYSTORE_BASE64`,
       `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`,
       `PLAY_SERVICE_ACCOUNT_JSON`, `SENTRY_DSN_ANDROID`, `SENTRY_AUTH_TOKEN`.
       `just android-play-sync-secrets` sets all but `SENTRY_AUTH_TOKEN` from `.local/`.

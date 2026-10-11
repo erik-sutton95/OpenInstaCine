@@ -2,8 +2,9 @@
 
 The Android analog of Xcode Cloud, ported from OpenPocketCine:
 [`.github/workflows/android-play.yml`](../.github/workflows/android-play.yml)
-builds a signed App Bundle with a monotonic `versionCode` and uploads it to Play
-closed testing (`alpha`). One-time setup is the [owner checklist](RELEASE.md#owner-checklist).
+builds a signed App Bundle with a monotonic `versionCode` and uploads it to
+the existing closed-testing track (`Closed testing - Beta`). One-time setup is the
+[owner checklist](RELEASE.md#owner-checklist).
 
 Status: the Android app builds (`:app:assembleDebug`, signed `assembleRelease`
 and `bundleRelease`) and its unit tests pass, but it is **not yet verified on a
@@ -21,13 +22,19 @@ release.
 | `versionCode` | `ANDROID_VERSION_CODE_BASE` + `github.run_number` |
 | Sentry DSN / symbols | `SENTRY_DSN_ANDROID` -> `:monitor` `BuildConfig`; `tools/sentry-upload.py --platform android` when `SENTRY_UPLOAD_ENABLED=true` |
 | Tester notes | [`Apps/Android/Play/WhatToTest.en-US.txt`](../Apps/Android/Play/WhatToTest.en-US.txt), Play "what's new" (500 characters) [`Apps/Android/Play/whatsnew/whatsnew-en-US`](../Apps/Android/Play/whatsnew/whatsnew-en-US) |
-| Upload | `r0adkll/upload-google-play`, package `com.opencapture.openinstacine`, track `alpha` |
+| Upload | `r0adkll/upload-google-play`, package `com.opencapture.openinstacine`, track `Closed testing - Beta` |
 
 It runs on **Run workflow** (or `just android-play-dispatch`) and on pushes to
 `main` that touch Android paths, only in `erik-sutton95/OpenInstaCine`, never on
 `pull_request`, and auto-upload only when the repository variable
 `ANDROID_PLAY_UPLOAD` is exactly `true`. Missing `play-closed` secrets fail the
-job. A dispatch without `PLAY_SERVICE_ACCOUNT_JSON` still signs the AAB and
+job. Automatic uploads and manual dispatches default to the existing Beta track,
+which uses the `openinstacine-beta` Google tester group. `alpha` and `internal`
+remain explicit dispatch options; the default must match the existing track
+name returned by the Play API, including spaces. Renaming that track requires
+updating the workflow and dispatch recipe together.
+
+A dispatch without `PLAY_SERVICE_ACCOUNT_JSON` still signs the AAB and
 attaches it as an artifact: that is the file for the first manual Console upload
 (the Play API cannot create a package).
 

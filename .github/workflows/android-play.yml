@@ -17,12 +17,13 @@ on:
   workflow_dispatch:
     inputs:
       track:
-        description: Play track (alpha = closed testing, internal = 100-tester smoke)
+        description: Play track (existing Beta tester group by default)
         type: choice
         options:
+          - "Closed testing - Beta"
           - alpha
           - internal
-        default: alpha
+        default: "Closed testing - Beta"
       status:
         description: Release status on the track
         type: choice
@@ -229,7 +230,7 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.opencapture.openinstacine
           releaseFiles: Apps/Android/app/build/outputs/bundle/release/app-release.aab
-          tracks: ${{ github.event.inputs.track || 'alpha' }}
+          tracks: ${{ github.event.inputs.track || 'Closed testing - Beta' }}
           status: ${{ github.event.inputs.status || 'completed' }}
           changesNotSentForReview: ${{ github.event.inputs.changes_not_sent_for_review || false }}
           releaseName: ${{ env.VERSION_NAME }} (${{ env.VERSION_CODE }})
@@ -254,7 +255,7 @@ jobs:
             echo "## Play closed testing"
             echo "- versionName: \`${VERSION_NAME}\`"
             echo "- versionCode: \`${VERSION_CODE}\`"
-            echo "- track: \`${{ github.event.inputs.track || 'alpha' }}\`"
+            echo "- track: \`${{ github.event.inputs.track || 'Closed testing - Beta' }}\`"
             echo "- status: \`${{ github.event.inputs.status || 'completed' }}\`"
             echo "- artifact: \`app-release-${VERSION_NAME}-${VERSION_CODE}\`"
             echo "- play API: \`${{ steps.creds.outputs.play_api }}\`"
