@@ -125,6 +125,8 @@ targets:
         # Do not request UIRequiresFullScreen compatibility scaling: it keeps a
         # fixed scene size underneath the system window buttons on iPadOS 26.
         INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "OpenInstaCine uses Bluetooth to find your Insta360 Luna, ask it for approval, and hand off to its Wi-Fi."
+        # OpenCineApple links AVFoundation external USB capture support.
+        INFOPLIST_KEY_NSCameraUsageDescription: "If you use an external USB capture device on iPad, OpenInstaCine needs camera access to receive its video."
         INFOPLIST_KEY_NSMotionUsageDescription: "OpenInstaCine uses headphone motion so AirPods can aim the gimbal."
         # iOS names the current Wi-Fi only to apps with precise location (Add setup › Wi-Fi).
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "OpenInstaCine uses your location only so iOS can tell it which Wi-Fi this iPhone is on, to offer that network when you add a camera's Wi-Fi setup. Your location is not stored or shared."

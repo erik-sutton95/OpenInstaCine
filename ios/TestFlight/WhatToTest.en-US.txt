@@ -6,7 +6,7 @@ New and changed
 
 Fixes
 
-- The zoom chip and dial now reach and show 15x. The readout used to stop at 12x.
+- Fixed missing privacy information that blocked TestFlight uploads.
 - AirPods head tracking follows your head smoothly instead of jumping, and the gimbal stops as soon as you stop moving.
 - The EV assist reads the live picture, so auto exposure shows about 0.0 instead of -1.3.
 
