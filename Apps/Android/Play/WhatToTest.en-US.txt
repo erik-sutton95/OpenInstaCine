@@ -1,20 +1,18 @@
 New and changed
 
-- ISO, shutter and white balance show as set only once the camera reports them. A change the camera drops says it was not applied instead of quietly reverting.
-- Record sends start or stop for what the camera reports, never a blind toggle, and waits for the camera's capture status right after connecting.
-- OpenInstaCine is a free, open-source field monitor for the Insta360 Luna Ultra on firmware 1.1.15. It needs a 64-bit phone on Android 10 or newer.
+- Rebuilt live view, camera browsing and settings on OpenCine, the shared foundation of the OpenCapture apps.
+- Luna camera and gimbal tools retain their supported options. ISO, shutter, white balance and Record still wait for the camera to confirm.
+- For Luna Ultra on firmware 1.1.15; Android 10+ on a 64-bit phone. Live audio controls and meters remain unavailable.
 
 Fixes
 
-- Updated full-screen display setup for Android 15 and later.
-
-- Live View shows a vertical camera picture whole instead of a heavily zoomed crop.
-- Playback scopes, zebra and false color keep their own clip level instead of moving the live picture's, and the reverse.
-
+- Camera browsing now includes internal storage and a present SD card, instead of omitting SD clips.
 - Playback stays paused when a late loop, seek or scrub finishes. Press Play to resume.
+- Live View shows a vertical camera picture whole instead of a heavily zoomed crop.
+- Updated full-screen display setup for Android 15 and later.
 
 What to test
 
-- Force quit the Insta360 app, then pair from the start screen. Set ISO Auto, 400 and 800 and WB Kelvin: each settles on the camera's value without bouncing back.
-- Start and stop recording from the app and the camera button: the lamp follows the camera. Drop Wi-Fi during a change: it says the link dropped, then controls work again.
-- Try waveform, false color, zoom and the gimbal. Pause a clip during a loop or scrub: it should hold. Report problems from Operator Setup or support@opencapture.org.
+- Force quit the Insta360 app, pair and check live view. Change ISO, shutter and WB, then record from the app and camera. Check the camera confirms each change.
+- Check portrait and landscape with scopes, false color and peaking. Open and close assist options, try zoom and the gimbal, and compare clip assists with live view.
+- Open clips from internal storage and an SD card. Record a short take, reopen the gallery and pause during loops or scrubs. Report problems from Operator Setup or support@opencapture.org.
