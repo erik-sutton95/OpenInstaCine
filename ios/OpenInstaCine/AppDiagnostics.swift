@@ -30,7 +30,7 @@ enum AppDiagnostics {
         ]
     }
     /// The camera network this app's cameras serve.
-    static let gate = ReliabilityReportingGate(cameraIPv4Prefix: "192.168.2.")
+    static let gate = ReliabilityReportingGate(cameraIPv4Prefix: "192.168.42.")
     static let origin: FeedIncidentOrigin = {
         #if DEBUG
             let verification = ReliabilityReportingVerification.mode != nil

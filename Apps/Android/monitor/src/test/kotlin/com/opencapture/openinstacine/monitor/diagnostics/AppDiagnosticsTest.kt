@@ -22,7 +22,7 @@ class AppDiagnosticsTest {
         assertEquals("openinstacine-android", host.reportingClient)
         assertEquals("support@opencapture.org", host.supportEmail)
         assertEquals("openpocketcine.operator", host.preferencesName)
-        assertEquals("192.168.2.", AppDiagnostics.gate.cameraIPv4Prefix)
+        assertEquals("192.168.42.", AppDiagnostics.gate.cameraIPv4Prefix)
         // Camera-network redaction: the camera's access point stays readable, other networks do not.
         assertEquals("ssid=OsmoPocket3-A1B2", host.redact("ssid=OsmoPocket3-A1B2"))
         assertEquals("ssid=<redacted>", host.redact("ssid=CafeWiFi"))

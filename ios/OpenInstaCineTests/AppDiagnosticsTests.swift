@@ -15,7 +15,7 @@ final class AppDiagnosticsTests: XCTestCase {
         // Tests run a development build: reinstalls must not read as watchdog kills.
         XCTAssertEqual(host.environment, "development")
         XCTAssertFalse(host.tracksWatchdogTerminations)
-        XCTAssertEqual(AppDiagnostics.gate.cameraIPv4Prefix, "192.168.2.")
+        XCTAssertEqual(AppDiagnostics.gate.cameraIPv4Prefix, "192.168.42.")
         // Camera access points stay readable, other networks do not.
         XCTAssertEqual(host.redact("ssid=OsmoPocket3-A1B2"), "ssid=OsmoPocket3-A1B2")
         XCTAssertEqual(host.redact("ssid=CafeWiFi"), "ssid=<redacted>")

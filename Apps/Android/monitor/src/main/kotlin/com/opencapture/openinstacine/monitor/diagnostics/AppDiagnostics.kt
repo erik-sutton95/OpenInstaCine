@@ -30,7 +30,7 @@ internal object AppDiagnostics {
         )
     val dsn = ReliabilityReportingDSN()
     val consent = ReliabilityReportingConsent(dsn)
-    val gate = ReliabilityReportingGate(consent, ReliabilityReportingHostPolicy(), cameraIPv4Prefix = "192.168.2.")
+    val gate = ReliabilityReportingGate(consent, ReliabilityReportingHostPolicy(), cameraIPv4Prefix = "192.168.42.")
     val origin = FeedIncidentOrigin({ BuildConfig.BUILD_IDENTITY }, host.redact)
     val reporting =
         ReliabilityReporting(host, consent, dsn, gate, origin, ::SentryReliabilitySink) {
@@ -38,4 +38,16 @@ internal object AppDiagnostics {
         }
     val incidents = FeedIncidentRuntime(reporting)
     val manualReport = ManualProblemReport(host, dsn, gate, OkHttpManualReportUpload)
+
+    // The root owns one camera backend. A retired facade cannot reopen its successor's gate.
+    private var cameraSessionOwner: Any? = null
+    @Synchronized fun beginCameraSession(owner: Any) {
+        cameraSessionOwner = owner
+        reporting.setCameraSessionActive(true)
+    }
+    @Synchronized fun endCameraSession(owner: Any) {
+        if (cameraSessionOwner !== owner) return
+        cameraSessionOwner = null
+        reporting.setCameraSessionActive(false)
+    }
 }

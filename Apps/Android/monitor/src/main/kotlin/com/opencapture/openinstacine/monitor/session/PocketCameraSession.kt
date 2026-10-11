@@ -67,6 +67,7 @@ import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.opencine.media.SerialSessionGate
 import com.opencapture.opencine.decoder.HevcDecoder
 import com.opencapture.openinstacine.monitor.diagnostics.DiagnosticCenter
+import com.opencapture.openinstacine.monitor.diagnostics.AppDiagnostics
 import com.opencapture.opencine.media.FeedDecoderErrorOrigin
 import com.opencapture.opencine.media.FeedIncidentAges
 import com.opencapture.opencine.media.FeedIncidentBreadcrumb
@@ -144,6 +145,16 @@ class PocketCameraSession(
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backend: CameraBackend = MonitorConfiguration.createBackend(appContext)
+    private val reportingOwner = Any()
+    private var reportingActive = false
+    private var closed = false
+
+    private fun updateReportingActivity(active: Boolean) {
+        if (closed || reportingActive == active) return
+        reportingActive = active
+        if (active) AppDiagnostics.beginCameraSession(reportingOwner)
+        else AppDiagnostics.endCameraSession(reportingOwner)
+    }
     private val controls: CameraControls? = backend as? CameraControls
     /** This session's names and media host (STATE-01: per session, never a launch-time global). */
     val profile: CameraProfile = LunaShellMapping.profile
@@ -376,6 +387,7 @@ class PocketCameraSession(
         }
         scope.launch {
             backend.phase.collect { value ->
+                updateReportingActivity(value != ConnectionPhase.IDLE && value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED)
                 if (value != ConnectionPhase.LIVE) cancelProgrammedMove()
                 when (value) {
                     ConnectionPhase.LIVE -> {
@@ -459,12 +471,18 @@ class PocketCameraSession(
 
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     fun disconnect() {
+        updateReportingActivity(false)
         cancelProgrammedMove()
         backend.disconnect(); decoder.reset()
         holdsMonitor = false; hasVideoFormat = false
         tracking.clear()
     }
-    fun close() { cancelProgrammedMove(); backend.close(); decoder.reset(); scope.cancel() }
+    fun close() {
+        if (closed) return
+        updateReportingActivity(false)
+        closed = true
+        cancelProgrammedMove(); backend.close(); decoder.reset(); scope.cancel()
+    }
     fun noteSceneBecameInactive() {
         programSceneActive = false; cancelProgrammedMove(); backend.sceneActive(false)
     }
