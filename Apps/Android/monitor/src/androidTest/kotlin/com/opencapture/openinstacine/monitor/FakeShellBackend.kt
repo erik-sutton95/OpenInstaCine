@@ -55,8 +55,12 @@ internal class FakeShellBackend(
     override val joinedSSID = MutableStateFlow<String?>(null)
     val frameFlow = MutableSharedFlow<EncodedVideoFrame>(extraBufferCapacity = 64)
     override val frames = frameFlow
+    @Volatile var frameGeneration: Long? = null
+    override val frameConnectionGeneration: Long? get() = frameGeneration
+    val connectCalls = CopyOnWriteArrayList<String>()
+    var onConnect: ((String) -> Unit)? = null
     override fun startScan() {}
-    override fun connect(id: String) {}
+    override fun connect(id: String) { connectCalls += id; onConnect?.invoke(id) }
     override fun disconnect() {}
     override fun close() {}
     override fun sceneActive(active: Boolean) {}

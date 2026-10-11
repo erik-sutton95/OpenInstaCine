@@ -40,6 +40,7 @@ import com.opencapture.opencine.vocabulary.SessionDropStormGuard
 import com.opencapture.opencine.vocabulary.SessionRecoveryDecision
 import com.opencapture.opencine.vocabulary.SessionRecoveryPolicy
 import com.opencapture.opencine.vocabulary.SessionRecoveryUi
+import com.opencapture.opencine.vocabulary.RecoveryPictureProof
 import com.opencapture.opencine.vocabulary.ShutterAngle
 import com.opencapture.opencine.vocabulary.TrackingBox
 import com.opencapture.opencine.vocabulary.TrackingHud
@@ -366,6 +367,14 @@ class PocketCameraSession(
     fun autoWhiteBalanceLock(status: CameraStatus = _status.value): Pair<Int, Int>? = null
     fun lockAutoWhiteBalance() = Unit
 
+    // Serialize source replacement/probe reset with queued frame admission.
+    private val recoveryFrameLock = Any()
+    @Volatile private var lastAccessUnitAt: Long? = null
+    @Volatile private var lastFrameGeneration: Long? = null
+    private val dropGuard = SessionDropStormGuard()
+    private var recoveryJob: Job? = null
+    private var recoveryGeneration = 0L
+
     init {
         scope.launch {
             backend.snapshot.collect { value ->
@@ -391,7 +400,7 @@ class PocketCameraSession(
                 if (value != ConnectionPhase.LIVE) cancelProgrammedMove()
                 when (value) {
                     ConnectionPhase.LIVE -> {
-                        holdsMonitor = true; _recoveryState.value = SessionRecoveryUi.Idle; resetFrameClock()
+                        holdsMonitor = true; resetFrameClock()
                         startGimbalAnglePoll()
                     }
                     ConnectionPhase.FAILED -> {
@@ -401,7 +410,7 @@ class PocketCameraSession(
                     ConnectionPhase.IDLE -> {
                         resetFrameClock(); stopGimbalAngle()
                         faceAFArmJob?.cancel(); faceAFArmJob = null; _faceAFArmed.value = false; publishFaceDetectWanted()
-                        recoveryJob?.cancel(); recoveryJob = null
+                        retireRecovery()
                         holdsMonitor = false; _recoveryState.value = SessionRecoveryUi.Idle
                         pins.clear(); recordStartedAt = null; _controlBusy.value = false
                     }
@@ -411,10 +420,16 @@ class PocketCameraSession(
         }
         scope.launch(Dispatchers.Default) {
             backend.frames.collect { frame ->
-                noteFrameClock(frame.timestampMicros)
-                videoPackets += 1
-                accessUnits += 1
-                if (decoder.decode(frame.annexB)) { framesEnqueued += 1; hasVideoFormat = true }
+                synchronized(recoveryFrameLock) {
+                    val generation = backend.frameConnectionGeneration
+                    if (generation != null && frame.connectionGeneration != generation) return@synchronized
+                    lastAccessUnitAt = SystemClock.elapsedRealtime()
+                    lastFrameGeneration = frame.connectionGeneration
+                    noteFrameClock(frame.timestampMicros)
+                    videoPackets += 1
+                    accessUnits += 1
+                    if (decoder.decode(frame.annexB)) { framesEnqueued += 1; hasVideoFormat = true }
+                }
             }
         }
     }
@@ -455,9 +470,13 @@ class PocketCameraSession(
     val lunaPort: LunaConnectPort? = (backend as? LunaConnectPort)?.let { port ->
         object : LunaConnectPort by port {
             override fun connect(id: String) {
+                retireRecovery()
+                _recoveryState.value = SessionRecoveryUi.Idle
                 cancelProgrammedMove()
-                decoder.reset(); videoPackets = 0; hasVideoFormat = false
-                port.connect(id)
+                synchronized(recoveryFrameLock) {
+                    decoder.reset(); videoPackets = 0; hasVideoFormat = false
+                    port.connect(id)
+                }
             }
         }
     }
@@ -471,9 +490,11 @@ class PocketCameraSession(
 
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     fun disconnect() {
+        retireRecovery()
+        _recoveryState.value = SessionRecoveryUi.Idle
         updateReportingActivity(false)
         cancelProgrammedMove()
-        backend.disconnect(); decoder.reset()
+        synchronized(recoveryFrameLock) { backend.disconnect(); decoder.reset() }
         holdsMonitor = false; hasVideoFormat = false
         tracking.clear()
     }
@@ -481,22 +502,44 @@ class PocketCameraSession(
         if (closed) return
         updateReportingActivity(false)
         closed = true
-        cancelProgrammedMove(); backend.close(); decoder.reset(); scope.cancel()
+        retireRecovery()
+        cancelProgrammedMove()
+        synchronized(recoveryFrameLock) { backend.close(); decoder.reset() }
+        scope.cancel()
     }
     fun noteSceneBecameInactive() {
         programSceneActive = false; cancelProgrammedMove(); backend.sceneActive(false)
     }
-    fun noteSceneBecameActive() { programSceneActive = true; backend.sceneActive(true) }
-    internal fun hasRecoveryPicture(startedAt: Long): Boolean = hasVideoFormat
+    fun noteSceneBecameActive() {
+        programSceneActive = true
+        // The bounded recovery episode already owns reconnect while the link is failed.
+        if (recoveryJob?.isActive != true) backend.sceneActive(true)
+    }
+    internal fun hasRecoveryPicture(startedAt: Long, generation: Long? = backend.frameConnectionGeneration): Boolean {
+        val source = generation ?: return false
+        if (backend.frameConnectionGeneration != source || lastFrameGeneration != source) return false
+        val now = SystemClock.elapsedRealtime()
+        val admitted = decoder.lastDecoderAcceptedAt ?: return false
+        if (admitted < startedAt || now - admitted !in 0 until 2_000) return false
+        // C2 surface output may not emit an output callback. Its fresh codec-stamped
+        // presentation still proves a decoded picture after this source's input admission.
+        if (decoder.decoderOutputExpected) {
+            val output = decoder.lastDecoderOutputAt ?: return false
+            if (output < startedAt || now - output !in 0 until 2_000) return false
+        }
+        return RecoveryPictureProof.isFresh(startedAt, now, decoder.lastPresentedAt, lastAccessUnitAt)
+    }
     /** iOS `retrySessionRecovery`: the operator starts a fresh bounded run. */
     fun retrySessionRecovery() {
         dropGuard.reset()
-        recoveryJob?.cancel(); recoveryJob = null
+        retireRecovery()
         _recoveryState.value = SessionRecoveryUi.Idle
         beginSessionRecovery()
     }
-    private val dropGuard = SessionDropStormGuard()
-    private var recoveryJob: Job? = null
+    private fun retireRecovery() {
+        recoveryGeneration += 1
+        recoveryJob?.cancel(); recoveryJob = null
+    }
     /**
      * iOS `beginSessionRecovery` + `runSessionRecoveryAttempts`: a live drop keeps the monitor on the last
      * frame and reconnects through the backend's BLE-first path, retrying at once then 0.5 s to 8 s
@@ -512,26 +555,60 @@ class PocketCameraSession(
             return
         }
         Log.i("OpenInstaCine", "session: drop, bounded recovery")
+        val episode = ++recoveryGeneration
+        fun ownsEpisode() = !closed && recoveryGeneration == episode && backend.connected.value?.id == id
         recoveryJob = scope.launch {
             val policy = SessionRecoveryPolicy.monitor
             var failures = 0
-            val ended = kotlinx.coroutines.withTimeoutOrNull(SessionRecoveryPolicy.AUTOMATIC_RECOVERY_BUDGET_MS) {
+            fun sourceStillOwned(source: Long?): Boolean {
+                if (!ownsEpisode()) return false
+                if (backend.frameConnectionGeneration == source) return true
+                _recoveryState.value = SessionRecoveryUi.WaitingForOperator(failures + 1)
+                return false
+            }
+            val ended = kotlinx.coroutines.withTimeoutOrNull(SessionRecoveryPolicy.AUTOMATIC_RECOVERY_BUDGET_MS) episodeBudget@ {
                 while (true) {
+                    if (!ownsEpisode()) return@episodeBudget
                     val next = policy.state(failures)
                     _recoveryState.value = next
                     if (next !is SessionRecoveryUi.Retrying) break
-                    backend.connect(id)
+                    val source = synchronized(recoveryFrameLock) {
+                        backend.connect(id)
+                        backend.frameConnectionGeneration
+                    }
+                    val startedAt = withContext(Dispatchers.IO) {
+                        synchronized(recoveryFrameLock) {
+                            decoder.prepareAfterForeground()
+                            lastAccessUnitAt = null; lastFrameGeneration = null
+                            decoder.beginPresentationProbe()
+                        }
+                    }
+                    if (!sourceStillOwned(source)) return@episodeBudget
                     kotlinx.coroutines.withTimeoutOrNull(2_000) { backend.phase.first { it != ConnectionPhase.FAILED } }
                     val outcome = backend.phase.first { it == ConnectionPhase.LIVE || it == ConnectionPhase.FAILED || it == ConnectionPhase.IDLE }
-                    if (outcome != ConnectionPhase.FAILED) { Log.i("OpenInstaCine", "session: recovered after $failures failed attempt(s)"); break }
+                    if (!ownsEpisode() || outcome == ConnectionPhase.IDLE) return@episodeBudget
+                    val picture = if (outcome == ConnectionPhase.LIVE) {
+                        kotlinx.coroutines.withTimeoutOrNull(10_000L) pictureBudget@ {
+                            while (ownsEpisode() && backend.frameConnectionGeneration == source && phase == ConnectionPhase.LIVE) {
+                                if (synchronized(recoveryFrameLock) { hasRecoveryPicture(startedAt, source) }) return@pictureBudget true
+                                delay(100)
+                            }
+                            false
+                        } == true
+                    } else false
+                    if (!sourceStillOwned(source) || phase == ConnectionPhase.IDLE) return@episodeBudget
+                    if (picture) {
+                        _recoveryState.value = SessionRecoveryUi.Idle
+                        Log.i("OpenInstaCine", "session: recovered picture after $failures failed attempt(s)")
+                        break
+                    }
                     failures += 1
                     val decision = policy.decision(failures, Math.random())
                     if (decision !is SessionRecoveryDecision.Retry) { _recoveryState.value = policy.state(failures); break }
                     delay(decision.afterMs)
                 }
             }
-            // Budget spent: the attempt in flight may still land (LIVE clears the card); otherwise the operator decides.
-            if (ended == null) _recoveryState.value = SessionRecoveryUi.WaitingForOperator(failures + 1)
+            if (ended == null && ownsEpisode()) _recoveryState.value = SessionRecoveryUi.WaitingForOperator(failures + 1)
         }
     }
     fun abandonRecoveryToMenu() = disconnect()
