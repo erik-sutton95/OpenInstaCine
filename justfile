@@ -20,6 +20,7 @@ check:
     python3 -m py_compile tools/ble_lab.py
     python3 tools/ble_lab.py --help > /dev/null
     python3 -m unittest discover -s tools -p 'test_ucd2.py'
+    python3 -m unittest discover -s tools -p 'test_ios_archive_privacy.py'
     bash tools/sentry-test.sh
     ./scripts/ios-release-notes-check.sh
     ./scripts/android-release-notes-check.sh

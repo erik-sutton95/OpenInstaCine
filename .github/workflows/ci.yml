@@ -46,6 +46,9 @@ jobs:
       - name: Sentry release configuration
         run: bash ./tools/sentry-test.sh
 
+      - name: Packaged iOS privacy regression
+        run: python3 -m unittest discover -s tools -p 'test_ios_archive_privacy.py'
+
       - name: TestFlight notes
         run: |
           ./scripts/ios-release-notes-check.sh
