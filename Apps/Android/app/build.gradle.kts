@@ -9,7 +9,7 @@ val resolvedVersionName: String = property("openinstacine.versionName").toString
 android {
  namespace = "com.opencapture.openinstacine"
  compileSdk = 36
- defaultConfig { applicationId = "com.opencapture.openinstacine"; minSdk = 29; targetSdk = 36; versionCode = resolvedVersionCode; versionName = resolvedVersionName; ndk { abiFilters += "arm64-v8a" } }
+ defaultConfig { applicationId = "com.opencapture.openinstacine"; minSdk = 29; targetSdk = 36; versionCode = resolvedVersionCode; versionName = resolvedVersionName; manifestPlaceholders["sentryProguardUuid"] = System.getenv("SENTRY_PROGUARD_UUID").orEmpty(); ndk { abiFilters += "arm64-v8a" } }
 
  // Play and sideload builds sign with the keystore named in the environment
  // (docs/android-play-ci.md, docs/RELEASE.md). Unset keeps debug and an unsigned release possible.
@@ -35,8 +35,9 @@ android {
   // A distinct id and the "OpenInstaCine Dev" label (src/debug) install beside a Play or sideload build.
   debug { applicationIdSuffix = ".debug"; versionNameSuffix = "-debug" }
   release {
-   // Minify stays off like OpenPocketCine: no mapping.txt, so Sentry needs only the native symbols.
-   isMinifyEnabled = false
+   isMinifyEnabled = true
+   isShrinkResources = true
+   proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
    if (uploadKeystorePath.isNotEmpty()) signingConfig = signingConfigs.getByName("release")
   }
  }

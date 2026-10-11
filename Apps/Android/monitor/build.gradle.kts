@@ -21,6 +21,7 @@ android {
 
     defaultConfig {
         minSdk = 29
+        consumerProguardFiles("proguard-rules.pro")
         buildConfigField("String", "VERSION_NAME", "\"$resolvedVersionName\"")
         buildConfigField("int", "VERSION_CODE", "$resolvedVersionCode")
         buildConfigField("String", "SOURCE_REVISION", "\"unknown\"")

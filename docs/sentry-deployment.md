@@ -40,9 +40,18 @@ Off unless `SENTRY_UPLOAD_ENABLED` is exactly `true`. Then
 `tools/sentry-upload.py --platform ios|android` checks and uploads:
 
 - iOS: the archive's dSYMs.
-- Android: native `.so` symbols from `:monitor` (Swift core, CMake) and the
-  merged app libraries. Minify is off, so there is no ProGuard mapping; a
-  `mapping.txt` without `SENTRY_PROGUARD_UUID` fails the upload.
+- Android: native `.so` symbols from `:monitor` (Swift core, CMake), merged app
+  libraries, and the R8 mapping. Play CI generates `SENTRY_PROGUARD_UUID` before
+  bundling; Gradle embeds the same value as `io.sentry.proguard-uuid`. The
+  mapping and UUID are retained together in the `r8-mapping` artifact. A
+  `mapping.txt` without `SENTRY_PROGUARD_UUID` still fails the upload.
+
+Local release recipes generate a UUID unless one is supplied. For a direct
+Gradle release or a later manual mapping upload, export `SENTRY_PROGUARD_UUID`
+before building, record it with that build's mapping, and reuse it for upload.
+A direct Gradle build without the UUID has no Sentry mapping binding and must
+not be used for a reporting-enabled release. Reporting consent and upload
+opt-in are unchanged.
 
 `SENTRY_PROJECT` defaults to `openinstacine-ios` / `openinstacine-android`; set it
 explicitly in each CI environment anyway. Needs `SENTRY_AUTH_TOKEN` (org token

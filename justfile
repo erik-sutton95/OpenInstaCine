@@ -137,8 +137,11 @@ android-bundle:
     #!/usr/bin/env bash
     set -euo pipefail
     set -a; source .local/play-signing.env; set +a
+    export SENTRY_PROGUARD_UUID="${SENTRY_PROGUARD_UUID:-$(python3 -c 'import uuid; print(uuid.uuid4())')}"
     cd Apps/Android
     JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk}" ./gradlew bundleRelease ${VERSION_CODE:+-PversionCode="$VERSION_CODE"}
+    test -s app/build/outputs/mapping/release/mapping.txt
+    printf '%s\n' "$SENTRY_PROGUARD_UUID" > app/build/outputs/mapping/release/sentry-proguard-uuid.txt
     echo "AAB: Apps/Android/app/build/outputs/bundle/release/app-release.aab"
 
 # Sideload APK for a GitHub release (docs/RELEASE.md). n = sideload build on this version.
@@ -150,10 +153,15 @@ android-sideload n:
       ANDROID_KEY_ALIAS="$KEY_ALIAS" ANDROID_KEY_PASSWORD="$KEY_PASSWORD"
     export SENTRY_DSN_ANDROID="${SENTRY_DSN_ANDROID:-$(sed -n 's/^SENTRY_DSN_ANDROID=//p' .local/reliability.properties)}"
     [[ -n "$SENTRY_DSN_ANDROID" ]] || { echo "SENTRY_DSN_ANDROID is unset" >&2; exit 1; }
+    export SENTRY_PROGUARD_UUID="${SENTRY_PROGUARD_UUID:-$(python3 -c 'import uuid; print(uuid.uuid4())')}"
     version="$(sed -n 's/^openinstacine.versionName=//p' Apps/Android/gradle.properties)"
     (cd Apps/Android && JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk}" ./gradlew assembleRelease)
     mkdir -p .local/apk
+    test -s Apps/Android/app/build/outputs/mapping/release/mapping.txt
     cp Apps/Android/app/build/outputs/apk/release/app-release.apk ".local/apk/OpenInstaCine-$version-{{n}}-sideload.apk"
+    mkdir -p ".local/apk/OpenInstaCine-$version-{{n}}-sideload-mapping"
+    cp Apps/Android/app/build/outputs/mapping/release/mapping.txt ".local/apk/OpenInstaCine-$version-{{n}}-sideload-mapping/mapping.txt"
+    printf '%s\n' "$SENTRY_PROGUARD_UUID" > ".local/apk/OpenInstaCine-$version-{{n}}-sideload-mapping/sentry-proguard-uuid.txt"
     echo ".local/apk/OpenInstaCine-$version-{{n}}-sideload.apk"
 
 android-play-dispatch track="alpha" status="completed":
