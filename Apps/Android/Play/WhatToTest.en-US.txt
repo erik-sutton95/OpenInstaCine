@@ -6,6 +6,8 @@ New and changed
 
 Fixes
 
+- Updated full-screen display setup for Android 15 and later.
+
 - Live View shows a vertical camera picture whole instead of a heavily zoomed crop.
 - Playback scopes, zebra and false color keep their own clip level instead of moving the live picture's, and the reverse.
 
