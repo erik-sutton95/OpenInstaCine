@@ -1,18 +1,16 @@
 New and changed
 
-- Rebuilt live view, camera browsing and settings on OpenCine, the shared foundation of the OpenCapture apps.
-- Luna camera and gimbal tools retain their supported options. ISO, shutter, white balance and Record still wait for the camera to confirm.
+- Playback controls follow the player's real playing and buffering state.
 - For Luna Ultra on firmware 1.1.15. Live audio controls and meters remain unavailable.
 
 Fixes
 
-- Camera browsing now includes internal storage and a present SD card, instead of omitting SD clips.
-- The camera gallery returns after a connection recovery, so uncached clips remain available when live view has returned.
-- Playback stays paused when a late loop, seek or scrub finishes. Press Play to resume.
-- Fixed missing privacy information that blocked TestFlight uploads.
+- Media clip taps stay usable after a camera source changes or reconnects.
+- Pause remains available while playback waits for data; pressing it prevents an unexpected restart.
+- Camera browsing includes internal storage and a present SD card.
 
 What to test
 
-- Force quit the Insta360 app, pair and check live view. Change ISO, shutter and WB, then record from the app, camera and Apple Watch. Check the camera confirms each change.
-- Open clips from internal storage and an SD card. Record a short take, reopen the gallery, pause during looping or scrubbing, then check cached playback offline.
-- Try scopes, false color, peaking and an I-Log LUT in both orientations. Open and close assist options, then try zoom, the gimbal and AirPods head tracking.
+- Reconnect your camera, open Media and try short and long clips from internal storage and an SD card. Check cached playback offline.
+- Pause while a clip is buffering, then scrub or switch clips. Playback should restart only when you press Play.
+- Check Media and playback in portrait and landscape. If a clip will not open, report its duration, storage and whether it was cached.

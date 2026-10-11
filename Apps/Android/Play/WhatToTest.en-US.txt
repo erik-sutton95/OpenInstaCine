@@ -1,18 +1,16 @@
 New and changed
 
-- Rebuilt live view, camera browsing and settings on OpenCine, the shared foundation of the OpenCapture apps.
-- Luna camera and gimbal tools retain their supported options. ISO, shutter, white balance and Record still wait for the camera to confirm.
+- Playback controls follow the player's real playing and buffering state.
 - For Luna Ultra on firmware 1.1.15; Android 10+ on a 64-bit phone. Live audio controls and meters remain unavailable.
 
 Fixes
 
-- Camera browsing now includes internal storage and a present SD card, instead of omitting SD clips.
+- Pause remains available while playback waits for data; pressing it prevents an unexpected restart.
 - Playback stays paused when a late loop, seek or scrub finishes. Press Play to resume.
-- Live View shows a vertical camera picture whole instead of a heavily zoomed crop.
-- Updated full-screen display setup for Android 15 and later.
+- Camera browsing includes internal storage and a present SD card.
 
 What to test
 
-- Force quit the Insta360 app, pair and check live view. Change ISO, shutter and WB, then record from the app and camera. Check the camera confirms each change.
-- Check portrait and landscape with scopes, false color and peaking. Open and close assist options, try zoom and the gimbal, and compare clip assists with live view.
-- Open clips from internal storage and an SD card. Record a short take, reopen the gallery and pause during loops or scrubs. Report problems from Operator Setup or support@opencapture.org.
+- Reconnect your camera, open Media and try short and long clips from internal storage and an SD card. Check cached playback offline.
+- Pause while a clip is buffering, then scrub or switch clips. Playback should restart only when you press Play.
+- Check Media and playback in portrait and landscape. If a clip will not open, report its duration, storage and whether it was cached.
