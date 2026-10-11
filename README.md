@@ -152,12 +152,12 @@ repository, at `../OpenCine`; `Package.swift`, `ios/project.yml` and
 `scripts/checkout-opencine.sh` clones it there at the commit pinned in `opencine-pins.txt`
 (CI and Xcode Cloud use the same script); an existing checkout is only compared, never moved.
 
-
 ```bash
+scripts/checkout-opencine.sh  # check out the pinned shared platform
 just                      # list all recipes
 just ios-generate         # generate the Xcode project
 just ios-build            # Simulator build, no signing
-just ios-run [device]     # signed build, install and launch on a USB iPhone
+just ios-run <device>     # signed build, install and launch on a chosen USB iPhone
 just ios-test             # app unit tests
 just core-test            # shared core and Luna protocol tests
 just android-check        # build, test, and lint Android
@@ -191,7 +191,9 @@ Keychain.
 
 ## Contributing
 
-Contributions are welcome.
+Contributions are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup,
+checks and the pull-request workflow. For security reports, follow
+[`SECURITY.md`](SECURITY.md) and use private advisories.
 
 - Read [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for the layout, build recipes and the
   Simulator rig.

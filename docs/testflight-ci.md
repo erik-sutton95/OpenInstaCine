@@ -49,7 +49,7 @@ Both bundle ids (`com.opencapture.openinstacine`, `com.opencapture.openinstacine
 must be registered on team `4V4EGQ6LZA` before the first archive: Xcode Cloud
 cannot register the Watch id during export. The app id needs **Hotspot
 Configuration** and **Access WiFi Information** (`OpenInstaCine.entitlements`).
-A local `just ios-run` with automatic signing registers both.
+A local `just ios-run <device>` with automatic signing registers both.
 
 ## Tester notes
 

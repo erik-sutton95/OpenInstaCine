@@ -42,7 +42,7 @@ Needs Xcode 26, XcodeGen and `just`. Run from the repository root.
 | --- | --- |
 | `just ios-generate` | `xcodegen generate` in `ios/` |
 | `just ios-build` | Simulator build, no signing, derived data in `.local/DD` |
-| `just ios-run [device]` | Development-signed build, install and launch on a USB iPhone (devicectl id) |
+| `just ios-run <device>` | Development-signed build, install and launch on a chosen USB iPhone (devicectl id) |
 | `just ios-test` | App unit tests on the first available iPhone simulator |
 | `just core-test` | `swift test` for this package and the OpenCine `Insta360` tests |
 | `just oic-remote ...` | DEBUG remote client (see below) |

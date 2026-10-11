@@ -62,7 +62,7 @@ ios-build: ios-generate
     xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'generic/platform=iOS Simulator' -derivedDataPath .local/DD CODE_SIGNING_ALLOWED=NO build
 
 # Development-signed build + install + launch on a USB iPhone (devicectl id).
-ios-run device="B1138BFC-5392-56A1-93F1-5B722F7BA10F": ios-generate
+ios-run device: ios-generate
     xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'generic/platform=iOS' -derivedDataPath .local/DDdev -allowProvisioningUpdates build
     xcrun devicectl device install app --device {{device}} .local/DDdev/Build/Products/Debug-iphoneos/OpenInstaCine.app
     xcrun devicectl device process launch --device {{device}} --activate --terminate-existing com.opencapture.openinstacine
