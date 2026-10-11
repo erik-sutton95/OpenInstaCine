@@ -120,10 +120,13 @@ internal fun waitUntil(timeoutMs: Long = 5_000, predicate: () -> Boolean): Boole
  * A facade over [backend], as the brand launcher would build it. The process keeps the brand's own
  * Luna composition installed afterwards, as the other instrumented tests leave it.
  */
-internal fun liveSession(backend: FakeShellBackend): PocketCameraSession {
+internal fun liveSession(
+    backend: FakeShellBackend,
+    incidents: com.opencapture.opencine.media.FeedIncidentSink = RecordingFeedIncidentSink(),
+): PocketCameraSession {
     MonitorConfiguration.install(MonitorConfiguration.identity) { backend }
     try {
-        return onMain { PocketCameraSession(InstrumentationRegistry.getInstrumentation().targetContext) }
+        return onMain { PocketCameraSession(InstrumentationRegistry.getInstrumentation().targetContext, incidents) }
     } finally {
         MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
             val wifi = com.opencapture.openinstacine.monitor.pairing.CameraWifiCredentialStore(context)

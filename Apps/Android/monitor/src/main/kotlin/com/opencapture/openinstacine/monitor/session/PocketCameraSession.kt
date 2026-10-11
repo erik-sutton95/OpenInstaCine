@@ -142,11 +142,16 @@ import com.opencapture.opencine.media.LivePipelineCadence
  */
 class PocketCameraSession(
     context: Context,
+    incidentSink: com.opencapture.opencine.media.FeedIncidentSink = AppDiagnostics.incidents,
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backend: CameraBackend = MonitorConfiguration.createBackend(appContext)
     private val reportingOwner = Any()
+    private val feedIncidents = AppDiagnostics.incidentSink(reportingOwner, incidentSink)
+    private var incidentSessionActive = false
+    private var incidentPrevious: Pair<Double, List<Long>>? = null
+    private var incidentSourceGeneration: Long? = null
     private var reportingActive = false
     private var closed = false
 
@@ -371,6 +376,7 @@ class PocketCameraSession(
     private val recoveryFrameLock = Any()
     @Volatile private var lastAccessUnitAt: Long? = null
     @Volatile private var lastFrameGeneration: Long? = null
+    @Volatile private var sourceProbeStartedAt: Long? = null
     private val dropGuard = SessionDropStormGuard()
     private var recoveryJob: Job? = null
     private var recoveryGeneration = 0L
@@ -396,6 +402,7 @@ class PocketCameraSession(
         }
         scope.launch {
             backend.phase.collect { value ->
+                if (value != ConnectionPhase.IDLE && value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED && !incidentSessionActive) beginFeedIncidentSession()
                 updateReportingActivity(value != ConnectionPhase.IDLE && value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED)
                 if (value != ConnectionPhase.LIVE) cancelProgrammedMove()
                 when (value) {
@@ -408,6 +415,7 @@ class PocketCameraSession(
                         if (holdsMonitor) beginSessionRecovery()
                     }
                     ConnectionPhase.IDLE -> {
+                        endFeedIncidentSession()
                         resetFrameClock(); stopGimbalAngle()
                         faceAFArmJob?.cancel(); faceAFArmJob = null; _faceAFArmed.value = false; publishFaceDetectWanted()
                         retireRecovery()
@@ -416,6 +424,12 @@ class PocketCameraSession(
                     }
                     else -> Unit
                 }
+            }
+        }
+        scope.launch {
+            while (isActive) {
+                delay(1_000)
+                publishFeedIncidentSnapshot()
             }
         }
         scope.launch(Dispatchers.Default) {
@@ -490,6 +504,7 @@ class PocketCameraSession(
 
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     fun disconnect() {
+        endFeedIncidentSession()
         retireRecovery()
         _recoveryState.value = SessionRecoveryUi.Idle
         updateReportingActivity(false)
@@ -500,6 +515,7 @@ class PocketCameraSession(
     }
     fun close() {
         if (closed) return
+        endFeedIncidentSession()
         updateReportingActivity(false)
         closed = true
         retireRecovery()
@@ -509,9 +525,11 @@ class PocketCameraSession(
     }
     fun noteSceneBecameInactive() {
         programSceneActive = false; cancelProgrammedMove(); backend.sceneActive(false)
+        feedIncidents.recordBreadcrumb(FeedIncidentBreadcrumb(SystemClock.elapsedRealtime() / 1_000.0, FeedIncidentBreadcrumbKind.SCENE_ACTIVITY, "inactive"))
     }
     fun noteSceneBecameActive() {
         programSceneActive = true
+        feedIncidents.recordBreadcrumb(FeedIncidentBreadcrumb(SystemClock.elapsedRealtime() / 1_000.0, FeedIncidentBreadcrumbKind.SCENE_ACTIVITY, "active"))
         // The bounded recovery episode already owns reconnect while the link is failed.
         if (recoveryJob?.isActive != true) backend.sceneActive(true)
     }
@@ -554,6 +572,7 @@ class PocketCameraSession(
             _recoveryState.value = SessionRecoveryUi.PausedAfterDrops(dropGuard.dropsInWindow)
             return
         }
+        if (phase == ConnectionPhase.FAILED) feedIncidents.noteUnexpectedDisconnect(SystemClock.elapsedRealtime() / 1_000.0)
         Log.i("OpenInstaCine", "session: drop, bounded recovery")
         val episode = ++recoveryGeneration
         fun ownsEpisode() = !closed && recoveryGeneration == episode && backend.connected.value?.id == id
@@ -580,7 +599,7 @@ class PocketCameraSession(
                         synchronized(recoveryFrameLock) {
                             decoder.prepareAfterForeground()
                             lastAccessUnitAt = null; lastFrameGeneration = null
-                            decoder.beginPresentationProbe()
+                            decoder.beginPresentationProbe().also { sourceProbeStartedAt = it }
                         }
                     }
                     if (!sourceStillOwned(source)) return@episodeBudget
@@ -609,9 +628,100 @@ class PocketCameraSession(
                 }
             }
             if (ended == null && ownsEpisode()) _recoveryState.value = SessionRecoveryUi.WaitingForOperator(failures + 1)
+            if (ownsEpisode() && _recoveryState.value is SessionRecoveryUi.WaitingForOperator) {
+                feedIncidents.noteExhausted(SystemClock.elapsedRealtime() / 1_000.0)
+            }
         }
     }
     fun abandonRecoveryToMenu() = disconnect()
+
+    private fun beginFeedIncidentSession() {
+        incidentSessionActive = true
+        incidentPrevious = null
+        incidentSourceGeneration = backend.frameConnectionGeneration
+        feedIncidents.beginSession(FeedIncidentSessionContext(
+            sessionId = java.util.UUID.randomUUID().toString(),
+            appVersion = AppDiagnostics.host.versionName,
+            appBuild = AppDiagnostics.host.versionCode.toString(),
+            sourceRevision = AppDiagnostics.host.sourceRevision,
+            osName = "Android", osVersion = android.os.Build.VERSION.RELEASE,
+            hardwareClass = android.os.Build.DEVICE, cameraFamily = "luna",
+            testSource = AppDiagnostics.origin.currentTestSource(),
+            buildIdentity = AppDiagnostics.origin.currentBuildIdentity(),
+        ))
+    }
+
+    private fun endFeedIncidentSession() {
+        if (!incidentSessionActive) return
+        incidentSessionActive = false
+        incidentPrevious = null
+        feedIncidents.endSession(SystemClock.elapsedRealtime() / 1_000.0)
+    }
+
+    /** Diagnostic snapshot from actual AU admission, native decoder and present clocks. */
+    internal fun feedIncidentSnapshot(): FeedIncidentSnapshot = synchronized(recoveryFrameLock) {
+        val nowMs = SystemClock.elapsedRealtime()
+        val now = nowMs / 1_000.0
+        val generation = backend.frameConnectionGeneration
+        if (generation != incidentSourceGeneration) {
+            incidentSourceGeneration = generation
+            incidentPrevious = null
+        }
+        val pipeline = cadence.snapshot()
+        val counts = listOf(accessUnits.toLong(), decoder.framesEnqueued.get().toLong(),
+            pipeline.counts.getValue(LivePipelineCadence.Stage.OUTPUT), decoder.framesPresented.get().toLong())
+        val previous = incidentPrevious
+        val elapsed = previous?.let { now - it.first } ?: 0.0
+        val rates = counts.mapIndexed { index, count ->
+            if (previous == null || elapsed <= 0) 0.0 else (count - previous.second[index]).coerceAtLeast(0) / elapsed
+        }
+        incidentPrevious = now to counts
+        fun age(at: Long?): Double? = at?.let { (nowMs - it).coerceAtLeast(0) / 1_000.0 }
+        fun sourceAge(at: Long?): Double? = at?.takeIf {
+            sourceProbeStartedAt?.let { started -> it >= started } != false
+        }?.let(::age)
+        val currentSource = generation != null && lastFrameGeneration == generation
+        val error = decoder.errorLifetime.lastError?.takeIf {
+            sourceProbeStartedAt?.let { started -> it.atElapsedMs >= started } != false
+        }
+        val errorOrigin = when (error?.origin) {
+            com.opencapture.opencine.media.DecoderErrorOrigin.CONFIGURE -> com.opencapture.opencine.media.FeedDecoderErrorOrigin.CREATE
+            com.opencapture.opencine.media.DecoderErrorOrigin.QUEUE -> com.opencapture.opencine.media.FeedDecoderErrorOrigin.SYNC
+            com.opencapture.opencine.media.DecoderErrorOrigin.OUTPUT,
+            com.opencapture.opencine.media.DecoderErrorOrigin.OUTPUT_RELEASE -> com.opencapture.opencine.media.FeedDecoderErrorOrigin.CALLBACK
+            null -> com.opencapture.opencine.media.FeedDecoderErrorOrigin.NONE
+        }
+        FeedIncidentSnapshot(
+            monotonicNow = now, wallClockMs = System.currentTimeMillis(),
+            // Luna exposes AUs, not transport packet/ACK/queue counters; do not relabel them.
+            rates = FeedIncidentRates(accessUnitHz = rates[0], decodeAcceptHz = rates[1],
+                decodedOutputHz = rates[2], presentHz = rates[3]),
+            ages = FeedIncidentAges(accessUnitAge = if (currentSource) age(lastAccessUnitAt) else null,
+                decodeAcceptAge = if (currentSource) sourceAge(decoder.lastDecoderAcceptedAt) else null,
+                decodedOutputAge = if (currentSource) sourceAge(decoder.lastDecoderOutputAt) else null,
+                presentAge = if (currentSource) sourceAge(decoder.lastPresentedAt) else null),
+            decoder = FeedIncidentDecoder(generation = decoder.errorLifetime.generation,
+                formatGeneration = decoder.errorLifetime.formatGeneration, codec = error?.codec ?: "unknown",
+                width = decoder.pictureWidth, height = decoder.pictureHeight,
+                origin = errorOrigin, errorClass = error?.code, errorCount = decoder.errorLifetime.countThisGeneration,
+                decoderFailed = error != null && decoder.failedThisGeneration, errorAge = age(error?.atElapsedMs),
+                receivedIrap = decoder.lastIrapAt != null, awaitingIrap = decoder.awaitingIdr,
+                hasDecodableReferences = decoder.hasDecodableReferences, lastIrapAge = age(decoder.lastIrapAt),
+                lastSuccessfulOutputAge = if (currentSource) sourceAge(decoder.lastDecoderOutputAt) else null),
+            lifecycle = FeedIncidentLifecycle(foreground = programSceneActive, playbackActive = isBrowsingMedia,
+                connected = backend.connected.value != null && phase != ConnectionPhase.IDLE,
+                liveEstablished = decoder.lastPresentedAt != null, sceneActive = programSceneActive,
+                thermalState = "unknown", assistState = "unknown",
+                outputObservable = decoder.decoderOutputExpected, presentationExpected = decoder.isPresentationReady),
+        )
+    }
+
+    private fun publishFeedIncidentSnapshot() {
+        if (!incidentSessionActive || closed) return
+        val snapshot = feedIncidentSnapshot()
+        feedIncidents.noteDecoderGeneration(snapshot.decoder.generation)
+        feedIncidents.ingestSnapshot(snapshot)
+    }
 
     // Status mapping (Luna readout to the shared CameraStatus), iOS `applyDeviceStatus`/`applySettings`/`applyCapture`.
     private fun applyReadout(readout: CameraReadout) {

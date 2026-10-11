@@ -132,6 +132,9 @@ final class CameraSession {
     @ObservationIgnored private var descriptors: [UUID: MonitorCamera] = [:]
     @ObservationIgnored private var expectedDisconnect = false
     @ObservationIgnored private var incidentSessionActive = false
+    @ObservationIgnored private let incidentOwner = UUID()
+    @ObservationIgnored private var incidentPrevious: (at: TimeInterval, counts: [Int])?
+    @ObservationIgnored private var incidentLastAccessUnitAt: Date?
     @ObservationIgnored private var sessionRecoveryTask: Task<Void, Never>?
     @ObservationIgnored private var recoveryCardGraceTask: Task<Void, Never>?
     /// Recovery decisions (admit, storm, attempts, budget). Transport and the card stay here.
@@ -511,8 +514,10 @@ final class CameraSession {
 
     func disconnect() {
         AppDiagnostics.reporting.setCameraSessionActive(false)
-        AppDiagnostics.incidents.endSession(now: ProcessInfo.processInfo.systemUptime)
+        AppDiagnostics.endFeedSession(owner: incidentOwner, now: ProcessInfo.processInfo.systemUptime)
         incidentSessionActive = false
+        incidentPrevious = nil
+        incidentLastAccessUnitAt = nil
         connectGeneration += 1
         reconnectTarget = nil
         connectionTargetID = nil
@@ -631,6 +636,7 @@ final class CameraSession {
         case .disconnected(let reason):
             guard connectedCamera != nil else { return }
             ControlLiveLog.line("session: camera link dropped: \(reason)")
+            AppDiagnostics.noteFeedDisconnect(owner: incidentOwner, now: ProcessInfo.processInfo.systemUptime)
             beginSessionRecovery(reason: reason, trigger: .datalinkLost)
         case .note(let note):
             controlNote = note
@@ -638,6 +644,7 @@ final class CameraSession {
     }
 
     private func ingestAccessUnit(_ data: Data) {
+        incidentLastAccessUnitAt = Date()
         videoPackets += 1
         guard !isBrowsingMedia else { return }
         accessUnits += 1
@@ -791,7 +798,7 @@ final class CameraSession {
         linkTicker = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
-                guard let self else { return }
+                guard let self, !Task.isCancelled else { return }
                 self.refreshLinkHealth()
                 self.watchFeed()
                 if let started = self.recordStartedAt, self.status.isRecording {
@@ -992,7 +999,6 @@ final class CameraSession {
             now: ProcessInfo.processInfo.systemUptime, current: sessionRecovery)
         guard began != .ignored else { return }
         guard let cameraID = connectedCamera?.id ?? recoveryCameraID else { return }
-        AppDiagnostics.incidents.noteUnexpectedDisconnect(now: ProcessInfo.processInfo.systemUptime)
         recordFeedRepair("session", phase: .requested, reason: String(describing: trigger))
         recoveryCameraID = cameraID
         if recoveryDeviceName.isEmpty { recoveryDeviceName = connectedCamera?.name ?? "" }
@@ -1139,8 +1145,10 @@ final class CameraSession {
 
     private func beginFeedIncidentSession() {
         incidentSessionActive = true
+        incidentPrevious = nil
+        incidentLastAccessUnitAt = nil
         let info = Bundle.main.infoDictionary ?? [:]
-        AppDiagnostics.incidents.beginSession(
+        AppDiagnostics.beginFeedSession(owner: incidentOwner, context:
             FeedIncidentSessionContext(
                 sessionID: UUID().uuidString,
                 appVersion: info["CFBundleShortVersionString"] as? String ?? "unknown",
@@ -1154,19 +1162,68 @@ final class CameraSession {
     }
 
     func recordFeedBreadcrumb(_ kind: FeedIncidentBreadcrumbKind, detail: String = "") {
-        AppDiagnostics.incidents.recordBreadcrumb(
+        AppDiagnostics.recordFeedBreadcrumb(owner: incidentOwner, breadcrumb:
             FeedIncidentBreadcrumb(
                 monotonicAt: ProcessInfo.processInfo.systemUptime, kind: kind, detail: detail))
     }
 
     private func recordFeedRepair(_ action: String, phase: FeedRepairPhase, reason: String? = nil) {
-        AppDiagnostics.incidents.recordRepair(
+        AppDiagnostics.recordFeedRepair(owner: incidentOwner, repair:
             FeedRepairRecord(
                 monotonicAt: ProcessInfo.processInfo.systemUptime, action: action, phase: phase,
                 reason: reason))
     }
 
-    private func publishFeedIncidentSnapshot() {}
+    /// Actual backend AU arrival and shared native decode/presentation measurements.
+    func feedIncidentSnapshot(now: TimeInterval = ProcessInfo.processInfo.systemUptime,
+        wall: Date = Date()) -> FeedIncidentSnapshot {
+        let decode = decoder.incidentDecodeSnapshot
+        let counts = [accessUnits, decode.submitted, decode.accepted, decode.output,
+            decode.assistOutput, decoder.incidentPresentations]
+        let previous = incidentPrevious
+        let elapsed = previous.map { now - $0.at } ?? 0
+        let rates = counts.enumerated().map { index, count -> Double in
+            guard let previous, elapsed > 0 else { return 0 }
+            return Double(max(0, count - previous.counts[index])) / elapsed
+        }
+        incidentPrevious = (now, counts)
+        let failed = decoder.isDecoderWedged
+        return FeedIncidentSnapshot(monotonicNow: now, wallClock: wall,
+            // UCD2 exposes AUs here; packet, ACK, queue and ingress measurements are unavailable.
+            rates: FeedIncidentRates(accessUnitHz: rates[0], decodeSubmitHz: rates[1],
+                decodeAcceptHz: rates[2], decodedOutputHz: rates[3], assistOutputHz: rates[4],
+                presentHz: rates[5]),
+            ages: FeedIncidentAges(accessUnitAge: incidentLastAccessUnitAt.map { wall.timeIntervalSince($0) },
+                decodeAcceptAge: decode.acceptedAge, decodedOutputAge: decode.outputAge,
+                assistOutputAge: decode.assistOutputAge,
+                presentAge: decoder.monitorPresentedAt.map { wall.timeIntervalSince($0) }),
+            decoder: FeedIncidentDecoder(generation: decoder.sourceFrameGeneration,
+                formatGeneration: decoder.vtRebuildCount, codec: decoder.incidentCodec,
+                width: Int(decoder.pictureSize.width), height: Int(decoder.pictureSize.height),
+                lastStatus: decoder.lastDecodeStatus, lastFlags: decoder.lastDecodeFlags,
+                origin: decoder.lastDecodeOrigin == "submit" ? .sync
+                    : FeedDecoderErrorOrigin(rawValue: decoder.lastDecodeOrigin) ?? .none,
+                errorClass: failed ? "nativeDecoder" : nil, errorCount: decoder.decoderErrors,
+                decoderFailed: failed, errorAge: decoder.lastDecodeErrorAt.map { wall.timeIntervalSince($0) },
+                receivedIrap: decoder.sawKeyframe, awaitingIrap: decoder.awaitingIDR,
+                hasDecodableReferences: decoder.canReleaseIDRHold,
+                lastIrapAge: decoder.lastIrapAt.map { wall.timeIntervalSince($0) },
+                lastSuccessfulOutputAge: decode.outputAge),
+            lifecycle: FeedIncidentLifecycle(foreground: gimbalControlSceneActive,
+                settingsCovered: incidentSettingsCovered, playbackActive: status.inPlayback || isBrowsingMedia,
+                connected: connectedCamera != nil, liveEstablished: decoder.monitorPresentedAt != nil,
+                thermalState: String(ProcessInfo.processInfo.thermalState.rawValue),
+                memoryWarning: DiagnosticCenter.shared.hadRecentMemoryWarning(),
+                lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled, sceneActive: gimbalControlSceneActive,
+                assistState: decoder.effects.replacesIdentityFeed ? "replacement" : "identity",
+                outputObservable: decoder.videoToolboxActive, presentationExpected: !incidentSettingsCovered))
+    }
+
+    private func publishFeedIncidentSnapshot() {
+        guard ownsBackend, incidentSessionActive else { return }
+        AppDiagnostics.noteFeedDecoderGeneration(owner: incidentOwner, generation: decoder.sourceFrameGeneration)
+        AppDiagnostics.ingestFeedSnapshot(owner: incidentOwner, snapshot: feedIncidentSnapshot())
+    }
 
     // MARK: - Face AF (Vision on the decoded feed; camera-agnostic)
 
