@@ -591,11 +591,17 @@ private fun LiveFaceFramePump(
     val latest = rememberUpdatedState(onFrame)
     val wanted = rememberUpdatedState(wantsFrame)
     val vulkan = LocalGpuLive.current
+    val faceInput = remember(surfaceView, textureView, vulkan, enabled) {
+        com.opencapture.openinstacine.monitor.session.FaceFrameInput { failure ->
+            DiagnosticCenter.log("error", "faceAF", "input", "faceAF input unavailable class=${failure.javaClass.simpleName}")
+        }
+    }
     LaunchedEffect(surfaceView, textureView, vulkan, enabled, feed.x, feed.y, feed.width, feed.height) {
         if (!enabled) return@LaunchedEffect
         val tapW = LiveFaceDetector.TAP_WIDTH
         while (isActive) {
             delay(LiveFaceDetector.INTERVAL_MS)
+            if (faceInput.failed) return@LaunchedEffect
             // Vulkan: identity 720p RGB, same space as iOS Vision / 0xA6.
             // PixelCopy of the swapchain is already mirrored when TT180/MIRROR
             // is on, and the overlay mirrors again , box on the opposite side.
@@ -604,7 +610,7 @@ private fun LiveFaceFramePump(
                 // Take a fresh readback first, then ask for the next only when the
                 // detector will use it (10 Hz idle pace skips the GPU readback too).
                 session.takeFaceNv21()?.let {
-                    latest.value(LiveFaceDetector.Frame.nv21(it, LiveFaceDetector.TAP_WIDTH, LiveFaceDetector.TAP_HEIGHT))
+                    faceInput.nv21(it, LiveFaceDetector.TAP_WIDTH, LiveFaceDetector.TAP_HEIGHT)?.let(latest.value)
                 }
                 if (wanted.value()) session.requestFaceTap()
                 continue
@@ -617,7 +623,7 @@ private fun LiveFaceFramePump(
             if (gles != null && gles.isAvailable) {
                 val src = gles.getBitmap(tapW, tapH)
                 inFlight.set(false)
-                if (src != null) latest.value(LiveFaceDetector.Frame.of(src))
+                if (src != null) faceInput.of(src)?.let(latest.value)
                 continue
             }
             val view = surfaceView
@@ -646,7 +652,7 @@ private fun LiveFaceFramePump(
                     { result ->
                         inFlight.set(false)
                         if (result == PixelCopy.SUCCESS) {
-                            latest.value(LiveFaceDetector.Frame.of(dest))
+                            faceInput.of(dest)?.let(latest.value)
                         } else {
                             dest.recycle()
                         }
