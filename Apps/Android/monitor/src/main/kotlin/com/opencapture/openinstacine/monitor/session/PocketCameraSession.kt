@@ -148,7 +148,8 @@ class PocketCameraSession(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backend: CameraBackend = MonitorConfiguration.createBackend(appContext)
     private val reportingOwner = Any()
-    private val feedIncidents = AppDiagnostics.incidentSink(reportingOwner, incidentSink)
+    private val incidentSessionSink = AppDiagnostics.incidentSink(reportingOwner, incidentSink)
+    private var feedIncidents: com.opencapture.opencine.media.FeedIncidentSource? = null
     private var incidentSessionActive = false
     private var incidentPrevious: Pair<Double, List<Long>>? = null
     private var incidentSourceGeneration: Long? = null
@@ -525,11 +526,11 @@ class PocketCameraSession(
     }
     fun noteSceneBecameInactive() {
         programSceneActive = false; cancelProgrammedMove(); backend.sceneActive(false)
-        feedIncidents.recordBreadcrumb(FeedIncidentBreadcrumb(SystemClock.elapsedRealtime() / 1_000.0, FeedIncidentBreadcrumbKind.SCENE_ACTIVITY, "inactive"))
+        feedIncidents?.recordBreadcrumb(FeedIncidentBreadcrumb(SystemClock.elapsedRealtime() / 1_000.0, FeedIncidentBreadcrumbKind.SCENE_ACTIVITY, "inactive"))
     }
     fun noteSceneBecameActive() {
         programSceneActive = true
-        feedIncidents.recordBreadcrumb(FeedIncidentBreadcrumb(SystemClock.elapsedRealtime() / 1_000.0, FeedIncidentBreadcrumbKind.SCENE_ACTIVITY, "active"))
+        feedIncidents?.recordBreadcrumb(FeedIncidentBreadcrumb(SystemClock.elapsedRealtime() / 1_000.0, FeedIncidentBreadcrumbKind.SCENE_ACTIVITY, "active"))
         // The bounded recovery episode already owns reconnect while the link is failed.
         if (recoveryJob?.isActive != true) backend.sceneActive(true)
     }
@@ -572,7 +573,8 @@ class PocketCameraSession(
             _recoveryState.value = SessionRecoveryUi.PausedAfterDrops(dropGuard.dropsInWindow)
             return
         }
-        if (phase == ConnectionPhase.FAILED) feedIncidents.noteUnexpectedDisconnect(SystemClock.elapsedRealtime() / 1_000.0)
+        val incident = feedIncidents
+        if (phase == ConnectionPhase.FAILED) incident?.noteUnexpectedDisconnect(SystemClock.elapsedRealtime() / 1_000.0)
         Log.i("OpenInstaCine", "session: drop, bounded recovery")
         val episode = ++recoveryGeneration
         fun ownsEpisode() = !closed && recoveryGeneration == episode && backend.connected.value?.id == id
@@ -629,7 +631,7 @@ class PocketCameraSession(
             }
             if (ended == null && ownsEpisode()) _recoveryState.value = SessionRecoveryUi.WaitingForOperator(failures + 1)
             if (ownsEpisode() && _recoveryState.value is SessionRecoveryUi.WaitingForOperator) {
-                feedIncidents.noteExhausted(SystemClock.elapsedRealtime() / 1_000.0)
+                incident?.noteExhausted(SystemClock.elapsedRealtime() / 1_000.0)
             }
         }
     }
@@ -639,7 +641,7 @@ class PocketCameraSession(
         incidentSessionActive = true
         incidentPrevious = null
         incidentSourceGeneration = backend.frameConnectionGeneration
-        feedIncidents.beginSession(FeedIncidentSessionContext(
+        feedIncidents = incidentSessionSink.beginBoundSession(FeedIncidentSessionContext(
             sessionId = java.util.UUID.randomUUID().toString(),
             appVersion = AppDiagnostics.host.versionName,
             appBuild = AppDiagnostics.host.versionCode.toString(),
@@ -655,7 +657,9 @@ class PocketCameraSession(
         if (!incidentSessionActive) return
         incidentSessionActive = false
         incidentPrevious = null
-        feedIncidents.endSession(SystemClock.elapsedRealtime() / 1_000.0)
+        val incident = feedIncidents
+        feedIncidents = null
+        incident?.endSession(SystemClock.elapsedRealtime() / 1_000.0)
     }
 
     /** Diagnostic snapshot from actual AU admission, native decoder and present clocks. */
@@ -718,9 +722,10 @@ class PocketCameraSession(
 
     private fun publishFeedIncidentSnapshot() {
         if (!incidentSessionActive || closed) return
+        val incident = feedIncidents ?: return
         val snapshot = feedIncidentSnapshot()
-        feedIncidents.noteDecoderGeneration(snapshot.decoder.generation)
-        feedIncidents.ingestSnapshot(snapshot)
+        incident.noteDecoderGeneration(snapshot.decoder.generation)
+        incident.ingestSnapshot(snapshot)
     }
 
     // Status mapping (Luna readout to the shared CameraStatus), iOS `applyDeviceStatus`/`applySettings`/`applyCapture`.

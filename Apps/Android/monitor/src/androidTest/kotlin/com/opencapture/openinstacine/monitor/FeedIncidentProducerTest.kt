@@ -86,6 +86,77 @@ class FeedIncidentProducerTest {
         } finally { onMain { session.close() } }
     }
 
+    @Test fun sameFacadeReconnectReturnsDistinctBindingAndRetiredCallbacksCannotReachSuccessor() {
+        val first = RecordingFeedIncidentSink()
+        val second = RecordingFeedIncidentSink()
+        val unbound = RecordingFeedIncidentSink()
+        var begins = 0
+        val sink = object : com.opencapture.opencine.media.FeedIncidentSink by unbound {
+            override fun beginBoundSession(context: com.opencapture.opencine.media.FeedIncidentSessionContext): com.opencapture.opencine.media.FeedIncidentSource {
+                val source = if (begins++ == 0) first else second
+                source.beginSession(context)
+                return source
+            }
+        }
+        val facade = com.opencapture.openinstacine.monitor.diagnostics.AppDiagnostics.incidentSink(Any(), sink)
+        fun context() = com.opencapture.opencine.media.FeedIncidentSessionContext(
+            "reused-context", "1", "1", "test", "test", "1", "test", "test")
+        val old = facade.beginBoundSession(context())
+        old.ingestSnapshot(com.opencapture.opencine.media.FeedIncidentSnapshot(1.0))
+        val current = facade.beginBoundSession(context())
+        try {
+            assertTrue(old !== current)
+            assertEquals(1, first.events.count { it == "end" })
+            val retired = first.events.toList()
+            old.ingestSnapshot(com.opencapture.opencine.media.FeedIncidentSnapshot(2.0))
+            old.recordRepair(com.opencapture.opencine.media.FeedRepairRecord(2.0, "test",
+                com.opencapture.opencine.media.FeedRepairPhase.REQUESTED))
+            old.noteDecoderGeneration(99)
+            old.noteSocketGeneration(99)
+            old.noteUnexpectedDisconnect(2.0)
+            old.noteExhausted(2.0)
+            old.endSession(2.0)
+            assertEquals(retired, first.events.toList())
+            assertEquals(listOf("begin"), second.events.toList())
+            current.ingestSnapshot(com.opencapture.opencine.media.FeedIncidentSnapshot(3.0))
+            current.noteDecoderGeneration(2)
+            assertEquals(listOf("begin", "snapshot", "decoderGeneration"), second.events.toList())
+            assertTrue(unbound.events.isEmpty())
+        } finally { current.endSession(3.0) }
+        assertEquals(1, second.events.count { it == "end" })
+    }
+
+    @Test fun actualSessionReconnectRetainsTheNewBoundResultFromTheSameFacade() {
+        val first = RecordingFeedIncidentSink()
+        val second = RecordingFeedIncidentSink()
+        val unbound = RecordingFeedIncidentSink()
+        var begins = 0
+        val hostSink = object : com.opencapture.opencine.media.FeedIncidentSink by unbound {
+            override fun beginBoundSession(context: com.opencapture.opencine.media.FeedIncidentSessionContext): com.opencapture.opencine.media.FeedIncidentSource {
+                val source = if (begins++ == 0) first else second
+                source.beginSession(context)
+                return source
+            }
+        }
+        val backend = FakeShellBackend()
+        val session = liveSession(backend, hostSink)
+        try {
+            assertTrue(waitUntil { first.snapshots.isNotEmpty() })
+            onMain { backend.phase.value = ConnectionPhase.IDLE }
+            assertTrue(waitUntil { first.events.contains("end") })
+            val retired = first.events.toList()
+            onMain { backend.phase.value = ConnectionPhase.LIVE }
+            assertTrue(waitUntil { second.snapshots.isNotEmpty() })
+            onMain { session.noteSceneBecameInactive() }
+            assertTrue(second.events.contains("breadcrumb"))
+            assertEquals(retired, first.events.toList())
+            assertEquals(2, begins)
+            assertTrue(unbound.events.isEmpty())
+            onMain { session.close() }
+            assertEquals(1, second.events.count { it == "end" })
+        } finally { onMain { session.close() } }
+    }
+
     @Test fun anActualFailedLiveLinkRecordsDisconnectAndOperatorExitEndsTheSameSession() {
         val sink = RecordingFeedIncidentSink()
         val backend = FakeShellBackend()
