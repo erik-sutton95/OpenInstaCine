@@ -68,10 +68,14 @@ ios-run device: ios-generate
     xcrun devicectl device install app --device {{device}} .local/DDdev/Build/Products/Debug-iphoneos/OpenInstaCine.app
     xcrun devicectl device process launch --device {{device}} --activate --terminate-existing com.opencapture.openinstacine
 
+# Select an isolated simulator with IOS_TEST_DEVICE_ID when running concurrent tasks.
 ios-test *args: ios-generate
     #!/usr/bin/env bash
     set -euo pipefail
-    device_id="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ && !found { print $2; found = 1 }')"
+    device_id="${IOS_TEST_DEVICE_ID:-}"
+    if [ -z "$device_id" ]; then
+        device_id="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ && !found { print $2; found = 1 }')"
+    fi
     xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination "platform=iOS Simulator,id=$device_id" -derivedDataPath .local/DD {{args}} test
 
 # Drive a DEBUG build on the phone without XCUITest (screenshots, state, actions).
