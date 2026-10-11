@@ -168,7 +168,8 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
                 lookProfile: model.session.connectedCamera?.model.captureProfile?.looks ?? LunaShellMapping.lookProfile)
         })
     }
-    func values(record: MonitorMediaRecord<LunaMediaLibraryPayload>, model: AppModel) -> MonitorPlaybackSourceValues {
+    func values(record: MonitorMediaRecord<LunaMediaLibraryPayload>, model: AppModel,
+        owner: MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>) -> MonitorPlaybackSourceValues {
         let file = record.payload.file
         let grade = model.session.cacheGrade(for: file)
         let availability: MonitorPlaybackAvailability
@@ -179,14 +180,18 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
         availability = grade == .original ? .original : grade.isProxyOnly ? .proxy : .camera
         #endif
         let transfer = model.monitorTransfer ?? model.assist.monitorColorMode.map(MonitorTransfer.init)
-        let buffered = currentNative?.player.currentItem?.loadedTimeRanges.map {
-            CMTimeGetSeconds(CMTimeRangeGetEnd($0.timeRangeValue))
-        }.filter(\.isFinite).max()
+        let buffered = owner.playback.flatMap { playback -> Double? in
+            guard playback.ready, owner.isCurrent(playback.token),
+                playback.active?.asset.id == record.asset.id, playback.native === currentNative
+            else { return nil }
+            return currentNative?.bufferedThroughSeconds(token: playback.token)
+        }
         return .init(availability: availability,
-            progress: model.session.mediaDownloadProgress[file.path], buffered: buffered,
+            progress: model.session.mediaDownloadProgress[file.path],
             colorLabel: model.session.shotColor(for: file)?.label(in: model.session.profile),
             transfer: transfer,
-            clipByte: transfer.map { model.frameSamples.exposureCeiling.clipByte(transfer: $0) })
+            clipByte: transfer.map { model.frameSamples.exposureCeiling.clipByte(transfer: $0) },
+            bufferedThroughSeconds: buffered)
     }
 }
 

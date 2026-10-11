@@ -61,6 +61,20 @@ class Media3PlaybackPort(val player: ExoPlayer, scope: CoroutineScope) : Monitor
     }
     private fun current(token: MonitorPlaybackItemToken, request: String): Boolean =
         !closed && this.token == token && admitted(token) && preparation == request && player.currentMediaItem?.mediaId == request
+    /** Native playable time for the current prepared source, never transfer byte progress. */
+    fun bufferedThroughSeconds(token: MonitorPlaybackItemToken): Double? {
+        val request = preparation.takeIf { it.isNotEmpty() } ?: return null
+        fun stillOwned(): Boolean = !closed && this.token == token && preparation == request &&
+            admitted(token) && !closed && this.token == token && preparation == request
+        if (!stillOwned()) return null
+        val item = player.currentMediaItem ?: return null
+        if (!stillOwned() || item.mediaId != request) return null
+        val milliseconds = player.bufferedPosition
+        if (!stillOwned()) return null
+        val currentItem = player.currentMediaItem
+        if (!stillOwned() || currentItem !== item || milliseconds < 0) return null
+        return milliseconds / 1000.0
+    }
     override fun retireItem(token: MonitorPlaybackItemToken) {
         if (closed || (this.token != null && token.revision != 0L &&
                 (this.token?.owner != token.owner || token.revision < (this.token?.revision ?: 0)))) return

@@ -163,7 +163,7 @@ struct MediaPlayerView: View {
             cacheOriginal: OperatorPrefs.cacheFullResolution,
             deliveryPresented: deliveryPresentation != nil || model.delivery.isActive,
             operations: source.operations(model: model, owner: owner),
-            source: { source.values(record: $0, model: model) },
+            source: { source.values(record: $0, model: model, owner: owner) },
             nativeAssists: { playback in
                 guard playback.native === source.native else { return nil }
                 return source.assists

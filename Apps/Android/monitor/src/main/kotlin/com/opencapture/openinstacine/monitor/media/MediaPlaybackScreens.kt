@@ -205,7 +205,11 @@ fun MediaPlayerScreen(files: List<MediaFile>, startingAt: MediaFile, controller:
                         controller.cacheGrade(file).isProxyOnly -> com.opencapture.opencine.media.MonitorPlaybackAvailability.PROXY
                         else -> com.opencapture.opencine.media.MonitorPlaybackAvailability.CAMERA
                     }, progress = controller.downloadProgress[file.path]?.toDouble(),
-                    buffered = composition?.native?.player?.bufferedPosition?.takeIf { it >= 0 }?.let { it / 1000.0 },
+                    bufferedThroughSeconds = composition?.takeIf { current ->
+                        val playback = owner.state.value.playback
+                        playback != null && playback === current.playback && playback.state.value.ready &&
+                            playback.state.value.active?.asset?.id == record.asset.id
+                    }?.let { current -> current.native.bufferedThroughSeconds(current.playback.state.value.token) },
                     transfer = state?.look?.transfer)
             }, nativeAudio = { player -> composition?.takeIf { it.playback === player }?.audio },
             close = onClose, share = { record ->
