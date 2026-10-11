@@ -58,38 +58,12 @@ enum AppDiagnostics {
         reporting: reporting,
         directory: DiagnosticCenter.diagnosticsDirectory?
             .appendingPathComponent("incidents", isDirectory: true))
-    @MainActor private static var incidentOwner: UUID?
-    @MainActor static func beginFeedSession(owner: UUID, context: FeedIncidentSessionContext) {
-        if let previous = incidentOwner, previous != owner {
-            incidents.endSession(now: ProcessInfo.processInfo.systemUptime)
-        }
-        incidentOwner = owner
-        incidents.beginSession(context)
-    }
-    @MainActor static func endFeedSession(owner: UUID, now: TimeInterval) {
-        guard incidentOwner == owner else { return }
-        incidentOwner = nil
-        incidents.endSession(now: now)
-    }
-    @MainActor static func ingestFeedSnapshot(owner: UUID, snapshot: FeedIncidentSnapshot) {
-        guard incidentOwner == owner else { return }
-        incidents.ingestSnapshot(snapshot)
-    }
-    @MainActor static func recordFeedBreadcrumb(owner: UUID, breadcrumb: FeedIncidentBreadcrumb) {
-        guard incidentOwner == owner else { return }
-        incidents.recordBreadcrumb(breadcrumb)
-    }
-    @MainActor static func recordFeedRepair(owner: UUID, repair: FeedRepairRecord) {
-        guard incidentOwner == owner else { return }
-        incidents.recordRepair(repair)
-    }
-    @MainActor static func noteFeedDisconnect(owner: UUID, now: TimeInterval) {
-        guard incidentOwner == owner else { return }
-        incidents.noteUnexpectedDisconnect(now: now)
-    }
-    @MainActor static func noteFeedDecoderGeneration(owner: UUID, generation: Int) {
-        guard incidentOwner == owner else { return }
-        incidents.noteDecoderGeneration(generation)
+    @MainActor private static var incidentSource: FeedIncidentSessionSource?
+    @MainActor static func beginFeedSession(context: FeedIncidentSessionContext) -> FeedIncidentSessionSource {
+        incidentSource?.endSession(now: ProcessInfo.processInfo.systemUptime)
+        let source = incidents.beginBoundSession(context)
+        incidentSource = source
+        return source
     }
     @MainActor static let problemReporting = ProblemReporting(
         host: host, gate: gate, dsnProvider: dsn.configured,

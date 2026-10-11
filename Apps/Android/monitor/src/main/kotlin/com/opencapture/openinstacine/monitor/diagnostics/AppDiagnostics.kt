@@ -12,6 +12,7 @@ import com.opencapture.opencine.appkit.diagnostics.ReliabilityReportingHostPolic
 import com.opencapture.opencine.vocabulary.PrivacyRedactor
 import com.opencapture.openinstacine.monitor.BuildConfig
 import com.opencapture.opencine.media.FeedIncidentSink
+import com.opencapture.opencine.media.FeedIncidentSource
 import com.opencapture.opencine.media.FeedIncidentSessionContext
 import com.opencapture.opencine.media.FeedIncidentSnapshot
 import com.opencapture.opencine.media.FeedIncidentBreadcrumb
@@ -46,33 +47,36 @@ internal object AppDiagnostics {
     val manualReport = ManualProblemReport(host, dsn, gate, OkHttpManualReportUpload)
 
     private var incidentOwner: Any? = null
-    private var ownedIncidentSink: FeedIncidentSink? = null
+    private var ownedIncidentSink: FeedIncidentSource? = null
 
     /** Host submissions belong to one facade; the runtime owns persistence and reporting policy. */
     fun incidentSink(owner: Any, sink: FeedIncidentSink = incidents): FeedIncidentSink = object : FeedIncidentSink {
+        private var source: FeedIncidentSource? = null
         override fun beginSession(context: FeedIncidentSessionContext) = synchronized(AppDiagnostics) {
             if (incidentOwner !== owner) ownedIncidentSink?.endSession(SystemClock.elapsedRealtime() / 1_000.0)
+            source = sink.beginBoundSession(context)
             incidentOwner = owner
-            ownedIncidentSink = sink
-            sink.beginSession(context)
+            ownedIncidentSink = source
         }
         override fun endSession(nowSeconds: Double) = synchronized(AppDiagnostics) {
             if (incidentOwner === owner) {
-                sink.endSession(nowSeconds)
+                source?.endSession(nowSeconds)
+                source = null
                 incidentOwner = null
                 ownedIncidentSink = null
             }
         }
-        private fun submit(action: () -> Unit) = synchronized(AppDiagnostics) {
-            if (incidentOwner === owner) action()
+        private fun submit(action: (FeedIncidentSource) -> Unit) = synchronized(AppDiagnostics) {
+            if (incidentOwner === owner) source?.let(action)
         }
-        override fun ingestSnapshot(snapshot: FeedIncidentSnapshot) = submit { sink.ingestSnapshot(snapshot) }
-        override fun recordBreadcrumb(breadcrumb: FeedIncidentBreadcrumb) = submit { sink.recordBreadcrumb(breadcrumb) }
-        override fun recordRepair(repair: FeedRepairRecord) = submit { sink.recordRepair(repair) }
-        override fun noteDecoderGeneration(generation: Int) = submit { sink.noteDecoderGeneration(generation) }
-        override fun noteSocketGeneration(generation: Int) = submit { sink.noteSocketGeneration(generation) }
-        override fun noteExhausted(nowSeconds: Double) = submit { sink.noteExhausted(nowSeconds) }
-        override fun noteUnexpectedDisconnect(nowSeconds: Double) = submit { sink.noteUnexpectedDisconnect(nowSeconds) }
+        override fun ingestSnapshot(snapshot: FeedIncidentSnapshot) = submit { it.ingestSnapshot(snapshot) }
+        override fun recordBreadcrumb(breadcrumb: FeedIncidentBreadcrumb) = submit { it.recordBreadcrumb(breadcrumb) }
+        override fun recordRepair(repair: FeedRepairRecord) = submit { it.recordRepair(repair) }
+        override fun noteDecoderGeneration(generation: Int) = submit { it.noteDecoderGeneration(generation) }
+        override fun noteSocketGeneration(generation: Int) = submit { it.noteSocketGeneration(generation) }
+        override fun noteExhausted(nowSeconds: Double) = submit { it.noteExhausted(nowSeconds) }
+        override fun noteUnexpectedDisconnect(nowSeconds: Double) = submit { it.noteUnexpectedDisconnect(nowSeconds) }
+        override fun noteTestSource(source: com.opencapture.opencine.media.FeedIncidentTestSource) = submit { it.noteTestSource(source) }
     }
 
     // The root owns one camera backend. A retired facade cannot reopen its successor's gate.

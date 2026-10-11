@@ -62,11 +62,8 @@ final class HevcDecoder: OpenCineApple.MonitorLiveVideoRuntime {
         super.init(configuration: .init(
             assists: assistConfiguration,
             shouldRebuildSession: { CameraSoftAP.shouldRebuildVTSession(status: $0) },
-            policyChanged: { replacing in
-                AppDiagnostics.incidents.recordBreadcrumb(FeedIncidentBreadcrumb(
-                    monotonicAt: ProcessInfo.processInfo.systemUptime, kind: .assistChange,
-                    detail: replacing ? "replacement" : "identity"))
-            },
+            // Incident policy observations are sampled by the owned CameraSession. This callback
+            // has no captured source token and must not submit to a current global incident sink.
             decodeEvent: { event in
                 #if DEBUG
                 switch event {

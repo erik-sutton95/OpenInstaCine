@@ -63,6 +63,29 @@ class FeedIncidentProducerTest {
         } finally { onMain { first.close(); second.close() } }
     }
 
+    @Test fun actualFacadeRetainsTheMediaBindingInsteadOfSubmittingToTheUnboundSink() {
+        val unbound = RecordingFeedIncidentSink()
+        val bound = RecordingFeedIncidentSink()
+        val hostSink = object : com.opencapture.opencine.media.FeedIncidentSink by unbound {
+            override fun beginBoundSession(context: com.opencapture.opencine.media.FeedIncidentSessionContext): com.opencapture.opencine.media.FeedIncidentSource {
+                bound.beginSession(context)
+                return bound
+            }
+        }
+        val session = liveSession(FakeShellBackend(), hostSink)
+        try {
+            assertEquals(1, bound.contexts.size)
+            assertTrue(waitUntil { bound.snapshots.isNotEmpty() })
+            onMain { session.noteSceneBecameInactive() }
+            assertTrue(bound.events.contains("breadcrumb"))
+            onMain { session.close() }
+            assertEquals("end", bound.events.last())
+            assertTrue(unbound.contexts.isEmpty())
+            assertTrue(unbound.snapshots.isEmpty())
+            assertTrue(unbound.events.isEmpty())
+        } finally { onMain { session.close() } }
+    }
+
     @Test fun anActualFailedLiveLinkRecordsDisconnectAndOperatorExitEndsTheSameSession() {
         val sink = RecordingFeedIncidentSink()
         val backend = FakeShellBackend()

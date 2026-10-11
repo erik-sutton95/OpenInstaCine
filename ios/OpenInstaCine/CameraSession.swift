@@ -132,7 +132,8 @@ final class CameraSession {
     @ObservationIgnored private var descriptors: [UUID: MonitorCamera] = [:]
     @ObservationIgnored private var expectedDisconnect = false
     @ObservationIgnored private var incidentSessionActive = false
-    @ObservationIgnored private let incidentOwner = UUID()
+    @ObservationIgnored private var incidentSource: FeedIncidentSessionSource?
+    @ObservationIgnored private var incidentAssistState: String?
     @ObservationIgnored private var incidentPrevious: (at: TimeInterval, counts: [Int])?
     @ObservationIgnored private var incidentLastAccessUnitAt: Date?
     @ObservationIgnored private var sessionRecoveryTask: Task<Void, Never>?
@@ -514,7 +515,9 @@ final class CameraSession {
 
     func disconnect() {
         AppDiagnostics.reporting.setCameraSessionActive(false)
-        AppDiagnostics.endFeedSession(owner: incidentOwner, now: ProcessInfo.processInfo.systemUptime)
+        incidentSource?.endSession(now: ProcessInfo.processInfo.systemUptime)
+        incidentSource = nil
+        incidentAssistState = nil
         incidentSessionActive = false
         incidentPrevious = nil
         incidentLastAccessUnitAt = nil
@@ -636,7 +639,7 @@ final class CameraSession {
         case .disconnected(let reason):
             guard connectedCamera != nil else { return }
             ControlLiveLog.line("session: camera link dropped: \(reason)")
-            AppDiagnostics.noteFeedDisconnect(owner: incidentOwner, now: ProcessInfo.processInfo.systemUptime)
+            incidentSource?.noteUnexpectedDisconnect(now: ProcessInfo.processInfo.systemUptime)
             beginSessionRecovery(reason: reason, trigger: .datalinkLost)
         case .note(let note):
             controlNote = note
@@ -1145,10 +1148,11 @@ final class CameraSession {
 
     private func beginFeedIncidentSession() {
         incidentSessionActive = true
+        incidentAssistState = nil
         incidentPrevious = nil
         incidentLastAccessUnitAt = nil
         let info = Bundle.main.infoDictionary ?? [:]
-        AppDiagnostics.beginFeedSession(owner: incidentOwner, context:
+        incidentSource = AppDiagnostics.beginFeedSession(context:
             FeedIncidentSessionContext(
                 sessionID: UUID().uuidString,
                 appVersion: info["CFBundleShortVersionString"] as? String ?? "unknown",
@@ -1162,13 +1166,13 @@ final class CameraSession {
     }
 
     func recordFeedBreadcrumb(_ kind: FeedIncidentBreadcrumbKind, detail: String = "") {
-        AppDiagnostics.recordFeedBreadcrumb(owner: incidentOwner, breadcrumb:
+        incidentSource?.recordBreadcrumb(
             FeedIncidentBreadcrumb(
                 monotonicAt: ProcessInfo.processInfo.systemUptime, kind: kind, detail: detail))
     }
 
     private func recordFeedRepair(_ action: String, phase: FeedRepairPhase, reason: String? = nil) {
-        AppDiagnostics.recordFeedRepair(owner: incidentOwner, repair:
+        incidentSource?.recordRepair(
             FeedRepairRecord(
                 monotonicAt: ProcessInfo.processInfo.systemUptime, action: action, phase: phase,
                 reason: reason))
@@ -1220,9 +1224,18 @@ final class CameraSession {
     }
 
     private func publishFeedIncidentSnapshot() {
-        guard ownsBackend, incidentSessionActive else { return }
-        AppDiagnostics.noteFeedDecoderGeneration(owner: incidentOwner, generation: decoder.sourceFrameGeneration)
-        AppDiagnostics.ingestFeedSnapshot(owner: incidentOwner, snapshot: feedIncidentSnapshot())
+        guard ownsBackend, incidentSessionActive, let source = incidentSource else { return }
+        let snapshot = feedIncidentSnapshot()
+        // Native policy/discard callbacks have no source token. Observe their allowlisted state
+        // here, under this facade's captured incident source, rather than retagging late callbacks.
+        if incidentAssistState != snapshot.lifecycle.assistState {
+            incidentAssistState = snapshot.lifecycle.assistState
+            source.recordBreadcrumb(.init(monotonicAt: snapshot.monotonicNow, kind: .assistChange,
+                detail: snapshot.lifecycle.assistState))
+        }
+        source.noteTestSource(AppDiagnostics.origin.currentTestSource())
+        source.noteDecoderGeneration(decoder.sourceFrameGeneration)
+        source.ingestSnapshot(snapshot)
     }
 
     // MARK: - Face AF (Vision on the decoded feed; camera-agnostic)

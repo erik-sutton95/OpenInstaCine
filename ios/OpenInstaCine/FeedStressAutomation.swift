@@ -407,7 +407,7 @@ enum FeedStressAutomation {
                 return true
             }
             guard first else { return }
-            AppDiagnostics.incidents.noteTestSource(.faultInjection)
+            // The owned snapshot producer promotes incident origin from this run state.
             AppDiagnostics.reporting.noteCurrentTestSource(.faultInjection)
         }
 
