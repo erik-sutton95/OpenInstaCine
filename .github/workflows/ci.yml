@@ -170,6 +170,10 @@ jobs:
       - name: Swift packages
         run: just core-test
       - name: iOS unit tests
+        # Xcode forwards TEST_RUNNER_ variables into the test host.
+        # Preserve the existing hosted-CI versus hardware timing contract.
+        env:
+          TEST_RUNNER_CI: "true"
         run: just ios-test -only-testing:OpenInstaCineTests
 
   android:
