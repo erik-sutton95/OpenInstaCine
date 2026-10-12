@@ -94,7 +94,7 @@ object DiagnosticCenter {
                 exceptions = exceptionLines(),
                 extras = AppDiagnostics.incidents.reportExtras(),
                 cap = minOf(maxChars, BoundedDiagnosticFormatter.CHARACTER_CAP),
-                isSafeNetwork = PrivacyRedactor::isCameraNetwork,
+                isSafeNetwork = { false },
             )
         return ManualProblemReportEnvelope.utf8Prefix(body, maxBytes)
     }

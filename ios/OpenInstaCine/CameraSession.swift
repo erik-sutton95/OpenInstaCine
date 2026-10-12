@@ -132,6 +132,8 @@ final class CameraSession {
     @ObservationIgnored private var descriptors: [UUID: MonitorCamera] = [:]
     @ObservationIgnored private var expectedDisconnect = false
     @ObservationIgnored private var incidentSessionActive = false
+    /// This session's hold on the reporting camera path, from connect start until disconnect.
+    @ObservationIgnored private var cameraPathLease: ReliabilityCameraPathLease?
     @ObservationIgnored private var incidentSource: FeedIncidentSessionSource?
     @ObservationIgnored private var incidentAssistState: String?
     @ObservationIgnored private var incidentPrevious: (at: TimeInterval, counts: [Int])?
@@ -495,7 +497,7 @@ final class CameraSession {
 
     /// What every connect sets before the backend runs; returns its generation.
     private func prepareConnection(to camera: FoundCamera, preserveMonitor: Bool) -> Int {
-        AppDiagnostics.reporting.setCameraSessionActive(true)
+        if cameraPathLease == nil { cameraPathLease = AppDiagnostics.reporting.beginCameraPath() }
         connectGeneration += 1
         LocalVPNNotice.app.noteIfActive()
         backend.stopScan()
@@ -514,7 +516,8 @@ final class CameraSession {
     }
 
     func disconnect() {
-        AppDiagnostics.reporting.setCameraSessionActive(false)
+        cameraPathLease?.end()
+        cameraPathLease = nil
         incidentSource?.endSession(now: ProcessInfo.processInfo.systemUptime)
         incidentSource = nil
         incidentAssistState = nil

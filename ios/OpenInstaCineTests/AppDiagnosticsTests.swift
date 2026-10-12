@@ -16,8 +16,9 @@ final class AppDiagnosticsTests: XCTestCase {
         XCTAssertEqual(host.environment, "development")
         XCTAssertFalse(host.tracksWatchdogTerminations)
         XCTAssertEqual(AppDiagnostics.gate.cameraIPv4Prefix, "192.168.42.")
-        // Camera access points stay readable, other networks do not.
-        XCTAssertEqual(host.redact("ssid=OsmoPocket3-A1B2"), "ssid=OsmoPocket3-A1B2")
+        // Luna keeps no network readable (A6-10): DJI-looking and ordinary SSIDs are both redacted.
+        XCTAssertEqual(host.redact("ssid=OsmoPocket3-A1B2"), "ssid=<redacted>")
+        XCTAssertEqual(host.redact("ssid=EdgeRouter-5G"), "ssid=<redacted>")
         XCTAssertEqual(host.redact("ssid=CafeWiFi"), "ssid=<redacted>")
         XCTAssertTrue(AppDiagnostics.reporting.gate === AppDiagnostics.gate)
         XCTAssertTrue(AppDiagnostics.reporting.consent === AppDiagnostics.consent)

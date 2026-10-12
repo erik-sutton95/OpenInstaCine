@@ -21,7 +21,7 @@ check:
     python3 tools/ble_lab.py --help > /dev/null
     python3 -m unittest discover -s tools -p 'test_ucd2.py'
     python3 -m unittest discover -s tools -p 'test_ios_archive_privacy.py'
-    bash tools/sentry-test.sh
+    just sentry-test
     ./scripts/ios-release-notes-check.sh
     ./scripts/android-release-notes-check.sh
     git diff --check
@@ -106,7 +106,9 @@ android-check:
 
 # Offline Sentry release-tooling checks. No network, no uploads.
 sentry-test:
-    bash tools/sentry-test.sh
+    OPC_APP_ROOT=. OPC_APP_NAME=OpenInstaCine bash ../OpenCine/scripts/sentry/sentry-test.sh
+    python3 tools/ios-package-resolved-check.py
+    bash scripts/ios-package-resolved-test.sh
 
 testflight-notes:
     ./scripts/ios-release-notes-check.sh
@@ -134,7 +136,7 @@ ios-resolve: ios-generate
 
 # Local iOS builds: SENTRY_DSN_IOS from .local/reliability.properties -> ignored Reliability.local.xcconfig.
 ios-local-dsn:
-    SENTRY_DSN_IOS="$(sed -n 's/^SENTRY_DSN_IOS=//p' .local/reliability.properties)" python3 tools/sentry-dsn-xcconfig.py --out ios/OpenInstaCine/Reliability.local.xcconfig --require
+    SENTRY_DSN_IOS="$(sed -n 's/^SENTRY_DSN_IOS=//p' .local/reliability.properties)" python3 ../OpenCine/scripts/sentry/sentry-dsn-xcconfig.py --out ios/OpenInstaCine/Reliability.local.xcconfig --require
 
 # Signed Play bundle with the upload key from .local/play-signing.env. VERSION_CODE=n overrides the floor.
 android-bundle:
