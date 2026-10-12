@@ -19,7 +19,7 @@ fun createLunaMediaLibrary(
         preferences.getString("opc.media.lastCameraID", null) != key) {
         preferences.edit().putString("opc.media.lastCameraID", key).apply()
     }
-    val look = MediaCache(context.noBackupFilesDir, preferences)
+    val look = MediaCache(context.noBackupFilesDir, preferences, storage)
     val codec = LunaMediaCatalogCodec(session.mediaCatalogRecords) { file ->
         look.shotColor(file.path, key, context).takeIf { it >= 0 }
     }
