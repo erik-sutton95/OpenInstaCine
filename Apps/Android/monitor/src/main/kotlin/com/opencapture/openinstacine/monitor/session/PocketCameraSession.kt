@@ -765,9 +765,8 @@ class PocketCameraSession(
     /** [stampMicros]: the frame's camera clock (Luna: its u64 ms header stamp, in microseconds). */
     private fun noteFrameClock(stampMicros: Long) {
         // The HUD shows HH:MM:SS: published once per displayed second.
-        val timecode = frameTimecode.note(
-            stampMicros / 1_000, System.currentTimeMillis(), java.util.TimeZone.getDefault(), _status.value.fps,
-        ) ?: return
+        val timecode = frameTimecode.note(stampMicros / 1_000, System.currentTimeMillis(), java.util.TimeZone.getDefault())
+            ?: return
         _status.update { it.copy(timecode = LunaShellMapping.timecodeText(timecode)) }
         (control.state.value.session as? LunaCameraSession)?.ingest(timecode)
     }
