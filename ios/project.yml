@@ -33,6 +33,9 @@ targets:
     postBuildScripts:
       - name: Stamp source revision
         script: bash "${SRCROOT}/../../OpenCine/scripts/sentry/stamp-source-revision.sh"
+        # Ordered after Info.plist processing, which otherwise may rerun after it and drop the stamp.
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
         basedOnDependencyAnalysis: false
     dependencies:
       - package: OpenInstaViewCore
