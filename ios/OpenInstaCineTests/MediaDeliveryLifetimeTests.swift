@@ -90,6 +90,7 @@ final class MediaDeliveryLifetimeTests: XCTestCase {
 }
 
 import MonitorUI
+import OpenCineCameraControls
 import OpenInstaViewCore
 import SwiftUI
 import UIKit
@@ -129,7 +130,7 @@ final class MediaDeliveryPresentationTests: XCTestCase {
             destination: .nativeShare, totalClips: 1,
             clipIndex: 1, clipFraction: 0.5, isSwitchingNetworks: true)
         let image = await render(
-            AnyView(MediaDeliveryOverlay(state: state, onCancel: {})),
+            AnyView(MonitorOperatorDeliveryProgress(state: state, onCancel: {})),
             name: "shared-delivery-busy-progress")
         let cg = try XCTUnwrap(image.cgImage)
         var bytes = [UInt8](repeating: 0, count: cg.width * cg.height * 4)

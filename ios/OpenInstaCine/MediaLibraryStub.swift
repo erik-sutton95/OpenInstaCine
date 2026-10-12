@@ -95,52 +95,8 @@ extension UIImage.Orientation {
     }
 }
 
-enum MediaCategoryTab: String, CaseIterable, Identifiable {
-    case all = "All"
-    case videos = "Videos"
-    case photos = "Photos"
-    case favorites = "Favorites"
-
-    var id: String { rawValue }
-
-    var opcIcon: OpcIcon {
-        switch self {
-        case .all: .layoutGrid
-        case .videos: .film
-        case .photos: .image
-        case .favorites: .star
-        }
-    }
-
-    var headerTitle: String {
-        switch self {
-        case .all: "All clips"
-        case .videos: "Videos"
-        case .photos: "Photos"
-        case .favorites: "Favorites"
-        }
-    }
-
-    var libraryTab: MediaLibraryTab {
-        switch self {
-        case .all: .all
-        case .videos: .videos
-        case .photos: .photos
-        case .favorites: .favorites
-        }
-    }
-}
-
 enum MediaClipPresentation {
     static let resolutionLevels = MonitorMediaResolutionLevel.standard
-    static func resolutionLabel(_ value: String?) -> String? { MonitorMediaGalleryLabels.resolution(value, levels: resolutionLevels) }
-    static func dateLabel(_ key: String) -> String { MonitorMediaGalleryLabels.date(key) }
-    static func metadataLine(file: MediaFile, durationOverride: String? = nil) -> String {
-        MonitorMediaGalleryLabels.metadata(resolution: file.resolution,
-            bytes: MediaClipFormatting.byteLabel(file.sizeBytes),
-            duration: file.kind == .video ? durationOverride ?? MediaClipFormatting.durationLabel(seconds: file.durationSeconds) : nil,
-            levels: resolutionLevels)
-    }
 }
 
 typealias MediaLibraryCopy = MonitorMediaGalleryCopy
@@ -172,7 +128,7 @@ struct MediaLibraryView: View {
                 let file = record.payload.file
                 return .init(resolution: file.resolution, byteCount: file.sizeBytes,
                     durationSeconds: file.durationSeconds, dateKey: file.dateKey,
-                    colorLabel: session.shotColor(for: file)?.label(in: session.profile), progress: session.mediaDownloadProgress[file.path])
+                    colorLabel: session.shotColor(for: file)?.label(in: session.profile))
             }, begin: { library.begin() }, refresh: { library.refresh() }, close: dismiss,
             open: { presented = $0 }, share: { records, token in
                 guard library.isCurrent(token) else { return }
@@ -197,21 +153,14 @@ struct MediaLibraryView: View {
                     }
                 }
             }
-            .overlay {
-                if let state = model.delivery.overlayState {
-                    VStack {
-                        MediaDeliveryOverlay(state: state) { model.delivery.cancel() }
-                            .padding(.horizontal, 20).padding(.top, 8)
-                        Spacer()
-                    }.allowsHitTesting(true)
-                }
-            }
+            .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
             .overlay {
                 if let deliveryFiles {
                     MediaDeliveryPopupOverlay(files: deliveryFiles) { self.deliveryFiles = nil }
                 }
             }
-            .sheet(item: model.delivery.sharePresentation) { payload in
+            // A player or photo cover presents its own share sheet; gate the binding, not the view.
+            .sheet(item: presented == nil ? model.delivery.sharePresentation : .constant(nil)) { payload in
                 MediaShareSheet(urls: payload.urls) { model.delivery.completeSharePresentation(id: payload.id) }
             }
             .onChange(of: library.lifetimeToken) { _, _ in presented = nil; deliveryFiles = nil }

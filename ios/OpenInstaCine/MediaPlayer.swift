@@ -12,19 +12,6 @@ import UIKit
 
 // MARK: - Shared chrome
 
-struct MediaCircleIconButton: View {
-    let icon: OpcIcon
-    var size: CGFloat = 34
-
-    var body: some View {
-        icon
-            .frame(width: size * 0.38, height: size * 0.38)
-            .foregroundStyle(LiveDesign.text)
-            .frame(width: size, height: size)
-            .glassCircle(interactive: true)
-    }
-}
-
 struct MediaShareSheet: UIViewControllerRepresentable {
     let urls: [URL]
     var onDismiss: () -> Void = {}
@@ -38,13 +25,6 @@ struct MediaShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-enum MediaTimeFormatting {
-    static func label(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-        return MediaClipFormatting.durationLabel(seconds: Int(seconds.rounded(.down)))
-    }
 }
 
 // MARK: - Photo viewer
@@ -80,6 +60,10 @@ struct MediaPhotoViewer: View {
             if let delivery {
                 MediaDeliveryPopupOverlay(files: [delivery]) { self.delivery = nil }
             }
+        }
+        .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
+        .sheet(item: model.delivery.sharePresentation) { payload in
+            MediaShareSheet(urls: payload.urls) { _ = model.delivery.completeSharePresentation(id: payload.id) }
         }
         .onDisappear { delivery = nil }
         .onChange(of: library.lifetimeToken) { _, _ in delivery = nil }
@@ -135,12 +119,7 @@ struct MediaPlayerView: View {
                             }.zIndex(5)
                         }
                     }
-                    .overlay(alignment: .top) {
-                        if let state = model.delivery.overlayState {
-                            MediaDeliveryOverlay(state: state) { model.delivery.cancel() }
-                                .padding(.horizontal, 20).padding(.top, 8).zIndex(50)
-                        }
-                    }
+                    .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
                     .sheet(item: model.delivery.sharePresentation) { payload in
                         MediaShareSheet(urls: payload.urls) { _ = model.delivery.completeSharePresentation(id: payload.id) }
                     }
