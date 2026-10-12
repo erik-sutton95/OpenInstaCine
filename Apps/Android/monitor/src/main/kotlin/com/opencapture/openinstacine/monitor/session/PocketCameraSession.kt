@@ -5,6 +5,8 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
 import com.opencapture.opencine.cameracontrols.CaptureLists
+import com.opencapture.opencine.cameracontrols.commitZoomCycle
+import com.opencapture.opencine.cameracontrols.pendingZoom
 import com.opencapture.opencine.motion.GimbalProgram
 import com.opencapture.opencine.motion.GimbalWaypoint
 import com.opencapture.opencine.motion.GimbalWaypointSlot
@@ -1200,8 +1202,10 @@ class PocketCameraSession(
             GamepadOperatorAction.RECENTER -> performGimbalDoubleTap()
             GamepadOperatorAction.FLIP -> flipGimbal()
             GamepadOperatorAction.TRACK -> handleGamepadTrackToggle()
-            GamepadOperatorAction.ZOOM_CHIP_IN -> setZoom(CamFov.nextJump(zoomCycleFrom(), zoomStops()))
-            GamepadOperatorAction.ZOOM_CHIP_OUT -> setZoom(CamFov.previousJump(zoomCycleFrom(), zoomStops()))
+            GamepadOperatorAction.ZOOM_CHIP_IN ->
+                control.commitZoomCycle(CamFov.nextJump(control.state.value.pendingZoom ?: zoomCycleFrom(), zoomStops()))
+            GamepadOperatorAction.ZOOM_CHIP_OUT ->
+                control.commitZoomCycle(CamFov.previousJump(control.state.value.pendingZoom ?: zoomCycleFrom(), zoomStops()))
             GamepadOperatorAction.ISO_UP, GamepadOperatorAction.ISO_DOWN -> {
                 val status = _status.value
                 if (status.isoIndex < 0) return

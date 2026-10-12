@@ -148,8 +148,6 @@ import com.opencapture.opencine.vocabulary.SessionRecoveryCopy
 import com.opencapture.opencine.vocabulary.SessionRecoveryUi
 import com.opencapture.opencine.vocabulary.VideoResolution
 import com.opencapture.openinstacine.monitor.assists.AssistLongPress
-import com.opencapture.openinstacine.monitor.assists.AssistOptionsPopup
-import com.opencapture.openinstacine.monitor.assists.LiveAssistLayer
 import com.opencapture.openinstacine.monitor.assists.LiveAssistState
 import com.opencapture.monitorui.MonitorAssistTool
 import com.opencapture.openinstacine.monitor.feed.FeedEffectsRenderPlan
