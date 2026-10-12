@@ -1442,10 +1442,10 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
     }
 
     private func mediaClipCenter(_ filename: String) -> XCUICoordinate {
-        // Asset identities are opaque: the clip is the gallery cell that shows its filename.
-        app.otherElements.matching(NSPredicate(format: "identifier BEGINSWITH 'monitor.media.clip.'"))
-            .containing(NSPredicate(format: "label == %@", filename)).firstMatch
-            .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        // Asset identities are opaque: the clip is the gallery cell named by its filename.
+        app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier BEGINSWITH 'monitor.media.clip.' AND label == %@", filename)
+        ).firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
     }
 
     private func visibleReviewClips() -> [String] {

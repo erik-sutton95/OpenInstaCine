@@ -185,9 +185,6 @@
                 #endif
                 model.control.onChange = {}
             }
-            // Every review starts from the first-run display chrome, as it does from first-run assists.
-            model.dispLive = .liveDefaults
-            model.dispClean = .cleanDefaults
             if ProcessInfo.processInfo.environment["OPV_UI_REVIEW_MOTION"] == "1" {
                 model.session.gimbalProgram = GimbalProgram(
                     a: .init(yawDeg: 0, pitchDeg: 0, zoom: 1, nativePitchDeg: 0),
