@@ -5,7 +5,6 @@ import androidx.compose.runtime.Composable
 import com.opencapture.opencine.appkit.MonitorCaptureField
 import com.opencapture.opencine.appkit.MonitorCapturePreferences
 import com.opencapture.opencine.appkit.captureField
-import com.opencapture.opencine.appkit.readPhoneBatteryReadout
 import com.opencapture.opencine.cameracontrols.CaptureRefresh
 import com.opencapture.opencine.cameracontrols.CaptureSheetHost
 import com.opencapture.opencine.cameracontrols.CaptureAudioService
@@ -19,9 +18,6 @@ import com.opencapture.opencine.cameracontrols.LiveSheet
 import com.opencapture.opencine.motion.GimbalWaypointSlot
 import com.opencapture.opencine.runtime.MonitorHDRDisplay
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.BatteryManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -197,14 +193,6 @@ class AppModel(
         private set
     override var lutSelection by mutableStateOf(OperatorPrefs.lutSelection(appContext))
         private set
-    var assistClean: Boolean
-        get() = assist.clean
-        set(value) { assist.clean = value }
-    var phoneBatteryPercent by mutableIntStateOf(-1)
-        private set
-    var phoneCharging by mutableStateOf(false)
-        private set
-    var uiLocked by mutableStateOf(false)
     override val gimbalGamepad = GimbalGamepadDriver(OperatorPrefs::gimbalGamepadStick)
     override var gamepadConnected by mutableStateOf(false)
 
@@ -221,7 +209,7 @@ class AppModel(
     }
 
     fun endChromeEditing() = operatorSession.finishEditing()
-    fun setDisplayMode(clean: Boolean) { assist.clean = clean }
+    fun setDisplayMode(clean: Boolean) { operatorSession.select(if (clean) PocketDispMode.CLEAN else PocketDispMode.LIVE) }
 
     fun noteBecameLive() {
         operatorSession.synchronize(shell.state.value.monitor?.id)
@@ -327,24 +315,6 @@ class AppModel(
         OperatorPrefs.setCleanViewPinnedTools(appContext, value)
     }
 
-    fun toggleUiLocked() {
-        uiLocked = !uiLocked
-    }
-
-    fun refreshPhoneBattery() {
-        val readout =
-            readPhoneBatteryReadout(
-                appContext.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)),
-                appContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager,
-            )
-        applyPhoneBattery(readout.percent ?: -1, readout.externalPower == true)
-    }
-
-    fun applyPhoneBattery(percent: Int, charging: Boolean) {
-        phoneBatteryPercent = percent
-        phoneCharging = charging
-    }
-
     fun pressRecord() = session.pressRecord()
 
     fun pressShutter() = session.pressShutter()
@@ -422,7 +392,7 @@ class AppModel(
     fun tapFocus(x: Float, y: Float) = session.tapFocus(x, y)
 
     fun updateGimbalStick(x: Float, y: Float) {
-        if (uiLocked) return
+        if (operatorSession.locked) return
         session.updateGimbalStick(
             x,
             y,
@@ -433,7 +403,7 @@ class AppModel(
     }
 
     override fun updateGimbalPadStick(x: Float, y: Float) {
-        if (uiLocked) return
+        if (operatorSession.locked) return
         session.updateGimbalStick(x, y, gimbalStickSensitivity, assist.mirrorsHorizontally)
     }
 
@@ -507,7 +477,7 @@ class AppModel(
 
     override fun canDriveGimbalPad(): Boolean =
         isLive &&
-            !uiLocked &&
+            !operatorSession.locked &&
             shell.state.value.cover == null &&
             !isEditingChrome &&
             !session.browsingMedia
