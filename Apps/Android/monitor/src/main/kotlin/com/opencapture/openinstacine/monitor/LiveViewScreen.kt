@@ -1,5 +1,7 @@
 package com.opencapture.openinstacine.monitor
 
+import com.opencapture.opencine.cameracontrols.MonitorLinkObservation
+import com.opencapture.opencine.cameracontrols.rememberMonitorLinkReadout
 import com.opencapture.opencine.cameracontrols.MonitorOperatorRecoveryCard
 import com.opencapture.opencine.cameracontrols.*
 
@@ -15,7 +17,6 @@ import com.opencapture.opencine.appkit.monitorChromeEditBoxes
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.opencine.cameracontrols.CaptureLists
 import com.opencapture.opencine.cameracontrols.LiveAutoExposureUnlockButton
-import com.opencapture.opencine.cameracontrols.LiveChromeReadout
 import com.opencapture.opencine.cameracontrols.LiveControlSheet
 import com.opencapture.opencine.cameracontrols.LiveFeedGestureWell
 import com.opencapture.opencine.cameracontrols.LiveFocusResetButton
@@ -26,7 +27,6 @@ import com.opencapture.opencine.cameracontrols.LiveGimbalSheetHost
 import com.opencapture.opencine.cameracontrols.LiveGimbalStick
 import com.opencapture.opencine.cameracontrols.LivePickerHost
 import com.opencapture.opencine.cameracontrols.LiveSheet
-import com.opencapture.opencine.cameracontrols.LiveViewLink
 import com.opencapture.opencine.cameracontrols.LiveZoom
 import com.opencapture.opencine.cameracontrols.LiveZoomChip
 import com.opencapture.opencine.cameracontrols.LocalLiveCanvasOrigin
@@ -39,10 +39,6 @@ import com.opencapture.opencine.cameracontrols.reportChromeFrame
 import com.opencapture.opencine.cameracontrols.retainedSheet
 import com.opencapture.opencine.platform.LocalVPNProbe
 import com.opencapture.opencine.runtime.MonitorHDRDisplay
-import com.opencapture.opencine.media.CameraLinkHealthInputs
-import com.opencapture.opencine.media.CameraLinkHealthScorer
-import com.opencapture.opencine.media.FrameRateSampler
-import com.opencapture.opencine.media.LinkSignalBars
 import com.opencapture.monitorui.portraitZones
 import com.opencapture.monitorui.portraitAssistToolbar
 import com.opencapture.monitorui.portraitFillCropContent
@@ -127,7 +123,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
-import android.os.SystemClock
 import com.opencapture.monitorui.MonitorQuickGestureOwner
 import com.opencapture.monitorui.monitorReadoutGesture
 import com.opencapture.opencine.core.LocalVPNFilter
@@ -144,7 +139,6 @@ import com.opencapture.opencine.vocabulary.ControlHud
 import com.opencapture.opencine.vocabulary.FocusOverlay
 import com.opencapture.opencine.vocabulary.FocusResetPolicy
 import com.opencapture.opencine.vocabulary.LiveFeedFocusGesture
-import com.opencapture.opencine.vocabulary.SessionRecoveryCopy
 import com.opencapture.opencine.vocabulary.VideoResolution
 import com.opencapture.openinstacine.monitor.assists.AssistLongPress
 import com.opencapture.openinstacine.monitor.assists.LiveAssistState
@@ -230,10 +224,6 @@ fun LiveViewScreen(model: AppModel) {
         model.gimbalGamepad.pulseLimit(model, operatorHaptics)
     }
 
-    var fpsLabel by remember { mutableStateOf("\u2014") }
-    var bars by remember { mutableIntStateOf(0) }
-    val fpsSampler = remember { FrameRateSampler() }
-    val signalBars = remember { LinkSignalBars() }
     tick
 
     val glass = remember { MonitorGlass(GlassTier.FLAT) }
@@ -270,54 +260,15 @@ fun LiveViewScreen(model: AppModel) {
     LaunchedEffect(vulkanSession, useVulkan, scopeSourceIdentity, hasPicture, scopeSourceActive) {
         vulkanSession?.configureScopeSource(scopeSourceIdentity, hasPicture, scopeSourceActive && useVulkan)
     }
-    LaunchedEffect(model.session, useVulkan, vulkanSession) {
-        var lastCount = 0
-        var lastAt = 0L
-        var held = "\u2014"
-        while (true) {
-            val now = SystemClock.elapsedRealtime()
-            val count =
-                if (useVulkan) {
-                    vulkanSession?.framesPresented?.get() ?: 0
-                } else {
-                    model.session.decoder.framesPresented.get()
-                }
-            if (lastAt > 0L && now > lastAt) {
-                val instant = (count - lastCount) * 1000.0 / (now - lastAt).toDouble()
-                if (instant >= 0.0) fpsSampler.recordFrameRate(instant)
-            }
-            lastCount = count
-            lastAt = now
-            val presented = model.session.decoder.lastPresentedAt
-            val recovering = model.session.isFeedRecovering
-            val phase = model.session.phaseFlow.value.vocabularyPhase()
-            val label =
-                if (model.session.recoveryState.value.isRecovering) {
-                    SessionRecoveryCopy.HELD_FRAME_BADGE
-                } else {
-                    LiveViewLink.fpsChipLabel(
-                        connection = phase,
-                        recovering = recovering,
-                        formattedFPS = fpsSampler.formatted,
-                        measuredFPS = fpsSampler.displayFPS,
-                    )
-                }
-            held = LiveChromeReadout.holdFPS(label, held)
-            fpsLabel = held
-            val measured = fpsSampler.displayFPS
-            val snapshot =
-                CameraLinkHealthScorer.score(
-                    CameraLinkHealthInputs(
-                        phase = LiveViewLink.cameraLinkPhase(phase, recovering, measured),
-                        liveViewFPS = measured.takeIf { it > 0 },
-                        targetLiveViewFPS = LiveViewLink.TARGET_FPS,
-                        secondsSinceLastGoodFrame = presented?.let { (now - it) / 1000.0 },
-                        isRecoveringStream = recovering,
-                    ),
-                )
-            bars = signalBars.update(snapshot.linkHealthScore)
-            delay(200)
-        }
+    val link = rememberMonitorLinkReadout(Triple(model.session, useVulkan, vulkanSession)) {
+        MonitorLinkObservation(
+            connection = model.session.phaseFlow.value.vocabularyPhase(),
+            framesPresented =
+                if (useVulkan) vulkanSession?.framesPresented?.get() ?: 0 else model.session.decoder.framesPresented.get(),
+            lastPresentedAtMillis = model.session.decoder.lastPresentedAt,
+            feedRecovering = model.session.isFeedRecovering,
+            sessionRecovering = model.session.recoveryState.value.isRecovering,
+        )
     }
 
     CompositionLocalProvider(LocalMonitorGlass provides glass, LocalMonitorBackdrops provides listOf(backdrop.source),
@@ -455,7 +406,7 @@ fun LiveViewScreen(model: AppModel) {
             model::resetFocusPoint, { model.session.cancelSubjectTracking() }, model.session::presentControlNote)
         MonitorOperatorLiveSurface(chrome,
             geometry, liveState,
-            cameraStatusLiveSource(chrome, geometry, liveState, fpsLabel, bars, hasPicture, verticalPicture,
+            cameraStatusLiveSource(chrome, geometry, liveState, link.label, link.bars, hasPicture, verticalPicture,
                 mirrored = liveViewFlip, recovering = recovery.isRecovering, busy = controlBusy, note = controlNote,
                 clearNote = model.session::clearControlNoteIf,
                 readExposure = { status.meteredEv.takeIf { it >= 0 } ?: pictureMeteredEv(model.session, assist, status) },
