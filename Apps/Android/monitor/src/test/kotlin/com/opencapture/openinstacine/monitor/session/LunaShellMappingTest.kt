@@ -242,12 +242,10 @@ class LunaShellMappingTest {
         val m = LunaShellMapping
         // 2026-09-30 08:51:10.54 UTC, Stockholm (UTC+2).
         val t = 1_790_758_270.54
-        assertEquals("10:51:10:13", m.timecode(t, 7200, 25))
-        assertEquals("10:51:10:16", m.timecode(t, 7200, 30))
-        assertEquals("10:51:10:13", m.timecode(t, 7200, 50))
-        assertEquals("10:51:10:16", m.timecode(t, 7200, 120))
+        // Whole seconds: the phone clock never invents a frame field.
+        assertEquals("10:51:10", m.timecode(t, 7200))
         // Wraps at midnight, west of GMT too.
-        assertEquals("23:59:59:23", m.timecode(86_399.99, 0, 24))
-        assertEquals("23:00:00:00", m.timecode(3600.0, -7200, 24))
+        assertEquals("23:59:59", m.timecode(86_399.99, 0))
+        assertEquals("23:00:00", m.timecode(3600.0, -7200))
     }
 }

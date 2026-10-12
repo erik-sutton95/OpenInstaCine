@@ -1,7 +1,10 @@
 package com.opencapture.openinstacine.monitor.session
 
-import com.opencapture.opencine.core.CameraValuePin
+import com.opencapture.monitorui.MonitorTimecodeFormat
+import com.opencapture.opencine.appkit.label
 import com.opencapture.opencine.core.CameraTimecode
+import com.opencapture.opencine.core.CameraValuePin
+import com.opencapture.opencine.core.TimecodePrecision
 import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
 import com.opencapture.opencine.insta360.luna.LunaSubjectTracking
 import com.opencapture.opencine.insta360.shell.CameraColorProfile
@@ -24,7 +27,6 @@ import com.opencapture.opencine.vocabulary.TrackingBox
 import com.opencapture.opencine.vocabulary.VideoFormat
 import com.opencapture.opencine.vocabulary.VideoFrameRate
 import com.opencapture.opencine.vocabulary.VideoResolution
-import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.reflect.KMutableProperty0
 
@@ -239,17 +241,15 @@ internal object LunaShellMapping {
     }
 
     /** Time-of-day timecode text (`LunaFrameTimecode.timecode`). */
-    fun timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int): String =
-        timecodeText(LunaFrameTimecode.timecode(unixSeconds, timeZoneSeconds, fps))
+    fun timecode(unixSeconds: Double, timeZoneSeconds: Int): String? =
+        timecodeText(LunaFrameTimecode.timecode(unixSeconds, timeZoneSeconds))
 
     /** Deep Track boxes between the shared owner and the shell's overlays (same top-left frame). */
     fun trackingBox(box: LunaSubjectTracking.Box) = TrackingBox(box.x, box.y, box.width, box.height)
     fun lunaBox(box: TrackingBox) = LunaSubjectTracking.Box(box.x, box.y, box.width, box.height)
 
-    /** `HH:MM:SS:FF`, the status text the HUD reads. */
-    fun timecodeText(timecode: CameraTimecode): String = with(timecode) {
-        String.format(Locale.US, "%02d:%02d:%02d:%02d", hours, minutes, seconds, frames)
-    }
+    /** The status text the HUD reads, by the shared rule: Luna declares whole seconds (`HH:MM:SS`). */
+    fun timecodeText(timecode: CameraTimecode): String? = MonitorTimecodeFormat.label(timecode, TimecodePrecision.Seconds)
 
     /** Battery, storage and shooting mode (iOS `apply(device:)` + `applyDeviceStatus`). */
     fun applyDevice(readout: CameraReadout, status: CameraStatus, pins: LunaControlPins, now: Long): CameraStatus {

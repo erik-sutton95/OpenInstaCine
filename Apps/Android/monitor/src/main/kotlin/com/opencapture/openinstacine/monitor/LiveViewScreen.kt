@@ -11,7 +11,6 @@ import com.opencapture.opencine.appkit.monitorChromeEditStroke
 import com.opencapture.opencine.appkit.MonitorChromeEditBadgeLayer
 import com.opencapture.opencine.appkit.MonitorChromeEditBanner
 import com.opencapture.opencine.appkit.monitorChromeEditBoxes
-import com.opencapture.opencine.appkit.ObservePhoneBattery
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.opencine.cameracontrols.CaptureLists
 import com.opencapture.opencine.cameracontrols.LiveAutoExposureUnlockButton
@@ -204,7 +203,7 @@ fun LiveViewScreen(model: AppModel) {
     val gimbalLimitPulse by model.session.gimbalLimitPulse.collectAsState()
     val operatorHaptics = LocalOperatorHaptics.current
     var tick by remember { mutableIntStateOf(0) }
-    val liveState = remember(model) { MonitorOperatorLiveState(model.uiLocked) }
+    val liveState = remember(model) { MonitorOperatorLiveState() }
     val context = LocalContext.current
     val assist = model.assist
     val wantedViewFlip = CameraCommands.liveViewFlip(poseViewFlip, assist.mirrorsHorizontally)
@@ -222,7 +221,6 @@ fun LiveViewScreen(model: AppModel) {
     val verticalPicture by model.session.decoder.isVerticalPicture.collectAsState()
     val hasPicture by model.session.decoder.hasPicture.collectAsState()
 
-    ObservePhoneBattery { model.applyPhoneBattery(it.percent ?: -1, it.externalPower == true) }
     LaunchedEffect(Unit) {
         while (true) {
             delay(1_000)
@@ -449,7 +447,7 @@ fun LiveViewScreen(model: AppModel) {
         ) {
         val faceMetering by model.session.faceMetering.collectAsState()
         val metering = faceMetering?.let { MonitorOperatorMeteringTile(it) { model.session.setFaceMetering(!it) } }
-        val chrome = rememberOperatorChromeSource(model, status)
+        val chrome = rememberOperatorChromeSource(model, status, capabilities)
         val focus = MonitorOperatorFocusObservation(focusPoint, trackingHud, model.session.supportsTapFocus,
             aeLock != null, model.focusBoxLocked, focusOffCenter)
         val focusActions = MonitorOperatorFocusActions(
@@ -460,15 +458,15 @@ fun LiveViewScreen(model: AppModel) {
             model::resetFocusPoint, { model.session.cancelSubjectTracking() }, model.session::presentControlNote)
         MonitorOperatorLiveSurface(chrome,
             geometry, liveState,
-            MonitorOperatorLivePresentation(status, capabilities, fpsLabel, bars,
-                model.phoneBatteryPercent.takeIf { it >= 0 }, hasPicture, verticalPicture, liveViewFlip, flipV,
-                recovery.isRecovering, controlBusy, controlNote, metering),
-            assist, rememberOperatorAssistSource(model, status), focus, focusActions, model.session.levelReading,
-            CameraCommands.liveInvertPan(poseInvertPan, assist.mirrorsHorizontally) != flipV,
-            readExposure = { status.meteredEv.takeIf { it >= 0 } ?: pictureMeteredEv(model.session, assist, status) },
-            exposureAvailable = !recovery.isRecovering && !model.session.isFeedRecovering,
-            vpnActive = { LocalVPNProbe.isActive(context) }, clearNote = model.session::clearControlNoteIf,
-            lockedChanged = { model.uiLocked = it }, nativeInputBlocked = { reason ->
+            cameraStatusLiveSource(chrome, geometry, liveState, fpsLabel, bars, hasPicture, verticalPicture,
+                mirrored = liveViewFlip, recovering = recovery.isRecovering, busy = controlBusy, note = controlNote,
+                clearNote = model.session::clearControlNoteIf,
+                readExposure = { status.meteredEv.takeIf { it >= 0 } ?: pictureMeteredEv(model.session, assist, status) },
+                exposureAvailable = !recovery.isRecovering && !model.session.isFeedRecovering,
+                level = model.session.levelReading,
+                levelViewFlip = CameraCommands.liveInvertPan(poseInvertPan, assist.mirrorsHorizontally) != flipV,
+                vpnActive = { LocalVPNProbe.isActive(context) }, metering = metering),
+            rememberOperatorAssistSource(model, status), focus, focusActions, nativeInputBlocked = { reason ->
                 model.gimbalGamepad.noteBlocked(model)
                 model.endGimbalStick()
                 if (reason == MonitorInputBlock.LOCK) model.session.cancelProgrammedMove()
