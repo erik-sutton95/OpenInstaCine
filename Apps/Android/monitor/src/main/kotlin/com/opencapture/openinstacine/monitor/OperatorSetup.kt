@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import com.opencapture.opencine.cameracontrols.OperatorAppInformation
 import com.opencapture.opencine.cameracontrols.OperatorDiagnostics
 import com.opencapture.opencine.cameracontrols.OperatorHelpCopy
-import com.opencapture.opencine.cameracontrols.OperatorLegalPage
 import com.opencapture.opencine.cameracontrols.OperatorLinkSample
 import com.opencapture.opencine.cameracontrols.OperatorSetupApp
 import com.opencapture.opencine.cameracontrols.OperatorSetupState
@@ -74,25 +73,17 @@ internal fun operatorSetupApp(model: AppModel) = OperatorSetupApp(
         versionHelp = SettingsHelpCopy.APP_VERSION, termsHelp = "How you can use OpenInstaCine.",
     ),
     sourceUrl = OpenPocketCineLinks.SOURCE,
-    termsUrl = OpenPocketCineLinks.TERMS,
     diagnostics = OperatorDiagnostics(
         AppDiagnostics.reporting, AppDiagnostics.manualReport, AppDiagnostics.incidents,
         diagnosticText = { DiagnosticCenter.boundedDiagnosticText(model.session) },
         shareReport = { DiagnosticCenter.shareReport(it, model.session, copyForFeedback = false) },
         reportActionMinimumTouchTarget = true,
     ),
-    legalPage = { page, onClose -> LegalDocumentScreen(kind = page.kind, onClose = onClose) },
+    legal = InstaLegalDocuments,
     lutPicker = { onClose -> LUTPicker(model = model, onClose = onClose) },
     // The gallery's own library: Settings counts and clears what the gallery writes.
     cacheSource = { monitorSettingsCacheSource(model.mediaLibrary) },
 )
-
-private val OperatorLegalPage.kind: LegalKind
-    get() = when (this) {
-        OperatorLegalPage.PRIVACY -> LegalKind.PRIVACY
-        OperatorLegalPage.LICENSES -> LegalKind.LICENSES
-        OperatorLegalPage.NOTICE -> LegalKind.NOTICE
-    }
 
 @Composable
 fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {

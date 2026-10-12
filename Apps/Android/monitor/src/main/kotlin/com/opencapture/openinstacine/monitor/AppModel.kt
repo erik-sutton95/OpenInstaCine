@@ -1,5 +1,6 @@
 package com.opencapture.openinstacine.monitor
 
+import com.opencapture.opencine.cameracontrols.MonitorLegalPage
 import com.opencapture.opencine.appkit.MonitorOperatorSessionModel
 import androidx.compose.runtime.Composable
 import com.opencapture.opencine.appkit.MonitorCaptureField
@@ -118,7 +119,7 @@ class AppModel(
     var focusBoxLocked by mutableStateOf(false)
     var coreVersion by mutableStateOf<String?>(null)
     /** A legal document over the cameras page (product composition, not a shell cover). */
-    var legal by mutableStateOf<LegalKind?>(null)
+    var legal by mutableStateOf<MonitorLegalPage?>(null)
     internal val operatorSession = MonitorOperatorSessionModel(shell, assist, OperatorPrefs.displayPreferences(appContext), scope)
     override var operatorSettingsTab: MonitorSettingsTab
         get() = operatorSession.settingsTab

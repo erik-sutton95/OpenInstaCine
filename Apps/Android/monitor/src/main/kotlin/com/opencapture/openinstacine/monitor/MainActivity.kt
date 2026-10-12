@@ -10,6 +10,8 @@ import androidx.compose.ui.graphics.Color
 import com.opencapture.opencine.appkit.applyMonitorSystemBars
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.opencine.appkit.rememberOperatorHaptics
+import com.opencapture.opencine.cameracontrols.MonitorLegalDocumentScreen
+import com.opencapture.opencine.cameracontrols.MonitorLegalPage
 import com.opencapture.opencine.runtime.MonitorHDRDisplay
 import com.opencapture.openinstacine.monitor.diagnostics.AppDiagnostics
 import android.annotation.SuppressLint
@@ -162,9 +164,9 @@ private fun OpenInstaCineApp(model: AppModel) {
             BrandColors.ink, OpcFonts.sora),
         keepScreenAwake = model.keepScreenAwake,
         reports = MonitorReportsOffer(AppDiagnostics.consent, AppDiagnostics.reporting, AppDiagnostics.host.product) {
-            model.legal = LegalKind.PRIVACY
+            model.legal = MonitorLegalPage.PRIVACY
         },
-        reportsAllowed = !showLive && model.legal != LegalKind.PRIVACY,
+        reportsAllowed = !showLive && model.legal != MonitorLegalPage.PRIVACY,
         // Knowing about screen recording only dims the HDR boost.
         onScreenRecording = { model.screenCaptured = it },
     ) {
@@ -202,7 +204,7 @@ private fun OpenInstaCineApp(model: AppModel) {
             MonitorConfiguration.identity.sourceLabel?.let { label ->
                 if (showLive) Text(label, color = BrandColors.accent, style = LiveType.mono(10f), modifier = Modifier.align(Alignment.TopCenter).background(BrandColors.background).padding(horizontal = 8.dp, vertical = 3.dp))
             }
-            model.legal?.let { kind -> if (!showLive) LegalDocumentScreen(kind) { model.legal = null } }
+            model.legal?.let { page -> if (!showLive) MonitorLegalDocumentScreen(InstaLegalDocuments, page) { model.legal = null } }
         }
     }
     if (showProblemReport) {
@@ -210,7 +212,7 @@ private fun OpenInstaCineApp(model: AppModel) {
     }
     if (showReportingPrivacy) {
         Dialog(onDismissRequest = { showReportingPrivacy = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            LegalDocumentScreen(kind = LegalKind.PRIVACY, onClose = { showReportingPrivacy = false })
+            MonitorLegalDocumentScreen(InstaLegalDocuments, MonitorLegalPage.PRIVACY) { showReportingPrivacy = false }
         }
     }
 }
