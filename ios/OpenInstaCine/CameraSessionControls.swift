@@ -1408,7 +1408,7 @@ extension CameraSession {
         guard
             let timecode = frameTimecode.note(
                 frameClock: milliseconds, arrival: Date().timeIntervalSince1970,
-                timeZoneSeconds: TimeZone.current.secondsFromGMT(), fps: status.fps)
+                timeZoneSeconds: TimeZone.current.secondsFromGMT())
         else { return }
         status.timecode = LunaShellMapping.timecodeText(timecode)
         (coreSession as? LunaCameraSession)?.ingest(timecode: timecode)

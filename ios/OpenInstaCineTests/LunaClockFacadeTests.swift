@@ -88,8 +88,7 @@ final class LunaClockFacadeTests: XCTestCase {
         let zoneSeconds = TimeZone.current.secondsFromGMT()
         func expected(_ milliseconds: UInt64, _ offset: Double) -> String {
             LunaShellMapping.timecode(
-                unixSeconds: Double(milliseconds) / 1000 + offset, timeZoneSeconds: zoneSeconds,
-                fps: session.status.fps)
+                unixSeconds: Double(milliseconds) / 1000 + offset, timeZoneSeconds: zoneSeconds)
         }
         let first: UInt64 = 100_000
         let before = Date().timeIntervalSince1970

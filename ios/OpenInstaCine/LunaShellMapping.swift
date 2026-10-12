@@ -323,15 +323,14 @@ enum LunaShellMapping {
     }
 
     /// Time-of-day timecode text (`LunaFrameTimecode.timecode`).
-    static func timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int) -> String {
-        timecodeText(LunaFrameTimecode.timecode(unixSeconds: unixSeconds, timeZoneSeconds: timeZoneSeconds, fps: fps))
+    static func timecode(unixSeconds: Double, timeZoneSeconds: Int) -> String {
+        timecodeText(LunaFrameTimecode.timecode(unixSeconds: unixSeconds, timeZoneSeconds: timeZoneSeconds))
     }
 
-    /// `HH:MM:SS:FF`, the status text the HUD reads.
+    /// `HH:MM:SS`, the status text the HUD reads. The Luna clock has seconds precision; no
+    /// frame number is derived from the arrival time.
     static func timecodeText(_ timecode: CameraTimecode) -> String {
-        String(
-            format: "%02d:%02d:%02d:%02d", timecode.hours, timecode.minutes, timecode.seconds,
-            timecode.frames)
+        String(format: "%02d:%02d:%02d", timecode.hours, timecode.minutes, timecode.seconds)
     }
 }
 
