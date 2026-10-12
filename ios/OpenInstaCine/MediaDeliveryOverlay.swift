@@ -15,7 +15,9 @@ extension MonitorDeliveryBatchProgress {
 @MainActor
 @Observable
 final class MediaDeliveryCoordinator {
-    private let lifetime:
+    /// The app-scoped run owner; `MonitorOperatorDeliveryChrome` reads it at the root and on
+    /// each media surface.
+    let lifetime:
         MonitorDeliveryModel<
             MediaDeliveryOverlayState, MediaDeliveryRunOutcome, MonitorDeliveryShareFiles<URL>
         >
@@ -44,8 +46,6 @@ final class MediaDeliveryCoordinator {
             })
     }
 
-    var overlayState: MediaDeliveryOverlayState? { lifetime.state.progress }
-    var completionToast: String? { lifetime.state.toast }
     var isActive: Bool { lifetime.state.running }
     var sharePayload: MediaSharePayload? {
         lifetime.state.share.map { .init(id: $0.id, urls: $0.payload.urls) }
@@ -81,6 +81,14 @@ final class MediaDeliveryCoordinator {
         }
     }
 
+    /// Frame.io from the camera network caches every original first, as a run of this owner.
+    func cacheBeforeInternetHop(_ files: [MediaFile], session: CameraSession, source: MonitorDeliveryAdmission) async throws {
+        try await lifetime.cacheBeforeInternetHop(
+            records: files, originals: MediaDeliveryRunner.originals(session, source: source), source: source,
+            filename: { $0.filename }, completion: .uploaded(summary: ""), uploadCaption: "Uploading to Frame.io",
+            progress: { $0 })
+    }
+
     func failUnavailableExportSettings() {
         lifetime.begin { _ in .init(.failed(message: "Export settings are unavailable."), toast: "Export settings are unavailable.") }
     }
@@ -101,13 +109,6 @@ struct MediaSharePayload: Identifiable, Sendable {
     let id: UUID
     let urls: [URL]
 }
-struct MediaDeliveryOverlay: View {
-    let state: MediaDeliveryOverlayState
-    var onCancel: () -> Void
-
-    var body: some View { MonitorOperatorDeliveryProgress(state: state, onCancel: onCancel) }
-}
-
 @MainActor
 enum MediaDeliveryRunner {
     static func execute(request: MediaDeliveryBeginRequest, model: AppModel,
@@ -132,19 +133,20 @@ enum MediaDeliveryRunner {
             restore: { model.endInternetHop($0) })
         return await MonitorDeliveryModel<MediaDeliveryOverlayState, MediaDeliveryRunOutcome, MonitorDeliveryShareFiles<URL>>.runBatch(
             records: request.files, destination: request.destination.shared, action: request.postExportAction, admission: source,
-            originals: .init(available: session.isDownloaded, acquire: { file in
-                guard source.isCurrent() else { return }
-                await session.download(file: file)
-            }, progress: { session.mediaDownloadProgress(for: $0) }),
-            exporter: .init { file, progress in
+            originals: originals(session, source: source),
+            exporter: .init(original: { file in
+                // A still is delivered as its cached original; only movies are exported.
+                guard file.kind == .photo, source.isCurrent(), session.isDownloaded(file) else { return nil }
+                return session.localURL(for: file)
+            }) { file, progress in
                 guard source.isCurrent() else { throw CancellationError() }
                 do { return try await export(file: file, request: request, model: model,
                     session: session, admission: source, progress: progress) }
                 catch { if isConvertLogSkip(error) { return nil }; throw error }
             }, share: { urls in
-                let staged = try MediaShareStaging.prepareForShare(videoURLs: urls)
+                let staged = try MediaShareStaging.prepareForShare(urls: urls)
                 return .init(urls: staged.urls, cleanup: staged.stagingCleanupURL)
-            }, photos: .batch { try await MediaPhotosSaver.saveVideos(at: $0, ifCurrent: { source.isCurrent() }) },
+            }, photos: .batch { try await MediaPhotosSaver.save(at: $0, ifCurrent: { source.isCurrent() }) },
             upload: .init(progressCaption: "Uploading to Frame.io") { url, progress in
                 guard source.isCurrent() else { throw CancellationError() }
                 try await model.uploadFileToFrameio(sourceURL: url, filename: url.lastPathComponent) { fraction in
@@ -155,6 +157,13 @@ enum MediaDeliveryRunner {
             noPrepared: { files in request.configuration.convertLog ? files.first.map {
                 MediaDeliveryError.convertLogNotLog($0.filename).localizedDescription
             } : nil }, progress: onProgress)
+    }
+
+    static func originals(_ session: CameraSession, source: MonitorDeliveryAdmission) -> MonitorDeliveryOriginalService<MediaFile> {
+        .init(available: session.isDownloaded, acquire: { file in
+            guard source.isCurrent() else { return }
+            await session.download(file: file)
+        }, progress: { session.mediaDownloadProgress(for: $0) })
     }
 
     private static func export(

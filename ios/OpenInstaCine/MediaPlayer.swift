@@ -81,6 +81,10 @@ struct MediaPhotoViewer: View {
                 MediaDeliveryPopupOverlay(files: [delivery]) { self.delivery = nil }
             }
         }
+        .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
+        .sheet(item: model.delivery.sharePresentation) { payload in
+            MediaShareSheet(urls: payload.urls) { _ = model.delivery.completeSharePresentation(id: payload.id) }
+        }
         .onDisappear { delivery = nil }
         .onChange(of: library.lifetimeToken) { _, _ in delivery = nil }
     }
@@ -135,12 +139,7 @@ struct MediaPlayerView: View {
                             }.zIndex(5)
                         }
                     }
-                    .overlay(alignment: .top) {
-                        if let state = model.delivery.overlayState {
-                            MediaDeliveryOverlay(state: state) { model.delivery.cancel() }
-                                .padding(.horizontal, 20).padding(.top, 8).zIndex(50)
-                        }
-                    }
+                    .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
                     .sheet(item: model.delivery.sharePresentation) { payload in
                         MediaShareSheet(urls: payload.urls) { _ = model.delivery.completeSharePresentation(id: payload.id) }
                     }

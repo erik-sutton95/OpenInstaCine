@@ -89,7 +89,7 @@ import XCTest
         await settle { !FileManager.default.fileExists(atPath: staging.path) }
         XCTAssertTrue(FileManager.default.fileExists(atPath: original.path))
         XCTAssertNil(coordinator.sharePayload)
-        XCTAssertNil(coordinator.overlayState)
+        XCTAssertNil(coordinator.lifetime.state.progress)
         XCTAssertFalse(coordinator.isActive)
     }
 }

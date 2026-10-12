@@ -197,21 +197,14 @@ struct MediaLibraryView: View {
                     }
                 }
             }
-            .overlay {
-                if let state = model.delivery.overlayState {
-                    VStack {
-                        MediaDeliveryOverlay(state: state) { model.delivery.cancel() }
-                            .padding(.horizontal, 20).padding(.top, 8)
-                        Spacer()
-                    }.allowsHitTesting(true)
-                }
-            }
+            .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
             .overlay {
                 if let deliveryFiles {
                     MediaDeliveryPopupOverlay(files: deliveryFiles) { self.deliveryFiles = nil }
                 }
             }
-            .sheet(item: model.delivery.sharePresentation) { payload in
+            // A player or photo cover presents its own share sheet; gate the binding, not the view.
+            .sheet(item: presented == nil ? model.delivery.sharePresentation : .constant(nil)) { payload in
                 MediaShareSheet(urls: payload.urls) { model.delivery.completeSharePresentation(id: payload.id) }
             }
             .onChange(of: library.lifetimeToken) { _, _ in presented = nil; deliveryFiles = nil }
