@@ -21,7 +21,7 @@ import com.opencapture.monitorui.LocalMonitorBackdrops
 import com.opencapture.monitorui.monitorBackdropSource
 import com.opencapture.openinstacine.monitor.feed.rememberMonitorBackdropFeed
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import com.opencapture.opencine.appkit.MonitorBitmapDecoder
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -122,13 +122,13 @@ fun MediaPhotoViewer(model: AppModel, file: MediaFile, controller: LunaMediaPlay
     val loaders = com.opencapture.opencine.appkit.MonitorMediaPictureLoaders<LunaMediaLibraryPayload, Bitmap>(
         cached = { request ->
             if (!request.isCurrent()) null else (controller.localFile(request.record.payload.file) ?: controller.thumbnailFile(request.record.payload.file))?.let { location ->
-                withContext(Dispatchers.IO) { BitmapFactory.decodeFile(location.absolutePath) }
+                withContext(Dispatchers.IO) { MonitorBitmapDecoder.decode(location, MonitorBitmapDecoder.PAGE_EDGE) }
             }
         }, source = { request ->
             if (!request.isCurrent()) null else {
                 val location = controller.cacheForPlayback(request.record.payload.file)
                 if (location == null || !request.isCurrent()) null
-                else withContext(Dispatchers.IO) { BitmapFactory.decodeFile(location.absolutePath) }
+                else withContext(Dispatchers.IO) { MonitorBitmapDecoder.decode(location, MonitorBitmapDecoder.PAGE_EDGE) }
             }
         })
     val operations = com.opencapture.opencine.appkit.MonitorMediaGalleryOperations<LunaMediaLibraryPayload>(
