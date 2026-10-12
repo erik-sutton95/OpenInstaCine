@@ -10,7 +10,6 @@ import com.opencapture.openinstacine.monitor.session.PocketCameraSession
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlinx.coroutines.Job
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -105,9 +104,9 @@ class SessionRecoveryPictureTest {
         val session = liveSession(backend)
         try {
             beginRecovery(session, backend)
-            val episode = onMain { field(session, "recoveryJob") as Job }
+            assertTrue(onMain { session.isSessionRecoveryRunning })
             onMain { backend.frameGeneration = 3L; backend.phase.value = ConnectionPhase.IDLE }
-            assertTrue(waitUntil { episode.isCancelled && !session.holdsMonitor })
+            assertTrue(waitUntil { !session.isSessionRecoveryRunning && !session.holdsMonitor })
             frame(backend, 2L)
             frame(backend)
             assertTrue(waitUntil { session.videoPackets == 1 })
