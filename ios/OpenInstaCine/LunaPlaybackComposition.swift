@@ -42,25 +42,10 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
         return owner
     }
     func mediaPlaybackRecord(for file: MediaFile) -> MonitorMediaRecord<LunaMediaLibraryPayload>? {
-        if let record = mediaRecord(for: file) { return record }
-        #if targetEnvironment(simulator)
-        if MonitorMediaReview.isActive, file.path.hasPrefix(MonitorMediaReview.pathPrefix) {
-            // The existing opt-in simulator review passes synthetic files directly, outside its
-            // catalog, with or without supplied footage: the player's controls work without it, as
-            // on main. Use the real legacy codec for immutable cached-file facts, without a service.
-            let codec = LunaMediaCatalogCodec(source: nil, shotColor: { _ in nil })
-            return try? codec.decode(JSONEncoder().encode([file])).first
-        }
-        #endif
-        return nil
+        mediaRecord(for: file)
     }
     private func playbackCandidates(_ record: MonitorMediaRecord<LunaMediaLibraryPayload>) -> [MonitorPlaybackCandidate] {
         let file = record.payload.file
-        #if targetEnvironment(simulator)
-        if let url = MonitorMediaReview.clipURL(for: file) {
-            return [.cached(.init(url: url, mimeType: "video/mp4", sourceKey: file.path))]
-        }
-        #endif
         var choices: [MonitorPlaybackCandidate] = []
         func cached(_ source: MediaPlaybackSource) -> MonitorPlaybackCandidate {
             .cached(.init(url: source.url, mimeType: source.mimeType, sourceKey: source.path,
@@ -172,13 +157,8 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
         owner: MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>) -> MonitorPlaybackSourceValues {
         let file = record.payload.file
         let grade = model.session.cacheGrade(for: file)
-        let availability: MonitorPlaybackAvailability
-        #if targetEnvironment(simulator)
-        if MonitorMediaReview.clipURL(for: file) != nil { availability = .original }
-        else { availability = grade == .original ? .original : grade.isProxyOnly ? .proxy : .camera }
-        #else
-        availability = grade == .original ? .original : grade.isProxyOnly ? .proxy : .camera
-        #endif
+        let availability: MonitorPlaybackAvailability =
+            grade == .original ? .original : grade.isProxyOnly ? .proxy : .camera
         let transfer = model.monitorTransfer ?? model.assist.monitorColorMode.map(MonitorTransfer.init)
         let buffered = owner.playback.flatMap { playback -> Double? in
             guard playback.ready, owner.isCurrent(playback.token),
@@ -205,12 +185,7 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
             guard let self, let owner, self.mediaLibrary === owner,
                 owner.isCurrent(token), owner.cache.directory.generation == generation,
                 self.mediaCameraID == cameraID else { return false }
-            if indexed { return owner.record(record.asset.id) != nil }
-            #if targetEnvironment(simulator)
-            return MonitorMediaReview.isActive && record.payload.file.path.hasPrefix(MonitorMediaReview.pathPrefix)
-            #else
-            return false
-            #endif
+            return indexed && owner.record(record.asset.id) != nil
         }
     }
 }

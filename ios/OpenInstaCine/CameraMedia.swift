@@ -34,15 +34,9 @@ enum MediaOperatorCopy {
         storage: MonitorMediaCacheStorage? = nil, cacheRoot: URL? = nil) {
         self.fileManager = fileManager; self.storage = storage ?? MonitorMediaCacheStorage(fileManager: fileManager)
         nativeIO = LunaNativeMediaIO(configuration: httpConfiguration); rootOverride = cacheRoot
-        #if DEBUG && targetEnvironment(simulator)
-            MonitorMediaReview.prepareOwnedIndex()
-        #endif
     }
     func cacheRoot(cameraID: String) -> URL {
         if let rootOverride { return rootOverride.appendingPathComponent(cameraID, isDirectory: true) }
-        #if DEBUG && targetEnvironment(simulator)
-            if MonitorMediaReview.isActive { return MonitorMediaReview.cacheRoot }
-        #endif
         return fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("OpenInstaCine/media/\(cameraID)", isDirectory: true)
     }

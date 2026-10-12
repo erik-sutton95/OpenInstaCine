@@ -829,15 +829,7 @@ struct AppRoot: View {
     var body: some View {
         ZStack {
             MonitorTheme.background.ignoresSafeArea()
-            #if targetEnvironment(simulator)
-                if MonitorMediaReview.isActive && !MonitorMediaReview.usesProductionShell {
-                    MonitorMediaReviewView()
-                } else {
-                    primaryExperience
-                }
-            #else
-                primaryExperience
-            #endif
+            primaryExperience
 
             if model.showsLaunchSplash {
                 LaunchSplashOverlay(isVisible: Bindable(model).showsLaunchSplash)
@@ -858,7 +850,7 @@ struct AppRoot: View {
         .environment(model)
         #if DEBUG && targetEnvironment(simulator)
         .overlay(alignment: .topLeading) {
-            if MonitorMediaReview.usesProductionShell { MonitorPlaybackReviewFacts(model: model) }
+            if MonitorUIReview.playbackFacts { MonitorPlaybackReviewFacts(model: model) }
         }
         #endif
         .environment(\.font, MonitorTheme.font(16))

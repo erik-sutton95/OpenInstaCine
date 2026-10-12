@@ -55,7 +55,7 @@ private final class MonitorPlaybackReviewObserver {
             lastItem = itemID
         }
         let library = model.session.mediaLibrary
-        let service = MonitorMediaReview.playbackService
+        let service = MonitorUIReview.mediaService
         let null = NSNull()
         func value<T>(_ optional: T?) -> Any { optional.map { $0 as Any } ?? null }
         let time = player.map { CMTimeGetSeconds($0.currentTime()) }.flatMap { $0.isFinite ? $0 : nil }

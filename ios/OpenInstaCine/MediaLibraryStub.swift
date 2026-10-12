@@ -215,6 +215,14 @@ struct MediaLibraryView: View {
                 MediaShareSheet(urls: payload.urls) { model.delivery.completeSharePresentation(id: payload.id) }
             }
             .onChange(of: library.lifetimeToken) { _, _ in presented = nil; deliveryFiles = nil }
+            #if DEBUG && targetEnvironment(simulator)
+                .task(id: library.displayedRecords.first?.asset.id) {
+                    // `ReviewLaunch(screen: .playback)`: open the first staged clip as a tap would.
+                    guard MonitorUIReview.opensFirstClip, let record = library.displayedRecords.first else { return }
+                    MonitorUIReview.opensFirstClip = false
+                    presented = .init(record: record, playlist: library.displayedRecords, admission: library.actionToken)
+                }
+            #endif
     }
     private func dismiss() {
         if let onClose { onClose() } else { model.shell.dismissCover() }

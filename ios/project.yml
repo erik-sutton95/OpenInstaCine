@@ -220,13 +220,18 @@ targets:
       - OpenInstaCineUITests
     dependencies:
       - target: OpenInstaCine
-      # The UI tests every app shares (OpenCine OpenCineAppUITesting).
+      # The UI tests every app shares (OpenCine OpenCineAppUITesting) and the review contract
+      # and capabilities its conformance profile names (MonitorPresentation).
       - package: OpenCine
         product: OpenCineAppUITesting
+      - package: OpenCine
+        product: MonitorPresentation
     settings:
       base:
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
+        # Declares the conformance profile before any test runs (ConformanceApp.swift).
+        INFOPLIST_KEY_NSPrincipalClass: $(PRODUCT_MODULE_NAME).ConformanceApp
         PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.uitests
         TEST_TARGET_NAME: OpenInstaCine
         DEVELOPMENT_TEAM: "4V4EGQ6LZA"
