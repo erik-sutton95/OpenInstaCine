@@ -9,6 +9,8 @@ import com.opencapture.opencine.appkit.diagnostics.ReliabilityReportingConsent
 import com.opencapture.opencine.appkit.diagnostics.ReliabilityReportingDSN
 import com.opencapture.opencine.appkit.diagnostics.ReliabilityReportingGate
 import com.opencapture.opencine.appkit.diagnostics.ReliabilityReportingHostPolicy
+import com.opencapture.opencine.appkit.sentry.OkHttpManualReportUpload
+import com.opencapture.opencine.appkit.sentry.SentryReliabilitySink
 import com.opencapture.opencine.vocabulary.PrivacyRedactor
 import com.opencapture.openinstacine.monitor.BuildConfig
 import com.opencapture.opencine.media.FeedIncidentSink
@@ -92,17 +94,5 @@ internal object AppDiagnostics {
         override fun noteExhausted(nowSeconds: Double) { legacySource?.noteExhausted(nowSeconds) }
         override fun noteUnexpectedDisconnect(nowSeconds: Double) { legacySource?.noteUnexpectedDisconnect(nowSeconds) }
         override fun noteTestSource(source: com.opencapture.opencine.media.FeedIncidentTestSource) { legacySource?.noteTestSource(source) }
-    }
-
-    // The root owns one camera backend. A retired facade cannot reopen its successor's gate.
-    private var cameraSessionOwner: Any? = null
-    @Synchronized fun beginCameraSession(owner: Any) {
-        cameraSessionOwner = owner
-        reporting.setCameraSessionActive(true)
-    }
-    @Synchronized fun endCameraSession(owner: Any) {
-        if (cameraSessionOwner !== owner) return
-        cameraSessionOwner = null
-        reporting.setCameraSessionActive(false)
     }
 }

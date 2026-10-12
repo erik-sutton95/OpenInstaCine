@@ -173,7 +173,7 @@ final class DiagnosticCenter: NSObject, MXMetricManagerSubscriber {
             journal: ControlLiveLog.recentLines(),
             exceptions: Self.readLines(Self.exceptionsURL),
             extras: AppDiagnostics.incidents.reportExtras() + Self.metricKitExtras(),
-            isSafeNetwork: PrivacyRedactor.isCameraNetwork)
+            isSafeNetwork: { _ in false })
     }
 
     @MainActor
@@ -184,7 +184,7 @@ final class DiagnosticCenter: NSObject, MXMetricManagerSubscriber {
         let extras = Self.metricKitExtras() + AppDiagnostics.incidents.reportExtras()
         let body = DiagnosticReport.fullReport(
             environment: env, journal: journal, exceptions: exceptions, extras: extras,
-            isSafeNetwork: PrivacyRedactor.isCameraNetwork)
+            isSafeNetwork: { _ in false })
         guard let dir = Self.diagnosticsDirectory else { return nil }
         let name = "report.txt"
         let url = dir.appendingPathComponent(name)
@@ -211,7 +211,7 @@ final class DiagnosticCenter: NSObject, MXMetricManagerSubscriber {
         DiagnosticReport.compactSummary(
             environment: environment(session: session),
             recent: ControlLiveLog.recentLines(),
-            isSafeNetwork: PrivacyRedactor.isCameraNetwork)
+            isSafeNetwork: { _ in false })
     }
 
     @MainActor

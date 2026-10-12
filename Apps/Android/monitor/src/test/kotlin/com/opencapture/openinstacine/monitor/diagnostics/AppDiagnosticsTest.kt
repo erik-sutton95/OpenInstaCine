@@ -23,8 +23,9 @@ class AppDiagnosticsTest {
         assertEquals("support@opencapture.org", host.supportEmail)
         assertEquals("openpocketcine.operator", host.preferencesName)
         assertEquals("192.168.42.", AppDiagnostics.gate.cameraIPv4Prefix)
-        // Camera-network redaction: the camera's access point stays readable, other networks do not.
-        assertEquals("ssid=OsmoPocket3-A1B2", host.redact("ssid=OsmoPocket3-A1B2"))
+        // Luna keeps no network readable (A6-10): DJI-looking and ordinary SSIDs are both redacted.
+        assertEquals("ssid=<redacted>", host.redact("ssid=OsmoPocket3-A1B2"))
+        assertEquals("ssid=<redacted>", host.redact("ssid=EdgeRouter-5G"))
         assertEquals("ssid=<redacted>", host.redact("ssid=CafeWiFi"))
         assertSame(AppDiagnostics.gate, AppDiagnostics.reporting.gate)
         assertSame(AppDiagnostics.consent, AppDiagnostics.reporting.consent)

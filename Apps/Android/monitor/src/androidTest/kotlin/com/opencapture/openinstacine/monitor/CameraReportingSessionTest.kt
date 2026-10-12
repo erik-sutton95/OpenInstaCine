@@ -29,7 +29,7 @@ class CameraReportingSessionTest {
         AppDiagnostics.consent.resetForTests()
     }
 
-    @Test fun joiningCancelsBothReportKindsAndCameraPathStillBlocksAfterRetirement() {
+    @Test fun joiningCancelsBothReportKindsAndFailureKeepsTheHoldUntilRetirement() {
         val backend = FakeShellBackend().also { it.phase.value = ConnectionPhase.IDLE }
         val session = liveSession(backend)
         try {
@@ -42,6 +42,10 @@ class CameraReportingSessionTest {
             assertTrue(waitUntil { AppDiagnostics.gate.isCameraSessionActive })
             assertEquals(1, automatic.cancellations)
             assertEquals(1, manual.cancellations)
+            // A drop into FAILED and recovery keeps the hold until the session retires (A6-08).
+            backend.phase.value = ConnectionPhase.FAILED
+            onMain { }
+            assertTrue(AppDiagnostics.gate.isCameraSessionActive)
             AppDiagnostics.gate.setCameraIPv4PathReadyForTests(true)
             onMain { session.disconnect() }
             assertFalse(AppDiagnostics.gate.isCameraSessionActive)

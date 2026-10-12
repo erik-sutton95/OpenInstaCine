@@ -50,6 +50,7 @@ import com.opencapture.openinstacine.monitor.OperatorPrefs
 import com.opencapture.openinstacine.monitor.bridge.SwiftCore
 import com.opencapture.opencine.appkit.MonitorControlModel
 import com.opencapture.opencine.appkit.MotionProgramSession
+import com.opencapture.opencine.appkit.diagnostics.ReliabilityCameraPathLease
 import com.opencapture.opencine.core.CameraCommandIntent
 import com.opencapture.opencine.core.CapabilitySnapshot
 import com.opencapture.opencine.core.MonitorLayoutCapabilities
@@ -153,14 +154,17 @@ class PocketCameraSession(
     private var incidentSessionActive = false
     private var incidentPrevious: Pair<Double, List<Long>>? = null
     private var incidentSourceGeneration: Long? = null
-    private var reportingActive = false
     private var closed = false
 
-    private fun updateReportingActivity(active: Boolean) {
-        if (closed || reportingActive == active) return
-        reportingActive = active
-        if (active) AppDiagnostics.beginCameraSession(reportingOwner)
-        else AppDiagnostics.endCameraSession(reportingOwner)
+    // Reports stay held back from this session's connect attempt, through recovery and FAILED,
+    // until it returns to IDLE, disconnects or closes; a retired facade only ends its own lease.
+    private var reportingCameraPath: ReliabilityCameraPathLease? = null
+    private fun holdReportingCameraPath() {
+        if (!closed && reportingCameraPath == null) reportingCameraPath = AppDiagnostics.reporting.beginCameraPath()
+    }
+    private fun releaseReportingCameraPath() {
+        reportingCameraPath?.close()
+        reportingCameraPath = null
     }
     private val controls: CameraControls? = backend as? CameraControls
     /** This session's names and media host (STATE-01: per session, never a launch-time global). */
@@ -404,7 +408,8 @@ class PocketCameraSession(
         scope.launch {
             backend.phase.collect { value ->
                 if (value != ConnectionPhase.IDLE && value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED && !incidentSessionActive) beginFeedIncidentSession()
-                updateReportingActivity(value != ConnectionPhase.IDLE && value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED)
+                if (value == ConnectionPhase.IDLE) releaseReportingCameraPath()
+                else if (value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED) holdReportingCameraPath()
                 if (value != ConnectionPhase.LIVE) cancelProgrammedMove()
                 when (value) {
                     ConnectionPhase.LIVE -> {
@@ -485,6 +490,7 @@ class PocketCameraSession(
     val lunaPort: LunaConnectPort? = (backend as? LunaConnectPort)?.let { port ->
         object : LunaConnectPort by port {
             override fun connect(id: String) {
+                holdReportingCameraPath()
                 retireRecovery()
                 _recoveryState.value = SessionRecoveryUi.Idle
                 cancelProgrammedMove()
@@ -508,7 +514,7 @@ class PocketCameraSession(
         endFeedIncidentSession()
         retireRecovery()
         _recoveryState.value = SessionRecoveryUi.Idle
-        updateReportingActivity(false)
+        releaseReportingCameraPath()
         cancelProgrammedMove()
         synchronized(recoveryFrameLock) { backend.disconnect(); decoder.reset() }
         holdsMonitor = false; hasVideoFormat = false
@@ -517,7 +523,7 @@ class PocketCameraSession(
     fun close() {
         if (closed) return
         endFeedIncidentSession()
-        updateReportingActivity(false)
+        releaseReportingCameraPath()
         closed = true
         retireRecovery()
         cancelProgrammedMove()
