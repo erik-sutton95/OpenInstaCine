@@ -9,6 +9,7 @@ import OpenCineApple
 import OpenCineCameraControls
 import OpenCineCore
 import OpenCineFrameIO
+import OpenCineFrameIOApple
 import OpenCineMedia
 import OpenCineRelay
 import OpenCineRelayApple
@@ -298,9 +299,9 @@ final class AppModel {
         }
     }
     var portraitRailExpanded = false
-    var frameioConnecting = false
-    var frameioUser: FrameioUser?
-    var delivery = MediaDeliveryCoordinator()
+    /// The app-scoped delivery owner: runs survive leaving the gallery or the player.
+    let delivery = MonitorDeliveryCoordinator()
+    let frameio = FrameioAccountModel(namespace: .openInstaCine)
     var relayHost = WatcherRelayHost(
         versionMismatchReason: WatcherRelayJoin.versionMismatchReason,
         logSubsystem: "com.opencapture.openinstacine", journal: { ControlLiveLog.line($0) })
@@ -359,49 +360,29 @@ final class AppModel {
             mode: session.status.shootingMode, recording: session.control.isRecording,
             locked: session.isLocked, busy: session.controlBusy, phase: session.phase)
     }
-    var internetHop = FrameioInternetHop()
-    var internetHopActive: Bool { internetHop.token != nil }
-    @ObservationIgnored private var internetHopSession: CameraSession?
+    /// The one internet hop off the Luna's Wi-Fi (A2-16): the Wi-Fi joiner leaves and rejoins,
+    /// and only the session and camera that left are ever rejoined.
+    @ObservationIgnored lazy var internetHop = MonitorInternetHop<InstaHopRoute>(
+        port: .init(
+            onCameraNetwork: { [weak self] in self?.session.backend.isOnCameraNetwork ?? false },
+            leave: { route, _ in
+                if let ssid = route.ssid { WiFiJoiner.leave(ssid: ssid) }
+                return route
+            },
+            admitsReturn: { [weak self] route in
+                guard let self else { return false }
+                return self.session === route.session && route.session.connectedCamera?.id == route.cameraID
+            },
+            rejoin: { route, _ in await route.session.rejoinSoftAPAfterInternetHop() }))
 
     /// On the Luna's own network (192.168.42.x), from the integration (SHELL-02 D10).
-    var isOnCameraAccessPoint: Bool { session.backend.isOnCameraNetwork }
+    var isOnCameraAccessPoint: Bool { internetHop.onCameraNetwork }
 
-    @discardableResult func beginInternetHop() -> FrameioInternetHop.Token {
-        let token = internetHop.begin()
-        internetHopSession = session
-        if let ssid = session.joinedSSID ?? session.cachedSSID { WiFiJoiner.leave(ssid: ssid) }
-        return token
-    }
-
-    func transferInternetHop(_ token: FrameioInternetHop.Token) -> FrameioInternetHop.Token? {
-        internetHop.transfer(token)
-    }
-
-    func endInternetHop(_ token: FrameioInternetHop.Token) {
-        guard internetHop.end(token) else { return }
-        let returningSession = internetHopSession
-        internetHopSession = nil
-        Task { await returningSession?.rejoinSoftAPAfterInternetHop() }
-    }
-
-    func waitForInternetPath(timeoutSeconds: Double, token: FrameioInternetHop.Token) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeoutSeconds)
-        while Date() < deadline {
-            if Task.isCancelled || !internetHop.owns(token) { return false }
-            if !isOnCameraAccessPoint, await Self.canReachInternet() {
-                return !Task.isCancelled && internetHop.owns(token)
-            }
-            try? await Task.sleep(for: .milliseconds(400))
-        }
-        return false
-    }
-
-    private static func canReachInternet() async -> Bool {
-        guard let url = URL(string: "https://ims-na1.adobelogin.com") else { return false }
-        var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
-        request.timeoutInterval = 3
-        return (try? await URLSession.shared.data(for: request)) != nil
+    /// Where a hop leaves from: the current session, its camera and the network it joined.
+    var hopRoute: InstaHopRoute {
+        InstaHopRoute(
+            session: session, cameraID: session.connectedCamera?.id,
+            ssid: session.joinedSSID ?? session.cachedSSID)
     }
 
     var currentDispMode: PocketDispMode { operatorSession.mode }

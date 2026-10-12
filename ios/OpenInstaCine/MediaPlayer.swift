@@ -10,23 +10,6 @@ import OpenInstaViewCore
 import SwiftUI
 import UIKit
 
-// MARK: - Shared chrome
-
-struct MediaShareSheet: UIViewControllerRepresentable {
-    let urls: [URL]
-    var onDismiss: () -> Void = {}
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: urls, applicationActivities: nil)
-        controller.completionWithItemsHandler = { _, _, _, _ in
-            onDismiss()
-        }
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
 // MARK: - Photo viewer
 
 /// Source addresses and bounded UIKit decoding; common UI owns the complete photo page.
@@ -62,9 +45,6 @@ struct MediaPhotoViewer: View {
             }
         }
         .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
-        .sheet(item: model.delivery.sharePresentation) { payload in
-            MediaShareSheet(urls: payload.urls) { _ = model.delivery.completeSharePresentation(id: payload.id) }
-        }
         .onDisappear { delivery = nil }
         .onChange(of: library.lifetimeToken) { _, _ in delivery = nil }
     }
@@ -105,7 +85,7 @@ struct MediaPlayerView: View {
     @State private var owner: MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>?
     @State private var initial: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>?
     @State private var pictureGeometry: MonitorPlaybackPictureGeometry?
-    @State private var deliveryPresentation: MediaDeliveryPresentation?
+    @State private var deliveryFiles: [MediaFile]?
     init(files: [MediaFile], startingAt file: MediaFile) { self.files = files; first = file }
 
     var body: some View {
@@ -113,16 +93,13 @@ struct MediaPlayerView: View {
             if let owner, let initial {
                 player(owner, initial: initial)
                     .overlay {
-                        if let deliveryPresentation {
-                            MediaDeliveryPopupOverlay(files: deliveryPresentation.files) {
-                                self.deliveryPresentation = nil
+                        if let deliveryFiles {
+                            MediaDeliveryPopupOverlay(files: deliveryFiles) {
+                                self.deliveryFiles = nil
                             }.zIndex(5)
                         }
                     }
                     .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
-                    .sheet(item: model.delivery.sharePresentation) { payload in
-                        MediaShareSheet(urls: payload.urls) { _ = model.delivery.completeSharePresentation(id: payload.id) }
-                    }
             } else { Color.black }
         }.onAppear {
             guard owner == nil, let record = model.session.mediaPlaybackRecord(for: first) else { return }
@@ -140,7 +117,7 @@ struct MediaPlayerView: View {
             assist: model.assist, stores: .app, looks: .app, palette: LiveDesign.self,
             haptics: .app, usage: $model.assistToolUsage,
             cacheOriginal: OperatorPrefs.cacheFullResolution,
-            deliveryPresented: deliveryPresentation != nil || model.delivery.isActive,
+            deliveryPresented: deliveryFiles != nil || model.delivery.isActive,
             operations: source.operations(model: model, owner: owner),
             source: { source.values(record: $0, model: model, owner: owner) },
             nativeAssists: { playback in
@@ -148,7 +125,7 @@ struct MediaPlayerView: View {
                 return source.assists
             }, readScopes: { model.monitorSamples.displayBundle }, configureDisplay: scopeDisplay,
             close: { dismiss() }, share: { record in
-                deliveryPresentation = MediaDeliveryPresentation(files: [record.payload.file])
+                deliveryFiles = [record.payload.file]
             }, onGeometry: { geometry in
                 guard geometry.item == owner.playback?.token else { return }
                 pictureGeometry = geometry

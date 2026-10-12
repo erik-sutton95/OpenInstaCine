@@ -159,10 +159,6 @@ struct MediaLibraryView: View {
                     MediaDeliveryPopupOverlay(files: deliveryFiles) { self.deliveryFiles = nil }
                 }
             }
-            // A player or photo cover presents its own share sheet; gate the binding, not the view.
-            .sheet(item: presented == nil ? model.delivery.sharePresentation : .constant(nil)) { payload in
-                MediaShareSheet(urls: payload.urls) { model.delivery.completeSharePresentation(id: payload.id) }
-            }
             .onChange(of: library.lifetimeToken) { _, _ in presented = nil; deliveryFiles = nil }
     }
     private func dismiss() {
