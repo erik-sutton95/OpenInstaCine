@@ -95,52 +95,8 @@ extension UIImage.Orientation {
     }
 }
 
-enum MediaCategoryTab: String, CaseIterable, Identifiable {
-    case all = "All"
-    case videos = "Videos"
-    case photos = "Photos"
-    case favorites = "Favorites"
-
-    var id: String { rawValue }
-
-    var opcIcon: OpcIcon {
-        switch self {
-        case .all: .layoutGrid
-        case .videos: .film
-        case .photos: .image
-        case .favorites: .star
-        }
-    }
-
-    var headerTitle: String {
-        switch self {
-        case .all: "All clips"
-        case .videos: "Videos"
-        case .photos: "Photos"
-        case .favorites: "Favorites"
-        }
-    }
-
-    var libraryTab: MediaLibraryTab {
-        switch self {
-        case .all: .all
-        case .videos: .videos
-        case .photos: .photos
-        case .favorites: .favorites
-        }
-    }
-}
-
 enum MediaClipPresentation {
     static let resolutionLevels = MonitorMediaResolutionLevel.standard
-    static func resolutionLabel(_ value: String?) -> String? { MonitorMediaGalleryLabels.resolution(value, levels: resolutionLevels) }
-    static func dateLabel(_ key: String) -> String { MonitorMediaGalleryLabels.date(key) }
-    static func metadataLine(file: MediaFile, durationOverride: String? = nil) -> String {
-        MonitorMediaGalleryLabels.metadata(resolution: file.resolution,
-            bytes: MediaClipFormatting.byteLabel(file.sizeBytes),
-            duration: file.kind == .video ? durationOverride ?? MediaClipFormatting.durationLabel(seconds: file.durationSeconds) : nil,
-            levels: resolutionLevels)
-    }
 }
 
 typealias MediaLibraryCopy = MonitorMediaGalleryCopy

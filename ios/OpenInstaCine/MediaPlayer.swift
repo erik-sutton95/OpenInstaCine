@@ -12,19 +12,6 @@ import UIKit
 
 // MARK: - Shared chrome
 
-struct MediaCircleIconButton: View {
-    let icon: OpcIcon
-    var size: CGFloat = 34
-
-    var body: some View {
-        icon
-            .frame(width: size * 0.38, height: size * 0.38)
-            .foregroundStyle(LiveDesign.text)
-            .frame(width: size, height: size)
-            .glassCircle(interactive: true)
-    }
-}
-
 struct MediaShareSheet: UIViewControllerRepresentable {
     let urls: [URL]
     var onDismiss: () -> Void = {}
@@ -38,13 +25,6 @@ struct MediaShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-enum MediaTimeFormatting {
-    static func label(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return "0:00" }
-        return MediaClipFormatting.durationLabel(seconds: Int(seconds.rounded(.down)))
-    }
 }
 
 // MARK: - Photo viewer
