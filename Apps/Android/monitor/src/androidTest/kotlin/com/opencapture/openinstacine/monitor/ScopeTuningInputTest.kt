@@ -15,7 +15,8 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.opencapture.openinstacine.monitor.assists.AssistOptionsPopup
+import com.opencapture.opencine.cameracontrols.AssistOptionsPanel
+import com.opencapture.openinstacine.monitor.assists.AppAssistHost
 import com.opencapture.opencine.media.MonitorCrushClipCompensation
 import com.opencapture.openinstacine.monitor.assists.LiveAssistState
 import com.opencapture.monitorui.MonitorAssistTool
@@ -131,7 +132,7 @@ class ScopeTuningInputTest {
         scenario.onActivity { activity ->
             activity.setContent {
                 Box(Modifier.fillMaxSize().testTag(identity).semantics { testTagsAsResourceId = true }) {
-                    AssistOptionsPopup(tool, state, {}, embedded = true)
+                    AssistOptionsPanel(tool, state, {}, AppAssistHost, embedded = true)
                 }
             }
         }
