@@ -1,7 +1,7 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.library)
+    // BuildConfig.SENTRY_DSN_ANDROID: the CI secret, else the ignored .local/reliability.properties.
+    id("com.opencapture.opencine.reporting")
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -25,7 +25,6 @@ android {
         buildConfigField("String", "VERSION_NAME", "\"$resolvedVersionName\"")
         buildConfigField("int", "VERSION_CODE", "$resolvedVersionCode")
         buildConfigField("String", "SOURCE_REVISION", "\"unknown\"")
-        buildConfigField("String", "SENTRY_DSN_ANDROID", "\"\"")
         buildConfigField("String", "BUILD_IDENTITY", "\"unknown\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The reporting adapter's manifest binds io.sentry.proguard-uuid to this placeholder. The app
@@ -102,26 +101,6 @@ val sourceRevisionField =
             com.android.build.api.variant.BuildConfigField("String", "\"$value\"", "git source revision")
         }
 
-// Non-empty SENTRY_DSN_ANDROID wins; otherwise the ignored repo-root .local/reliability.properties.
-val sentryDsnAndroidField =
-    providers.environmentVariable("SENTRY_DSN_ANDROID")
-        .orElse("")
-        .zip(
-            providers.of(LocalReliabilityDsnValueSource::class.java) {
-                parameters.propertiesFile.set(
-                    repositoryRoot.resolve(".local/reliability.properties"),
-                )
-            },
-        ) { env, file ->
-            val raw = env.trim().ifEmpty { file.trim() }
-            val escaped = raw.replace("\\", "\\\\").replace("\"", "\\\"")
-            com.android.build.api.variant.BuildConfigField(
-                "String",
-                "\"$escaped\"",
-                "optional Sentry Android DSN",
-            )
-        }
-
 // Windows CPython installs put `python` on PATH and no `python3`. `PYTHON` overrides both.
 val pythonExecutable: Provider<String> =
     providers.environmentVariable("PYTHON").orElse(
@@ -133,7 +112,6 @@ val pythonExecutable: Provider<String> =
 androidComponents {
     onVariants { variant ->
         variant.buildConfigFields?.put("SOURCE_REVISION", sourceRevisionField)
-        variant.buildConfigFields?.put("SENTRY_DSN_ANDROID", sentryDsnAndroidField)
         val identity = providers.exec {
             workingDir = repositoryRoot
             commandLine(
@@ -266,22 +244,4 @@ listOf("Debug", "Release").forEach { variant ->
     }
     tasks.matching { it.name == "bundle${variant}LocalLintAar" || it.name == "bundle${variant}Aar" }
         .configureEach { dependsOn(prepare) }
-}
-
-abstract class LocalReliabilityDsnValueSource :
-    ValueSource<String, LocalReliabilityDsnValueSource.Params> {
-    interface Params : ValueSourceParameters {
-        @get:org.gradle.api.tasks.Optional
-        @get:InputFile
-        @get:PathSensitive(PathSensitivity.NONE)
-        val propertiesFile: RegularFileProperty
-    }
-
-    override fun obtain(): String {
-        val file = parameters.propertiesFile.orNull?.asFile ?: return ""
-        if (!file.isFile) return ""
-        val props = Properties()
-        file.inputStream().use { props.load(it) }
-        return props.getProperty("SENTRY_DSN_ANDROID")?.trim().orEmpty()
-    }
 }

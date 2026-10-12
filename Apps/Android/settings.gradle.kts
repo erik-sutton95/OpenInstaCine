@@ -1,4 +1,5 @@
-pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+// OpenCine's Gradle plugins (the reporting adapter's DSN), from the same sibling checkout.
+pluginManagement { includeBuild("../../../OpenCine/Android/build-logic"); repositories { google(); mavenCentral(); gradlePluginPortal() } }
 dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
 rootProject.name = "OpenInstaCine"
 include(":app", ":monitor")
