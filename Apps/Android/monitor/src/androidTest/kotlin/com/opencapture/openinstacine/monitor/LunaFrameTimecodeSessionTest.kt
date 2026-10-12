@@ -44,42 +44,29 @@ class LunaFrameTimecodeSessionTest {
         assertNotNull(timecode())
     }
 
-    /** `HH:MM:SS:FF` as (second of day, frame). */
-    private fun parse(text: String): Pair<Int, Int> {
-        val (h, m, s, f) = text.split(":").map(String::toInt)
-        return (h * 3600 + m * 60 + s) to f
+    /** `HH:MM:SS` (whole seconds: the phone clock invents no frame field) as the second of day. */
+    private fun parse(text: String): Int {
+        val (h, m, s) = text.split(":").map(String::toInt)
+        return h * 3600 + m * 60 + s
     }
 
     @Test fun frameStampsPinToTheEarliestArrivalAndPublishOncePerSecond() {
         val first = 100_000L
         frameUntilShown(first)
-        val (second, frames) = parse(timecode()!!)
-        // Unknown fps counts 25 frames a second, so the frame number places the arrival within
-        // 40 ms of its second; each probe below stays clear of that uncertainty. Older stamps
-        // arrived later than the pinned one, so the offset holds.
-        val previousSecond = (second + 86_399) % 86_400
-        fun assertUnchanged(stampMs: Long) {
-            val before = timecode()
-            frame(stampMs)
-            SystemClock.sleep(300)
-            assertEquals(before, timecode(), "the timecode changes only when its second does")
-        }
-        fun assertPrevious(stampMs: Long, expectedFrames: Set<Int>) {
-            val before = timecode()
-            frame(stampMs)
-            assertTrue(waitUntil { timecode() != before })
-            val (shown, shownFrames) = parse(timecode()!!)
-            assertEquals(previousSecond, shown)
-            assertTrue(shownFrames in expectedFrames, "frame $shownFrames")
-        }
-        if (frames >= 10) {
-            assertUnchanged(first - 250)
-            assertPrevious(first - (frames + 1) * 40 - 300, setOf(16, 17))
-        } else {
-            val previous = first - (frames + 1) * 40 - 500
-            assertPrevious(previous, setOf(11, 12))
-            assertUnchanged(previous - 250)
-        }
+        val shown = timecode()!!
+        val second = parse(shown)
+        // Later arrivals keep the earliest offset, so a frame stamped a whole second earlier shows
+        // exactly the previous second, whatever the sub-second phase of the pinned arrival.
+        frame(first - 1_000)
+        assertTrue(waitUntil { timecode() != shown })
+        val previous = timecode()
+        assertEquals((second + 86_399) % 86_400, parse(previous!!))
+        frame(first - 1_000)
+        SystemClock.sleep(300)
+        assertEquals(previous, timecode(), "the timecode changes only when its second does")
+        frame(first)
+        assertTrue(waitUntil { timecode() != previous })
+        assertEquals(shown, timecode())
     }
 
     @Test fun linkPhaseChangesClearTheTimecodeAndStartThePinningOver() {

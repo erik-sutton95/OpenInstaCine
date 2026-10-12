@@ -136,14 +136,16 @@ private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabiliti
                 MonitorOperatorViewport(maxWidth.value, maxHeight.value, 0f, 0f, safeTop, safeBottom, 1f, safeTop > 0f),
                 model.assist, model::chromeSectionMounts, model.portraitFeedAspect, sourceAspect, sourceAspect < 1f,
                 model.virtualJoystickSize, false)
-            MonitorOperatorLiveSurface(rememberOperatorChromeSource(model, status), geometry, liveState,
-                MonitorOperatorLivePresentation(status, capabilities, "25", 4,
-                    model.phoneBatteryPercent.takeIf { it >= 0 }, true, sourceAspect < 1f, false, false, false, false, null),
-                model.assist, rememberOperatorAssistSource(model, status),
+            val chrome = rememberOperatorChromeSource(model, status, capabilities)
+            MonitorOperatorLiveSurface(chrome, geometry, liveState,
+                cameraStatusLiveSource(chrome, geometry, liveState, "25", 4, hasPicture = true,
+                    verticalPicture = sourceAspect < 1f, mirrored = false, recovering = false, busy = false, note = null,
+                    clearNote = {}, readExposure = { -1 }, exposureAvailable = false, level = null, levelViewFlip = false,
+                    vpnActive = { false }),
+                rememberOperatorAssistSource(model, status),
                 MonitorOperatorFocusObservation(null, com.opencapture.opencine.vocabulary.TrackingHud(), false, false, false, false),
                 MonitorOperatorFocusActions({ _, _ -> }, {}, { false }, { false }, {}, { false }, {}, {}, {}),
-                level = null, levelViewFlip = false, readExposure = { -1 }, exposureAvailable = false,
-                vpnActive = { false }, clearNote = {}, lockedChanged = {}, nativeInputBlocked = {},
+                nativeInputBlocked = {},
                 picture = {
                     if (image != null) Image(image.asImageBitmap(), null,
                         Modifier.liveModuleFrame(geometry.pictureContent).monitorBackdropSource(backdrop),

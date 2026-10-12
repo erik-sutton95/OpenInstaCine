@@ -1,4 +1,5 @@
-pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+// OpenCine's Gradle plugins (the reporting adapter's DSN), from the same sibling checkout.
+pluginManagement { includeBuild("../../../OpenCine/Android/build-logic"); repositories { google(); mavenCentral(); gradlePluginPortal() } }
 dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
 rootProject.name = "OpenInstaCine"
 include(":app", ":monitor")
@@ -24,6 +25,7 @@ includeBuild("../../../OpenCine/Android") {
         substitute(module("com.opencapture.opencine:insta360-shell")).using(project(":insta360-shell"))
         substitute(module("com.opencapture.opencine:insta360-luna")).using(project(":insta360-luna"))
         substitute(module("com.opencapture.opencine:appkit")).using(project(":appkit"))
+        substitute(module("com.opencapture.opencine:appkit-sentry")).using(project(":appkit-sentry"))
         substitute(module("com.opencapture.opencine:camera-controls")).using(project(":camera-controls"))
     }
 }

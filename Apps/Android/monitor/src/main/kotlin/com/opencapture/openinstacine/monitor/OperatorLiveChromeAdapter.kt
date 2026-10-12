@@ -6,12 +6,14 @@ import androidx.compose.runtime.getValue
 import com.opencapture.opencine.cameracontrols.MonitorOperatorLiveChromeSource
 import com.opencapture.opencine.cameracontrols.MonitorOperatorStickActions
 import com.opencapture.opencine.cameracontrols.MonitorOperatorZoomPresentation
+import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.opencine.vocabulary.CamFov
 import com.opencapture.opencine.vocabulary.CameraStatus
 
 /** Native optical reports and SDK movement ports; chrome and picker policy live in CameraControls. */
 @Composable
-internal fun rememberOperatorChromeSource(model: AppModel, status: CameraStatus): MonitorOperatorLiveChromeSource<AppModel> {
+internal fun rememberOperatorChromeSource(model: AppModel, status: CameraStatus,
+    capabilities: MonitorLayoutCapabilities): MonitorOperatorLiveChromeSource<AppModel> {
     val zoomReadout by model.session.zoomReadout.collectAsState()
     val dial by model.session.zoomDialReadout.collectAsState()
     val pinching by model.session.zoomPinching.collectAsState()
@@ -23,5 +25,6 @@ internal fun rememberOperatorChromeSource(model: AppModel, status: CameraStatus)
     return MonitorOperatorLiveChromeSource(model, model.shell, model.operatorSession,
         model.operatorCaptureSource, OperatorPrefs, model.portraitFeedAspect, model::updatePortraitFeedAspect,
         zoom, MonitorOperatorStickActions(model::updateGimbalStick, model::endGimbalStick,
-            model.session::performGimbalDoubleTap, model.session::flipGimbal))
+            model.session::performGimbalDoubleTap, model.session::flipGimbal),
+        status = status, capabilities = capabilities)
 }

@@ -1,3 +1,4 @@
+import OpenCineMedia
 import SwiftUI
 import XCTest
 
@@ -69,6 +70,52 @@ final class LiveChromeAccessibilityTests: XCTestCase {
         try await settle(host.view)
         let covered = try exposed(host.view)
         XCTAssertTrue(covered.isDisjoint(with: live), "Covered: \(covered.sorted())")
+    }
+
+    /// A1-06: Luna reports no metered EV. The meter reads the live picture, marked as an
+    /// estimate, instead of standing unavailable while Settings says it meters the picture.
+    func testTheEVMeterReadsThePictureWhenTheCameraMetersNone() async throws {
+        setenv("OPV_UI_REVIEW_SCREEN", "live", 1)
+        defer { unsetenv("OPV_UI_REVIEW_SCREEN") }
+        let model = AppModel()
+        model.prepareStartup()
+        XCTAssertNil(model.session.status.meteredEv, "the camera meters nothing")
+        let suite = "LiveChromeAccessibilityTests.pictureEV"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        model.session.pictureEV = PictureEVMeter(defaults: defaults)
+        let wasOn = model.assist.evMeter
+        model.assist.evMeter = true
+        let host = UIHostingController(
+            rootView: LiveViewScreen().environment(model).environment(\.scenePhase, .active))
+        host.safeAreaRegions = []
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 874, height: 402))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        host.view.frame = window.bounds
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            model.session.disconnect()
+            model.assist.evMeter = wasOn
+        }
+        try await settle(host.view)
+
+        // A SIMULATED picture whose luma samples all sit at one code.
+        var luma = Array(repeating: 0, count: 256)
+        luma[118] = 1_000
+        let samples = ScopeSamples(
+            histogramLuma: luma, histogramRed: luma, histogramGreen: luma, histogramBlue: luma, points: [])
+        let source = model.frameSamples.openSource(.live)
+        defer { model.frameSamples.closeSource(source) }
+        model.frameSamples.publish(
+            source, source: nil, transfer: .rec709,
+            bundle: ScopeAssistBundle(samples: samples, transfer: .rec709))
+        try await settle(host.view)
+
+        let meter = try element("monitor.ev.meter", in: host.view)
+        let value = meter.accessibilityValue ?? ""
+        XCTAssertTrue(value.hasPrefix("Estimated from picture"), value)
     }
 
     private func settle(_ view: UIView) async throws {

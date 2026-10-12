@@ -1,3 +1,4 @@
+import Insta360Apple
 import Insta360Protocol
 import OpenCineCameraControls
 import OpenCineCore
@@ -139,16 +140,14 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertNil(CaptureLists.focusOption(from: status))
     }
 
-    func testTimeOfDayTimecode() {
+    func testTimeOfDayTimecodeHasSecondsPrecisionWithoutAFabricatedFrame() {
         // 2026-09-30 08:51:10.54 UTC, Stockholm (UTC+2).
         let t = 1_790_758_270.54
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 25), "10:51:10:13")
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 30), "10:51:10:16")
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 50), "10:51:10:13")
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 120), "10:51:10:16")
+        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200), "10:51:10")
+        XCTAssertNil(LunaFrameTimecode.timecode(unixSeconds: t, timeZoneSeconds: 7200).frames)
         // Wraps at midnight, west of GMT too.
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: 86_399.99, timeZoneSeconds: 0, fps: 24), "23:59:59:23")
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: 3600, timeZoneSeconds: -7200, fps: 24), "23:00:00:00")
+        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: 86_399.99, timeZoneSeconds: 0), "23:59:59")
+        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: 3600, timeZoneSeconds: -7200), "23:00:00")
     }
 
     func testInsta360FilenameDates() {

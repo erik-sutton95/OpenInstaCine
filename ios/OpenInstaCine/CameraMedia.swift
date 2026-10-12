@@ -183,12 +183,9 @@ extension CameraSession {
     var mediaNote: String? { playbackMediaNote ?? mediaLibrary.note }
     var isBrowsingMedia: Bool { mediaLibrary.browsing }
     var mediaCacheRevision: UInt64 { mediaLibrary.cacheRevision }
-    var mediaDownloadProgress: [String: Double] {
-        var values: [String: Double] = [:]
-        for record in mediaLibrary.records {
-            if let value = mediaLibrary.progress[record.asset.id] { values[record.payload.file.path] = value }
-        }
-        return values
+    /// One file's transfer progress, read from the library (the gallery reads it per record).
+    func mediaDownloadProgress(for file: MediaFile) -> Double? {
+        mediaRecord(for: file).flatMap { mediaLibrary.progress[$0.asset.id] }
     }
     func mediaRecord(for file: MediaFile) -> MonitorMediaRecord<LunaMediaLibraryPayload>? {
         var content = file; content.isStarred = false

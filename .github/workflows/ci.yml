@@ -44,7 +44,11 @@ jobs:
           args: "detect --source=. --redact --no-banner"
 
       - name: Sentry release configuration
-        run: bash ./tools/sentry-test.sh
+        # OpenCine's shared Sentry tooling, run against this app's Xcode Cloud archive hook.
+        run: |
+          OPC_APP_ROOT=. OPC_APP_NAME=OpenInstaCine bash ../OpenCine/scripts/sentry/sentry-test.sh
+          python3 tools/ios-package-resolved-check.py
+          bash scripts/ios-package-resolved-test.sh
 
       - name: Packaged iOS privacy regression
         run: python3 -m unittest discover -s tools -p 'test_ios_archive_privacy.py'

@@ -16,7 +16,7 @@ struct LiveViewScreen: View {
     @State private var gamepad = GimbalGamepadBridge()
     @State private var headphones = HeadphoneMotionBridge.appBridge()
     @State private var orientationObserver = InterfaceOrientationObserver()
-    private var interfaceLocked: Bool { interaction.locked }
+    private var interfaceLocked: Bool { model.operatorSession.locked }
     private var showsBottomBars: Bool {
         model.chromeSectionMounts(.toolBar) || model.chromeSectionMounts(.cameraValues)
     }
@@ -56,7 +56,7 @@ struct LiveViewScreen: View {
     }
 
     private func updateInputAdmission(_ admission: MonitorInputAdmission) {
-        model.session.isLocked = interaction.locked
+        model.session.isLocked = interfaceLocked
         switch admission {
         case .blocked(let reason):
             gamepad.noteBlocked(); headphones.noteBlocked()
@@ -135,7 +135,8 @@ struct LiveViewScreen: View {
                 readIMU: { model.headTrackImuReadout }, calibrate: { headphones.tapControl() }),
             readLevel: { now, viewFlip in
                 LevelAssist.display(model.session.levelReading.mode(now: now, viewFlip: viewFlip))
-            }
+            },
+            pictureEV: { model.pictureEV }
         ) { LiveFeedPane()
         } preview: { AssistInspectorPreview(tool: $0)
         } lookMenu: { LUTAssist.longPressMenu(assist: model.assist) }
