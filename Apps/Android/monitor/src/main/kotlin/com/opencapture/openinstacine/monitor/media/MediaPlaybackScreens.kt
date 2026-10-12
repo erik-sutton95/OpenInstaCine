@@ -82,11 +82,9 @@ import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.openinstacine.monitor.MonitorGlass
 import com.opencapture.monitorui.MonitorIcon
 import com.opencapture.openinstacine.monitor.OperatorPrefs
-import com.opencapture.openinstacine.monitor.assists.AssistOptionsPopup
 import com.opencapture.opencine.cameracontrols.AssistAudioOverlay
 import com.opencapture.openinstacine.monitor.assists.AssistRect
 import com.opencapture.openinstacine.monitor.assists.LiveAssistState
-import com.opencapture.openinstacine.monitor.assists.LiveAssistLayer
 import com.opencapture.monitorui.MonitorAssistTool
 import com.opencapture.opencine.cameracontrols.MirrorAssist
 import com.opencapture.openinstacine.monitor.feed.rememberLiveFeedEffectsPlan
