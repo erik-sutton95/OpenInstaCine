@@ -124,6 +124,22 @@ final class AppModel {
     @ObservationIgnored let playbackBackdrop = MonitorVideoBackdropRenderer()
     /// Monitor tools follow the displayed source; watcher scopes must never read the camera bus.
     var monitorSamples: LiveFrameSampleBus { isWatchingFeed ? relayClient.samples : frameSamples }
+
+    /// EV estimated from the live picture, for a camera that meters none: the picture's median
+    /// against 18% grey, less where this source's auto exposure places it (`PictureEVMeter`).
+    var pictureEV: EvComp? {
+        guard assist.evMeterFromPicture else { return nil }
+        let bundle = monitorSamples.bundle
+        guard let picture = MonitorNDFilterRecommendation.pictureStops(
+            lumaHistogram: bundle.samples.histogramLuma, transfer: bundle.transfer)
+        else { return nil }
+        let status = session.status
+        let stops = session.pictureEV.stops(
+            picture: picture, context: session.pictureEVContext(transfer: bundle.transfer),
+            evComp: status.expoMode == .auto ? status.evComp.map { Double($0.thirds) / 3 } : nil,
+            now: ProcessInfo.processInfo.systemUptime)
+        return stops.value.map { EvComp(thirds: Int(($0 * 3).rounded())) }
+    }
     var monitorColorMode: ColorMode? {
         if isWatchingFeed { return relayClient.colorMode }
         if assist.gradesClip { return assist.monitorColorMode }

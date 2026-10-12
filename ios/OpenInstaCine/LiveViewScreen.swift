@@ -135,7 +135,8 @@ struct LiveViewScreen: View {
                 readIMU: { model.headTrackImuReadout }, calibrate: { headphones.tapControl() }),
             readLevel: { now, viewFlip in
                 LevelAssist.display(model.session.levelReading.mode(now: now, viewFlip: viewFlip))
-            }
+            },
+            pictureEV: { model.pictureEV }
         ) { LiveFeedPane()
         } preview: { AssistInspectorPreview(tool: $0)
         } lookMenu: { LUTAssist.longPressMenu(assist: model.assist) }
