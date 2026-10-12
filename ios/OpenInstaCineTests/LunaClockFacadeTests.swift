@@ -20,8 +20,8 @@ final class LunaClockFacadeTests: XCTestCase {
         }
     }
 
-    private func liveSession(_ wire: Wire) -> CameraSession {
-        let session = CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
+    private func liveSession(_ wire: Wire) -> OpenInstaCine.CameraSession {
+        let session = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
         let luna = LunaCameraSession(
             send: { try wire.reply($0, nil) }, sendWithin: { try wire.reply($0, $1) },
             functionMode: { LunaFunctionMode.normalVideo.rawValue },

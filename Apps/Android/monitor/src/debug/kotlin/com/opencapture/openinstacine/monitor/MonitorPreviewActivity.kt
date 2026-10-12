@@ -1,5 +1,7 @@
 package com.opencapture.openinstacine.monitor
 
+import com.opencapture.opencine.core.CameraTimecode
+
 import com.opencapture.opencine.cameracontrols.*
 import com.opencapture.monitorui.portraitZones
 import com.opencapture.monitorui.portraitOnFeedControls
@@ -107,7 +109,7 @@ private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabiliti
     safeTop: Float, safeBottom: Float, patterned: Boolean = false) {
     val status = remember(capabilities) {
         CameraStatus(batteryPercent = 80, storageTotalMb = 131072, storageFreeMb = 109568,
-            timecode = if (capabilities.timecode) "15:39:50:00" else null,
+            timecode = if (capabilities.timecode) CameraTimecode(15, 39, 50, frames = 0) else null,
             shootingMode = 1, iso = 1600, isoIndex = 7, shutterDenom = 50,
             expoMode = CameraCommands.EXPO_MANUAL, colorMode = CameraCommands.COLOR_DLOG2,
             resolutionCode = CameraCommands.RES_4K, fps = 25, fpsIndex = 2,
