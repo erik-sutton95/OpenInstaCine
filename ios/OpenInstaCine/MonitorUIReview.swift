@@ -1,10 +1,13 @@
 #if targetEnvironment(simulator)
+    import CryptoKit
     import Foundation
     import MonitorPresentation
     import Insta360Apple
     import Insta360Protocol
+    import OpenCineApple
     import OpenCineCameraControls
     import OpenCineCore
+    import OpenCineMedia
     import OpenInstaViewCore
     import UIKit
 
@@ -13,15 +16,17 @@
     /// identities, and never advance the actual connection state machine.
     @MainActor
     enum MonitorUIReview {
-        static var screen: String? { ProcessInfo.processInfo.environment["OPV_UI_REVIEW_SCREEN"] }
-        static var isActive: Bool { screen != nil }
+        /// The shared typed review every app decodes (`ReviewLaunch`). Other switches (fit,
+        /// orientation, motion, unknown core reports, photos) stay raw keys read below.
+        static var launch: ReviewLaunch? { .current }
+        static var screen: ReviewLaunch.Screen? { launch?.screen }
+        /// `OPV_UI_REVIEW_SCREEN=sequence`, this app's own shell walk (`runSequence`).
+        static var isSequence: Bool { ProcessInfo.processInfo.environment[ReviewLaunch.Key.screen] == "sequence" }
+        static var isActive: Bool { launch != nil || isSequence }
         /// The connection state the cameras and pair pages show: `empty`, `saved-nearby`,
         /// `connecting`, `failure`, `pair-choose`, `pair-approve`, `pair-join`, `pair-video`,
         /// `pair-failure`, `pair-bluetooth`; none is the two saved cameras, idle.
-        static var state: String {
-            let environment = ProcessInfo.processInfo.environment
-            return environment["OPV_UI_REVIEW_STATE"] ?? (environment["OPV_UI_REVIEW_CONNECTING"] == "1" ? "connecting" : "")
-        }
+        static var state: String { launch?.state ?? "" }
         static let studioID = "00000000-0000-0000-0000-000000000001"
 
         /// The shared cameras model's inputs for a review: a scripted Luna backend and a private
@@ -63,7 +68,7 @@
 
         #if DEBUG
             static var zoomControls: Bool {
-                screen == "live"
+                screen == .live
                     && ProcessInfo.processInfo.environment["OPV_UI_REVIEW_ZOOM_CONTROLS"]
                         == "1"
             }
@@ -136,10 +141,10 @@
             status.audioChannel = .stereo
             status.timecode = "15:39:50:00"
             status.colorMode = .iLog
-            if let raw = ProcessInfo.processInfo.environment["OPV_UI_REVIEW_METERED_EV"],
-                let value = UInt8(raw)
-            {
-                status.meteredEv = EvComp(rawValue: value)
+            if let ev = launch?.meteredEV {
+                // The camera meters in thirds of a stop: the nearest one it could report.
+                status.meteredEv = EvComp(
+                    thirds: min(max(Int((ev * 3).rounded()), EvComp.minThirds), EvComp.maxThirds))
             }
             #if DEBUG
                 if zoomControls {
@@ -169,8 +174,15 @@
             model.session.status = status
             // SIMULATED reports go through the real common session and descriptors. Native
             // integration-only readouts keep the fixture status above.
-            if ["live", "settings", "media"].contains(screen) {
-                presentSimulatedMonitor(model)
+            if let launch, ![.cameras, .pair].contains(launch.screen) {
+                #if DEBUG
+                    // A connected camera's media source rides on the monitor, as a real one does.
+                    var services = CameraServices()
+                    if launch.connected { services.register(mediaService, as: (any CameraMediaService).self) }
+                    presentSimulatedMonitor(model, services: services)
+                #else
+                    presentSimulatedMonitor(model)
+                #endif
                 model.control.onChange = {}
             }
             if ProcessInfo.processInfo.environment["OPV_UI_REVIEW_MOTION"] == "1" {
@@ -204,20 +216,33 @@
                 }
             default: break
             }
-            if screen == "pair" { model.shell.beginPairing() }
-            if screen == "settings" { model.shell.open(.settings) }
-            if screen == "media" { model.shell.open(.media) }
-            #if DEBUG
-                if MonitorMediaReview.usesProductionShell {
-                    model.session.configureMediaLibrary(service: MonitorMediaReview.playbackService)
-                    model.shell.open(.media)
-                }
-            #endif
-            if screen == "sequence" { runSequence(model, status: status) }
+            if isSequence { runSequence(model, status: status) }
+            switch screen {
+            case .pair: model.shell.beginPairing()
+            case .settings:
+                if let tab = launch?.settingsTab { model.operatorSettingsTab = tab }
+                model.shell.open(.settings)
+            case .chromeEdit: model.beginChromeEditing(model.currentDispMode)
+            case .media, .playback:
+                #if DEBUG
+                    guard let launch else { return }
+                    opensFirstClip = launch.screen == .playback
+                    Task {
+                        do { try await stageMedia(launch, in: model.session) } catch {
+                            assertionFailure("Could not stage the review media: \(error)")
+                        }
+                        model.session.configureMediaLibrary(
+                            service: model.shell.monitor?.camera.services[(any CameraMediaService).self])
+                        model.session.mediaLibrary.layout = launch.layout
+                        model.shell.open(.media)
+                    }
+                #endif
+            case .cameras, .live, nil: break
+            }
         }
 
         /// SIMULATED monitor, simulator only: isolated session with no network send path.
-        static func presentSimulatedMonitor(_ model: AppModel) {
+        static func presentSimulatedMonitor(_ model: AppModel, services: CameraServices = .init()) {
             let saved =
                 model.cameras.saved.first
                 ?? SavedCamera(
@@ -232,7 +257,7 @@
             } else {
                 session = model.session.backend.openSession()
             }
-            model.shell.present(ConnectedCamera(saved: saved, session: session))
+            model.shell.present(ConnectedCamera(saved: saved, session: session, services: services))
         }
 
         /// Uses Luna's actual report decoding and capability projection. UI writes fail locally,
@@ -347,4 +372,151 @@
         func openSession() -> LunaCameraSession { backend.openSession() }
         func forget(cameraID: UUID) {}
     }
+
+    #if DEBUG
+        extension MonitorUIReview {
+            /// `ReviewLaunch(screen: .playback)`: the Media page opens its first clip once, as a tap would.
+            static var opensFirstClip = false
+            /// `OPV_UI_REVIEW_PLAYBACK_FACTS=<path>` mounts the native player facts (`MonitorPlaybackReviewFacts`).
+            static let playbackFacts = ProcessInfo.processInfo.environment["OPV_UI_REVIEW_PLAYBACK_FACTS"] != nil
+            /// The connected camera's SIMULATED media source: a complete catalog, no camera operations.
+            static let mediaService = ReviewMediaService()
+
+            /// Media written through the library's own cache and catalog, as finished downloads leave
+            /// it: `mediaCount` generated clips (`ReviewClip`), or the two decoded-video inputs of
+            /// `OPV_SIM_FEED_MANIFEST`, or two generated stills with `OPV_UI_REVIEW_MEDIA_PHOTOS=1`.
+            static func stageMedia(_ launch: ReviewLaunch, in session: CameraSession) async throws {
+                let cache = session.mediaLibrary.cache
+                try await cache.directory.clear(preserving: [])
+                let environment = ProcessInfo.processInfo.environment
+                let media: [StagedMedia] =
+                    if environment["OPV_SIM_FEED_MANIFEST"] != nil { try decodedInputs() }
+                    else if environment["OPV_UI_REVIEW_MEDIA_PHOTOS"] == "1" { try stills() }
+                    else { try await clips(launch.mediaCount) }
+                let records = try cache.codec.decode(JSONEncoder().encode(media.map(\.file)))
+                for (record, item) in zip(records, media) {
+                    for address in record.address.representations.values {
+                        try cache.directory.write(item.bytes, at: address)
+                    }
+                    if let thumbnail = item.thumbnail, let address = record.address.thumbnail {
+                        try cache.directory.write(thumbnail, at: address)
+                    }
+                }
+                try cache.save(records)
+                // The library loads its catalog once: closed and unkeyed, the next configuration
+                // builds one over these.
+                session.mediaLibrary.close()
+                session.mediaLibraryKey = nil
+            }
+
+            private struct StagedMedia {
+                let file: MediaFile
+                let bytes: Data
+                var thumbnail: Data? = nil
+            }
+
+            /// One clip a minute from 2026-09-12 12:00 UTC, named as the camera names them.
+            private static func clips(_ count: Int) async throws -> [StagedMedia] {
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent("ReviewClip.mp4")
+                try await ReviewClip.write(to: url)
+                let bytes = try Data(contentsOf: url)
+                let names = DateFormatter()
+                names.locale = Locale(identifier: "en_US_POSIX")
+                names.timeZone = TimeZone(identifier: "UTC")
+                names.dateFormat = "yyyyMMdd'_'HHmmss"
+                return (0..<count).map { index in
+                    let stamp = names.string(from: Date(timeIntervalSince1970: 1_789_214_400 + Double(index) * 60))
+                    let suffix = String(format: "_00_%03d", index + 1)
+                    return StagedMedia(file: MediaFile(
+                        path: "DCIM/Camera01/VID_\(stamp)\(suffix).MP4", thumbPath: "DCIM/Camera01/IMG_\(stamp)\(suffix).JPG",
+                        handle: UInt32(index + 1), sizeBytes: UInt64(bytes.count),
+                        durationSeconds: ReviewClip.seconds, resolution: "640x360", fps: 24), bytes: bytes)
+                }
+            }
+
+            private static func stills() throws -> [StagedMedia] {
+                let renderer = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32))
+                let image = renderer.image { context in
+                    UIColor.systemGreen.setFill()
+                    context.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
+                }
+                guard let bytes = image.jpegData(compressionQuality: 0.8) else { throw CocoaError(.fileWriteUnknown) }
+                return (1...2).map { value in
+                    StagedMedia(file: MediaFile(
+                        path: "UI-REVIEW/IMG_20261003_14000\(value)_00_00\(value).JPG",
+                        thumbPath: "UI-REVIEW/IMG_20261003_14000\(value)_00_00\(value).JPG",
+                        sizeBytes: UInt64(bytes.count), resolution: "32x32"), bytes: bytes)
+                }
+            }
+
+            private struct PlaybackInput: Decodable {
+                let name: String
+                let path: String
+                let reference: String
+                let sha256: String
+                let reference_sha256: String
+                let size: Int
+                let duration: Int
+                let width: Int
+                let height: Int
+                let fps: Int
+            }
+            private struct PlaybackManifest: Decodable { let files: [PlaybackInput] }
+            private enum InputError: Error { case invalid }
+
+            /// The two decoded-video inputs a native playback review supplies, checked against their
+            /// manifest; ordinary legacy addresses, A with a proxy.
+            private static func decodedInputs() throws -> [StagedMedia] {
+                let environment = ProcessInfo.processInfo.environment
+                guard let manifestPath = environment["OPV_SIM_FEED_MANIFEST"] else { throw InputError.invalid }
+                let manifest = try JSONDecoder().decode(PlaybackManifest.self,
+                    from: Data(contentsOf: URL(fileURLWithPath: manifestPath)))
+                guard manifest.files.count == 2 else { throw InputError.invalid }
+                return try manifest.files.enumerated().map { index, input in
+                    let key = index == 0 ? "OPV_SIM_FEED_CLIP" : "OPV_SIM_FEED_CLIP_B"
+                    guard let path = environment[key], path == input.path,
+                        input.name == (index == 0 ? "A" : "B"), input.duration == 12,
+                        input.width == 640, input.height == 360, input.fps == 24 else { throw InputError.invalid }
+                    let data = try Data(contentsOf: URL(fileURLWithPath: path))
+                    let reference = try Data(contentsOf: URL(fileURLWithPath: input.reference))
+                    func hash(_ bytes: Data) -> String { SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() }
+                    guard data.count == input.size, hash(data) == input.sha256,
+                        hash(reference) == input.reference_sha256,
+                        let jpeg = UIImage(data: reference)?.jpegData(compressionQuality: 0.9) else { throw InputError.invalid }
+                    let chronology = 2 - index
+                    let suffix = String(format: "14000%d_00_00%d", chronology, chronology)
+                    return StagedMedia(file: MediaFile(path: "DCIM/VID_20261003_\(suffix).MP4",
+                        thumbPath: "DCIM/IMG_20261003_\(suffix).JPG", sizeBytes: UInt64(data.count),
+                        durationSeconds: input.duration, resolution: "640x360", fps: input.fps,
+                        proxyPath: index == 0 ? "DCIM/LRV_20261003_\(suffix).LRV" : nil), bytes: data, thumbnail: jpeg)
+                }
+            }
+        }
+
+        /// One SIMULATED source; catalog is complete and unsupported operations stay absent.
+        @MainActor final class ReviewMediaService: CameraMediaService {
+            let browse = ReviewMediaBrowse()
+            var opens = 0
+            var sessionID: OpenCineCore.CameraSessionID { browse.binding.session }
+            func openBrowse() async -> any CameraMediaBrowse { opens += 1; return browse }
+        }
+        @MainActor final class ReviewMediaBrowse: CameraMediaBrowse {
+            let binding = MediaBrowseBinding(session: .init(), epoch: .init(1))
+            var thumbnails: (any CameraMediaThumbnailService)? { nil }
+            var transfers: (any CameraMediaTransferService)? { nil }
+            var deletion: (any CameraMediaDeleteService)? { nil }
+            var closes = 0
+            func catalog() async -> any MediaCatalogCursor { ReviewMediaCursor() }
+            func close() async { closes += 1 }
+        }
+        @MainActor private final class ReviewMediaCursor: MediaCatalogCursor {
+            var done = false
+            func next() async -> MediaCatalogDelta? {
+                guard !done else { return nil }
+                done = true
+                return .init(complete: true)
+            }
+            func close() { done = true }
+        }
+    #endif
 #endif

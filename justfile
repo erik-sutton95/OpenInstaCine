@@ -68,6 +68,11 @@ ios-run device: ios-generate
     xcrun devicectl device install app --device {{device}} .local/DDdev/Build/Products/Debug-iphoneos/OpenInstaCine.app
     xcrun devicectl device process launch --device {{device}} --activate --terminate-existing com.opencapture.openinstacine
 
+# The shared conformance scenarios (OpenCine docs/conformance/SCENARIOS.md) on the simulator `udid`,
+# which needs accessibility enabled (OpenCine scripts/ios-private-simulator.py create).
+conformance-ios udid result="": ios-generate
+    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCineUIReview -destination 'platform=iOS Simulator,id={{udid}}' -parallel-testing-enabled NO {{ if result != "" { "-resultBundlePath " + result } else { "" } }} -only-testing:OpenInstaCineUITests/GalleryRoundTrip -only-testing:OpenInstaCineUITests/ShareRoundTrip -only-testing:OpenInstaCineUITests/ConfirmationCancel -only-testing:OpenInstaCineUITests/ChromeEditReturn -only-testing:OpenInstaCineUITests/AccessibilityTraversal -only-testing:OpenInstaCineUITests/ConformanceCoverageTests test
+
 # Select an isolated simulator with IOS_TEST_DEVICE_ID when running concurrent tasks.
 ios-test *args: ios-generate
     #!/usr/bin/env bash
