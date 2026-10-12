@@ -25,12 +25,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -46,7 +42,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.opencapture.openinstacine.monitor.diagnostics.DiagnosticCenter
-import androidx.activity.compose.BackHandler
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.opencapture.opencine.appkit.AppShell
@@ -55,7 +50,6 @@ import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.opencine.platform.LocalVPNProbe
 import com.opencapture.opencine.appkit.ShellActions
 import com.opencapture.opencine.appkit.ShellBrand
-import com.opencapture.opencine.appkit.ShellModel
 import com.opencapture.openinstacine.monitor.diagnostics.ManualProblemReportDialog
 import com.opencapture.opencine.appkit.DiscoveryPermissions
 import com.opencapture.openinstacine.monitor.pairing.PairingCallouts
@@ -180,21 +174,15 @@ private fun OpenInstaCineApp(model: AppModel) {
             val radioOn by model.session.radioOn.collectAsState()
             AppShell(
                 model.shell,
-                // Main's setup chip menu: Forget only, no Rename setup.
-                ShellBrand(MonitorConfiguration.identity.wordmark, renamesSetups = false),
+                // The Luna integration declares its nearby tap (pair at once) and setup naming (none).
+                ShellBrand(MonitorConfiguration.identity.wordmark),
                 ShellActions(
                     diagnostics = { DiagnosticCenter.shareReport(context, model.session) },
                     reportProblem = { showProblemReport = true },
-                    // Pair on a nearby card connects it at once, on the pair page.
-                    pair = {
-                        model.shell.beginPairing()
-                        cameras.nearby.firstOrNull { it.id == model.cameras.state.value.selection }?.let(model.cameras::connect)
-                    },
                 ),
                 monitor = { LiveViewScreen(model) },
                 page = { cover -> ShellPage(model, cover) },
                 coverPresentation = com.opencapture.opencine.appkit.ShellCoverPresentation.SHELL,
-                pageFrame = { route, content -> HomeFrame(model, pairing = route == ShellModel.Route.PAIR, content) },
                 pairingFlow = pairingWizard(
                     label = PairingWizard.phaseLabel(
                         when {
@@ -268,21 +256,4 @@ private val DISCOVERY_RESTART = DiscoveryRestart.ANY_TIME
 private fun beginDiscovery(model: AppModel, onBluetoothOff: () -> Unit = {}) {
     if (DISCOVERY_RESTART.allows(model.cameras.state.value, model.isLive)) model.session.startScan()
     if (!model.session.radioOn.value) onBluetoothOff()
-}
-
-/** Existing pair-page insets and back handling; camera clearance belongs to the shared page. */
-@Composable
-private fun HomeFrame(model: AppModel, pairing: Boolean, content: @Composable () -> Unit) {
-    if (!pairing) { content(); return }
-    val state by model.cameras.state.collectAsState()
-    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(vertical = 16.dp)) {
-        Box(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-            // As the pair page always did: Back stops a connect and leaves the page.
-            BackHandler(enabled = state.attempts.isNotEmpty() || state.saved.isNotEmpty()) {
-                model.cameras.cancelAll()
-                model.shell.endPairing()
-            }
-            content()
-        }
-    }
 }
