@@ -75,7 +75,6 @@ import com.opencapture.monitorui.MonitorPlaybackLayout
 import com.opencapture.openinstacine.monitor.AppModel
 import com.opencapture.openinstacine.monitor.GlassTier
 import com.opencapture.openinstacine.monitor.LiveDesign
-import com.opencapture.openinstacine.monitor.liveModuleFrame
 import com.opencapture.openinstacine.monitor.LiveType
 import com.opencapture.openinstacine.monitor.LocalMonitorGlass
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
