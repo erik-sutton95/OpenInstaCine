@@ -183,7 +183,7 @@ fun MediaPlayerScreen(files: List<MediaFile>, startingAt: MediaFile, controller:
     val resolvedColor = PlaybackLutColor.resolve(clip = color, live = status.colorMode,
         last = OperatorPrefs.lastMonitorColorMode(context))
     val picker = base.lookPicker?.let {
-        com.opencapture.opencine.cameracontrols.AssistLutPicker(it.copy, it.selection, it.onSelect, it.profile, resolvedColor)
+        com.opencapture.opencine.cameracontrols.AssistLutPicker(it.copy, it.selection, it.onSelect, it.library, it.profile, resolvedColor)
     }
     val assists = com.opencapture.opencine.cameracontrols.MonitorOperatorAssistSource(base.host, base.scopes,
         base.scopeStackMoved, picker, preview = { tool ->

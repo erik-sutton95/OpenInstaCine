@@ -1,12 +1,18 @@
 package com.opencapture.openinstacine.monitor.lut
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import com.opencapture.opencine.cameracontrols.LUTPicker
 import com.opencapture.opencine.cameracontrols.LutPickerCopy
+import com.opencapture.opencine.cameracontrols.MonitorLutCategory
+import com.opencapture.opencine.cameracontrols.MonitorLutLibrary
+import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.LutCatalog
 import com.opencapture.openinstacine.monitor.AppModel
+import com.opencapture.openinstacine.monitor.bridge.SwiftCore
 
 /** What this app's LUT picker says: the camera looks sit on the Camera tab with the shared Auto. */
 internal val AppLutPickerCopy = LutPickerCopy(
@@ -18,6 +24,18 @@ internal val AppLutPickerCopy = LutPickerCopy(
     cameraLooksCaption = "Camera looks for this color profile",
 )
 
+private var processLutLibrary: MonitorLutLibrary? = null
+
+/**
+ * The process's one custom LUT library. The Swift facade's `packImportedLut` runs the shared
+ * `CubeLUT.validatedImport` gate, so a cube it refuses is never stored.
+ */
+@Synchronized
+internal fun appLutLibrary(context: Context): MonitorLutLibrary = processLutLibrary ?: MonitorLutLibrary(
+    mapOf(MonitorLutCategory.CUSTOM to LutCatalog.customDirectory(context.applicationContext.filesDir)),
+    pack = { bytes -> if (SwiftCore.isAvailable) SwiftCore.packImportedLut(bytes, 0.0, CameraCommands.COLOR_NORMAL) else null },
+).also { processLutLibrary = it }
+
 /** Settings sheet. Same body as the assist-tray form; 50/50 stays inline. */
 @Composable
 fun LUTPicker(model: AppModel, onClose: () -> Unit) {
@@ -27,6 +45,7 @@ fun LUTPicker(model: AppModel, onClose: () -> Unit) {
         copy = AppLutPickerCopy,
         selection = model.lutSelection,
         onSelect = model::updateLutSelection,
+        library = appLutLibrary(LocalContext.current),
         onClose = onClose,
         embedded = false,
         splitComparison = assist.splitComparison,

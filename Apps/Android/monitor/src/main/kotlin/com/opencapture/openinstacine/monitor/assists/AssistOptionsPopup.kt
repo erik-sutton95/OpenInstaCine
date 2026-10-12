@@ -16,6 +16,7 @@ import com.opencapture.opencine.vocabulary.fromColorMode
 import com.opencapture.openinstacine.monitor.AppModel
 import com.opencapture.openinstacine.monitor.OperatorPrefs
 import com.opencapture.openinstacine.monitor.lut.AppLutPickerCopy
+import com.opencapture.openinstacine.monitor.lut.appLutLibrary
 import com.opencapture.openinstacine.monitor.settings.SettingsPalette
 import com.opencapture.monitorui.MonitorAssistTool
 
@@ -67,6 +68,7 @@ fun AssistOptionsPopup(
                 OperatorPrefs.setLutSelection(context, id)
             }
         },
+        library = appLutLibrary(context),
         profile = model?.session?.connectedCamera?.model?.captureProfile?.looks ?: com.opencapture.openinstacine.monitor.session.LunaCameraLUTProfile.value,
         colorMode = colorMode,
     )
