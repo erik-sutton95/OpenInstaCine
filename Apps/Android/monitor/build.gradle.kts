@@ -213,6 +213,8 @@ dependencies {
     implementation("com.opencapture.opencine:media:0.1.0-SNAPSHOT")
     implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT")
     implementation("com.opencapture.opencine:native-runtime:0.1.0-SNAPSHOT")
+    // Shared Media3 player recipe, port, audio meter tap and playback owner.
+    implementation("com.opencapture.opencine:media3:0.1.0-SNAPSHOT")
     implementation("com.opencapture.opencine:platform:0.1.0-SNAPSHOT")
     // Live-view MediaCodec decoder (HevcDecoder), shared with OpenPocketCine.
     implementation("com.opencapture.opencine:decoder:0.1.0-SNAPSHOT")

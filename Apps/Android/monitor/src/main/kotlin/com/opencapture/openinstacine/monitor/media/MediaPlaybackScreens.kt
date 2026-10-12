@@ -3,6 +3,7 @@
 package com.opencapture.openinstacine.monitor.media
 
 import com.opencapture.monitorui.MonitorConfirmPopup
+import com.opencapture.opencine.media3.Media3PlaybackOwner
 import com.opencapture.monitorui.MonitorPlaybackScreen
 import com.opencapture.monitorui.MonitorPlaybackPresentation
 import com.opencapture.monitorui.MonitorPlaybackActions
@@ -148,13 +149,14 @@ fun MediaPlayerScreen(files: List<MediaFile>, startingAt: MediaFile, controller:
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var composition by remember(controller) { mutableStateOf<LunaAndroidPlaybackOwner?>(null) }
+    var composition by remember(controller) { mutableStateOf<Media3PlaybackOwner<LunaMediaLibraryPayload, LunaPlaybackLook>?>(null) }
     val owner = remember(controller) {
         com.opencapture.opencine.appkit.MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>(controller.library,
             scope = scope, makeAdmittedPlayback = { _, admission ->
                 composition?.close()
                 if (!admission.isCurrent()) null else {
-                    val next = LunaAndroidPlaybackOwner(context, controller)
+                    val next = Media3PlaybackOwner(context, controller.library, controller::playbackCandidates,
+                        controller::resolvePlaybackLook, controller::playbackAdmission) { it.file.fps?.toDouble() }
                     if (!admission.isCurrent()) { next.close(); null } else {
                         composition = next
                         if (!admission.isCurrent()) { next.close(); null } else next.playback
