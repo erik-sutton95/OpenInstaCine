@@ -187,7 +187,7 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
             return currentNative?.bufferedThroughSeconds(token: playback.token)
         }
         return .init(availability: availability,
-            progress: model.session.mediaDownloadProgress[file.path],
+            progress: model.session.mediaLibrary.progress[record.asset.id],
             colorLabel: model.session.shotColor(for: file)?.label(in: model.session.profile),
             transfer: transfer,
             clipByte: transfer.map { model.frameSamples.exposureCeiling.clipByte(transfer: $0) },

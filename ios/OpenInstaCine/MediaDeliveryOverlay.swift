@@ -135,7 +135,7 @@ enum MediaDeliveryRunner {
             originals: .init(available: session.isDownloaded, acquire: { file in
                 guard source.isCurrent() else { return }
                 await session.download(file: file)
-            }, progress: { session.mediaDownloadProgress[$0.path] }),
+            }, progress: { session.mediaDownloadProgress(for: $0) }),
             exporter: .init { file, progress in
                 guard source.isCurrent() else { throw CancellationError() }
                 do { return try await export(file: file, request: request, model: model,

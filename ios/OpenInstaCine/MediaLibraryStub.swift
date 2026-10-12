@@ -172,7 +172,7 @@ struct MediaLibraryView: View {
                 let file = record.payload.file
                 return .init(resolution: file.resolution, byteCount: file.sizeBytes,
                     durationSeconds: file.durationSeconds, dateKey: file.dateKey,
-                    colorLabel: session.shotColor(for: file)?.label(in: session.profile), progress: session.mediaDownloadProgress[file.path])
+                    colorLabel: session.shotColor(for: file)?.label(in: session.profile))
             }, begin: { library.begin() }, refresh: { library.refresh() }, close: dismiss,
             open: { presented = $0 }, share: { records, token in
                 guard library.isCurrent(token) else { return }
