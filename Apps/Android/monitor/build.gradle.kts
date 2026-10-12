@@ -28,6 +28,9 @@ android {
         buildConfigField("String", "SENTRY_DSN_ANDROID", "\"\"")
         buildConfigField("String", "BUILD_IDENTITY", "\"unknown\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The reporting adapter's manifest binds io.sentry.proguard-uuid to this placeholder. The app
+        // fills it for release; this module's instrumented test APK merges it too and needs a value.
+        manifestPlaceholders["sentryProguardUuid"] = ""
 
         ndk {
             abiFilters += supportedAndroidAbi
