@@ -2,16 +2,10 @@ package com.opencapture.openinstacine.monitor.pairing
 
 import androidx.compose.foundation.background
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import com.opencapture.openinstacine.monitor.LiveDesign
 
-/** Startup chrome colors still used outside the pairing pages (LUT picker, app backdrop). */
-object StartupColors {
-    val destructive: Color = Color(0.930f, 0.267f, 0.267f)
-    val backdropBase: Color = LiveDesign.background
-}
-
-fun Modifier.startupBackdrop(): Modifier = background(StartupColors.backdropBase)
+/** The app backdrop behind the shell. */
+fun Modifier.startupBackdrop(): Modifier = background(LiveDesign.background)
 
 /** Vendor-app interference copy for the pairing callouts. */
 object StartupConnectionCopy {

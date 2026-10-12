@@ -1,103 +1,7 @@
 package com.opencapture.openinstacine.monitor
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.opencapture.monitorui.monitorScrollFade
-
-enum class LegalKind(val title: String) {
-    PRIVACY("Privacy"),
-    TERMS("Terms"),
-    LICENSES("Licenses"),
-    NOTICE("NOTICE"),
-    ;
-
-    val body: String
-        get() =
-            when (this) {
-                PRIVACY -> PRIVACY_BODY
-                TERMS -> TERMS_BODY
-                LICENSES -> LICENSES_BODY
-                NOTICE -> NOTICE_BODY
-            }
-}
-
-@Composable
-fun LegalDocumentScreen(
-    kind: LegalKind,
-    onClose: () -> Unit,
-) {
-    BackHandler(onBack = onClose)
-    val shape = RoundedCornerShape(LiveDesign.CORNER_RADIUS_DP.dp)
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(LiveDesign.background)
-            .windowInsetsPadding(WindowInsets.safeDrawing),
-    ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 12.dp),
-        ) {
-            Column(Modifier.padding(start = 45.dp)) {
-                Text(
-                    com.opencapture.openinstacine.monitor.MonitorConfiguration.identity.wordmark,
-                    style = LiveType.ui(9.5f, FontWeight.Bold).copy(letterSpacing = 0.8.sp),
-                    color = LiveDesign.accent,
-                )
-                Text(
-                    kind.title,
-                    style = LiveType.title(24f, FontWeight.SemiBold),
-                    color = LiveDesign.text,
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            val bodyScroll = rememberScrollState()
-            Text(
-                kind.body,
-                style = LiveType.ui(14f, FontWeight.Normal).copy(lineHeight = 19.sp),
-                color = LiveDesign.text,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .monitorScrollFade(bodyScroll)
-                        .verticalScroll(bodyScroll)
-                        .background(LiveDesign.surface, shape)
-                        .border(1.dp, LiveDesign.hairline, shape)
-                        .padding(16.dp),
-            )
-        }
-        OperatorCloseButton(
-            onClose = onClose,
-            modifier =
-                Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 16.dp, top = 16.dp),
-        )
-    }
-}
+import com.opencapture.opencine.cameracontrols.MonitorLegalDocument
+import com.opencapture.opencine.cameracontrols.MonitorLegalDocuments
 
 private val PRIVACY_BODY =
     """
@@ -130,19 +34,6 @@ Third parties
 Android may ask for location so the app can join the camera Wi-Fi or scan BLE. OpenInstaCine does not use that permission for maps, ads, or a location history.
 
 The full privacy policy is https://opencapture.org/openinstacine/privacy
-    """.trimIndent()
-
-private val TERMS_BODY =
-    """
-OpenInstaCine is free software under the Apache License 2.0. You may use, modify, and share it under that license.
-
-This is an unofficial field monitor. It is not affiliated with, endorsed by, or supported by Arashi Vision Inc. (Insta360). "Insta360" and "Luna" are trademarks of Arashi Vision Inc., used only to identify the camera the app can talk to.
-
-Reverse-engineered protocol behavior can be incomplete or wrong. Do not rely on this app as the only way to start or stop a take — record from the camera body until those commands are proven.
-
-The software is provided on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND. See LICENSE in the repository.
-
-By using the app you agree to follow the Code of Conduct when participating in the project.
     """.trimIndent()
 
 private val LICENSES_BODY =
@@ -180,3 +71,12 @@ used only to identify the camera.
 No Insta360 SDK or proprietary Insta360 documentation is included in, distributed with, or required
 by this project.
     """.trimIndent()
+
+/** Insta's legal set: privacy, licenses and NOTICE ship with the app; the terms are the web page. */
+internal val InstaLegalDocuments = MonitorLegalDocuments(
+    wordmark = MonitorConfiguration.identity.wordmark,
+    privacy = MonitorLegalDocument.Text(PRIVACY_BODY),
+    terms = MonitorLegalDocument.Link(OpenPocketCineLinks.TERMS),
+    licenses = MonitorLegalDocument.Text(LICENSES_BODY),
+    notice = MonitorLegalDocument.Text(NOTICE_BODY),
+)

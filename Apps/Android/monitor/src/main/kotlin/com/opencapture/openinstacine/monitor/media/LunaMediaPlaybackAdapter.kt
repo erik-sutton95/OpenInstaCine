@@ -67,6 +67,16 @@ class LunaMediaPlaybackAdapter(
         if (mode >= 0) cache.rememberShotColor(file.path, mode, cameraId)
         return mode
     }
+    /** Captured at item admission: the same browsing source, directory generation and record. */
+    fun playbackAdmission(record: MonitorMediaRecord<LunaMediaLibraryPayload>): MonitorPlaybackAdmission {
+        val source = library.actionToken
+        val directory = library.cache.directory
+        val generation = directory.generation
+        return MonitorPlaybackAdmission {
+            library.isCurrent(source) && library.state.value.browsing &&
+                directory.generation == generation && library.record(record.asset.id) != null
+        }
+    }
     fun isFavorite(file: MediaFile): Boolean = record(file)?.favorite ?: file.isStarred
     fun toggleFavorite(file: MediaFile) { record(file)?.let { library.toggleFavorite(it.asset.id) } }
     fun canCache(file: MediaFile): Boolean = isLive && library.canTransfer && record(file)?.asset?.representations?.any { it.role == MediaRepresentationRole.ORIGINAL } == true

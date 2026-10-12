@@ -3,6 +3,7 @@
 package com.opencapture.openinstacine.monitor.media
 
 import com.opencapture.monitorui.MonitorConfirmPopup
+import com.opencapture.opencine.media3.Media3PlaybackOwner
 import com.opencapture.monitorui.MonitorPlaybackScreen
 import com.opencapture.monitorui.MonitorPlaybackPresentation
 import com.opencapture.monitorui.MonitorPlaybackActions
@@ -20,7 +21,7 @@ import com.opencapture.monitorui.LocalMonitorBackdrops
 import com.opencapture.monitorui.monitorBackdropSource
 import com.opencapture.openinstacine.monitor.feed.rememberMonitorBackdropFeed
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import com.opencapture.opencine.appkit.MonitorBitmapDecoder
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -119,13 +120,13 @@ fun MediaPhotoViewer(model: AppModel, file: MediaFile, controller: LunaMediaPlay
     val loaders = com.opencapture.opencine.appkit.MonitorMediaPictureLoaders<LunaMediaLibraryPayload, Bitmap>(
         cached = { request ->
             if (!request.isCurrent()) null else (controller.localFile(request.record.payload.file) ?: controller.thumbnailFile(request.record.payload.file))?.let { location ->
-                withContext(Dispatchers.IO) { BitmapFactory.decodeFile(location.absolutePath) }
+                withContext(Dispatchers.IO) { MonitorBitmapDecoder.decode(location, MonitorBitmapDecoder.PAGE_EDGE) }
             }
         }, source = { request ->
             if (!request.isCurrent()) null else {
                 val location = controller.cacheForPlayback(request.record.payload.file)
                 if (location == null || !request.isCurrent()) null
-                else withContext(Dispatchers.IO) { BitmapFactory.decodeFile(location.absolutePath) }
+                else withContext(Dispatchers.IO) { MonitorBitmapDecoder.decode(location, MonitorBitmapDecoder.PAGE_EDGE) }
             }
         })
     val operations = com.opencapture.opencine.appkit.MonitorMediaGalleryOperations<LunaMediaLibraryPayload>(
@@ -146,13 +147,14 @@ fun MediaPlayerScreen(files: List<MediaFile>, startingAt: MediaFile, controller:
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var composition by remember(controller) { mutableStateOf<LunaAndroidPlaybackOwner?>(null) }
+    var composition by remember(controller) { mutableStateOf<Media3PlaybackOwner<LunaMediaLibraryPayload, LunaPlaybackLook>?>(null) }
     val owner = remember(controller) {
         com.opencapture.opencine.appkit.MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>(controller.library,
             scope = scope, makeAdmittedPlayback = { _, admission ->
                 composition?.close()
                 if (!admission.isCurrent()) null else {
-                    val next = LunaAndroidPlaybackOwner(context, controller)
+                    val next = Media3PlaybackOwner(context, controller.library, controller::playbackCandidates,
+                        controller::resolvePlaybackLook, controller::playbackAdmission) { it.file.fps?.toDouble() }
                     if (!admission.isCurrent()) { next.close(); null } else {
                         composition = next
                         if (!admission.isCurrent()) { next.close(); null } else next.playback
@@ -179,7 +181,7 @@ fun MediaPlayerScreen(files: List<MediaFile>, startingAt: MediaFile, controller:
     val resolvedColor = PlaybackLutColor.resolve(clip = color, live = status.colorMode,
         last = OperatorPrefs.lastMonitorColorMode(context))
     val picker = base.lookPicker?.let {
-        com.opencapture.opencine.cameracontrols.AssistLutPicker(it.copy, it.selection, it.onSelect, it.profile, resolvedColor)
+        com.opencapture.opencine.cameracontrols.AssistLutPicker(it.copy, it.selection, it.onSelect, it.library, it.profile, resolvedColor)
     }
     val assists = com.opencapture.opencine.cameracontrols.MonitorOperatorAssistSource(base.host, base.scopes,
         base.scopeStackMoved, picker, preview = { tool ->

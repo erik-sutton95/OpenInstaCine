@@ -60,4 +60,4 @@ val verifyReleaseComponentRegistrars = tasks.register<Exec>("verifyReleaseCompon
  commandLine("bash", rootProject.projectDir.resolve("../../../OpenCine/scripts/android-verify-component-registrars.sh").absolutePath, releaseBundle.get().asFile.absolutePath)
 }
 tasks.matching { it.name == "bundleRelease" }.configureEach { finalizedBy(verifyReleaseComponentRegistrars) }
-dependencies { implementation(project(":monitor")); implementation(libs.opencine.insta360.luna); implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT"); implementation(libs.kotlinx.coroutines.android) }
+dependencies { implementation(project(":monitor")); implementation(libs.opencine.insta360.luna); implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT"); implementation("com.opencapture.opencine:platform:0.1.0-SNAPSHOT"); implementation(libs.kotlinx.coroutines.android) }
