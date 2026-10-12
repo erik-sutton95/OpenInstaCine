@@ -199,7 +199,7 @@ class LunaMediaPlaybackOwnerInputTest {
                 scenario.onActivity { activity ->
                     model = AppModel(context)
                     model!!.mediaLibrary.bind(source)
-                    activity.setContent { OpenPocketCineTheme { MediaLibraryScreen(model!!) { closed += 1 } } }
+                    activity.setContent { OpenInstaCineTheme { MediaLibraryScreen(model!!) { closed += 1 } } }
                     activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 }
                 await("One actual browse opens") { source.opens == 1 && model!!.mediaLibrary.binding != null && model!!.mediaLibrary.state.value.records.size == 2 }

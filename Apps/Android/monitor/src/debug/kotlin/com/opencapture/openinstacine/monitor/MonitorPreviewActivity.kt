@@ -59,7 +59,7 @@ class MonitorPreviewActivity : ComponentActivity() {
         if (intent.getStringExtra("surface") == "reporting-consent") {
             // Preview the real layout without reading or changing reporting consent.
             setContent {
-                OpenPocketCineTheme {
+                OpenInstaCineTheme {
                     com.opencapture.opencine.appkit.diagnostics.AutomaticReportsPrompt(
                         product = com.opencapture.openinstacine.monitor.diagnostics.AppDiagnostics.host.product,
                         onPrivacy = {}, onEnable = {}, onNotNow = {},
@@ -82,7 +82,7 @@ class MonitorPreviewActivity : ComponentActivity() {
         )
         val sourceAspect = intent.getFloatExtra("aspect", 16f / 9f).takeIf { it > 0f } ?: 16f / 9f
         setContent {
-            OpenPocketCineTheme {
+            OpenInstaCineTheme {
                 CompositionLocalProvider(LocalMonitorGlass provides remember { MonitorGlass(GlassTier.FLAT) }) {
                     if (intent.getStringExtra("surface") == "catalog") {
                         ReviewClipCapabilities(intent.getBooleanExtra("clipStar", false))

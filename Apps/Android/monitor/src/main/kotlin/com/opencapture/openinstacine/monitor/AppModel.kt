@@ -70,7 +70,7 @@ import com.opencapture.opencine.cameracontrols.PortraitFeedAspect
 
 class AppModel(
     context: Context,
-) : GamepadHost, GimbalChromeHost, CaptureSheetHost, OperatorSetupModel {
+) : GamepadHost, GimbalChromeHost, CaptureSheetHost, OperatorSetupModel, AutoCloseable {
     private val appContext = context.applicationContext
     init {
         DiagnosticCenter.install(appContext)
@@ -114,7 +114,6 @@ class AppModel(
     }
 
     val savedCameras: List<SavedCamera> get() = cameras.state.value.saved
-    var showsLaunchSplash by mutableStateOf(true)
     /** Long-press on the tap-focus box locks it: feed taps no longer move focus. */
     var focusBoxLocked by mutableStateOf(false)
     var coreVersion by mutableStateOf<String?>(null)
@@ -555,7 +554,7 @@ class AppModel(
         session.disconnect()
     }
 
-    fun close() {
+    override fun close() {
         mediaLibrary.close()
         inspectorPreview.close()
         gimbalGamepad.stopListening()
