@@ -36,6 +36,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.math.min
+import com.opencapture.monitorui.LiveMonitorLayout
 import org.junit.Test
 import org.junit.runner.RunWith
 

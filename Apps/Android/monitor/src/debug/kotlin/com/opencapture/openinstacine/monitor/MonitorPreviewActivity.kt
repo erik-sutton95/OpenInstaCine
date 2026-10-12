@@ -43,7 +43,6 @@ import com.opencapture.opencine.cameracontrols.LiveSheet
 import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.CameraStatus
-import com.opencapture.openinstacine.monitor.assists.MonitorAssistInspector
 import com.opencapture.opencine.cameracontrols.PortraitFeedAspect
 
 /**
