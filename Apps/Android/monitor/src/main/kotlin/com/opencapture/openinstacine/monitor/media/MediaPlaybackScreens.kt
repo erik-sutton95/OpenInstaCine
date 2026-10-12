@@ -210,14 +210,7 @@ fun MediaPlayerScreen(files: List<MediaFile>, startingAt: MediaFile, controller:
                     }?.let { current -> current.native.bufferedThroughSeconds(current.playback.state.value.token) },
                     transfer = state?.look?.transfer)
             }, nativeAudio = { player -> composition?.takeIf { it.playback === player }?.audio },
-            close = onClose, share = { record ->
-                val current = owner.state.value.playback
-                val token = current?.state?.value?.token
-                if (current != null && token != null && current.state.value.active?.asset?.id == record.asset.id && owner.isCurrent(token)) {
-                    current.setPlaying(false)
-                    if (owner.isCurrent(token)) onDeliver(record.payload.file)
-                }
-            }) { player, plan, geometry ->
+            close = onClose, share = { record -> onDeliver(record.payload.file) }) { player, plan, geometry ->
             val native = composition?.takeIf { it.playback === player }?.native
             if (native != null) {
                 val current by player.state.collectAsState()

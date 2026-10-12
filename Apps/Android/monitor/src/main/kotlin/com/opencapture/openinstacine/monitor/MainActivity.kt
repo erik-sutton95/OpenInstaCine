@@ -1,5 +1,10 @@
 package com.opencapture.openinstacine.monitor
 
+import com.opencapture.opencine.cameracontrols.LocalMonitorDeliveryCoordinator
+import com.opencapture.opencine.cameracontrols.MonitorOperatorDeliveryChrome
+import com.opencapture.opencine.cameracontrols.rememberMonitorDeliveryCoordinator
+import com.opencapture.openinstacine.monitor.media.InstaMediaShare
+import com.opencapture.opencine.vocabulary.MediaHTTP
 import com.opencapture.opencine.appkit.applyMonitorSystemBars
 import com.opencapture.opencine.appkit.LocalOperatorHaptics
 import com.opencapture.opencine.appkit.rememberOperatorHaptics
@@ -123,8 +128,11 @@ open class MainActivity : ComponentActivity() {
             SideEffect { composeFirstFrameDrawn.set(true) }
             OpenPocketCineTheme {
                 val haptics = rememberOperatorHaptics { model.hapticsEnabled }
-                CompositionLocalProvider(LocalOperatorHaptics provides haptics) {
+                // One app-scoped delivery owner: a run outlives the media screen that began it.
+                val delivery = rememberMonitorDeliveryCoordinator()
+                CompositionLocalProvider(LocalOperatorHaptics provides haptics, LocalMonitorDeliveryCoordinator provides delivery) {
                     OpenPocketCineApp(model)
+                    MonitorOperatorDeliveryChrome(delivery, InstaMediaShare, { MediaHTTP.playbackMIMEType(it.name) })
                 }
             }
         }
