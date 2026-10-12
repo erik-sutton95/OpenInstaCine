@@ -330,8 +330,11 @@ internal fun pairingWizard(
         "We read the camera's Wi-Fi over Bluetooth, then join it for you.",
         "Exposure, LUTs and scopes go live as soon as the video link is up.",
     ),
-    approveLines = listOf("Look for an Approve / pairing prompt", "Tap it on the camera screen"),
-    joinLines = listOf("Leave the camera on. It brings up its own Wi-Fi", "On 5.8 GHz that can take about a minute; we keep trying"),
+    approveLines = listOf("Look for the connection request", "Tap Allow on the camera screen"),
+    joinLines = listOf(
+        "Leave the camera on. It brings up its own 5 GHz Wi-Fi",
+        "Close the Insta360 app on other phones so the camera is free",
+    ),
     label = label,
     joinedNetwork = joinedNetwork,
     vpnActive = vpnActive,
