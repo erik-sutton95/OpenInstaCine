@@ -759,15 +759,13 @@ class PocketCameraSession(
         if (!recording) recordStartedAt = null
         val elapsed = if (recording) maxOf(readout.captureSeconds, recordStartedAt?.let { ((now - it) / 1_000).toInt() } ?: 0) else 0
         next = next.copy(recordElapsedSec = elapsed)
-        // The frame clock owns the timecode (set from the decode thread).
-        _status.update { next.copy(timecode = it.timecode) }
+        _status.value = next
         if (_controlBusy.value && !pins.photoInFlight) _controlBusy.value = false
         publishFaceDetectWanted()
     }
 
     private fun resetFrameClock() {
         frameTimecode.reset()
-        _status.update { it.copy(timecode = null) }
     }
 
     /** [stampMicros]: the frame's camera clock (Luna: its u64 ms header stamp, in microseconds). */
@@ -775,7 +773,6 @@ class PocketCameraSession(
         // The HUD shows HH:MM:SS: published once per displayed second.
         val timecode = frameTimecode.note(stampMicros / 1_000, System.currentTimeMillis(), java.util.TimeZone.getDefault())
             ?: return
-        _status.update { it.copy(timecode = LunaShellMapping.timecodeText(timecode)) }
         (control.state.value.session as? LunaCameraSession)?.ingest(timecode)
     }
 

@@ -8,9 +8,11 @@ extension WatchRelayCopy {
 }
 
 extension WatchRelayState {
-    /// Snapshot from live telemetry. `feedLive` is whether a picture has presented.
+    /// Snapshot from live telemetry. `feedLive` is whether a picture has presented. `timecode` is
+    /// the clock as the shared status shows it (`MonitorStatusPresentation.clock`).
     public static func snapshot(
         status: CameraStatus,
+        timecode: String,
         phase: ConnectionPhase,
         cameraName: String,
         feedLive: Bool
@@ -22,7 +24,7 @@ extension WatchRelayState {
         let photography = status.isPhoto
         return WatchRelayState(
             isRecording: status.isRecording,
-            timecode: status.timecodeClock,
+            timecode: timecode,
             media: WatchRelayMedia.label(
                 storageFreeMb: status.storageFreeMb,
                 storageTotalMb: status.storageTotalMb,

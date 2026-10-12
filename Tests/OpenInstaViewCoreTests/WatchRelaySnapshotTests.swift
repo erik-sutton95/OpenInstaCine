@@ -9,13 +9,12 @@ struct WatchRelaySnapshotTests {
     func snapshotMapsLiveStatus() {
         var status = CameraStatus()
         status.isRecording = true
-        status.timecode = "01:02:03:04"
         status.storageFreeMb = 2048
         status.storageTotalMb = 4096
         status.batteryPercent = 41
         status.shootingMode = Int(ShootingMode.video.rawValue)
         let state = WatchRelayState.snapshot(
-            status: status, phase: .live, cameraName: "Pocket 4 Pro", feedLive: true)
+            status: status, timecode: "01:02:03", phase: .live, cameraName: "Pocket 4 Pro", feedLive: true)
         #expect(state.connection == .connected)
         #expect(state.feedLive)
         #expect(state.isRecording)
@@ -28,7 +27,7 @@ struct WatchRelaySnapshotTests {
     @Test("Snapshot is noCamera when the phone is not live")
     func snapshotNoCameraWhenIdle() {
         let state = WatchRelayState.snapshot(
-            status: CameraStatus(), phase: .idle, cameraName: "", feedLive: false)
+            status: CameraStatus(), timecode: "--:--:--", phase: .idle, cameraName: "", feedLive: false)
         #expect(state.connection == .noCamera)
         #expect(!state.feedLive)
         #expect(state.timecode == "--:--:--")
@@ -39,17 +38,17 @@ struct WatchRelaySnapshotTests {
         var status = CameraStatus()
         status.shootingMode = Int(ShootingMode.photo.rawValue)
         let state = WatchRelayState.snapshot(
-            status: status, phase: .live, cameraName: "Pocket", feedLive: true)
+            status: status, timecode: "01:02:03", phase: .live, cameraName: "Pocket", feedLive: true)
         #expect(state.isPhotography)
 
         status.shootingMode = Int(ShootingMode.photoRawPocket3AndNano)
         let pocket3 = WatchRelayState.snapshot(
-            status: status, phase: .live, cameraName: "Pocket 3", feedLive: true)
+            status: status, timecode: "01:02:03", phase: .live, cameraName: "Pocket 3", feedLive: true)
         #expect(pocket3.isPhotography)
 
         status.shootingMode = Int(ShootingMode.superNight.rawValue)
         let lowLight = WatchRelayState.snapshot(
-            status: status, phase: .live, cameraName: "Pocket 3", feedLive: true)
+            status: status, timecode: "01:02:03", phase: .live, cameraName: "Pocket 3", feedLive: true)
         #expect(!lowLight.isPhotography)
     }
 }

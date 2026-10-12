@@ -139,7 +139,6 @@
             status.whiteBalanceKelvin = 5600
             status.focusMode = .continuous
             status.audioChannel = .stereo
-            status.timecode = "15:39:50:00"
             status.colorMode = .iLog
             if let ev = launch?.meteredEV {
                 // The camera meters in thirds of a stop: the nearest one it could report.
@@ -279,10 +278,8 @@
                 session.ingest(settings: try LunaPhotographySettings(response: ProtoMessage.blob(field: 2, value: options)))
                 let capture = try ProtoMessage.integer(field: 1, value: status.isRecording ? 1 : 0)
                 session.ingest(capture: try LunaCaptureStatus(notification: capture))
-                let clock = (status.timecode ?? "").split(separator: ":").compactMap { Int($0) }
-                if clock.count == 4 {
-                    session.ingest(timecode: CameraTimecode(hours: clock[0], minutes: clock[1], seconds: clock[2], frames: clock[3]))
-                }
+                // Luna's clock is the phone's time of day in whole seconds (D2): no frame field.
+                session.ingest(timecode: CameraTimecode(hours: 15, minutes: 39, seconds: 50))
             } catch { assertionFailure("Invalid SIMULATED monitor fixture: \(error)") }
             return session
         }

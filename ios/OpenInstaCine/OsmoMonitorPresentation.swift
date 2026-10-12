@@ -24,7 +24,7 @@ enum OsmoMonitorPresentation {
     /// pose), host-derived timecode, no audio levels, no iris. Only clip delete, clip star and
     /// the internet hop are the app's, until media and connection routes carry them (SHELL-02).
     /// No session: what this app has always offered before a camera connects (gimbal, zoom,
-    /// focus, head tracking, timecode), so Settings keeps those rows. Simulator reviews open a
+    /// focus, head tracking), so Settings keeps those rows. Simulator reviews open a
     /// session (`MonitorUIReview.prepare`), so screenshots show what a Luna operator sees.
     static func capabilities(_ session: CameraSession) -> MonitorLayoutCapabilities {
         (session.coreSession as? LunaCameraSession)?.layout(base: appBase) ?? unconnected
@@ -32,7 +32,7 @@ enum OsmoMonitorPresentation {
 
     private static let unconnected: MonitorLayoutCapabilities = {
         var layout = appBase
-        (layout.gimbal, layout.zoom, layout.focus, layout.headTracking, layout.timecode) = (true, true, true, true, true)
+        (layout.gimbal, layout.zoom, layout.focus, layout.headTracking) = (true, true, true, true)
         return layout
     }()
 

@@ -89,7 +89,6 @@ extension AppModel: LiveChromeHost {
     var liveStatus: MonitorStatusPresentation {
         control.statusPresentation(elapsedSeconds: session.status.recordElapsedSec)
     }
-    var timecodeAvailable: Bool { true }
     var liveSignalBars: Int { session.liveSignalBars }
     var liveFPS: String { session.liveFPS }
     var gimbalPanelOpen: Bool { liveGimbalPanel != .none }

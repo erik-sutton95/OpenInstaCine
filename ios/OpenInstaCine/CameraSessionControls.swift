@@ -1410,7 +1410,6 @@ extension CameraSession {
                 frameClock: milliseconds, arrival: Date().timeIntervalSince1970,
                 timeZoneSeconds: TimeZone.current.secondsFromGMT())
         else { return }
-        status.timecode = LunaShellMapping.timecodeText(timecode)
-        (coreSession as? LunaCameraSession)?.ingest(timecode: timecode)
+        lunaSession?.ingest(timecode: timecode)
     }
 }
