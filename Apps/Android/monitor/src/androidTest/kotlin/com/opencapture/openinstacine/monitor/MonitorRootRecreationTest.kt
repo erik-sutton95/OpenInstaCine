@@ -26,7 +26,13 @@ import kotlin.test.assertTrue
 class MonitorRootRecreationTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
-    @Before fun grantDiscovery() {
+    @Before fun installTheLaunchersBackend() {
+        // Library instrumentation runs without the brand launcher: install its Luna composition.
+        MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
+            val wifi = com.opencapture.openinstacine.monitor.pairing.CameraWifiCredentialStore(context)
+            com.opencapture.opencine.insta360.luna.LunaBackend(context,
+                savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
+        }
         // A permission sheet would take the active window from the monitor.
         val app = instrumentation.targetContext.packageName
         DiscoveryPermissions.discovery().forEach { instrumentation.uiAutomation.grantRuntimePermission(app, it) }
