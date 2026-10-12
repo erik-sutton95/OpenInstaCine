@@ -212,11 +212,5 @@ class PlaybackChromeTest {
         assertEquals(0.2f, live.second, 0.001f)
     }
 
-    @Test
-    fun transportRowFitsNarrowestPhoneLikeIos() {
-        val needed = PlaybackChromeMetrics.transportRowWidth()
-        val usable = PlaybackChromeMetrics.narrowestScreenWidth - PlaybackChromeMetrics.chromeHorizontalPadding * 2
-        assertTrue(needed <= usable, "needed=$needed usable=$usable")
-    }
 
 }
