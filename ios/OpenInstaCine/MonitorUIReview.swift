@@ -271,6 +271,19 @@
                 var device = try LunaDeviceStatus(response: Data())
                 device.photoSubMode = 100; device.videoSubMode = 0
                 session.ingest(device: device)
+                if status.storageTotalMb > 0, status.storageFreeMb >= 0 {
+                    // The legacy review input is MiB; publish its exact bytes through the
+                    // same device-report decoder as a connected source, including zero free.
+                    let free = UInt64(status.storageFreeMb).multipliedReportingOverflow(by: 1_048_576)
+                    let total = UInt64(status.storageTotalMb).multipliedReportingOverflow(by: 1_048_576)
+                    if !free.overflow, !total.overflow {
+                        let volume = try ProtoMessage.integer(field: 2, value: free.partialValue)
+                            + ProtoMessage.integer(field: 3, value: total.partialValue)
+                            + ProtoMessage.integer(field: 4, value: 2)
+                        session.ingest(device: try LunaDeviceStatus(response:
+                            ProtoMessage.blob(field: 2, value: ProtoMessage.blob(field: 176, value: volume))))
+                    }
+                }
                 let exposure = try ProtoMessage.integer(field: 1, value: LunaExposureProgram.manual.rawValue)
                     + ProtoMessage.integer(field: 2, value: UInt64(status.iso))
                     + ProtoMessage.double(field: 3, value: 1 / Double(status.shutterDenom))
