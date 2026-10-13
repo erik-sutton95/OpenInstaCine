@@ -188,8 +188,8 @@ class LunaShellMappingTest {
         val s = m.applyDevice(readout, start, pins, now = 0)
         assertEquals(66, s.batteryPercent)
         assertTrue(s.charging)
-        assertEquals(50_490, s.internalTotalMb)
-        assertEquals(50_384, s.storageFreeMb)
+        assertEquals(48_151, s.internalTotalMb) // MiB
+        assertEquals(48_050, s.storageFreeMb)
         assertEquals(0, s.sdTotalMb) // SD slot reports NOCARD
         assertEquals(start.availableVideoFormats, s.availableVideoFormats)
         // A mode change on the camera clears the previous mode's wheels.
@@ -201,6 +201,14 @@ class LunaShellMappingTest {
         pins.shootingMode = pin(CameraCommands.SHOOT_SLOWMO, now = 0, settleMs = 3_000)
         val pending = m.applyDevice(readout, s.copy(shootingMode = CameraCommands.SHOOT_SLOWMO), pins, now = 1_000)
         assertEquals(CameraCommands.SHOOT_SLOWMO, pending.shootingMode)
+    }
+
+    @Test fun storageIsPublishedInTheUnitTheStatusFieldMeans() {
+        // A5-11: CameraStatus storage fields are MiB (the DJI wire unit); 60e9 free of 128e9 bytes.
+        val shared = readout.copy(storages = listOf(CameraStorage(2, true, 60_000_000_000, 128_000_000_000)))
+        val s = m.applyDevice(shared, CameraStatus(), LunaControlPins(), now = 0)
+        assertEquals(57_220, s.storageFreeMb)
+        assertEquals(122_070, s.storageTotalMb)
     }
 
     @Test fun lunaModeLabelsAndMediaAddressing() {

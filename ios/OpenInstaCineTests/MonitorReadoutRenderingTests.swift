@@ -1,3 +1,5 @@
+import Insta360AppleTestSupport
+import Insta360Protocol
 import SwiftUI
 import XCTest
 
@@ -7,9 +9,21 @@ import XCTest
 /// The status chrome on this app's model. The drum and shadow cases are in MonitorUITests.
 @MainActor
 final class MonitorReadoutRenderingTests: XCTestCase {
-    func testPortraitStorageRendersOutsideTheRasterizedStatusBand() throws {
+    func testPortraitStorageRendersOutsideTheRasterizedStatusBand() async throws {
         let model = AppModel()
         model.session.status.storageFreeMb = 102_400
+        let camera = FakeLuna()
+        let session = camera.connectedSession()
+        let volume = try ProtoMessage.integer(field: 2, value: 107_374_182_400)
+            + ProtoMessage.integer(field: 3, value: 137_438_953_472)
+            + ProtoMessage.integer(field: 4, value: 2)
+        session.ingest(device: try LunaDeviceStatus(response:
+            ProtoMessage.blob(field: 2, value: ProtoMessage.blob(field: 176, value: volume))))
+        model.control.bind(session)
+        defer { model.control.unbind() }
+        for _ in 0..<100 where model.control.snapshot?.storage.value == nil { await Task.yield() }
+        XCTAssertEqual(model.control.snapshot?.storage.value?.first?.freeBytes.value, 107_374_182_400,
+            "The native fixture renders the same storage through the common Luna observation")
         let layout = LiveMonitorLayout.fieldMonitor(
             size: CGSize(width: 440, height: 956),
             safeArea: EdgeInsets(top: 62, leading: 0, bottom: 34, trailing: 0),
