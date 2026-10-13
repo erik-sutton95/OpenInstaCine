@@ -109,11 +109,10 @@ private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabiliti
     safeTop: Float, safeBottom: Float, patterned: Boolean = false) {
     val status = remember(capabilities) {
         CameraStatus(batteryPercent = 80, storageTotalMb = 131072, storageFreeMb = 109568,
-            timecode = if (capabilities.timecode) CameraTimecode(15, 39, 50, frames = 0) else null,
             shootingMode = 1, iso = 1600, isoIndex = 7, shutterDenom = 50,
             expoMode = CameraCommands.EXPO_MANUAL, colorMode = CameraCommands.COLOR_DLOG2,
             resolutionCode = CameraCommands.RES_4K, fps = 25, fpsIndex = 2,
-            wbMode = 6, wbKelvin = 5600, focusMode = 2, focusTrack = 0, audioChannel = 2, audioMetersLeft = -21.0, audioMetersRight = -14.0)
+            wbMode = 6, wbKelvin = 5600, focusMode = 2, focusTrack = 0, audioChannel = 2, audioMetersLeft = -21.0, audioMetersRight = -14.0).withTimecodeValue(if (capabilities.timecode) CameraTimecode(15, 39, 50, frames = 0) else null)
     }
     val cover = model.liveCover()
     LaunchedEffect(cover) {
