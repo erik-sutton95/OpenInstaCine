@@ -4,6 +4,7 @@
     import MonitorPresentation
     import Insta360Apple
     import Insta360Protocol
+    import OpenCineAppKit
     import OpenCineApple
     import OpenCineCameraControls
     import OpenCineCore
@@ -176,10 +177,7 @@
             // integration-only readouts keep the fixture status above.
             if let launch, ![.cameras, .pair].contains(launch.screen) {
                 #if DEBUG
-                    // A connected camera's media source rides on the monitor, as a real one does.
-                    var services = CameraServices()
-                    if launch.connected { services.register(mediaService, as: (any CameraMediaService).self) }
-                    presentSimulatedMonitor(model, services: services)
+                    if launch.connected { presentConnectedCamera(model) } else { presentSimulatedMonitor(model) }
                 #else
                     presentSimulatedMonitor(model)
                 #endif
@@ -242,12 +240,7 @@
         }
 
         /// SIMULATED monitor, simulator only: isolated session with no network send path.
-        static func presentSimulatedMonitor(_ model: AppModel, services: CameraServices = .init()) {
-            let saved =
-                model.cameras.saved.first
-                ?? SavedCamera(
-                    id: studioID, integration: LunaCameraSession.integration, advertisedName: "Studio camera",
-                    model: "Luna Ultra")
+        static func presentSimulatedMonitor(_ model: AppModel) {
             let session: LunaCameraSession
             if isActive {
                 session = simulatedSession(status: model.session.status)
@@ -257,7 +250,14 @@
             } else {
                 session = model.session.backend.openSession()
             }
-            model.shell.present(ConnectedCamera(saved: saved, session: session, services: services))
+            model.shell.present(ConnectedCamera(saved: savedCamera(model), session: session))
+        }
+
+        private static func savedCamera(_ model: AppModel) -> SavedCamera {
+            model.cameras.saved.first
+                ?? SavedCamera(
+                    id: studioID, integration: LunaCameraSession.integration, advertisedName: "Studio camera",
+                    model: "Luna Ultra")
         }
 
         /// Uses Luna's actual report decoding and capability projection. UI writes fail locally,
@@ -266,7 +266,13 @@
             let session = LunaCameraSession(send: { _ in throw CancellationError() },
                 functionMode: { LunaFunctionMode.normalVideo.rawValue }, readSettings: {}, readCapture: {})
             session.linkChanged(.streaming, serial: nil)
-            guard ProcessInfo.processInfo.environment["OPV_UI_REVIEW_CORE_UNKNOWN"] != "1" else { return session }
+            report(status, to: session)
+            return session
+        }
+
+        /// The fixture's reports, through the session's own decoding.
+        static func report(_ status: CameraStatus, to session: LunaCameraSession) {
+            guard ProcessInfo.processInfo.environment["OPV_UI_REVIEW_CORE_UNKNOWN"] != "1" else { return }
             do {
                 var device = try LunaDeviceStatus(response: Data())
                 device.photoSubMode = 100; device.videoSubMode = 0
@@ -297,7 +303,6 @@
                     session.ingest(timecode: CameraTimecode(hours: clock[0], minutes: clock[1], seconds: clock[2], frames: clock[3]))
                 }
             } catch { assertionFailure("Invalid SIMULATED monitor fixture: \(error)") }
-            return session
         }
 
         /// `OPV_UI_REVIEW_SCREEN=sequence`: cameras, live, settings, live, media, live, cameras in
@@ -392,8 +397,32 @@
             static var opensFirstClip = false
             /// `OPV_UI_REVIEW_PLAYBACK_FACTS=<path>` mounts the native player facts (`MonitorPlaybackReviewFacts`).
             static let playbackFacts = ProcessInfo.processInfo.environment["OPV_UI_REVIEW_PLAYBACK_FACTS"] != nil
-            /// The connected camera's SIMULATED media source: a complete catalog, no camera operations.
-            static let mediaService = ReviewMediaService()
+            /// The SIMULATED camera of a `connected` review; `stageMedia` puts the staged media on its card.
+            static let camera = LunaReviewCamera(clips: [])
+            /// The review session's camera media with `ReviewCameraHTTP` as its HTTP side, so no file
+            /// request leaves the simulator.
+            static func cameraMedia(storage: MonitorMediaCacheStorage) -> CameraMedia {
+                let configuration = URLSessionConfiguration.ephemeral
+                configuration.protocolClasses = [ReviewCameraHTTP.self]
+                return CameraMedia(httpConfiguration: configuration, storage: storage)
+            }
+
+            /// `connected`: the app's own backend with the SIMULATED camera behind its control link,
+            /// so the real Luna session, media service and catalog run. Live clips carry the camera's
+            /// deletable fact and the camera operations are offered, as on a connected Luna. No network.
+            static func presentConnectedCamera(_ model: AppModel) {
+                let backend = model.session.backend
+                backend.connect(review: camera)
+                let session = backend.openSession()
+                report(model.session.status, to: session)
+                session.configureLens(zoomDomain: 1...model.session.zoomCeiling)
+                var services = CameraServices()
+                if let media = backend.mediaService(for: session.id) {
+                    services.register(media, as: (any CameraMediaService).self)
+                }
+                model.session.phase = .live
+                model.shell.present(ConnectedCamera(saved: savedCamera(model), session: session, services: services))
+            }
 
             /// Media written through the library's own cache and catalog, as finished downloads leave
             /// it: `mediaCount` generated clips (`ReviewClip`), or the two decoded-video inputs of
@@ -416,10 +445,19 @@
                     }
                 }
                 try cache.save(records)
+                // A connected camera lists the same clips, as the camera that recorded them would.
+                if launch.connected { camera.clips = media.map { reviewClip($0.file) } }
                 // The library loads its catalog once: closed and unkeyed, the next configuration
                 // builds one over these.
                 session.mediaLibrary.close()
                 session.mediaLibraryKey = nil
+            }
+
+            private static func reviewClip(_ file: MediaFile) -> LunaReviewCamera.Clip {
+                let size = (file.resolution ?? "").split(separator: "x").compactMap { Int($0) }
+                return .init(uri: file.path, byteCount: file.sizeBytes, milliseconds: UInt64(file.durationSeconds) * 1000,
+                    width: size.first ?? 0, height: size.last ?? 0, fps: UInt64(file.fps ?? 0),
+                    stamp: file.filenameTimestamp.flatMap { UInt64($0) })
             }
 
             private struct StagedMedia {
@@ -506,30 +544,23 @@
             }
         }
 
-        /// One SIMULATED source; catalog is complete and unsupported operations stay absent.
-        @MainActor final class ReviewMediaService: CameraMediaService {
-            let browse = ReviewMediaBrowse()
-            var opens = 0
-            var sessionID: OpenCineCore.CameraSessionID { browse.binding.session }
-            func openBrowse() async -> any CameraMediaBrowse { opens += 1; return browse }
-        }
-        @MainActor final class ReviewMediaBrowse: CameraMediaBrowse {
-            let binding = MediaBrowseBinding(session: .init(), epoch: .init(1))
-            var thumbnails: (any CameraMediaThumbnailService)? { nil }
-            var transfers: (any CameraMediaTransferService)? { nil }
-            var deletion: (any CameraMediaDeleteService)? { nil }
-            var closes = 0
-            func catalog() async -> any MediaCatalogCursor { ReviewMediaCursor() }
-            func close() async { closes += 1 }
-        }
-        @MainActor private final class ReviewMediaCursor: MediaCatalogCursor {
-            var done = false
-            func next() async -> MediaCatalogDelta? {
-                guard !done else { return nil }
-                done = true
-                return .init(complete: true)
+        /// The SIMULATED camera's HTTP server. The staged clips' bytes are already in the phone's cache
+        /// (`stageMedia`), so it answers every file request as a camera without that file does: 404, at
+        /// once. Playback then falls back to the cached original, as it does on a real camera.
+        private final class ReviewCameraHTTP: URLProtocol, @unchecked Sendable {
+            override class func canInit(with request: URLRequest) -> Bool { true }
+            override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+            override func startLoading() {
+                guard let url = request.url,
+                    let response = HTTPURLResponse(url: url, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: nil)
+                else {
+                    client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+                    return
+                }
+                client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+                client?.urlProtocolDidFinishLoading(self)
             }
-            func close() { done = true }
+            override func stopLoading() {}
         }
     #endif
 #endif

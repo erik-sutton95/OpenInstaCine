@@ -158,8 +158,12 @@ struct MediaLibraryView: View {
             .onChange(of: library.lifetimeToken) { _, _ in deliveryFiles = nil }
             #if DEBUG && targetEnvironment(simulator)
                 .task(id: library.displayedRecords.first?.asset.id) {
-                    // `ReviewLaunch(screen: .playback)`: open the first staged clip as a tap would.
-                    guard MonitorUIReview.opensFirstClip, let record = library.displayedRecords.first else { return }
+                    // `ReviewLaunch(screen: .playback)`: open the first staged clip as a tap would. A
+                    // connected camera's clip once the camera's own catalog lists it: the cached copy
+                    // shown before it carries no camera facts (deletable), as on a real connection.
+                    guard MonitorUIReview.opensFirstClip, let record = library.displayedRecords.first,
+                        MonitorUIReview.launch?.connected != true || record.asset.deletable == true
+                    else { return }
                     MonitorUIReview.opensFirstClip = false
                     presented = .init(record: record, playlist: library.displayedRecords, admission: library.actionToken)
                 }
