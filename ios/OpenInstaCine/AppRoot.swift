@@ -43,7 +43,11 @@ final class AppModel {
             if session == nil, MonitorUIReview.isActive { MonitorUIReview.resetMediaFavorites() }
         #endif
         let mediaStorage = MonitorMediaCacheStorage()
-        let session = session ?? CameraSession(backend: Self.makeBackend(), mediaStorage: mediaStorage)
+        var cameraMedia: CameraMedia?
+        #if DEBUG && targetEnvironment(simulator)
+            if MonitorUIReview.isActive { cameraMedia = MonitorUIReview.cameraMedia(storage: mediaStorage) }
+        #endif
+        let session = session ?? CameraSession(backend: Self.makeBackend(), cameraMedia: cameraMedia, mediaStorage: mediaStorage)
         self.session = session
         var port: any LunaConnectPort = session
         var defaults = UserDefaults.standard
