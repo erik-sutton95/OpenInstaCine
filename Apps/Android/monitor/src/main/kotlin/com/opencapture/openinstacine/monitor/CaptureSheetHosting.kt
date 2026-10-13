@@ -44,6 +44,7 @@ internal fun instaCaptureSessionState(
     focusModeSupported: () -> Boolean,
     nativeIsoHopSupported: () -> Boolean,
     irisSupported: () -> Boolean = { false },
+    isoCeilingSupported: () -> Boolean? = { null },
 ): CaptureSessionState = object : CaptureSessionState {
     override val aeLocked get() = aeLock() != null
     override val awbLockKelvin get() = awbLockKelvin()
@@ -52,6 +53,8 @@ internal fun instaCaptureSessionState(
     override val focusModeSupported get() = focusModeSupported()
     override val irisSupported get() = irisSupported()
     override val nativeIsoHopSupported get() = nativeIsoHopSupported()
+    override val nativeISO get() = com.opencapture.opencine.vocabulary.CaptureNativeISOCapabilities(
+        hop = nativeIsoHopSupported(), ceiling = isoCeilingSupported())
 }
 
 @Composable
@@ -60,7 +63,8 @@ internal fun AppModel.observedCaptureSessionState(status: CameraStatus): Capture
     val awbLock by session.awbLockKelvin.collectAsState()
     return instaCaptureSessionState({ aeLock }, { awbLock }, { session.autoWhiteBalanceLock(status) != null },
         { session.isFormatPinActive }, { CaptureLists.supportsFocusModeOrDefault(session.connectedCamera?.model) },
-        { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true })
+        { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true },
+        isoCeilingSupported = { false })
 }
 
 /** The Core drum for ISO, shutter and white balance Kelvin; EV is its own wheel on the typed path. */

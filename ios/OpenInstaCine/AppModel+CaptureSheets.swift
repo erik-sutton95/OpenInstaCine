@@ -58,11 +58,11 @@ extension AppModel: CaptureSheetHost {
     var autoExposureLocked: Bool { session.autoExposureLock != nil }
     var autoWhiteBalanceLocked: Bool { session.autoWhiteBalanceLock != nil }
     var canLockAutoWhiteBalance: Bool { session.canLockAutoWhiteBalance }
+    var captureRouting: CaptureSheetRouting { .init() }
     var captureCapabilities: CaptureSheetCapabilities {
         CaptureSheetCapabilities(
             focusMode: session.supportsFocusMode, aperture: session.supportsAperture,
-            nativeIsoHop: session.supportsNativeIsoHop, isoLimit: session.supportsIsoLimit,
-            commonExposureCompensation: false, commonFocusMode: false,
+            nativeISO: .init(hop: session.supportsNativeIsoHop, ceiling: session.supportsIsoLimit),
             audio: audioService != nil,
             faceMetering: session.supportsFaceMetering)
     }

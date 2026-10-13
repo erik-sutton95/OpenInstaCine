@@ -11,7 +11,8 @@ internal fun AppModel.makeOperatorCaptureSource(): MonitorOperatorCaptureSource 
         instaCaptureSessionState({ session.aeLock.value }, { session.awbLockKelvin.value },
         { session.autoWhiteBalanceLock(session.status.value) != null }, { session.isFormatPinActive },
         { com.opencapture.opencine.cameracontrols.CaptureLists.supportsFocusModeOrDefault(camera) },
-        { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true })
+        { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true },
+        isoCeilingSupported = { false })
     }, ready = { session.phase == ConnectionPhase.LIVE }, busy = { session.controlBusy.value },
     nativeExposureCompensation = true,
     confirmRecording = { recordConfirmationEnabled }, takePhoto = ::pressShutter,
