@@ -25,8 +25,18 @@ final class MonitorReadoutRenderingTests: XCTestCase {
             .environment(model))
         renderer.scale = 1
         let image = try XCTUnwrap(renderer.cgImage)
+        let attachment = XCTAttachment(image: UIImage(cgImage: image))
+        attachment.name = "SIMULATED portrait storage above the status band"
+        attachment.lifetime = .keepAlways
+        add(attachment)
         let bytes = try rgba(image)
-        let whitePixels = (0..<90).reduce(0) { count, y in
+        // The safe header moves with the cutout input. Its old fixed 90-point crop
+        // excluded the cleared storage row on this 62-point safe-top fixture.
+        let headerTop = Int(layout.battery.minY - 13)
+        let headerBottom = headerTop + 48
+        XCTAssertGreaterThanOrEqual(headerTop, Int(layout.safeArea.top + 8))
+        XCTAssertLessThanOrEqual(headerBottom, Int(layout.topDeck.minY))
+        let whitePixels = (headerTop..<headerBottom).reduce(0) { count, y in
             count
                 + (10..<180).filter { x in
                     let index = (y * image.width + x) * 4
@@ -35,7 +45,7 @@ final class MonitorReadoutRenderingTests: XCTestCase {
         }
         XCTAssertGreaterThan(
             whitePixels, 100,
-            "Storage must remain visible in the header, above the lower status band's raster bounds"
+            "Storage must remain visible in the safe header, above the lower status band's raster bounds"
         )
     }
 
