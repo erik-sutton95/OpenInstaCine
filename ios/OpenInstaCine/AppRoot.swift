@@ -769,7 +769,8 @@ final class AppModel {
                 status: session.status,
                 phase: session.phase,
                 cameraName: session.connectedCamera?.name ?? "",
-                feedLive: session.decoder.lastPresentedAt != nil))
+                feedLive: session.decoder.lastPresentedAt != nil,
+                storage: shell.control.snapshot?.storage ?? .unknown))
     }
 
     func watchToggleRecord() -> WatchCommandResult {
