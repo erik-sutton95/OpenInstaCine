@@ -7,7 +7,6 @@ import com.opencapture.opencine.cameracontrols.MonitorOperatorAssistSource
 import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.openinstacine.monitor.assists.AppAssistHost
 import com.opencapture.openinstacine.monitor.assists.AssistInspectorImagePreview
-import com.opencapture.openinstacine.monitor.feed.GpuOverlayBus
 import com.opencapture.openinstacine.monitor.lut.AppLutPickerCopy
 import kotlinx.coroutines.flow.map
 
@@ -19,7 +18,7 @@ internal fun rememberOperatorAssistSource(model: AppModel, status: CameraStatus)
     val look = AssistLutPicker(AppLutPickerCopy, selection, model::updateLutSelection,
         profile = model.camera?.captureProfile?.looks ?: com.opencapture.openinstacine.monitor.session.LunaCameraLUTProfile.value,
         colorMode = status.monitorColorMode)
-    return MonitorOperatorAssistSource(AppAssistHost, publications, { GpuOverlayBus.onSlotsMoved?.invoke() }, look, preview = { tool ->
+    return MonitorOperatorAssistSource(AppAssistHost, publications, {}, look, preview = { tool ->
         AssistInspectorImagePreview(tool, model.assist, model, selection, status.monitorColorMode, false)
     })
 }

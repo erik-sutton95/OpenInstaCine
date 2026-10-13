@@ -18,7 +18,7 @@ import com.opencapture.opencine.vocabulary.colorMode
 
 import com.opencapture.monitorui.LocalMonitorBackdrops
 import com.opencapture.monitorui.monitorBackdropSource
-import com.opencapture.openinstacine.monitor.feed.rememberMonitorBackdropFeed
+import com.opencapture.opencine.appkitnative.rememberMonitorBackdropFeed
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
@@ -173,7 +173,6 @@ fun MediaPlayerScreen(files: List<MediaFile>, startingAt: MediaFile, controller:
     val status by model.session.chromeStatus.collectAsState()
     val color = state?.look?.source?.colorMode ?: -1
     val effects = rememberLiveFeedEffectsPlan(model.assist, model.lutSelection, status,
-        family = model.session.connectedCamera?.model?.family.orEmpty(), cameraName = model.session.connectedCamera?.name,
         playback = true, clipColorMode = color)
     val base = com.opencapture.openinstacine.monitor.rememberOperatorAssistSource(model, status)
     val resolvedColor = PlaybackLutColor.resolve(clip = color, live = status.colorMode,

@@ -367,6 +367,15 @@ the same NEEDED list. `LiveVulkanSession`, the present gate, crash guard and win
 Device check (Android, Luna): live picture through Vulkan with LUT, scopes, peaking and the glass
 backdrop; background return, rotation and surface recreation keep the picture.
 
+## F11: shared HEVC live host (A3-11, A3-12)
+
+No change intended. Live View runs OpenCine's `MonitorLiveFeedHost` (insets, link readout, Vulkan
+picture with GLES and direct-decoder fallbacks, backdrop, face readback, recovery card) over this
+app's Luna session adapter, and its feed plans come from `MonitorFeedEffectsPlans` over the app's
+Swift core. `LiveVulkanSession`, `LiveFeedEffectsSession`, `MonitorBackdropFeed` and the
+`FeedEffectsWire` bakes left `:monitor` (the JNI exports pass the Luna source profile to OpenCine
+`MonitorFeedEffectsWire`); the crash guard and the `LiveFeed` integration values stay here.
+
 ## RELEASE-01: source sync retired
 
 The former Pocket presentation-shell sync, overlay script and sync-commit stamp have been

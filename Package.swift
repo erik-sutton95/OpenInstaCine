@@ -63,7 +63,6 @@ let package = Package(
             name: "OpenInstaCineAndroidFacadeTests",
             dependencies: [
                 "OpenInstaCineAndroidFacade", "OpenInstaViewCore",
-                .product(name: "OpenCineDJI", package: "OpenCine"),
             ]
         ),
     ]

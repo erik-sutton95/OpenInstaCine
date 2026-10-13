@@ -23,8 +23,7 @@ internal fun AssistInspectorImagePreview(tool: MonitorAssistTool, state: LiveAss
     val context = LocalContext.current
     val status by model.session.chromeStatus.collectAsState()
     val camera = model.session.connectedCamera
-    val plan = rememberLiveFeedEffectsPlan(state, lutSelection, status,
-        camera?.model?.family.orEmpty(), camera?.name, playback = playback,
+    val plan = rememberLiveFeedEffectsPlan(state, lutSelection, status, playback = playback,
         clipColorMode = colorMode, previewTool = tool)
     val pipeline = model.inspectorPreview
     val client = remember(pipeline, context) {

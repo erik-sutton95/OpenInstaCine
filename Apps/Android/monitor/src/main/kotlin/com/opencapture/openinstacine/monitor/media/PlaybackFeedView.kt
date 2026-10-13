@@ -6,7 +6,7 @@ import android.graphics.SurfaceTexture
 import android.view.TextureView
 import androidx.compose.foundation.layout.BoxWithConstraints
 import com.opencapture.monitorui.monitorBackdropSource
-import com.opencapture.openinstacine.monitor.feed.MonitorBackdropFeed
+import com.opencapture.opencine.appkitnative.MonitorBackdropFeed
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -19,8 +19,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.opencapture.opencine.media.MonitorPlaybackItemToken
-import com.opencapture.openinstacine.monitor.feed.FeedEffectsRenderPlan
-import com.opencapture.openinstacine.monitor.feed.LiveFeedEffectsSession
+import com.opencapture.opencine.media.FeedEffectsRenderPlan
+import com.opencapture.opencine.runtime.NativeGlesFeedSession
+import com.opencapture.openinstacine.monitor.feed.LiveFeed
 import com.opencapture.monitorui.MonitorPlaybackZoom
 
 /**
@@ -49,7 +50,7 @@ internal fun PlaybackFeedView(
     val pictureOwner = remember(native, sourceIdentity) { native.claimPicture() }
     val session =
         remember(native, pictureOwner) {
-            LiveFeedEffectsSession(
+            LiveFeed.glesFeed(
                 context = context,
                 scopeBus = scopeBus,
                 preview = preview,
@@ -117,7 +118,7 @@ internal fun PlaybackFeedView(
 }
 
 private class PlaybackEffectsFeedListener(
-    private val session: LiveFeedEffectsSession,
+    private val session: NativeGlesFeedSession,
 ) : TextureView.SurfaceTextureListener {
     override fun onSurfaceTextureAvailable(
         surfaceTexture: SurfaceTexture,

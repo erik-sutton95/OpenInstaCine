@@ -21,12 +21,6 @@ enum LUTAssist {
     static func longPressMenu(_ assist: LiveAssistState) -> some View {
         LUTPicker(assist: assist, embedded: true)
     }
-
-    /// Pinned under the catalog so landscape never scrolls exposure / 50/50 off-screen.
-    @ViewBuilder
-    static func longPressFooter(assist: LiveAssistState) -> some View {
-        LUTSplitComparisonBar(assist: assist)
-    }
 }
 
 /// Official Insta360 Luna I-Log to Rec.709 cube from the app bundle. Parsed once.
