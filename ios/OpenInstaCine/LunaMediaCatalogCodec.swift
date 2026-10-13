@@ -59,14 +59,8 @@ struct LunaMediaLibraryPayload: Sendable {
             thumbnail: "thumbs/" + cacheName(file.thumbPath) + ".jpg", representations: addresses, favoriteKey: file.path),
             favorite: file.isStarred, facts: .init(format: file.fileExtension, resolution: file.resolution,
                 dateKey: file.dateKey.isEmpty ? nil : file.dateKey, orderKey: file.filenameTimestamp,
-                color: (shotColor(file) ?? sourceColor(payload.source?.metadata?.gammaMode)).map { String($0.rawValue) }))
-    }
-    private func sourceColor(_ gamma: String?) -> ColorMode? {
-        guard let gamma = gamma?.lowercased() else { return nil }
-        if gamma.contains("log") { return .iLog }
-        if gamma.contains("dolby") || gamma.contains("hdr") { return .dolbyVision }
-        if gamma.contains("standard") || gamma.contains("vivid") { return .normal }
-        return nil
+                color: (shotColor(file) ?? LunaColorMode(gammaLabel: payload.source?.metadata?.gammaMode)
+                    .map(LunaShellMapping.colorMode)).map { String($0.rawValue) }))
     }
     private func cacheName(_ path: String) -> String { path.replacingOccurrences(of: "/", with: "_") }
     private func offlineIdentity(_ file: MediaFile) throws -> MediaAssetID {
