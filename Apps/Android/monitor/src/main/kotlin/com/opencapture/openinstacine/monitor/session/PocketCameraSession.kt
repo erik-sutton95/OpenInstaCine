@@ -500,6 +500,11 @@ class PocketCameraSession(
      */
     val lunaPort: LunaConnectPort? = (backend as? LunaConnectPort)?.let { port ->
         object : LunaConnectPort by port {
+            override fun openSession(): com.opencapture.opencine.core.CameraSession = port.openSession().also {
+                (it as? LunaCameraSession)?.configureShutter(if (OperatorPrefs.shutterUsesAngle(appContext))
+                    com.opencapture.opencine.media.HostShutterPresentation.EMULATED_ANGLE
+                    else com.opencapture.opencine.media.HostShutterPresentation.CAMERA_VALUE)
+            }
             override fun connect(id: String) {
                 holdReportingCameraPath()
                 retireRecovery()
@@ -510,6 +515,12 @@ class PocketCameraSession(
                 }
             }
         }
+    }
+
+    fun configureShutterPresentation(usesAngle: Boolean) {
+        (control.state.value.session as? LunaCameraSession)?.configureShutter(if (usesAngle)
+            com.opencapture.opencine.media.HostShutterPresentation.EMULATED_ANGLE
+            else com.opencapture.opencine.media.HostShutterPresentation.CAMERA_VALUE)
     }
 
     /**
@@ -1367,16 +1378,17 @@ class PocketCameraSession(
                 _status.value = _status.value.copy(resolutionCode = previous.resolutionCode, fpsIndex = previous.fpsIndex, fps = previous.fps)
             }
         }) { setRecordFormat(raw) }
-        // Angle mode is ours: keep the chosen degrees and rewrite 1/N for the new fps.
-        CaptureLists.rematchShutterDenomAfterFps(
-            usesAngle = OperatorPrefs.shutterUsesAngle(appContext),
+        // Angle mode is ours: Core decides when the chosen degrees owe a new 1/N (only an
+        // established manual video exposure; never an unknown one).
+        ShutterAngle.formatRematch(
             degrees = OperatorPrefs.shutterAngleDegrees(appContext),
+            usesAngle = OperatorPrefs.shutterUsesAngle(appContext),
+            manual = previous.expoMode == CameraCommands.EXPO_MANUAL,
+            isPhoto = previous.isPhoto,
             previousFps = previous.fps,
             nextFps = format.frameRate.fps,
-            expoMode = previous.expoMode,
-            currentDenom = previous.shutterDenom,
             available = previous.availableShutterDenoms,
-        )?.let(::setShutterDenom)
+        )?.denom?.takeIf { it != previous.shutterDenom }?.let(::setShutterDenom)
         return true
     }
     fun setResolutionFps(res: Int, fpsIndex: Int): Boolean = VideoFormat.parse(res, fpsIndex)?.let(::setVideoFormat) ?: false

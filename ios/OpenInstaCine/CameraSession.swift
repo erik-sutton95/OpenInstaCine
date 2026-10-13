@@ -1442,6 +1442,7 @@ extension CameraSession: LunaConnectPort {
     func openSession() -> LunaCameraSession {
         resetForConnection()
         let next = backend.openSession()
+        next.configureShutter(presentation: OperatorPrefs.shutterUsesAngle ? .emulatedAngle : .cameraValue)
         next.configureLens(zoomDomain: 1...zoomCeiling)
         return next
     }

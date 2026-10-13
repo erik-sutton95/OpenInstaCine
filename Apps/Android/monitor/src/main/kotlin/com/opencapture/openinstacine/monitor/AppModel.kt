@@ -303,6 +303,7 @@ class AppModel(
     fun updateShutterUsesAngle(value: Boolean) {
         shutterUsesAngle = value
         OperatorPrefs.setShutterUsesAngle(appContext, value)
+        session.configureShutterPresentation(value)
     }
 
     fun updateLutSelection(value: String) {
