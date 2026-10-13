@@ -535,7 +535,9 @@ final class AppModel {
                     available: s.availableShutterDenoms, current: s.shutterDenom),
                 zoomHundredths: session.zoomStops.map { Int(($0 * 100).rounded()) }),
             cameraModel: session.connectedCamera?.model.name,
-            isNano: session.bodyFamily == .nano)
+            isNano: session.bodyFamily == .nano,
+            batteryReading: control.snapshot?.power.batteryReading,
+            batteryExhausted: control.snapshot?.power.exhausted.value)
         return state
     }
 
@@ -769,7 +771,7 @@ final class AppModel {
                 timecode: liveStatus.clock,
                 phase: session.phase,
                 cameraName: session.connectedCamera?.name ?? "",
-                feedLive: session.decoder.lastPresentedAt != nil))
+                feedLive: session.decoder.lastPresentedAt != nil, power: control.snapshot?.power ?? .unknown))
     }
 
     func watchToggleRecord() -> WatchCommandResult {

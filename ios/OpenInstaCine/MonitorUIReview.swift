@@ -270,6 +270,12 @@
                 var device = try LunaDeviceStatus(response: Data())
                 device.photoSubMode = 100; device.videoSubMode = 0
                 session.ingest(device: device)
+                if (0...100).contains(status.batteryPercent) {
+                    let battery = try ProtoMessage.integer(field: 2, value: UInt64(status.batteryPercent))
+                        + ProtoMessage.integer(field: 1, value: status.charging ? 1 : 0)
+                    let options = try ProtoMessage.blob(field: 11, value: battery)
+                    session.ingest(device: try LunaDeviceStatus(response: ProtoMessage.blob(field: 2, value: options)))
+                }
                 let exposure = try ProtoMessage.integer(field: 1, value: LunaExposureProgram.manual.rawValue)
                     + ProtoMessage.integer(field: 2, value: UInt64(status.iso))
                     + ProtoMessage.double(field: 3, value: 1 / Double(status.shutterDenom))

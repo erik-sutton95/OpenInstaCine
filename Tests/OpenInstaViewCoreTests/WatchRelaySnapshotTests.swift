@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import OpenCineCore
 
 @testable import OpenInstaViewCore
 
@@ -51,4 +52,20 @@ struct WatchRelaySnapshotTests {
             status: status, timecode: "01:02:03", phase: .live, cameraName: "Pocket 3", feedLive: true)
         #expect(!lowLight.isPhotography)
     }
+    @Test func typedPowerReachesTheWristWithoutLegacyScalarFallback() {
+        var status = CameraStatus()
+        status.batteryPercent = 99
+        let reported = PowerStatus(battery: .init(0.25, origin: .cameraReported, at: nil, precision: .quantized(step: 0.25)),
+            exhausted: .init(true, origin: .cameraReported, at: nil))
+        let live = WatchRelayState.snapshot(status: status, timecode: "09:30:00", phase: .live,
+            cameraName: "SIMULATED", feedLive: true, power: reported)
+        #expect(live.batteryReading == .steps(filled: 1, of: 4))
+        #expect(live.batteryExhausted == true)
+        let unknown = WatchRelayState.snapshot(status: status, timecode: "09:30:00", phase: .live,
+            cameraName: "SIMULATED", feedLive: true, power: .unknown)
+        #expect(unknown.cameraBatteryPercent == 99)
+        #expect(unknown.batteryReading == nil)
+        #expect(unknown.batteryExhausted == nil)
+    }
+
 }
