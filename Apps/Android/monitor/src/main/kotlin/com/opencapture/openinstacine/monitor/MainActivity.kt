@@ -62,6 +62,8 @@ import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.opencapture.opencine.appkit.diagnostics.AutomaticReportsPrompt
 import com.opencapture.openinstacine.monitor.diagnostics.DiagnosticCenter
 import androidx.activity.compose.BackHandler
@@ -98,7 +100,12 @@ open class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         splashScreen.setKeepOnScreenCondition { !composeFirstFrameDrawn.get() }
         super.onCreate(savedInstanceState)
-        model = AppModel(applicationContext)
+        val localReview = MonitorReview.decode(intent)
+        MonitorReview.prepare(applicationContext, localReview)
+        model = AppModel(applicationContext, reviewLaunch = localReview)
+        if (localReview != null) lifecycleScope.launch {
+            MonitorReview.start(applicationContext, model, localReview)
+        }
         model.gimbalGamepad.ensureListening(this, model)
         // Target SDK 35+ enforces edge-to-edge on Android 15 and later.
         if (Build.VERSION.SDK_INT < 35) {
@@ -174,7 +181,7 @@ private fun OpenPocketCineApp(model: AppModel) {
     val context = LocalContext.current
     var showProblemReport by remember { mutableStateOf(false) }
     var showReportingPrivacy by remember { mutableStateOf(false) }
-    var launchSplashVisible by remember { mutableStateOf(true) }
+    var launchSplashVisible by remember { mutableStateOf(model.reviewLaunch == null) }
     val activity = LocalActivity.current
     lateinit var discovery: PermissionGate
     val enableBluetooth =
@@ -202,9 +209,9 @@ private fun OpenPocketCineApp(model: AppModel) {
 
     LaunchedEffect(Unit) {
         model.prepareStartup()
-        if (discovery.granted) {
+        if (model.reviewLaunch == null && discovery.granted) {
             beginDiscovery(model, onBluetoothOff = { requestBluetoothOn() })
-        } else if (!discovery.needsSettings) {
+        } else if (model.reviewLaunch == null && !discovery.needsSettings) {
             discovery.request()
         }
         delay(2_250)
@@ -240,7 +247,7 @@ private fun OpenPocketCineApp(model: AppModel) {
         (activity as? MainActivity)?.updateSystemBars()
     }
 
-    Box(Modifier.fillMaxSize().startupBackdrop()) {
+    Box(Modifier.fillMaxSize().startupBackdrop().reviewMetadata(model.reviewLaunch)) {
         val cameras by model.cameras.state.collectAsState()
         val phase by model.session.phaseFlow.collectAsState()
         val radioOn by model.session.radioOn.collectAsState()
@@ -283,7 +290,7 @@ private fun OpenPocketCineApp(model: AppModel) {
         LaunchSplashOverlay(visible = launchSplashVisible)
         model.legal?.let { kind -> if (!showLive) LegalDocumentScreen(kind) { model.legal = null } }
         var showAutomaticPrompt by remember {
-            mutableStateOf(AppDiagnostics.consent.shouldOfferAutomaticPrompt())
+            mutableStateOf(model.reviewLaunch == null && AppDiagnostics.consent.shouldOfferAutomaticPrompt())
         }
         if (!launchSplashVisible && !showLive && showAutomaticPrompt &&
             model.legal != LegalKind.PRIVACY

@@ -9,7 +9,7 @@ val resolvedVersionName: String = property("openinstacine.versionName").toString
 android {
  namespace = "com.opencapture.openinstacine"
  compileSdk = 36
- defaultConfig { applicationId = "com.opencapture.openinstacine"; minSdk = 29; targetSdk = 36; versionCode = resolvedVersionCode; versionName = resolvedVersionName; manifestPlaceholders["sentryProguardUuid"] = System.getenv("SENTRY_PROGUARD_UUID").orEmpty(); ndk { abiFilters += "arm64-v8a" } }
+ defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "com.opencapture.openinstacine"; minSdk = 29; targetSdk = 36; versionCode = resolvedVersionCode; versionName = resolvedVersionName; manifestPlaceholders["sentryProguardUuid"] = System.getenv("SENTRY_PROGUARD_UUID").orEmpty(); ndk { abiFilters += "arm64-v8a" } }
 
  // Play and sideload builds sign with the keystore named in the environment
  // (docs/android-play-ci.md, docs/RELEASE.md). Unset keeps debug and an unsigned release possible.
@@ -60,4 +60,4 @@ val verifyReleaseComponentRegistrars = tasks.register<Exec>("verifyReleaseCompon
  commandLine("bash", rootProject.projectDir.resolve("../../../OpenCine/scripts/android-verify-component-registrars.sh").absolutePath, releaseBundle.get().asFile.absolutePath)
 }
 tasks.matching { it.name == "bundleRelease" }.configureEach { finalizedBy(verifyReleaseComponentRegistrars) }
-dependencies { implementation(project(":monitor")); implementation(libs.opencine.insta360.luna); implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT"); implementation(libs.kotlinx.coroutines.android) }
+dependencies { androidTestImplementation("com.opencapture.opencine:app-ui-testing:0.1.0-SNAPSHOT"); implementation(project(":monitor")); implementation(libs.opencine.insta360.luna); implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT"); implementation(libs.kotlinx.coroutines.android) }
