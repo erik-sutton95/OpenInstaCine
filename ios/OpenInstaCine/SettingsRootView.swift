@@ -66,7 +66,7 @@ enum SettingsHelpCopy {
     static let linkHealth =
         "How healthy the camera link is right now \u{2014} delivery, not radio RSSI."
     static let clearCache =
-        "Removes downloaded clip files from this phone. The clip list stays so you can cache them again from the camera."
+        "Removes downloaded clip files, thumbnails, and camera indexes for every camera. The on-device library is left intact."
     static let cacheFullResolution =
         "Download the original camera file when you open a clip. Off keeps only the 720p proxy to save space. Share needs the original \u{2014} connect the camera if it is not cached."
     static let shareDiagnostics =
@@ -196,14 +196,15 @@ struct SettingsRootView: View {
         return model.frameio.isConnected ? .signedIn : .signedOut
     }
     private var cache: MonitorSettingsCacheSource {
-        let cameraID = model.session.mediaCameraID
         let revision = model.session.mediaCacheRevision
         let source = model.shell.monitor?.id
-        // Delivery exports count and clear with the media cache (A2-58).
-        return model.delivery.cacheSource(.init(identity: .init(namespace: cameraID, source: source), revision: revision,
-            isCurrent: { model.shell.monitor?.id == source && model.session.mediaCameraID == cameraID && model.session.mediaCacheRevision == revision },
-            count: { await model.session.cameraMedia.cacheByteCount(cameraID: cameraID) },
-            clear: { try await model.session.clearMediaCache() }))
+        // Delivery exports count and clear with the media cache (A2-58). The scope is every
+        // camera's cache on this phone (A2-33), so the identity is the shared cache parent.
+        return model.delivery.cacheSource(.init(
+            identity: .init(namespace: model.session.cameraMedia.mediaCacheParentPath, source: source), revision: revision,
+            isCurrent: { model.shell.monitor?.id == source && model.session.mediaCacheRevision == revision },
+            count: { await model.session.cameraMedia.cacheByteCountAllCameras() },
+            clear: { try await model.session.clearAllCamerasCache() }))
     }
     private var support: MonitorSettingsSupportSource {
         .init(consent: Binding(get: { AppDiagnostics.reporting.isOptedIn }, set: AppDiagnostics.reporting.setConsent),
