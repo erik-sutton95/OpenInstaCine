@@ -394,7 +394,14 @@ fun LiveViewScreen(model: AppModel) {
             LocalGpuLive provides if (useVulkan) vulkanSession else null,
         ) {
         val faceMetering by model.session.faceMetering.collectAsState()
-        val metering = faceMetering?.let { MonitorOperatorMeteringTile(it) { model.session.setFaceMetering(!it) } }
+        val meterOwner = model.session
+        val meterControl by meterOwner.control.state.collectAsState()
+        val meterSource = meterControl.snapshot?.let { it.session to it.epoch }
+        val meterPhase = meterOwner.phase
+        val metering = faceMetering?.let { face -> MonitorOperatorMeteringTile(face, isCurrent = {
+            model.session === meterOwner && meterOwner.control.state.value.snapshot?.let { it.session to it.epoch } == meterSource
+                && meterOwner.phase == meterPhase && meterOwner.faceMetering.value == face
+        }) { meterOwner.setFaceMetering(!face) } }
         val chrome = rememberOperatorChromeSource(model, status, capabilities)
         val focus = MonitorOperatorFocusObservation(focusPoint, trackingHud, model.session.supportsTapFocus,
             aeLock != null, model.focusBoxLocked, focusOffCenter)

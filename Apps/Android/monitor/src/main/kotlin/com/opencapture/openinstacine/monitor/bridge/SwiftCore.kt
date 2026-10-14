@@ -51,4 +51,11 @@ object SwiftCore {
         highlightIRE: Float,
         midtoneIRE: Float,
     ): FloatArray?
+
+    /** Named Media curves, independent of recording-option bytes and stored legacy ids. Unknown is null. */
+    external fun packImportedLutForTransfer(utf8: ByteArray, exposureStops: Double, transferTag: String?): ByteArray?
+    external fun packCreativeLutForTransfer(title: String, exposureStops: Double, transferTag: String?): ByteArray?
+    external fun packFalseColorPaintForTransfer(scaleOrdinal: Int, transferTag: String?, iso: Int): ByteArray?
+    external fun packFalseColorWeightForTransfer(scaleOrdinal: Int, transferTag: String?, iso: Int): ByteArray?
+    external fun feedAssistScalarsForTransfer(transferTag: String?, iso: Int, highlightIRE: Float, midtoneIRE: Float): FloatArray?
 }

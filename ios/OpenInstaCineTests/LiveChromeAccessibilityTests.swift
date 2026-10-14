@@ -118,6 +118,25 @@ final class LiveChromeAccessibilityTests: XCTestCase {
         XCTAssertTrue(value.hasPrefix("Estimated from picture"), value)
     }
 
+    func testNativeMeteringReadoutReachesTheSharedLiveSurface() async throws {
+        setenv("OPV_UI_REVIEW_SCREEN", "live", 1)
+        defer { unsetenv("OPV_UI_REVIEW_SCREEN") }
+        let model = AppModel()
+        model.prepareStartup()
+        let host = UIHostingController(rootView: LiveViewScreen().environment(model).environment(\.scenePhase, .active))
+        host.safeAreaRegions = []
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 874, height: 402))
+        window.rootViewController = host; window.makeKeyAndVisible(); host.view.frame = window.bounds
+        defer { window.isHidden = true; window.rootViewController = nil; model.session.disconnect() }
+        let cases: [(Bool?, String)] = [(false, "Matrix"), (true, "Face Priority"), (nil, "Unknown")]
+        for (face, label) in cases {
+            model.session.faceMetering = face
+            try await settle(host.view)
+            let meter = try element("monitor.capture.metering", in: host.view)
+            XCTAssertEqual(meter.accessibilityValue, label)
+        }
+    }
+
     private func settle(_ view: UIView) async throws {
         view.setNeedsLayout()
         view.layoutIfNeeded()

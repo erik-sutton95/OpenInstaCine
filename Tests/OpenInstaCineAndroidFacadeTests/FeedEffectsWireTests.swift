@@ -6,6 +6,32 @@ import OpenCineDJI
 
 @Suite
 struct FeedEffectsWireTests {
+    /// SIMULATED actual Android Luna LOG producer uses65536, not the old Swift UInt8 id.
+    @Test func actualLunaAndroidLogReportKeepsItsIlogTransferAndAssistScalars() {
+        let reportedCode = 65_536
+        #expect(FeedEffectsWire.monitorTransfer(colorModeCode: reportedCode) == .ilog)
+        let scalars = FeedEffectsWire.assistScalars(colorModeCode: reportedCode,
+            iso: 100, highlightIRE: 100, midtoneIRE: 55)
+        #expect(scalars[3] == 1, "The actual known I-Log path uses the existing log peaking scale")
+    }
+
+    @Test func typedTransferInputsRetainTheExistingPayloadsAndLegacyInterface() throws {
+        let typed = FeedEffectsWire.assistScalars(transfer: .ilog,
+            iso: 100, highlightIRE: 100, midtoneIRE: 55)
+        #expect(typed == FeedEffectsWire.assistScalars(colorModeCode: 65_536,
+            iso: 100, highlightIRE: 100, midtoneIRE: 55))
+        #expect(typed == FeedEffectsWire.assistScalars(colorModeCode: 0xE2,
+            iso: 100, highlightIRE: 100, midtoneIRE: 55))
+        #expect(try #require(FeedEffectsWire.packedFalseColorPaint(scaleOrdinal: 0, transfer: .ilog, iso: 100))
+            == FeedEffectsWire.packedFalseColorPaint(scaleOrdinal: 0, colorModeCode: 0xE2, iso: 100))
+        #expect(try #require(FeedEffectsWire.packedFalseColorWeight(scaleOrdinal: 0, transfer: .ilog, iso: 100))
+            == FeedEffectsWire.packedFalseColorWeight(scaleOrdinal: 0, colorModeCode: 0xE2, iso: 100))
+        #expect(LUTLibraryWire.packedCreativeLook("Warm", exposureStops: 0.5, transfer: .ilog)
+            == LUTLibraryWire.packedCreativeLook("Warm", exposureStops: 0.5, colorModeCode: 0xE2))
+        #expect(FeedEffectsWire.monitorTransfer(colorModeCode: -1) == .rec709,
+            "The original legacy fallback remains; named-curve unknown is represented at its boundary")
+    }
+
     /// The JNI color mode code is the stored raw value Insta main sent; it still names the curve.
     @Test
     func colorModeCodesFromMainKeepTheirTransfer() {

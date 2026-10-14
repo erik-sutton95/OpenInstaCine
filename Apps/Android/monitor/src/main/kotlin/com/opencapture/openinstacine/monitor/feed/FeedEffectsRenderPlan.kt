@@ -5,6 +5,7 @@ import com.opencapture.opencine.appkit.MonitorAssistRasterValues
 import com.opencapture.opencine.appkit.renderPlan
 import com.opencapture.opencine.appkit.renderToolVisible
 import com.opencapture.opencine.media.MonitorTransfer
+import com.opencapture.opencine.media.MonitorTransferWire
 import android.util.Log
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.monitorui.MonitorFalseColorSelection
@@ -18,6 +19,7 @@ import com.opencapture.opencine.media.MonitorLUTCube
 import com.opencapture.opencine.media.ScopeTapPolicy
 import com.opencapture.opencine.media.MonitorLUTExposureCompensation
 import com.opencapture.opencine.vocabulary.fromColorMode
+import com.opencapture.opencine.vocabulary.knownFromColorMode
 import com.opencapture.opencine.vocabulary.LutLookSource
 import com.opencapture.opencine.vocabulary.LutLookResolver
 
@@ -43,7 +45,8 @@ internal object FeedEffectsRenderPlanFactory {
         val falseColor = assist.renderToolVisible(MonitorAssistTool.FALSE, playback, previewTool)
         val look = LutLookResolver.resolve(lutSelection, lutOn, colorMode, profile = lookProfile, isPhoto = isPhoto)
         val lut = lutCube(context, look, assist.lutExposureStops, colorMode)
-        val scalars = if (SwiftCore.isAvailable) SwiftCore.feedAssistScalars(colorMode, iso,
+        val transferTag = MonitorTransfer.knownFromColorMode(colorMode)?.let(MonitorTransferWire::tag)
+        val scalars = if (SwiftCore.isAvailable && transferTag != null) SwiftCore.feedAssistScalarsForTransfer(transferTag, iso,
             assist.zebraHighlightIRE.toFloat(), assist.zebraMidtoneIRE.toFloat()) else null
         val vectorscope = assist.renderToolVisible(MonitorAssistTool.VECTOR, playback, previewTool) ||
             assist.inspectorScopeDemand?.takeIf { it.playback == playback && previewTool == null }?.tool == MonitorAssistTool.VECTOR
@@ -69,6 +72,7 @@ internal object FeedEffectsRenderPlanFactory {
     ): MonitorLUTCube? {
         val snapped = MonitorLUTExposureCompensation.snap(exposureStops)
         val exposureColorMode = LutLookResolver.exposureColorMode(source, colorMode)
+        val transferTag = MonitorTransfer.knownFromColorMode(exposureColorMode)?.let(MonitorTransferWire::tag) ?: return null
         val key =
             when (source) {
                 is LutLookSource.Asset -> "asset:${source.fileName}:$snapped:$exposureColorMode"
@@ -82,7 +86,7 @@ internal object FeedEffectsRenderPlanFactory {
                 return@value null
             }
             if (source is LutLookSource.Creative) {
-                return@value SwiftCore.packCreativeLut(source.name, snapped, exposureColorMode)
+                return@value SwiftCore.packCreativeLutForTransfer(source.name, snapped, transferTag)
             }
             val utf8 =
                 when (source) {
@@ -98,7 +102,7 @@ internal object FeedEffectsRenderPlanFactory {
                     }
                     is LutLookSource.Creative, LutLookSource.Off -> null
                 } ?: return@value null
-            SwiftCore.packImportedLut(utf8, snapped, exposureColorMode)
+            SwiftCore.packImportedLutForTransfer(utf8, snapped, transferTag)
         }
     }
 
@@ -110,6 +114,7 @@ internal object FeedEffectsRenderPlanFactory {
         rec709: Boolean,
     ): MonitorLUTCube? {
         if (!SwiftCore.isAvailable) return null
+        val transferTag = MonitorTransfer.knownFromColorMode(colorMode)?.let(MonitorTransferWire::tag) ?: return null
         // 4…7 = each scale read through the official Rec.709 look (Swift `FeedEffectsWire`).
         val ordinal =
             when (scale) {
@@ -121,9 +126,9 @@ internal object FeedEffectsRenderPlanFactory {
         val kind = if (paint) "paint" else "weight"
         return PackedCubeCache.value("$kind:$ordinal:$colorMode:$iso") {
             if (paint) {
-                SwiftCore.packFalseColorPaint(ordinal, colorMode, iso)
+                SwiftCore.packFalseColorPaintForTransfer(ordinal, transferTag, iso)
             } else {
-                SwiftCore.packFalseColorWeight(ordinal, colorMode, iso)
+                SwiftCore.packFalseColorWeightForTransfer(ordinal, transferTag, iso)
             }
         }
     }

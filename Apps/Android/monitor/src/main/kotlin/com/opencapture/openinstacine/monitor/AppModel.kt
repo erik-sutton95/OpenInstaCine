@@ -416,6 +416,44 @@ class AppModel(
 
     // CaptureSheetHost (camera-controls): the capture sheets read these values and commit through one typed entry.
     override val captureRouting = com.opencapture.opencine.cameracontrols.CaptureSheetRouting()
+    private val nativeColorChoices = listOf(
+        com.opencapture.opencine.insta360.shell.CameraColorProfile.STANDARD to "Standard",
+        com.opencapture.opencine.insta360.shell.CameraColorProfile.LOG to "I-Log",
+        com.opencapture.opencine.insta360.shell.CameraColorProfile.DOLBY_VISION to "Dolby Vision")
+    private fun nativeRateChoices(): List<com.opencapture.opencine.insta360.shell.CameraRecordFormat> {
+        val current = session.nativeFormat.value ?: return emptyList()
+        return session.nativeFormats.value.filter { it.width == current.width && it.height == current.height }
+            .distinctBy { com.opencapture.opencine.core.Rational.frameRate(it.fps) }
+    }
+    override fun nativeCaptureQuick(sheet: LiveSheet, status: CameraStatus): com.opencapture.monitorui.MonitorQuickControl? {
+        val enabled = session.phase == ConnectionPhase.LIVE && !operatorSession.locked &&
+            session.control.state.value.snapshot?.recording?.value == com.opencapture.opencine.core.RecordingState.IDLE
+        fun rate(value: com.opencapture.opencine.insta360.shell.CameraRecordFormat) =
+            com.opencapture.opencine.core.Rational.frameRate(value.fps)?.let(com.opencapture.opencine.appkit.MonitorCapturePresentation::frameRate)?.plus("p").orEmpty()
+        return when (sheet) {
+            LiveSheet.FORMAT -> session.nativeFormat.value?.let { current ->
+                val values = nativeRateChoices()
+                com.opencapture.monitorui.MonitorQuickControl(values.map(::rate), rate(current), enabled = enabled,
+                    context = values.joinToString(":") { it.id.toString() } + "@" + current.id)
+            }
+            LiveSheet.COLOR -> com.opencapture.monitorui.MonitorQuickControl(nativeColorChoices.map { it.second },
+                nativeColorChoices.firstOrNull { it.first == session.nativeColor.value }?.second.orEmpty(),
+                enabled = enabled, context = session.nativeColor.value?.name ?: "unknown")
+            else -> null
+        }
+    }
+    override fun commitNativeCaptureQuick(sheet: LiveSheet, selection: String) {
+        when (sheet) {
+            LiveSheet.FORMAT -> nativeRateChoices().firstOrNull { value ->
+                com.opencapture.opencine.core.Rational.frameRate(value.fps)?.let(com.opencapture.opencine.appkit.MonitorCapturePresentation::frameRate)?.plus("p") == selection
+            }?.let(session::setNativeRecordingFormat)
+            LiveSheet.COLOR -> nativeColorChoices.firstOrNull { it.second == selection }?.let { session.setNativeRecordingColor(it.first) }
+            else -> Unit
+        }
+    }
+
+    @Composable override fun nativeCapturePanel(sheet: LiveSheet, enabled: Boolean): (@Composable () -> Unit)? =
+        if (sheet == LiveSheet.FORMAT || sheet == LiveSheet.COLOR) ({ LunaNativeCapturePanel(this, sheet, enabled) }) else null
     override val camera get() = session.connectedCamera?.model
     override val audioService: CaptureAudioService? get() = null
     override fun captureField(sheet: LiveSheet, expoMode: Int): MonitorCaptureField? =

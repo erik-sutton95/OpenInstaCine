@@ -11,8 +11,15 @@ public enum LUTLibraryWire {
         exposureStops: Double = 0,
         colorModeCode: Int = Int(ColorMode.normal.rawValue)
     ) -> [UInt8]? {
+        packedImportedLUT(utf8: utf8, exposureStops: exposureStops, transfer: FeedEffectsWire.monitorTransfer(colorModeCode: colorModeCode))
+    }
+
+    public static func packedImportedLUT(
+        utf8: [UInt8],
+        exposureStops: Double = 0,
+        transfer: MonitorTransfer
+    ) -> [UInt8]? {
         guard utf8.count <= maximumSourceBytes, let cube = cube(from: utf8) else { return nil }
-        let transfer = FeedEffectsWire.monitorTransfer(colorModeCode: colorModeCode)
         let graded = cube.colorCube.compensatingExposure(
             stops: exposureStops, transfer: transfer.lutExposureTransfer)
         return packedRGBA(cube: graded)
@@ -22,8 +29,14 @@ public enum LUTLibraryWire {
         _ title: String, exposureStops: Double = 0,
         colorModeCode: Int = Int(ColorMode.normal.rawValue)
     ) -> [UInt8]? {
+        packedCreativeLook(title, exposureStops: exposureStops, transfer: FeedEffectsWire.monitorTransfer(colorModeCode: colorModeCode))
+    }
+
+    public static func packedCreativeLook(
+        _ title: String, exposureStops: Double = 0,
+        transfer: MonitorTransfer
+    ) -> [UInt8]? {
         guard let look = BuiltInLook(rawValue: title) else { return nil }
-        let transfer = FeedEffectsWire.monitorTransfer(colorModeCode: colorModeCode)
         let cube = look.cube().colorCube.compensatingExposure(
             stops: exposureStops, transfer: transfer.lutExposureTransfer)
         return packedRGBA(cube: cube)

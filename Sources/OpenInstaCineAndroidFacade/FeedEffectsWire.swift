@@ -13,6 +13,8 @@ public enum FeedEffectsWire {
     public static let assistScalarCount = 4
 
     public static func monitorTransfer(colorModeCode: Int) -> MonitorTransfer {
+        // Compatibility for the existing Android stored I-Log identifier. Typed callers send a curve name.
+        if colorModeCode == 65_536 { return .ilog }
         guard (0...255).contains(colorModeCode),
             let mode = ColorMode(rawValue: UInt8(colorModeCode))
         else { return .rec709 }
@@ -38,8 +40,15 @@ public enum FeedEffectsWire {
         scaleOrdinal: Int, colorModeCode: Int, iso: Int,
         sourceProfile: MonitorColorSourceProfile = LunaMonitorColorProfile.value
     ) -> [UInt8]? {
+        packedFalseColorPaint(scaleOrdinal: scaleOrdinal, transfer: monitorTransfer(colorModeCode: colorModeCode), iso: iso, sourceProfile: sourceProfile)
+    }
+
+    public static func packedFalseColorPaint(
+        scaleOrdinal: Int, transfer: MonitorTransfer, iso: Int,
+        sourceProfile: MonitorColorSourceProfile = LunaMonitorColorProfile.value
+    ) -> [UInt8]? {
         guard let scale = falseColorScale(scaleOrdinal) else { return nil }
-        let (transfer, ceiling) = prepared(colorModeCode: colorModeCode, iso: iso, sourceProfile: sourceProfile)
+        let (transfer, ceiling) = prepared(transfer: transfer, iso: iso, sourceProfile: sourceProfile)
         let key = cacheKey(
             readsRec709Look(scaleOrdinal) ? "paint709" : "paint", scale: scale, transfer: transfer,
             ceiling: ceiling, sourceProfile: sourceProfile)
@@ -54,8 +63,15 @@ public enum FeedEffectsWire {
         scaleOrdinal: Int, colorModeCode: Int, iso: Int,
         sourceProfile: MonitorColorSourceProfile = LunaMonitorColorProfile.value
     ) -> [UInt8]? {
+        packedFalseColorWeight(scaleOrdinal: scaleOrdinal, transfer: monitorTransfer(colorModeCode: colorModeCode), iso: iso, sourceProfile: sourceProfile)
+    }
+
+    public static func packedFalseColorWeight(
+        scaleOrdinal: Int, transfer: MonitorTransfer, iso: Int,
+        sourceProfile: MonitorColorSourceProfile = LunaMonitorColorProfile.value
+    ) -> [UInt8]? {
         guard let scale = falseColorScale(scaleOrdinal) else { return nil }
-        let (transfer, ceiling) = prepared(colorModeCode: colorModeCode, iso: iso, sourceProfile: sourceProfile)
+        let (transfer, ceiling) = prepared(transfer: transfer, iso: iso, sourceProfile: sourceProfile)
         let key = cacheKey(
             readsRec709Look(scaleOrdinal) ? "weight709" : "weight", scale: scale,
             transfer: transfer,
@@ -71,7 +87,14 @@ public enum FeedEffectsWire {
         colorModeCode: Int, iso: Int, highlightIRE: Double, midtoneIRE: Double,
         sourceProfile: MonitorColorSourceProfile = LunaMonitorColorProfile.value
     ) -> [Float] {
-        let (transfer, ceiling) = prepared(colorModeCode: colorModeCode, iso: iso, sourceProfile: sourceProfile)
+        assistScalars(transfer: monitorTransfer(colorModeCode: colorModeCode), iso: iso, highlightIRE: highlightIRE, midtoneIRE: midtoneIRE, sourceProfile: sourceProfile)
+    }
+
+    public static func assistScalars(
+        transfer: MonitorTransfer, iso: Int, highlightIRE: Double, midtoneIRE: Double,
+        sourceProfile: MonitorColorSourceProfile = LunaMonitorColorProfile.value
+    ) -> [Float] {
+        let (transfer, ceiling) = prepared(transfer: transfer, iso: iso, sourceProfile: sourceProfile)
         let clipByte = ceiling.clipByte(transfer: transfer, iso: iso)
         let highlight = ScopeDisplayScale.zebraHighlightNative(
             monitorPercent: highlightIRE, transfer: transfer, clipByte: clipByte)
@@ -104,11 +127,11 @@ public enum FeedEffectsWire {
     /// ceiling per feed session; the facade never observed tap maxima. An ISO outside
     /// 50…102400 leaves ISO unknown; the supplied source profile selects any reference.
     private static func prepared(
-        colorModeCode: Int, iso: Int, sourceProfile: MonitorColorSourceProfile
+        transfer: MonitorTransfer, iso: Int, sourceProfile: MonitorColorSourceProfile
     ) -> (transfer: MonitorTransfer, ceiling: OpenCineMedia.ScopeExposureCeiling) {
         let ceiling = OpenCineMedia.ScopeExposureCeiling(profile: sourceProfile.clip)
         ceiling.setISO(iso)
-        return (monitorTransfer(colorModeCode: colorModeCode), ceiling)
+        return (transfer, ceiling)
     }
 
     private static func lattice(scale: LiveFalseColorScale, transfer: MonitorTransfer,

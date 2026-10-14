@@ -175,6 +175,10 @@ final class CameraSession {
     @ObservationIgnored var pins = LunaControlPins()
     /// Accepted record formats for the current mode (VideoFormat ↔ Luna RecordResolution).
     @ObservationIgnored var formatTable: [VideoFormat: UInt64] = [:]
+    var nativeRecordingFormat: LunaVideoResolution?
+    var nativeRecordingColor: LunaColorMode?
+    @ObservationIgnored var nativeFormatPin: CameraValuePin<LunaVideoResolution>?
+    @ObservationIgnored var nativeColorPin: CameraValuePin<LunaColorMode>?
     /// Camera-reported gimbal mode/speed (Luna option 91). Nil until the first read.
     var gimbalMode: GimbalMode = .follow
     var gimbalSpeed: GimbalSpeed = .defaultSpeed
@@ -550,6 +554,8 @@ final class CameraSession {
         recordStartedAt = nil
         pins = LunaControlPins()
         formatTable = [:]
+        nativeRecordingFormat = nil; nativeRecordingColor = nil
+        nativeFormatPin = nil; nativeColorPin = nil
         zoomStop = 1
         zoomPinchPreview = nil
         zoomPin = nil
@@ -690,6 +696,17 @@ final class CameraSession {
     private func applySettings(_ settings: LunaPhotographySettings) {
         if let mode = settings.functionMode, mode != backend.functionMode { return }
         lunaSettings.merge(settings)
+        let instant = Date.timeIntervalSinceReferenceDate
+        if settings.recordResolution != nil || settings.types.contains(31) {
+            if let value = settings.videoResolution {
+                nativeRecordingFormat = CameraValuePin.reconcile(&nativeFormatPin, reported: value, now: instant) ?? value
+            } else { nativeFormatPin = nil; nativeRecordingFormat = nil }
+        }
+        if settings.colorMode != nil || settings.types.contains(35) {
+            if let value = settings.color {
+                nativeRecordingColor = CameraValuePin.reconcile(&nativeColorPin, reported: value, now: instant) ?? value
+            } else { nativeColorPin = nil; nativeRecordingColor = nil }
+        }
         var next = status
         LunaShellMapping.apply(settings: lunaSettings, to: &next, pins: &pins, table: &formatTable)
         if let zoom = settings.zoom { reconcileZoom(zoom, into: &next) }

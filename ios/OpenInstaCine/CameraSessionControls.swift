@@ -1,3 +1,4 @@
+import OpenCineAppKit
 import CoreGraphics
 import Foundation
 import Insta360Apple
@@ -381,14 +382,22 @@ extension CameraSession {
 
     /// fw 1.1.15 stores option 46 3.7 to 4.9 s after the SET.
     func setFaceMetering(_ on: Bool) {
-        guard canSendControl else { return }
-        pins.faceMetering = CameraValuePin(on, now: pinNow, settle: 6)
+        guard canSendControl, let target = lunaSession else { return }
+        let admission = LunaCommandAdmission(owner: target.commandOwner, isCurrent: { true })
+        let previous = faceMetering
+        let pin = CameraValuePin(on, now: pinNow, settle: 6)
+        pins.faceMetering = pin
         faceMetering = on
         let mode = backend.functionMode
         sendControl(
             on ? "Metering Face" : "Metering Matrix",
             { try LunaProtocol.setFaceMetering(on, functionMode: mode) },
-            onFail: { [weak self] in self?.pins.faceMetering = nil })
+            through: target, suppliedAdmission: admission,
+            onFail: { [weak self] in
+                guard let self, self.pins.faceMetering?.id == pin.id else { return }
+                self.pins.faceMetering = nil
+                self.faceMetering = previous
+            })
     }
 
     // MARK: - Aperture, audio (not exposed by Luna's phone protocol)
@@ -400,6 +409,57 @@ extension CameraSession {
     func clearGlamourIfEnabled() async {}
 
     // MARK: - Format and color
+
+    /// Real Luna identifiers are retained from the camera schema to the admitted native write.
+    func setNativeRecordingFormat(_ value: LunaVideoResolution) {
+        let previousRate = nativeRecordingFormat?.framesPerSecond
+        guard canSendControl, currentShootingMode?.offersVideoFormat == true,
+            LunaShellMapping.videoFormatValues.contains(value.rawValue), let target = lunaSession,
+            target.current.recording.value == .idle
+        else { return }
+        let admission = LunaCommandAdmission(owner: target.commandOwner, isCurrent: { true })
+        let previous = nativeRecordingFormat
+        let pin = CameraValuePin(value, now: pinNow, settle: 3)
+        nativeFormatPin = pin; nativeRecordingFormat = value
+        let functionMode = backend.functionMode
+        let label = MonitorCapturePresentation.recordingLabel(CameraRecordingFormat(
+            dimensions: .init(width: value.width, height: value.height), frameRate: Rational.frameRate(value.framesPerSecond))) ?? "Format"
+        sendControl(label, { try LunaProtocol.setRecordResolution(value.rawValue, functionMode: functionMode) },
+            through: target, suppliedAdmission: admission, onFail: { [weak self] in
+                guard let self, self.lunaSession === target, self.nativeFormatPin?.id == pin.id else { return }
+                self.nativeFormatPin = nil; self.nativeRecordingFormat = previous
+            }, onUnsent: { [weak self] in
+                guard let self, self.lunaSession === target, self.nativeFormatPin?.id == pin.id else { return }
+                self.nativeFormatPin = nil; self.nativeRecordingFormat = previous
+            })
+        if let previousRate, let targetRate = Rational.frameRate(value.framesPerSecond),
+            ShutterAngle.rematchesFormat(usesAngle: OperatorPrefs.shutterUsesAngle,
+                manual: control.snapshot?.exposureProgram.value == .manual, isPhoto: status.isPhoto,
+                previousFps: Int(previousRate.rounded()), nextFps: Int(targetRate.doubleValue.rounded())),
+            case .shutter(.duration)? = control.snapshot?.value(of: .shutter).value {
+            let denominator = ShutterAngle.denom(degrees: OperatorPrefs.shutterAngleDegrees,
+                fps: Int(targetRate.doubleValue.rounded()), available: status.availableShutterDenoms)
+            if denominator != status.shutterDenom { setShutterDenom(denominator) }
+        }
+    }
+
+    func setNativeRecordingColor(_ value: LunaColorMode) {
+        guard canSendControl, currentShootingMode != nil, [.standard, .iLog, .dolbyVision].contains(value),
+            let target = lunaSession, target.current.recording.value == .idle else { return }
+        let admission = LunaCommandAdmission(owner: target.commandOwner, isCurrent: { true })
+        let previous = nativeRecordingColor
+        let pin = CameraValuePin(value, now: pinNow, settle: 3)
+        nativeColorPin = pin; nativeRecordingColor = value
+        let functionMode = backend.functionMode
+        sendControl(String(describing: value), { try LunaProtocol.setColorMode(value, functionMode: functionMode) },
+            through: target, suppliedAdmission: admission, onFail: { [weak self] in
+                guard let self, self.lunaSession === target, self.nativeColorPin?.id == pin.id else { return }
+                self.nativeColorPin = nil; self.nativeRecordingColor = previous
+            }, onUnsent: { [weak self] in
+                guard let self, self.lunaSession === target, self.nativeColorPin?.id == pin.id else { return }
+                self.nativeColorPin = nil; self.nativeRecordingColor = previous
+            })
+    }
 
     func setVideoFormat(
         resolution: VideoResolution, frameRate: VideoFrameRate, fromOperator: Bool = true
