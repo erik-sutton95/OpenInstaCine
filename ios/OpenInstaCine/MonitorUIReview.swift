@@ -1,4 +1,4 @@
-#if targetEnvironment(simulator)
+#if targetEnvironment(simulator) || DEBUG
     import CryptoKit
     import Foundation
     import MonitorPresentation
@@ -12,9 +12,11 @@
     import OpenInstaViewCore
     import UIKit
 
-    /// Deterministic simulator-only presentation fixture. Opt-in environment values
-    /// never run on a physical camera or in an App Store build, never persist camera
-    /// identities, and never advance the actual connection state machine.
+    /// Deterministic opt-in presentation fixture. DEBUG keeps the shared SIMULATED
+    /// session fixture available to device test hosts (which have no simulator-only
+    /// build); the App Store Release build still excludes it. Opt-in environment
+    /// values never run on a physical camera, never persist camera identities, and
+    /// never advance the actual connection state machine.
     @MainActor
     enum MonitorUIReview {
         /// The shared typed review every app decodes (`ReviewLaunch`). Other switches (fit,

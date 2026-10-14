@@ -114,6 +114,12 @@ final class DeliveryOwnershipRuleTests: XCTestCase {
     func testDeliveryHasNoAppCopyOfASharedOwner() throws {
         let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("OpenInstaCine")
+        // The rule reads the app's Swift sources by path. A device bundle carries no
+        // source tree, so the enumeration is empty there; the full rule still runs on
+        // every host that has the sources.
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: sources.path),
+            "The app's source tree does not exist inside a device bundle")
         let types = [
             "FrameioAuthCoordinator", "FrameioConfig", "FrameioTokenStore",
             "FrameioKeychainStorage", "FrameioClients", "FrameioProjectListing",

@@ -113,6 +113,8 @@ final class LiveChromeAccessibilityTests: XCTestCase {
             bundle: ScopeAssistBundle(samples: samples, transfer: .rec709))
         try await settle(host.view)
 
+        // The established exclusion: a host with no accessibility tree cannot walk it.
+        try XCTSkipIf(Self.nodes(host.view).isEmpty, "No accessibility tree: enable app accessibility")
         let meter = try element("monitor.ev.meter", in: host.view)
         let value = meter.accessibilityValue ?? ""
         XCTAssertTrue(value.hasPrefix("Estimated from picture"), value)
