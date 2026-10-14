@@ -25,6 +25,17 @@ struct LunaQueuedZoomWrite {
     let admission: LunaCommandAdmission?
 }
 
+/// A constructed shutter operation. A missing operation must never acknowledge a Watch press.
+enum ShutterPress {
+    case record
+    case photo(Task<Void, Never>)
+
+    var photoTask: Task<Void, Never>? {
+        if case .photo(let task) = self { return task }
+        return nil
+    }
+}
+
 extension CameraSession {
     // MARK: - Capabilities
 
@@ -182,16 +193,22 @@ extension CameraSession {
     /// Rec lamp: start/stop video, or take a still in Photo. Record never lies: the
     /// lamp holds `controlBusy` until the Core session reports the outcome.
     func pressShutter() {
-        pressShutter(suppliedAdmission: nil)
+        _ = makeShutterPress(admission: nil, record: { toggleRecording(); return true })
     }
 
     @discardableResult
     func pressShutter(admission: LunaCommandAdmission) -> Task<Void, Never>? {
-        pressShutter(suppliedAdmission: admission)
+        makeShutterPress(admission: admission, record: {
+            toggleRecording(admission: admission)
+            return true
+        })?.photoTask
     }
 
-    @discardableResult
-    private func pressShutter(suppliedAdmission admission: LunaCommandAdmission?) -> Task<Void, Never>? {
+    func shutterPress(admission: LunaCommandAdmission?) -> ShutterPress? {
+        makeShutterPress(admission: admission, record: { dispatchWatchRecording(admission: admission) })
+    }
+
+    private func makeShutterPress(admission: LunaCommandAdmission?, record: () -> Bool) -> ShutterPress? {
         let target: LunaCameraSession?
         if let admission {
             guard let captured = lunaSession, admission.admits(captured.commandOwner) else { return nil }
@@ -201,14 +218,12 @@ extension CameraSession {
         let photoEpoch = target?.current.epoch
         guard canSendControl else { return nil }
         guard currentShootingMode?.isPhoto == true else {
-            if let admission { toggleRecording(admission: admission) }
-            else { toggleRecording() }
-            return nil
+            return record() ? .record : nil
         }
         controlBusy = true
         pins.photoInFlight = true
         controlNote = "Photo"
-        return sendControl(
+        guard let task = sendControl(
             "Photo", { try LunaProtocol.takePicture(mode: .normal) }, through: target,
             suppliedAdmission: admission, refresh: false,
             onFail: { [weak self] in
@@ -233,7 +248,8 @@ extension CameraSession {
                 else { return }
                 self.pins.photoInFlight = false
                 self.controlBusy = false
-            })
+            }) else { return nil }
+        return .photo(task)
     }
 
     func setShootingMode(_ mode: ShootingMode) {

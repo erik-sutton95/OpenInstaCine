@@ -769,41 +769,27 @@ final class AppModel {
     private func watchShutter(photo: Bool, watchAdmission: RelayWatchCommandAdmission?)
         -> WatchCommandResult
     {
-        let recording = session.status.isRecording
-        if session.controlBusy || session.isBrowsingMedia {
-            return WatchCommandResult(
-                accepted: false, isRecording: recording, error: WatchRelayCopy.busy)
-        }
-        guard case .live = session.phase else {
-            return WatchCommandResult(
-                accepted: false, isRecording: false, error: WatchRelayCopy.connectFirst)
-        }
-        let isPhoto = session.status.isPhoto
-        if photo, !isPhoto {
-            return WatchCommandResult(
-                accepted: false, isRecording: recording, error: WatchRelayCopy.switchToPhoto)
-        }
-        if !photo, isPhoto {
-            return WatchCommandResult(
-                accepted: false, isRecording: recording, error: WatchRelayCopy.switchToVideo)
-        }
-        if let watchAdmission {
-            guard watchAdmission.isCurrent, let shown = watchCommandSource,
-                let target = watchSourceSession, target === session.lunaSession,
-                watchSourceEpoch == target.current.epoch, shown.admits(target.commandOwner)
-            else {
-                publishWatchState()
-                return WatchCommandResult(
-                    accepted: false, isRecording: recording, error: WatchRelayCopy.cameraChanged)
-            }
-            let admission = LunaCommandAdmission(
-                owner: shown.owner, isCurrent: { shown.isCurrent && watchAdmission.isCurrent })
-            session.pressShutter(admission: admission)
-        } else {
-            session.pressShutter()
-        }
+        let result = WatchCommandPolicy.answer(
+            photo ? .capture : .toggleRecord, facts: {
+                WatchCommandFacts(
+                    isRecording: session.status.isRecording,
+                    isBusy: session.controlBusy || session.isBrowsingMedia,
+                    isLive: session.phase == .live, isPhotography: session.status.isPhoto)
+            }, shutter: {
+                let admission: LunaCommandAdmission?
+                if let watchAdmission {
+                    guard watchAdmission.isCurrent, let shown = watchCommandSource,
+                        let target = watchSourceSession, target === session.lunaSession,
+                        watchSourceEpoch == target.current.epoch, shown.admits(target.commandOwner)
+                    else { return .targetChanged }
+                    admission = LunaCommandAdmission(
+                        owner: shown.owner,
+                        isCurrent: { shown.isCurrent && watchAdmission.isCurrent })
+                } else { admission = nil }
+                return session.shutterPress(admission: admission) == nil ? .notSent : .sent
+            })
         publishWatchState()
-        return WatchCommandResult(accepted: true, isRecording: recording, error: nil)
+        return result
     }
 }
 

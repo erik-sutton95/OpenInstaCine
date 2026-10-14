@@ -210,6 +210,16 @@ extension CameraSession {
         control.record(start: nil, admission: dispatch)
     }
 
+    /// The Watch needs to know whether the existing common control has an actual record command.
+    /// Keep the original Void entry points for local callers and stored function references.
+    func dispatchWatchRecording(admission: LunaCommandAdmission?) -> Bool {
+        guard let editor = control.recordEditor() else { return false }
+        if let admission {
+            return commitRecording(from: editor, admission: admission)
+        }
+        return control.commitRecord(from: editor)
+    }
+
     /// A confirmed start or stop (the dialog already checked lock and link).
     func setRecording(start: Bool) { control.record(start: start) }
 
