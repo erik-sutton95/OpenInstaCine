@@ -2,7 +2,7 @@ package com.opencapture.openinstacine.monitor.session
 
 import com.opencapture.monitorui.MonitorTimecodeFormat
 import com.opencapture.opencine.appkit.label
-import com.opencapture.opencine.core.CameraTimecode
+import com.opencapture.opencine.core.CameraTimecodeReading
 import com.opencapture.opencine.core.CameraValuePin
 import com.opencapture.opencine.core.TimecodePrecision
 import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
@@ -249,7 +249,7 @@ internal object LunaShellMapping {
     fun lunaBox(box: TrackingBox) = LunaSubjectTracking.Box(box.x, box.y, box.width, box.height)
 
     /** The status text the HUD reads, by the shared rule: Luna declares whole seconds (`HH:MM:SS`). */
-    fun timecodeText(timecode: CameraTimecode): String? = MonitorTimecodeFormat.label(timecode, TimecodePrecision.Seconds)
+    fun timecodeText(timecode: CameraTimecodeReading): String? = MonitorTimecodeFormat.label(timecode, TimecodePrecision.Seconds)
 
     /** Battery, storage and shooting mode (iOS `apply(device:)` + `applyDeviceStatus`). */
     fun applyDevice(readout: CameraReadout, status: CameraStatus, pins: LunaControlPins, now: Long): CameraStatus {
