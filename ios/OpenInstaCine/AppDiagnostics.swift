@@ -56,13 +56,9 @@ enum AppDiagnostics {
         reporting: reporting,
         directory: DiagnosticCenter.diagnosticsDirectory?
             .appendingPathComponent("incidents", isDirectory: true))
-    @MainActor private static var incidentSource: FeedIncidentSessionSource?
     @MainActor static func beginFeedSession(context: FeedIncidentSessionContext) -> FeedIncidentSessionSource {
-        incidentSource?.endSession(now: ProcessInfo.processInfo.systemUptime)
-        let source = incidents.beginBoundSession(context)
-        incidentSource = source
-        return source
-    }
+    incidents.beginBoundSession(context)
+  }
     @MainActor static let problemReporting = ProblemReporting(
         host: host, gate: gate, dsnProvider: dsn.configured,
         isForeground: { UIApplication.shared.applicationState == .active })

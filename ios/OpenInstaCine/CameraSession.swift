@@ -136,7 +136,7 @@ final class CameraSession {
     @ObservationIgnored private var cameraPathLease: ReliabilityCameraPathLease?
     @ObservationIgnored private var incidentSource: FeedIncidentSessionSource?
     @ObservationIgnored private var incidentAssistState: String?
-    @ObservationIgnored private var incidentPrevious: (at: TimeInterval, counts: [Int])?
+    @ObservationIgnored private var incidentRateSampler = FeedIncidentRateSampler()
     @ObservationIgnored private var incidentLastAccessUnitAt: Date?
     /// The shared recovery episode (admit, storm, attempts, deadlines, budget, picture proof).
     /// Transport, decoder and the card stay here.
@@ -536,8 +536,8 @@ final class CameraSession {
         incidentSource = nil
         incidentAssistState = nil
         incidentSessionActive = false
-        incidentPrevious = nil
-        incidentLastAccessUnitAt = nil
+    incidentRateSampler.reset()
+    incidentLastAccessUnitAt = nil
         connectGeneration += 1
         reconnectTarget = nil
         connectionTargetID = nil
@@ -1141,21 +1141,11 @@ final class CameraSession {
     private func beginFeedIncidentSession() {
         incidentSessionActive = true
         incidentAssistState = nil
-        incidentPrevious = nil
-        incidentLastAccessUnitAt = nil
-        let info = Bundle.main.infoDictionary ?? [:]
-        incidentSource = AppDiagnostics.beginFeedSession(context:
-            FeedIncidentSessionContext(
-                sessionID: UUID().uuidString,
-                appVersion: info["CFBundleShortVersionString"] as? String ?? "unknown",
-                appBuild: info["CFBundleVersion"] as? String ?? "unknown",
-                sourceRevision: info["OPCSourceRevision"] as? String ?? "unknown",
-                osName: "iOS", osVersion: UIDevice.current.systemVersion,
-                hardwareClass: DiagnosticCenter.machineIdentifier,
-                cameraFamily: "luna",
-                testSource: AppDiagnostics.origin.currentTestSource(),
-                buildIdentity: AppDiagnostics.origin.currentBuildIdentity()))
-    }
+    incidentRateSampler.reset()
+    incidentLastAccessUnitAt = nil
+    incidentSource = AppDiagnostics.incidents.beginBoundSession(
+      AppDiagnostics.incidents.sessionContext(cameraFamily: "luna"))
+  }
 
     func recordFeedBreadcrumb(_ kind: FeedIncidentBreadcrumbKind, detail: String = "") {
         incidentSource?.recordBreadcrumb(
@@ -1174,38 +1164,25 @@ final class CameraSession {
     func feedIncidentSnapshot(now: TimeInterval = ProcessInfo.processInfo.systemUptime,
         wall: Date = Date()) -> FeedIncidentSnapshot {
         let decode = decoder.incidentDecodeSnapshot
-        let counts = [accessUnits, decode.submitted, decode.accepted, decode.output,
-            decode.assistOutput, decoder.incidentPresentations]
-        let previous = incidentPrevious
-        let elapsed = previous.map { now - $0.at } ?? 0
-        let rates = counts.enumerated().map { index, count -> Double in
-            guard let previous, elapsed > 0 else { return 0 }
-            return Double(max(0, count - previous.counts[index])) / elapsed
-        }
-        incidentPrevious = (now, counts)
-        let failed = decoder.isDecoderWedged
-        return FeedIncidentSnapshot(monotonicNow: now, wallClock: wall,
+    let rates = incidentRateSampler.sample(
+      now: now,
+      counts: .init(
+        accessUnit: accessUnits, decodeSubmit: decode.submitted, decodeAccept: decode.accepted,
+        decodedOutput: decode.output, assistOutput: decode.assistOutput,
+        present: decoder.incidentPresentations),
+      epoch: .init(
+        decoderGeneration: decoder.sourceFrameGeneration,
+        processedPresentation: decoder.effects.replacesIdentityFeed))
+    return FeedIncidentSnapshot(monotonicNow: now, wallClock: wall,
             // UCD2 exposes AUs here; packet, ACK, queue and ingress measurements are unavailable.
-            rates: FeedIncidentRates(accessUnitHz: rates[0], decodeSubmitHz: rates[1],
-                decodeAcceptHz: rates[2], decodedOutputHz: rates[3], assistOutputHz: rates[4],
-                presentHz: rates[5]),
-            ages: FeedIncidentAges(accessUnitAge: incidentLastAccessUnitAt.map { wall.timeIntervalSince($0) },
-                decodeAcceptAge: decode.acceptedAge, decodedOutputAge: decode.outputAge,
+      rates: rates,
+      ages: FeedIncidentAges(
+        accessUnitAge: FeedIncidentRateSampler.age(since: incidentLastAccessUnitAt, now: wall),
+        decodeAcceptAge: decode.acceptedAge, decodedOutputAge: decode.outputAge,
                 assistOutputAge: decode.assistOutputAge,
-                presentAge: decoder.monitorPresentedAt.map { wall.timeIntervalSince($0) }),
-            decoder: FeedIncidentDecoder(generation: decoder.sourceFrameGeneration,
-                formatGeneration: decoder.vtRebuildCount, codec: decoder.incidentCodec,
-                width: Int(decoder.pictureSize.width), height: Int(decoder.pictureSize.height),
-                lastStatus: decoder.lastDecodeStatus, lastFlags: decoder.lastDecodeFlags,
-                origin: decoder.lastDecodeOrigin == "submit" ? .sync
-                    : FeedDecoderErrorOrigin(rawValue: decoder.lastDecodeOrigin) ?? .none,
-                errorClass: failed ? "nativeDecoder" : nil, errorCount: decoder.decoderErrors,
-                decoderFailed: failed, errorAge: decoder.lastDecodeErrorAt.map { wall.timeIntervalSince($0) },
-                receivedIrap: decoder.sawKeyframe, awaitingIrap: decoder.awaitingIDR,
-                hasDecodableReferences: decoder.canReleaseIDRHold,
-                lastIrapAge: decoder.lastIrapAt.map { wall.timeIntervalSince($0) },
-                lastSuccessfulOutputAge: decode.outputAge, firstError: decoder.firstDecodeError),
-            lifecycle: FeedIncidentLifecycle(foreground: gimbalControlSceneActive,
+        presentAge: FeedIncidentRateSampler.age(since: decoder.monitorPresentedAt, now: wall)),
+      decoder: decoder.incidentDecoder(wall: wall),
+      lifecycle: FeedIncidentLifecycle(foreground: gimbalControlSceneActive,
                 settingsCovered: incidentSettingsCovered, playbackActive: status.inPlayback || isBrowsingMedia,
                 connected: connectedCamera != nil, liveEstablished: decoder.monitorPresentedAt != nil,
                 thermalState: String(ProcessInfo.processInfo.thermalState.rawValue),

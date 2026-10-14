@@ -76,11 +76,12 @@ import com.opencapture.opencine.media.FeedDecoderErrorOrigin
 import com.opencapture.opencine.media.FeedIncidentAges
 import com.opencapture.opencine.media.FeedIncidentBreadcrumb
 import com.opencapture.opencine.media.FeedIncidentBreadcrumbKind
-import com.opencapture.opencine.media.FeedIncidentDecoder
 import com.opencapture.opencine.media.FeedIncidentLifecycle
 import com.opencapture.opencine.media.FeedIncidentQueue
-import com.opencapture.opencine.media.FeedIncidentRates
-import com.opencapture.opencine.media.FeedIncidentSessionContext
+import com.opencapture.opencine.media.FeedIncidentRateSampler
+import com.opencapture.opencine.media.FeedIncidentStageCounts
+import com.opencapture.opencine.media.FeedIncidentCounterEpoch
+import com.opencapture.opencine.decoder.incidentDecoder
 import com.opencapture.opencine.media.FeedIncidentSnapshot
 import com.opencapture.opencine.media.FeedRepairPhase
 import com.opencapture.opencine.media.FeedRepairRecord
@@ -154,8 +155,7 @@ class PocketCameraSession(
     private val incidentSessionSink = AppDiagnostics.incidentSink(reportingOwner, incidentSink)
     private var feedIncidents: com.opencapture.opencine.media.FeedIncidentSource? = null
     private var incidentSessionActive = false
-    private var incidentPrevious: Pair<Double, List<Long>>? = null
-    private var incidentSourceGeneration: Long? = null
+    private val incidentRateSampler = FeedIncidentRateSampler()
     private var closed = false
 
     // Reports stay held back from this session's connect attempt, through recovery and FAILED,
@@ -664,48 +664,31 @@ class PocketCameraSession(
 
     private fun beginFeedIncidentSession() {
         incidentSessionActive = true
-        incidentPrevious = null
-        incidentSourceGeneration = backend.frameConnectionGeneration
-        feedIncidents = incidentSessionSink.beginBoundSession(FeedIncidentSessionContext(
-            sessionId = java.util.UUID.randomUUID().toString(),
-            appVersion = AppDiagnostics.host.versionName,
-            appBuild = AppDiagnostics.host.versionCode.toString(),
-            sourceRevision = AppDiagnostics.host.sourceRevision,
-            osName = "Android", osVersion = android.os.Build.VERSION.RELEASE,
-            hardwareClass = android.os.Build.DEVICE, cameraFamily = "luna",
-            testSource = AppDiagnostics.origin.currentTestSource(),
-            buildIdentity = AppDiagnostics.origin.currentBuildIdentity(),
-        ))
+        incidentRateSampler.reset()
+        feedIncidents = incidentSessionSink.beginBoundSession(
+            AppDiagnostics.incidents.sessionContext(cameraFamily = "luna"))
     }
 
     private fun endFeedIncidentSession() {
         if (!incidentSessionActive) return
         incidentSessionActive = false
-        incidentPrevious = null
+        incidentRateSampler.reset()
         val incident = feedIncidents
         feedIncidents = null
         incident?.endSession(SystemClock.elapsedRealtime() / 1_000.0)
     }
 
     /** Diagnostic snapshot from actual AU admission, native decoder and present clocks. */
-    internal fun feedIncidentSnapshot(): FeedIncidentSnapshot = synchronized(recoveryFrameLock) {
-        val nowMs = SystemClock.elapsedRealtime()
+    internal fun feedIncidentSnapshot(nowMs: Long = SystemClock.elapsedRealtime()): FeedIncidentSnapshot = synchronized(recoveryFrameLock) {
         val now = nowMs / 1_000.0
         val generation = backend.frameConnectionGeneration
-        if (generation != incidentSourceGeneration) {
-            incidentSourceGeneration = generation
-            incidentPrevious = null
-        }
         val pipeline = cadence.snapshot()
-        val counts = listOf(accessUnits.toLong(), decoder.framesEnqueued.get().toLong(),
-            pipeline.counts.getValue(LivePipelineCadence.Stage.OUTPUT), decoder.framesPresented.get().toLong())
-        val previous = incidentPrevious
-        val elapsed = previous?.let { now - it.first } ?: 0.0
-        val rates = counts.mapIndexed { index, count ->
-            if (previous == null || elapsed <= 0) 0.0 else (count - previous.second[index]).coerceAtLeast(0) / elapsed
-        }
-        incidentPrevious = now to counts
-        fun age(at: Long?): Double? = at?.let { (nowMs - it).coerceAtLeast(0) / 1_000.0 }
+        val rates = incidentRateSampler.sample(now, FeedIncidentStageCounts(
+            accessUnit = accessUnits.toLong(), decodeAccept = decoder.framesEnqueued.get().toLong(),
+            decodedOutput = pipeline.counts.getValue(LivePipelineCadence.Stage.OUTPUT),
+            present = decoder.framesPresented.get().toLong()),
+            epoch = FeedIncidentCounterEpoch(decoder.errorLifetime.generation.toLong(), generation))
+        fun age(at: Long?): Double? = FeedIncidentRateSampler.ageMilliseconds(at, nowMs)
         fun sourceAge(at: Long?): Double? = at?.takeIf {
             sourceProbeStartedAt?.let { started -> it >= started } != false
         }?.let(::age)
@@ -713,30 +696,18 @@ class PocketCameraSession(
         val error = decoder.errorLifetime.lastError?.takeIf {
             sourceProbeStartedAt?.let { started -> it.atElapsedMs >= started } != false
         }
-        val errorOrigin = when (error?.origin) {
-            com.opencapture.opencine.media.DecoderErrorOrigin.CONFIGURE -> com.opencapture.opencine.media.FeedDecoderErrorOrigin.CREATE
-            com.opencapture.opencine.media.DecoderErrorOrigin.QUEUE -> com.opencapture.opencine.media.FeedDecoderErrorOrigin.SYNC
-            com.opencapture.opencine.media.DecoderErrorOrigin.OUTPUT,
-            com.opencapture.opencine.media.DecoderErrorOrigin.OUTPUT_RELEASE -> com.opencapture.opencine.media.FeedDecoderErrorOrigin.CALLBACK
-            null -> com.opencapture.opencine.media.FeedDecoderErrorOrigin.NONE
-        }
         FeedIncidentSnapshot(
             monotonicNow = now, wallClockMs = System.currentTimeMillis(),
             // Luna exposes AUs, not transport packet/ACK/queue counters; do not relabel them.
-            rates = FeedIncidentRates(accessUnitHz = rates[0], decodeAcceptHz = rates[1],
-                decodedOutputHz = rates[2], presentHz = rates[3]),
+            rates = rates,
             ages = FeedIncidentAges(accessUnitAge = if (currentSource) age(lastAccessUnitAt) else null,
                 decodeAcceptAge = if (currentSource) sourceAge(decoder.lastDecoderAcceptedAt) else null,
                 decodedOutputAge = if (currentSource) sourceAge(decoder.lastDecoderOutputAt) else null,
                 presentAge = if (currentSource) sourceAge(decoder.lastPresentedAt) else null),
-            decoder = FeedIncidentDecoder(generation = decoder.errorLifetime.generation,
-                formatGeneration = decoder.errorLifetime.formatGeneration, codec = error?.codec ?: "unknown",
-                width = decoder.pictureWidth, height = decoder.pictureHeight,
-                origin = errorOrigin, errorClass = error?.code, errorCount = decoder.errorLifetime.countThisGeneration,
-                decoderFailed = error != null && decoder.failedThisGeneration, errorAge = age(error?.atElapsedMs),
-                receivedIrap = decoder.lastIrapAt != null, awaitingIrap = decoder.awaitingIdr,
-                hasDecodableReferences = decoder.hasDecodableReferences, lastIrapAge = age(decoder.lastIrapAt),
-                lastSuccessfulOutputAge = if (currentSource) sourceAge(decoder.lastDecoderOutputAt) else null),
+            decoder = decoder.incidentDecoder(nowElapsedMs = nowMs, generation = decoder.errorLifetime.generation,
+                codec = error?.codec ?: "unknown", errorNotBefore = sourceProbeStartedAt,
+                outputAge = if (currentSource) sourceAge(decoder.lastDecoderOutputAt) else null,
+                receivedIrap = decoder.lastIrapAt != null),
             lifecycle = FeedIncidentLifecycle(foreground = programSceneActive, playbackActive = isBrowsingMedia,
                 connected = backend.connected.value != null && phase != ConnectionPhase.IDLE,
                 liveEstablished = decoder.lastPresentedAt != null, sceneActive = programSceneActive,
