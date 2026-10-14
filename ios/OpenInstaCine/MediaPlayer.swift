@@ -14,31 +14,27 @@ import UIKit
 
 /// Source addresses and bounded UIKit decoding; common UI owns the complete photo page.
 struct MediaPhotoViewer: View {
-    let file: MediaFile
-    var admission: MonitorMediaLibraryActionToken? = nil
+    let opening: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>
+    let library: MonitorMediaLibraryModel<LunaMediaLibraryPayload>
+    let session: CameraSession
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var delivery: MediaFile?
 
     var body: some View {
-        let captured = model.session
-        let library = captured.mediaLibrary!
+        let captured = session
         let origin = model.shell.monitor?.id
-        let token = admission ?? library.actionToken
-        Group {
-            if library.isCurrent(token), let record = captured.mediaRecord(for: file) {
-                MonitorOperatorPhotoScreen(library: library, record: record, admission: token,
-                    assist: model.assist, loaders: loaders(captured),
-                    operations: operations(captured),
-                    haptics: .app, coverPresented: delivery != nil, sourceCurrent: { [weak model, weak captured] in
-                        guard let model, let captured else { return false }
-                        return model.session === captured && model.shell.monitor?.id == origin
-                    }, close: { dismiss() }, share: { request in
-                        guard request.isCurrent() else { return }
-                        delivery = request.record.payload.file
-                    })
-            } else { Color.black.ignoresSafeArea() }
-        }
+        MonitorOperatorPhotoScreen(library: library, record: opening.record, admission: opening.admission,
+            assist: model.assist, loaders: loaders(captured),
+            operations: operations(captured),
+            haptics: .app, coverPresented: delivery != nil, sourceCurrent: { [weak model, weak captured] in
+                guard let model, let captured else { return false }
+                return model.session === captured && captured.mediaLibrary === library
+                    && model.shell.monitor?.id == origin
+            }, close: { dismiss() }, share: { request in
+                guard request.isCurrent() else { return }
+                delivery = request.record.payload.file
+            })
         .overlay {
             if let delivery {
                 MediaDeliveryPopupOverlay(files: [delivery]) { self.delivery = nil }
@@ -77,21 +73,20 @@ struct MediaPhotoViewer: View {
 // MARK: - Player
 
 struct MediaPlayerView: View {
-    let files: [MediaFile]
-    let first: MediaFile
+    let opening: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var source = LunaPlaybackPresentationSource()
     @State private var owner: MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>?
-    @State private var initial: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>?
+    @State private var sourceAdmission: MonitorPlaybackAdmission?
     @State private var pictureGeometry: MonitorPlaybackPictureGeometry?
     @State private var deliveryFiles: [MediaFile]?
-    init(files: [MediaFile], startingAt file: MediaFile) { self.files = files; first = file }
+    init(opening: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>) { self.opening = opening }
 
     var body: some View {
         Group {
-            if let owner, let initial {
-                player(owner, initial: initial)
+            if let owner {
+                player(owner, initial: opening)
                     .overlay {
                         if let deliveryFiles {
                             MediaDeliveryPopupOverlay(files: deliveryFiles) {
@@ -100,14 +95,15 @@ struct MediaPlayerView: View {
                         }
                     }
                     .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
-            } else { Color.black }
+            } else { MonitorOperatorMediaUnavailable(close: { dismiss() }) }
         }.onAppear {
-            guard owner == nil, let record = model.session.mediaPlaybackRecord(for: first) else { return }
-            let playlist = (files.contains { $0.id == first.id } ? files : [first])
-                .compactMap { model.session.mediaPlaybackRecord(for: $0) }
-            let current = source.makeOwner(model: model)
-            owner = current
-            initial = .init(record: record, playlist: playlist, admission: current.library.actionToken)
+            guard owner == nil else { return }
+            let captured = model.session, origin = model.shell.monitor?.id
+            sourceAdmission = .init { [weak model, weak captured] in
+                guard let model, let captured else { return false }
+                return model.session === captured && model.shell.monitor?.id == origin
+            }
+            owner = source.makeOwner(model: model)
         }
     }
     private func player(_ owner: MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>,
@@ -124,6 +120,7 @@ struct MediaPlayerView: View {
                 guard playback.native === source.native else { return nil }
                 return source.assists
             }, readScopes: { model.monitorSamples.displayBundle }, configureDisplay: scopeDisplay,
+            sourceCurrent: { sourceAdmission?.isCurrent() == true },
             close: { dismiss() }, share: { record in
                 deliveryFiles = [record.payload.file]
             }, onGeometry: { geometry in
