@@ -217,7 +217,7 @@ struct SettingsRootView: View {
             document: { kind, close in
                 let legal: LegalDocumentView.Kind = switch kind { case .privacy: .privacy; case .licenses: .licenses; case .notice: .notice }
                 return AnyView(LegalDocumentView(kind: legal, onClose: close))
-            }, shareReport: { AnyView(DiagnosticActivityShareView(items: [$0])) })
+            }, shareReport: { AnyView(MonitorActivityShareSheet(items: [$0])) })
     }
     static var appVersionText: String { MonitorSettingsAppInformation.version() }
 }

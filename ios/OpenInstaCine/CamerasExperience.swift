@@ -11,22 +11,19 @@ import SwiftUI
 /// Integration pairing facts, diagnostic sheets and network checks stay app composition.
 struct LinkExperience: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.monitorWindowGeometry) private var windowGeometry
     @Environment(\.scenePhase) private var scenePhase
-    @State private var orientation = InterfaceOrientationObserver()
-    @State private var diagnostics: DiagnosticSharePayload?
+    @State private var diagnostics: MonitorDiagnosticsShareItem?
+    @State private var diagnosticsFailure: String?
     @State private var showProblemReport = false
-    /// Twenty seconds on the pair page without a camera: the hint replaces the pre-check.
-    @State private var stillLooking = false
 
     var body: some View {
         AppShell(
-            // Main's setup chip menu: Forget only, no Rename setup.
-            model: model.shell, brand: ShellBrand(name: "OpenInstaCine", renamesSetups: false),
+            model: model.shell, brand: ShellBrand(name: "OpenInstaCine"),
             actions: ShellActions(
                 diagnostics: {
-                    if let url = DiagnosticCenter.shared.beginShare(session: model.session) {
-                        diagnostics = DiagnosticSharePayload(url: url)
+                    switch DiagnosticCenter.shared.beginShare(session: model.session) {
+                    case .ready(let item): diagnostics = item
+                    case .failed(let message): diagnosticsFailure = message
                     }
                 },
                 reportProblem: { showProblemReport = true },
@@ -41,8 +38,7 @@ struct LinkExperience: View {
                         model.cameras.connect(sighting)
                     }
                 }),
-            safeArea: safeArea,
-            pairingFlow: model.pairingWizard(stillLooking: stillLooking).flow(
+            pairingFlow: model.pairingWizard().flow(
                 model.cameras, onDone: { model.shell.endPairing() }, rescan: { model.integration.retryDiscovery() }),
             coverPresentation: .shell
         ) { _ in
@@ -54,9 +50,16 @@ struct LinkExperience: View {
         // The app's one share sheet, above any gallery, player or photo cover (A2-52).
         .monitorDeliverySharePresenter(model.delivery.lifetime)
         .foregroundStyle(model.isLive ? AnyShapeStyle(.primary) : AnyShapeStyle(StartupColors.ink))
-        .onAppear { orientation.start() }
-        .onDisappear { orientation.stop() }
-        .sheet(item: $diagnostics) { payload in DiagnosticActivityShareView(items: [payload.url]) }
+        .sheet(item: $diagnostics) { item in MonitorActivityShareSheet(items: [item.url]) }
+        .alert(
+            "Couldn't write the diagnostics report",
+            isPresented: Binding(
+                get: { diagnosticsFailure != nil }, set: { if !$0 { diagnosticsFailure = nil } })
+        ) {
+            Button("OK", role: .cancel) { diagnosticsFailure = nil }
+        } message: {
+            Text(diagnosticsFailure ?? "")
+        }
         .sheet(isPresented: $showProblemReport) { ProblemReportView().environment(model) }
         .onChange(of: model.session.phase) { _, phase in
             if phase == .openingDatalink { LocalVPNNotice.app.noteIfActive() }
@@ -65,28 +68,14 @@ struct LinkExperience: View {
             // Back from Settings after Bluetooth was off or not allowed: look again.
             if phase == .active { model.integration.retryDiscovery() }
         }
-        .task(id: model.shell.route == .pair) {
-            stillLooking = false
-            guard model.shell.route == .pair, (try? await Task.sleep(for: .seconds(20))) != nil else { return }
-            stillLooking = true
-        }
-    }
-
-    private func safeArea(_ proxy: GeometryProxy) -> EdgeInsets {
-        let raw = LiveMonitorLayout.resolvedSafeArea(proxy.safeAreaInsets, scene: windowGeometry.safeArea)
-        guard proxy.size.height <= proxy.size.width else { return raw }
-        return OperatorPanelMetrics.fullScreenPanelSafeArea(
-            from: raw, isPortrait: false,
-            mirrored: LiveMonitorLayout.shouldMirror(
-                leading: raw.leading, trailing: raw.trailing, orientation: orientation.orientation))
     }
 }
 
 extension AppModel {
-    /// The pair wizard in OpenInstaCine's words: the Luna pages, the pre-check (or the hint after
-    /// twenty seconds without a camera), the session's live label, a Bluetooth failure, the camera
-    /// Wi-Fi joined and a local VPN.
-    func pairingWizard(stillLooking: Bool) -> PairingWizard {
+    /// The pair wizard in OpenInstaCine's words: the Luna pages, the pre-check (or the shared
+    /// still-looking hint once `CamerasModel.scanLooksEmpty` fires), the session's live label,
+    /// a Bluetooth failure, the camera Wi-Fi joined and a local VPN.
+    func pairingWizard() -> PairingWizard {
         PairingWizard(
             bodies: [
                 "Turn the Luna on and keep this iPhone nearby. It shows up by the last characters of its serial number.",
@@ -99,7 +88,7 @@ extension AppModel {
                 "Leave the camera on. It brings up its own 5 GHz Wi-Fi",
                 "Close the Insta360 app on other phones so the camera is free",
             ],
-            choosing: stillLooking && cameras.nearby.isEmpty
+            choosing: cameras.scanLooksEmpty
                 ? .init(
                     title: StartupConnectionCopy.scanEmptyTitle, icon: .camera,
                     lines: [StartupConnectionCopy.scanEmptyHint])
