@@ -29,7 +29,7 @@ internal object AppDiagnostics {
             releasePackage = "com.opencapture.openinstacine",
             versionName = BuildConfig.VERSION_NAME,
             versionCode = BuildConfig.VERSION_CODE,
-            debug = BuildConfig.DEBUG,
+            environment = BuildConfig.REPORTING_ENVIRONMENT,
             sourceRevision = BuildConfig.SOURCE_REVISION,
             reportingDsn = BuildConfig.SENTRY_DSN_ANDROID,
             reportingClient = "openinstacine-android",

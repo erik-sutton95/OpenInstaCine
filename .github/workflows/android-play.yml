@@ -179,6 +179,8 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           SENTRY_DSN_ANDROID: ${{ secrets.SENTRY_DSN_ANDROID }}
+          # Play testing tracks: reports name this build internal, never production.
+          OPC_DISTRIBUTION_CHANNEL: internal
         run: |
           set -euo pipefail
           ./gradlew bundleRelease -PversionCode="${VERSION_CODE}"
