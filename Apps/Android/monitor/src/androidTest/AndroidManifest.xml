@@ -1,0 +1,3 @@
+<?xml version='1.0' encoding='utf-8'?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools"><application><activity android:name="androidx.activity.ComponentActivity" tools:replace="android:exported,android:theme" android:exported="false" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+    </application></manifest>

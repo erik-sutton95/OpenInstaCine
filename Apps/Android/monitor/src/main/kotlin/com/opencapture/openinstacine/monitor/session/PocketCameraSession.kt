@@ -379,6 +379,12 @@ class PocketCameraSession(
     private val recoveryFrameLock = Any()
     @Volatile private var lastAccessUnitAt: Long? = null
     @Volatile private var lastFrameGeneration: Long? = null
+    /** Current accepted encoded-frame source, read directly rather than from a coalesced UI projection. */
+    val faceReadbackStreamGeneration: com.opencapture.opencine.core.StreamGeneration?
+        get() {
+            val source = backend.frameConnectionGeneration ?: return null
+            return com.opencapture.opencine.core.StreamGeneration(source).takeIf { lastFrameGeneration == source }
+        }
     @Volatile private var sourceProbeStartedAt: Long? = null
     private val dropGuard = SessionDropStormGuard()
     private var recoveryJob: Job? = null
