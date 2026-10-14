@@ -2,6 +2,7 @@ package com.opencapture.openinstacine.monitor
 
 import com.opencapture.opencine.appkit.MonitorOperatorSessionModel
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import com.opencapture.opencine.appkit.MonitorCaptureField
 import com.opencapture.opencine.appkit.MonitorCapturePreferences
 import com.opencapture.opencine.appkit.captureField
@@ -452,8 +453,11 @@ class AppModel(
         }
     }
 
-    @Composable override fun nativeCapturePanel(sheet: LiveSheet, enabled: Boolean): (@Composable () -> Unit)? =
-        if (sheet == LiveSheet.FORMAT || sheet == LiveSheet.COLOR) ({ LunaNativeCapturePanel(this, sheet, enabled) }) else null
+    @Composable override fun nativeCapturePanel(sheet: LiveSheet, enabled: Boolean): (@Composable () -> Unit)? {
+        val status by session.status.collectAsState()
+        return if (!status.isPhoto && (sheet == LiveSheet.FORMAT || sheet == LiveSheet.COLOR))
+            ({ LunaNativeCapturePanel(this, sheet, enabled) }) else null
+    }
     override val camera get() = session.connectedCamera?.model
     override val audioService: CaptureAudioService? get() = null
     override fun captureField(sheet: LiveSheet, expoMode: Int): MonitorCaptureField? =
