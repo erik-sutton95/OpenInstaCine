@@ -32,9 +32,16 @@ final class MonitorReadoutRenderingTests: XCTestCase {
         let bytes = try rgba(image)
         // The compact header returns to the corner position requested by the operator.
         // Derive the crop from the painted telemetry bounds, retaining the visibility check.
+        // The painted band rides the non-tablet portrait headerLift (6 points,
+        // FieldMonitorLayout) above the retained gauge corner, so the anchor follows the
+        // shared suite's relative bounds (MonitorPortraitHeaderClearanceTests) instead of
+        // the pre-lift absolute corner constant.
         let headerTop = Int(layout.battery.minY - 13)
         let headerBottom = headerTop + 48
-        XCTAssertEqual(headerTop, max(4, Int(layout.safeArea.top) - 40))
+        XCTAssertLessThanOrEqual(
+            headerTop, Int(layout.presentation!.gauges.y),
+            "Storage stays inside the restored corner band, lifted above the gauge corner"
+        )
         var lowestPaintedRow = headerTop
         let whitePixels = (headerTop..<headerBottom).reduce(0) { count, y in
             let painted = (10..<180).filter { x in
