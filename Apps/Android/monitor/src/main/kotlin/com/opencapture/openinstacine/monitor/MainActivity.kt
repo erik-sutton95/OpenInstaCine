@@ -23,6 +23,8 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import android.provider.Settings
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -79,7 +81,14 @@ open class MainActivity : ComponentActivity() {
         installSplashScreen().setKeepOnScreenCondition { !launch.firstFrameDrawn }
         super.onCreate(savedInstanceState)
         // One model per task: a recreated activity keeps the session; finishing closes it.
-        model = retainedMonitorRoot { AppModel(applicationContext).also(AppModel::prepareStartup) }
+        model = retainedMonitorRoot {
+            val localReview = MonitorReview.decode(intent)
+            MonitorReview.prepare(applicationContext, localReview)
+            AppModel(applicationContext, reviewLaunch = localReview).also { model ->
+                model.prepareStartup()
+                if (localReview != null) lifecycleScope.launch { MonitorReview.start(applicationContext, model, localReview) }
+            }
+        }
         model.gimbalGamepad.ensureListening(this, model)
         launch.setContent(this) {
             OpenInstaCineTheme {
@@ -150,9 +159,9 @@ private fun OpenInstaCineApp(model: AppModel) {
     }
 
     LaunchedEffect(Unit) {
-        if (discovery.granted) {
+        if (model.reviewLaunch == null && discovery.granted) {
             beginDiscovery(model, onBluetoothOff = { requestBluetoothOn() })
-        } else if (!discovery.needsSettings) {
+        } else if (model.reviewLaunch == null && !discovery.needsSettings) {
             discovery.request()
         }
     }
@@ -174,11 +183,12 @@ private fun OpenInstaCineApp(model: AppModel) {
         reports = MonitorReportsOffer(AppDiagnostics.consent, AppDiagnostics.reporting, AppDiagnostics.host.product) {
             model.legal = MonitorLegalPage.PRIVACY
         },
-        reportsAllowed = !showLive && model.legal != MonitorLegalPage.PRIVACY,
+        reportsAllowed = model.reviewLaunch == null && !showLive && model.legal != MonitorLegalPage.PRIVACY,
+        splash = com.opencapture.opencine.appkit.rememberMonitorLaunchSplash(enabled = model.reviewLaunch == null),
         // Knowing about screen recording only dims the HDR boost.
         onScreenRecording = { model.screenCaptured = it },
     ) {
-        Box(Modifier.fillMaxSize().startupBackdrop()) {
+        Box(Modifier.fillMaxSize().startupBackdrop().reviewMetadata(model.reviewLaunch)) {
             val cameras by model.cameras.state.collectAsState()
             val phase by model.session.phaseFlow.collectAsState()
             val radioOn by model.session.radioOn.collectAsState()

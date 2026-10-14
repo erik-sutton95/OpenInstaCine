@@ -67,6 +67,7 @@ import com.opencapture.opencine.cameracontrols.PortraitFeedAspect
 
 class AppModel(
     context: Context,
+    val reviewLaunch: com.opencapture.monitorui.ReviewLaunch? = null,
 ) : GamepadHost, GimbalChromeHost, CaptureSheetHost, OperatorSetupModel, AutoCloseable {
     private val appContext = context.applicationContext
     init {
@@ -74,7 +75,8 @@ class AppModel(
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val session = PocketCameraSession(context)
-    private val mediaStorage = com.opencapture.opencine.appkit.MonitorMediaCacheStorage()
+    // Internal so the Debug review seed stages into the app's own storage registry.
+    internal val mediaStorage = com.opencapture.opencine.appkit.MonitorMediaCacheStorage()
     private val initialMedia = com.opencapture.openinstacine.monitor.media.createLunaMediaLibrary(appContext, session, mediaStorage, null, scope)
     var mediaLibrary by mutableStateOf(initialMedia.first)
         private set
