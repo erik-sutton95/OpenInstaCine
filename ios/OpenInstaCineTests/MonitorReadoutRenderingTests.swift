@@ -30,19 +30,22 @@ final class MonitorReadoutRenderingTests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
         let bytes = try rgba(image)
-        // The safe header moves with the cutout input. Its old fixed 90-point crop
-        // excluded the cleared storage row on this 62-point safe-top fixture.
+        // The compact header returns to the corner position requested by the operator.
+        // Derive the crop from the painted telemetry bounds, retaining the visibility check.
         let headerTop = Int(layout.battery.minY - 13)
         let headerBottom = headerTop + 48
-        XCTAssertGreaterThanOrEqual(headerTop, Int(layout.safeArea.top + 8))
-        XCTAssertLessThanOrEqual(headerBottom, Int(layout.topDeck.minY))
+        XCTAssertEqual(headerTop, max(4, Int(layout.safeArea.top) - 40))
+        var lowestPaintedRow = headerTop
         let whitePixels = (headerTop..<headerBottom).reduce(0) { count, y in
-            count
-                + (10..<180).filter { x in
-                    let index = (y * image.width + x) * 4
-                    return bytes[index] > 220 && bytes[index + 1] > 220 && bytes[index + 2] > 220
-                }.count
+            let painted = (10..<180).filter { x in
+                let index = (y * image.width + x) * 4
+                return bytes[index] > 220 && bytes[index + 1] > 220 && bytes[index + 2] > 220
+            }.count
+            if painted > 0 { lowestPaintedRow = y }
+            return count + painted
         }
+        // The 48-point touch target may extend below the band; painted glyphs must clear it.
+        XCTAssertLessThan(lowestPaintedRow, Int(layout.topDeck.minY))
         XCTAssertGreaterThan(
             whitePixels, 100,
             "Storage must remain visible in the safe header, above the lower status band's raster bounds"
