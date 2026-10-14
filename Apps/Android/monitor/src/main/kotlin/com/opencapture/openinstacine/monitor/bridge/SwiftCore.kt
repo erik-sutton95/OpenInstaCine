@@ -6,8 +6,8 @@ import android.util.Log
  * JNI binding to `libOpenInstaCineAndroid.so`: OpenInstaViewCore plus
  * `OpenInstaCineAndroidFacade`. Staged by `:app:stageSwiftCore` / `just android-core`.
  */
-object SwiftCore {
-    val isAvailable: Boolean by lazy {
+object SwiftCore : com.opencapture.opencine.cameracontrols.MonitorFeedEffectsPacker {
+    override val isAvailable: Boolean by lazy {
         try {
             System.loadLibrary("OpenInstaCineAndroid")
             true
@@ -30,22 +30,22 @@ object SwiftCore {
     external fun coreVersion(): String
 
     /** Packed-2D RGBA8 cube (`n³ × 4`) for GLES upload. Input-referred LUT exposure. */
-    external fun packImportedLut(utf8: ByteArray, exposureStops: Double, colorMode: Int): ByteArray?
+    override external fun packImportedLut(utf8: ByteArray, exposureStops: Double, colorMode: Int): ByteArray?
 
     /** Generated Creative look (Mono / Contrast / Warm / Cool). */
-    external fun packCreativeLut(title: String, exposureStops: Double, colorMode: Int): ByteArray?
+    override external fun packCreativeLut(title: String, exposureStops: Double, colorMode: Int): ByteArray?
 
     /** Overlay paint cube for FALSE (`0` Video / `1` IRE / `2` Limits / `3` CineStop). */
-    external fun packFalseColorPaint(scaleOrdinal: Int, colorMode: Int, iso: Int): ByteArray?
+    override external fun packFalseColorPaint(scaleOrdinal: Int, colorMode: Int, iso: Int): ByteArray?
 
     /** Overlay weight cube paired with [packFalseColorPaint]. */
-    external fun packFalseColorWeight(scaleOrdinal: Int, colorMode: Int, iso: Int): ByteArray?
+    override external fun packFalseColorWeight(scaleOrdinal: Int, colorMode: Int, iso: Int): ByteArray?
 
     /**
      * `[highlightNative, midtoneNative, midtoneHalfNative, peakingGateScale]`
      * on encoded camera codes (iOS `ScopeDisplayScale.signalNative`).
      */
-    external fun feedAssistScalars(
+    override external fun feedAssistScalars(
         colorMode: Int,
         iso: Int,
         highlightIRE: Float,
