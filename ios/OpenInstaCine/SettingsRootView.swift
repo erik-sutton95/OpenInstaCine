@@ -56,7 +56,7 @@ enum SettingsHelpCopy {
     static let gamepad =
         "A connected game controller. The selected gimbal joystick pans and tilts. Cross/A records. Circle/B recenters. Square/X is rotate-180. Triangle/Y tracks a face. L1/R1 jump zoom out/in. L2/R2 hold-to-zoom (deeper is faster). D-pad up/down ISO, left/right shutter. Unplug rests the stick. On-screen stick wins while you hold it."
     static let keepScreenAwake =
-        "Prevents auto-lock while OpenInstaCine is open. A monitor should stay lit. iOS may still dim when the device overheats."
+        MonitorSettingsCopy.keepScreenAwake
     static let hdrDisplay =
         "Outdoor panel brightness, not a grade. WAVE, HISTO, PARADE, VECTOR, zebras and false color still read the decoded camera signal, so judge exposure there, not from how bright the picture looks. Screen recording and AirPlay drop back to a normal SDR picture so the file is not HDR-boosted. This is not the camera's Dolby Vision color mode. Off by default."
     static let themeHelp =

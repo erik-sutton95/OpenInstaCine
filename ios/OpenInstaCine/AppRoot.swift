@@ -886,14 +886,11 @@ struct AppRoot: View {
             model.prepareStartup()
             model.activateWatchRelay()
             model.screenCaptured = UIScreen.main.isCaptured
-            UIApplication.shared.isIdleTimerDisabled = model.keepScreenAwake
         }
         .onChange(of: model.relayClient.status) { _, status in
             model.noteWatcherStatusChanged(status)
         }
-        .onChange(of: model.keepScreenAwake) { _, awake in
-            UIApplication.shared.isIdleTimerDisabled = awake
-        }
+        .monitorScreenWake(enabled: model.keepScreenAwake)
         .task {
             try? await Task.sleep(for: LaunchSplashTiming.visibleDuration)
             withAnimation(.easeOut(duration: LaunchSplashTiming.fadeOutDuration)) {
