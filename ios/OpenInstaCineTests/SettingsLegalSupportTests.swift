@@ -103,6 +103,11 @@ import XCTest
         XCTAssertTrue(rows[.display]?.contains("HDR display") == true, "\(rows[.display] ?? [])")
         XCTAssertTrue(rows[.storage]?.contains("Full Resolution Caching") == true, "\(rows[.storage] ?? [])")
         XCTAssertTrue(rows[.system]?.contains("Automatic error reports") == true, "\(rows[.system] ?? [])")
+        // A2-78: the one Processing card, before Your cameras, with the shared Feed Upscaler.
+        let link = rows[.link] ?? []
+        let processing = try XCTUnwrap(link.firstIndex(of: "Processing"), "\(link)")
+        XCTAssertLessThan(processing, try XCTUnwrap(link.firstIndex(of: "Your cameras"), "\(link)"))
+        XCTAssertEqual(link.firstIndex(of: "Feed Upscaler"), processing + 1, "\(link)")
     }
 
     /// A2-24: Report a problem in Settings opens the app root's report, so a draft outlives the

@@ -87,11 +87,8 @@ struct SettingsRootView: View {
                 return .init(id: camera.id, name: camera.displayName,
                     detail: camera.model + (network.map { " · \($0)" } ?? ""), network: network)
             }, savedHelp: "Pair from the home list. Settings does not start a new pair; that stays on Your cameras.",
-            processing: MonitorUpscaler.supportedOnThisDevice.count > 1 ? .init(
-                options: MonitorUpscaler.supportedOnThisDevice.map(\.rawValue),
-                selection: Binding(get: { FeedUpscaleSwitch.shared.upscaler.rawValue }, set: {
-                    if let value = MonitorUpscaler(rawValue: $0) { FeedUpscaleSwitch.shared.upscaler = value }
-                }), help: SettingsHelpCopy.feedUpscaler) : nil)
+            processing: .init(upscaler: Binding(get: { FeedUpscaleSwitch.shared.upscaler },
+                set: { FeedUpscaleSwitch.shared.upscaler = $0 })))
     }
 
     private var sharing: MonitorSettingsSharingSource {

@@ -100,7 +100,7 @@ final class OperatorFacingCopyTests: XCTestCase {
             MonitorSettingsCopy.automaticReportsUnavailable,
             MonitorSettingsCopy.deleteSavedFeedReports,
             MonitorSettingsCopy.virtualJoystickSize,
-            SettingsHelpCopy.feedUpscaler,
+            MonitorSettingsCopy.feedUpscaler,
             MonitorSettingsCopy.clearAllCamerasCache,
             MonitorSettingsCopy.cacheFullResolution,
             MediaLibraryCopy.proxyTag,
