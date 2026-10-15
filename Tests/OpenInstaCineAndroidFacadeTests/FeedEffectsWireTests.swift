@@ -6,7 +6,7 @@ import OpenCineDJI
 
 @Suite
 struct FeedEffectsWireTests {
-    /// SIMULATED actual Android Luna LOG producer uses65536, not the old Swift UInt8 id.
+    /// SIMULATED actual Android Luna LOG producer uses 65536, not the old Swift UInt8 id.
     @Test func actualLunaAndroidLogReportKeepsItsIlogTransferAndAssistScalars() {
         let reportedCode = 65_536
         #expect(FeedEffectsWire.monitorTransfer(colorModeCode: reportedCode) == .ilog)
