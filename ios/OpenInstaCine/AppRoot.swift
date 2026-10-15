@@ -799,7 +799,16 @@ final class AppModel {
 
 struct AppRoot: View {
     @State private var model = AppModel()
-    @State private var showReliabilityPrompt = false
+    @State private var startup: MonitorAppStartup
+
+    init(startup: MonitorAppStartup? = nil) {
+        _startup = State(
+            initialValue: startup
+                ?? MonitorAppStartup(
+                    reports: .init(
+                        reporting: AppDiagnostics.reporting,
+                        tick: { AppDiagnostics.problemReporting.tick() })))
+    }
     @Environment(\.scenePhase) private var scenePhase
 
     @ViewBuilder private var primaryExperience: some View {
@@ -854,17 +863,8 @@ struct AppRoot: View {
             model.screenCaptured = UIScreen.main.isCaptured
         }
         .preferredColorScheme(.dark)
-        .sheet(isPresented: $showReliabilityPrompt) {
-            ReliabilityConsentPrompt { enabled in
-                AppDiagnostics.reporting.setConsent(enabled)
-                showReliabilityPrompt = false
-            }.environment(model)
-        }
-        .task {
-            while !Task.isCancelled {
-                AppDiagnostics.problemReporting.tick()
-                try? await Task.sleep(for: .seconds(2))
-            }
+        .monitorAppStartup(startup, splashVisible: Bindable(model).showsLaunchSplash) { choice in
+            ReliabilityConsentPrompt(onChoice: choice).environment(model)
         }
         .onAppear {
             #if DEBUG
@@ -894,15 +894,6 @@ struct AppRoot: View {
         .onChange(of: model.keepScreenAwake) { _, awake in
             UIApplication.shared.isIdleTimerDisabled = awake
         }
-        .task {
-            try? await Task.sleep(for: LaunchSplashTiming.visibleDuration)
-            withAnimation(.easeOut(duration: LaunchSplashTiming.fadeOutDuration)) {
-                model.showsLaunchSplash = false
-            }
-            if AppDiagnostics.reporting.isAvailable && !AppDiagnostics.consent.hasDecision {
-                showReliabilityPrompt = true
-            }
-        }
         .onChange(of: model.gimbalAnalogHeld) { _, held in
             if held { model.relayHost.reclaimControl() }
         }
@@ -924,10 +915,6 @@ struct AppRoot: View {
             Button("Deny", role: .cancel) { model.relayHost.denyControl() }
         }
         .onAppear { model.assist.inspectorSceneActive = scenePhase == .active }
-        // The shell reports each change once (`AppModel.shell.onSceneActivity`).
-        .onChange(of: scenePhase) { _, phase in
-            AppDiagnostics.problemReporting.tick()
-        }
         .monitorShellSceneActivity(model.shell)
     }
 }
