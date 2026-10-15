@@ -711,12 +711,12 @@ final class CameraSession {
         if let mode = settings.functionMode, mode != backend.functionMode { return }
         lunaSettings.merge(settings)
         let instant = Date.timeIntervalSinceReferenceDate
-        if settings.recordResolution != nil || settings.types.contains(31) {
+        if settings.recordResolution != nil || settings.types.contains(LunaPhotographyType.recordResolution.rawValue) {
             if let value = settings.videoResolution {
                 nativeRecordingFormat = CameraValuePin.reconcile(&nativeFormatPin, reported: value, now: instant) ?? value
             } else { nativeFormatPin = nil; nativeRecordingFormat = nil }
         }
-        if settings.colorMode != nil || settings.types.contains(35) {
+        if settings.colorMode != nil || settings.types.contains(LunaPhotographyType.colorMode.rawValue) {
             if let value = settings.color {
                 nativeRecordingColor = CameraValuePin.reconcile(&nativeColorPin, reported: value, now: instant) ?? value
             } else { nativeColorPin = nil; nativeRecordingColor = nil }

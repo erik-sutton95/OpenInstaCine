@@ -34,10 +34,13 @@ class LunaNativeCapturePinTest {
     private class HeldBackend : FakeShellBackend() {
         val formats = mutableListOf<CompletableDeferred<Boolean>>()
         val colors = mutableListOf<CompletableDeferred<Boolean>>()
+        val meters = mutableListOf<CompletableDeferred<Boolean>>()
         override suspend fun setRecordFormat(id: Long): Boolean =
             CompletableDeferred<Boolean>().also(formats::add).await()
         override suspend fun setColorProfile(profile: CameraColorProfile): Boolean =
             CompletableDeferred<Boolean>().also(colors::add).await()
+        override suspend fun setFaceMetering(on: Boolean): Boolean =
+            CompletableDeferred<Boolean>().also(meters::add).await()
     }
     private class Core : CameraSession {
         override val id = CameraSessionID()
@@ -60,7 +63,7 @@ class LunaNativeCapturePinTest {
     private var reported = report(a, CameraColorProfile.STANDARD)
     private fun report(format: CameraRecordFormat?, color: CameraColorProfile?) = CameraReadout(
         shootingMode = CameraShootingMode.VIDEO, recording = false,
-        recordFormat = format, recordFormats = listOf(a, b, c), color = color)
+        recordFormat = format, recordFormats = listOf(a, b, c), color = color, faceMetering = false)
 
     @Before fun open() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -154,5 +157,24 @@ class LunaNativeCapturePinTest {
         format(b); color(CameraColorProfile.LOG)
         onMain { backend.formats[0].complete(false); backend.colors[0].complete(false) }
         shown(b, CameraColorProfile.LOG)
+    }
+    @Test fun aSupersededFaceMeteringFailureCannotRollbackTheLatestChoice() {
+        onMain { facade.setFaceMetering(true); facade.setFaceMetering(false); facade.setFaceMetering(true) }
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        onMain { assertEquals(3, backend.meters.size); backend.meters[0].complete(false) }
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        onMain { assertEquals(true, facade.faceMetering.value) }
+    }
+    @Test fun aRetiredConnectionFaceMeteringFailureCannotRollbackTheSuccessor() {
+        onMain { facade.setFaceMetering(true) }
+        onMain {
+            facade.disconnect()
+            backend.frameGeneration = 2
+            facade.control.bind(Core())
+        }
+        publish(report(c, CameraColorProfile.DOLBY_VISION).copy(faceMetering = true))
+        onMain { backend.meters[0].complete(false) }
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        onMain { assertEquals(true, facade.faceMetering.value) }
     }
 }

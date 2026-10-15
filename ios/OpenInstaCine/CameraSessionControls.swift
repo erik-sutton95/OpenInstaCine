@@ -447,34 +447,29 @@ extension CameraSession {
             through: target, suppliedAdmission: admission, onFail: { [weak self] in
                 guard let self, self.lunaSession === target, self.nativeFormatPin?.id == pin.id else { return }
                 self.nativeFormatPin = nil; self.nativeRecordingFormat = previous
-            }, onUnsent: { [weak self] in
-                guard let self, self.lunaSession === target, self.nativeFormatPin?.id == pin.id else { return }
-                self.nativeFormatPin = nil; self.nativeRecordingFormat = previous
             })
         if let previousRate, let targetRate = Rational.frameRate(value.framesPerSecond),
-            ShutterAngle.rematchesFormat(usesAngle: OperatorPrefs.shutterUsesAngle,
+            case .shutter(.duration)? = control.snapshot?.value(of: .shutter).value,
+            let rematch = ShutterAngle.formatRematch(degrees: OperatorPrefs.shutterAngleDegrees,
+                usesAngle: OperatorPrefs.shutterUsesAngle,
                 manual: control.snapshot?.exposureProgram.value == .manual, isPhoto: status.isPhoto,
-                previousFps: Int(previousRate.rounded()), nextFps: Int(targetRate.doubleValue.rounded())),
-            case .shutter(.duration)? = control.snapshot?.value(of: .shutter).value {
-            let denominator = ShutterAngle.denom(degrees: OperatorPrefs.shutterAngleDegrees,
-                fps: Int(targetRate.doubleValue.rounded()), available: status.availableShutterDenoms)
-            if denominator != status.shutterDenom { setShutterDenom(denominator) }
+                previousFps: Int(previousRate.rounded()), nextFps: Int(targetRate.doubleValue.rounded()),
+                available: status.availableShutterDenoms),
+            rematch.denom != status.shutterDenom {
+            setShutterDenom(rematch.denom)
         }
     }
 
     func setNativeRecordingColor(_ value: LunaColorMode) {
-        guard canSendControl, currentShootingMode != nil, [.standard, .iLog, .dolbyVision].contains(value),
+        guard canSendControl, currentShootingMode != nil, LunaColorMode.nativeRecordingChoices.contains(value),
             let target = lunaSession, target.current.recording.value == .idle else { return }
         let admission = LunaCommandAdmission(owner: target.commandOwner, isCurrent: { true })
         let previous = nativeRecordingColor
         let pin = CameraValuePin(value, now: pinNow, settle: 3)
         nativeColorPin = pin; nativeRecordingColor = value
         let functionMode = backend.functionMode
-        sendControl(String(describing: value), { try LunaProtocol.setColorMode(value, functionMode: functionMode) },
+        sendControl(value.label, { try LunaProtocol.setColorMode(value, functionMode: functionMode) },
             through: target, suppliedAdmission: admission, onFail: { [weak self] in
-                guard let self, self.lunaSession === target, self.nativeColorPin?.id == pin.id else { return }
-                self.nativeColorPin = nil; self.nativeRecordingColor = previous
-            }, onUnsent: { [weak self] in
                 guard let self, self.lunaSession === target, self.nativeColorPin?.id == pin.id else { return }
                 self.nativeColorPin = nil; self.nativeRecordingColor = previous
             })

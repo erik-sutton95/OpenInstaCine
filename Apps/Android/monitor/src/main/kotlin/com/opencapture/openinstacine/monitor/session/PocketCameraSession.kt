@@ -1,6 +1,7 @@
 package com.opencapture.openinstacine.monitor.session
 
 import kotlin.math.roundToInt
+import com.opencapture.opencine.insta360.shell.label
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
@@ -276,7 +277,7 @@ class PocketCameraSession(
     }
     private fun retireNativeCaptureRequests() {
         nativeCaptureLifetime += 1
-        nativeFormatPin = null; nativeColorPin = null
+        nativeFormatPin = null; nativeColorPin = null; pins.faceMetering = null
     }
     private fun <T> nativeReadout(pin: NativeCapturePin<T>?, reported: T?, now: Long): Pair<T?, NativeCapturePin<T>?> {
         if (reported == null || pin == null || pin.source != nativeCaptureSource()) return reported to null
@@ -1375,11 +1376,16 @@ class PocketCameraSession(
     fun setFaceMetering(on: Boolean) {
         if (!canSendControl()) return
         val previous = _faceMetering.value
-        pins.faceMetering = pin(on, SystemClock.elapsedRealtime(), 6_000)
+        val pin = pin(on, SystemClock.elapsedRealtime(), 6_000)
+        val source = nativeCaptureSource()
+        pins.faceMetering = pin
         _faceMetering.value = on
+        // A later choice, or a replaced session or camera, owns the value: this request's callbacks retire.
+        val current = { pins.faceMetering === pin && nativeCaptureSource() == source }
         // The usual read 0.4 s after the SET is too early for 46; read again before the pin lapses.
-        sendControl(if (on) "Metering Face" else "Metering Matrix", onFail = { pins.faceMetering = null; _faceMetering.value = previous },
-            onSuccess = { scope.launch { delay(5_200); controls?.requestSettingsRefresh() } }) {
+        sendControl(if (on) "Metering Face" else "Metering Matrix", admission = current,
+            onFail = { pins.faceMetering = null; _faceMetering.value = previous },
+            onSuccess = { scope.launch { delay(5_200); if (current()) controls?.requestSettingsRefresh() } }) {
             setFaceMetering(on)
         }
     }
@@ -1410,28 +1416,29 @@ class PocketCameraSession(
         sendControl(label, admission = { nativeFormatPin === pin && pin.source == nativeCaptureSource() },
             onFail = { nativeFormatPin = null; _nativeFormat.value = previous }) { setRecordFormat(value.id) }
         val report = control.state.value.snapshot
-        if (previous != null && com.opencapture.opencine.media.ShutterAngle.rematchesFormat(
-            usesAngle = OperatorPrefs.shutterUsesAngle(appContext),
-            manual = report?.exposureProgram?.value == com.opencapture.opencine.core.CameraExposureProgram.MANUAL,
-            isPhoto = _status.value.isPhoto, previousFps = previous.fps.roundToInt(), nextFps = value.fps.roundToInt()) &&
-            (report?.value(com.opencapture.opencine.core.SettingKey.SHUTTER)?.value as? com.opencapture.opencine.core.SettingValue.Shutter)?.value is com.opencapture.opencine.core.ShutterValue.Duration) {
-            val denominator = com.opencapture.opencine.media.ShutterAngle.denom(OperatorPrefs.shutterAngleDegrees(appContext), value.fps.roundToInt(), _status.value.availableShutterDenoms)
-            if (denominator != _status.value.shutterDenom) setShutterDenom(denominator)
+        val rematch = previous?.let {
+            com.opencapture.opencine.media.ShutterAngle.formatRematch(OperatorPrefs.shutterAngleDegrees(appContext),
+                usesAngle = OperatorPrefs.shutterUsesAngle(appContext),
+                manual = report?.exposureProgram?.value == com.opencapture.opencine.core.CameraExposureProgram.MANUAL,
+                isPhoto = _status.value.isPhoto, previousFps = it.fps.roundToInt(), nextFps = value.fps.roundToInt(),
+                available = _status.value.availableShutterDenoms)
         }
+        val heldAsDuration = (report?.value(com.opencapture.opencine.core.SettingKey.SHUTTER)?.value as?
+            com.opencapture.opencine.core.SettingValue.Shutter)?.value is com.opencapture.opencine.core.ShutterValue.Duration
+        if (rematch != null && heldAsDuration && rematch.denom != _status.value.shutterDenom) setShutterDenom(rematch.denom)
         return true
     }
 
     fun setNativeRecordingColor(value: com.opencapture.opencine.insta360.shell.CameraColorProfile): Boolean {
-        val choices = listOf(com.opencapture.opencine.insta360.shell.CameraColorProfile.STANDARD,
-            com.opencapture.opencine.insta360.shell.CameraColorProfile.LOG, com.opencapture.opencine.insta360.shell.CameraColorProfile.DOLBY_VISION)
         if (!canSendControl() || lastReadout?.shootingMode == null ||
-            control.state.value.snapshot?.recording?.value != com.opencapture.opencine.core.RecordingState.IDLE || value !in choices) return false
+            control.state.value.snapshot?.recording?.value != com.opencapture.opencine.core.RecordingState.IDLE ||
+            value !in com.opencapture.opencine.insta360.shell.nativeRecordingColorProfiles) return false
         val source = nativeCaptureSource() ?: return false
         val previous = _nativeColor.value
         val pin = NativeCapturePin(source, pin(value, nativePinNow(), 3_000))
         nativeColorPin = pin
         _nativeColor.value = value
-        sendControl(value.name, admission = { nativeColorPin === pin && pin.source == nativeCaptureSource() },
+        sendControl(value.label, admission = { nativeColorPin === pin && pin.source == nativeCaptureSource() },
             onFail = { nativeColorPin = null; _nativeColor.value = previous }) { setColorProfile(value) }
         return true
     }
