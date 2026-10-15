@@ -42,7 +42,7 @@ class LunaNativePhotoPanelTest {
                 try { scenario.onActivity { model = AppModel(it) } }
                 finally {
                     MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
-                        val wifi = com.opencapture.openinstacine.monitor.pairing.CameraWifiCredentialStore(context)
+                        val wifi = com.opencapture.opencine.platform.CameraWifiCredentialStore(context, com.opencapture.openinstacine.monitor.pairing.cameraWifiStorage)
                         com.opencapture.opencine.insta360.luna.LunaBackend(context,
                             savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
                     }
@@ -56,7 +56,7 @@ class LunaNativePhotoPanelTest {
                 }
                 val drawn = CountDownLatch(1)
                 scenario.onActivity { activity -> activity.setContent {
-                    OpenPocketCineTheme {
+                    OpenInstaCineTheme {
                         val status by checkNotNull(model).session.status.collectAsState()
                         Box(Modifier.fillMaxSize().semantics { contentDescription = "SIMULATED photo drawer" }) {
                             LiveControlSheet(LiveSheet.FORMAT, checkNotNull(model), status,

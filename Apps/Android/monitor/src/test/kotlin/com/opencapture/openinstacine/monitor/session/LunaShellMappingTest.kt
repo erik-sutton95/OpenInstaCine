@@ -1,7 +1,7 @@
 package com.opencapture.openinstacine.monitor.session
 
 import com.opencapture.opencine.cameracontrols.CaptureLists
-import com.opencapture.opencine.core.CameraTimecode
+import com.opencapture.opencine.core.CameraTimecodeReading
 import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
 import com.opencapture.opencine.cameracontrols.captureQuickFocusControl
 import com.opencapture.opencine.vocabulary.CameraCommands
@@ -252,9 +252,9 @@ class LunaShellMappingTest {
         // 2026-09-30 08:51:10.54 UTC, Stockholm (UTC+2).
         val t = 1_790_758_270.54
         // Whole seconds: the phone clock never invents a frame field.
-        assertEquals(CameraTimecode(10, 51, 10), LunaFrameTimecode.timecode(t, 7200))
+        assertEquals(CameraTimecodeReading(10, 51, 10), LunaFrameTimecode.timecode(t, 7200))
         // Wraps at midnight, west of GMT too.
-        assertEquals(CameraTimecode(23, 59, 59), LunaFrameTimecode.timecode(86_399.99, 0))
-        assertEquals(CameraTimecode(23, 0, 0), LunaFrameTimecode.timecode(3600.0, -7200))
+        assertEquals(CameraTimecodeReading(23, 59, 59), LunaFrameTimecode.timecode(86_399.99, 0))
+        assertEquals(CameraTimecodeReading(23, 0, 0), LunaFrameTimecode.timecode(3600.0, -7200))
     }
 }

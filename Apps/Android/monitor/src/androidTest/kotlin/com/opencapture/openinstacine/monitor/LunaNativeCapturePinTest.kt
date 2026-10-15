@@ -74,7 +74,7 @@ class LunaNativeCapturePinTest {
             facade = onMain { PocketCameraSession(context, RecordingFeedIncidentSink(), nativePinNow = { now }) }
         } finally {
             MonitorConfiguration.install(MonitorConfiguration.identity) { host ->
-                val wifi = com.opencapture.openinstacine.monitor.pairing.CameraWifiCredentialStore(host)
+                val wifi = com.opencapture.opencine.platform.CameraWifiCredentialStore(host, com.opencapture.openinstacine.monitor.pairing.cameraWifiStorage)
                 com.opencapture.opencine.insta360.luna.LunaBackend(host,
                     savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
             }
