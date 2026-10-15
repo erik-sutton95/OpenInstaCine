@@ -28,6 +28,25 @@ final class RemoteControlAdmissionTests: XCTestCase {
     XCTAssertEqual(model.quickSnapshot(.color)?.selection, "I-Log")
   }
 
+  /// Twin of Android `LunaNativePhotoPanelTest`: Photo keeps the shared fallback, as the drawer does.
+  func testPhotoOffersNoNativeFormatOrColorQuickChoice() throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    let model = AppModel(session: facade)
+    defer { facade.disconnect(); core.close(.requested) }
+    facade.status.shootingMode = Int(ShootingMode.photo.rawValue)
+    facade.nativeRecordingFormat = try XCTUnwrap(LunaVideoResolution(rawValue: 48))
+    facade.nativeRecordingColor = .iLog
+    XCTAssertTrue(facade.status.isPhoto)
+    XCTAssertNil(model.quickSnapshot(.resolution)?.nativeSheet)
+    XCTAssertNil(model.quickSnapshot(.color)?.nativeSheet)
+    XCTAssertNil(model.nativeCapturePanel(.resolution, enabled: true))
+    facade.status.shootingMode = Int(ShootingMode.video.rawValue)
+    XCTAssertEqual(model.quickSnapshot(.resolution)?.nativeSheet, .resolution)
+    XCTAssertEqual(model.quickSnapshot(.color)?.nativeSheet, .color)
+  }
+
   func testUnknownRecordingFactCannotSendANativeFormatOrColorWrite() throws {
     let wire = RemoteLunaWire()
     let core = wire.connect()

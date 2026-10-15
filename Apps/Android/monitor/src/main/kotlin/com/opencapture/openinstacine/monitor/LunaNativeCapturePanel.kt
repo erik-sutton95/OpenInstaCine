@@ -11,7 +11,9 @@ import com.opencapture.opencine.cameracontrols.CaptureDrumWheel
 import com.opencapture.opencine.cameracontrols.LiveSheet
 import com.opencapture.opencine.core.CameraRecordingFormat
 import com.opencapture.opencine.core.Rational
-import com.opencapture.opencine.insta360.shell.CameraColorProfile
+import com.opencapture.opencine.insta360.shell.aspectLabel
+import com.opencapture.opencine.insta360.shell.label
+import com.opencapture.opencine.insta360.shell.nativeRecordingColorProfiles
 
 /** Native values keep the backend's identifiers; the shared sheet owns all chrome. */
 @Composable internal fun LunaNativeCapturePanel(model: AppModel, sheet: LiveSheet, enabled: Boolean) {
@@ -22,6 +24,7 @@ import com.opencapture.opencine.insta360.shell.CameraColorProfile
     val available by session.nativeFormats.collectAsState()
     val color by session.nativeColor.collectAsState()
     val captured = Triple(state.snapshot?.session, state.snapshot?.epoch, phase)
+    // The drawer is enabled and acts only while its captured source is current (iOS `admitted`).
     val isCurrent = { enabled && !model.operatorSession.locked &&
         session.control.state.value.snapshot?.recording?.value == com.opencapture.opencine.core.RecordingState.IDLE &&
         captured == Triple(session.control.state.value.snapshot?.session,
@@ -33,18 +36,18 @@ import com.opencapture.opencine.insta360.shell.CameraColorProfile
             val rate = Rational.frameRate(value.fps)
             val format = CameraRecordingFormat.measured(dimensions, rate)
             CaptureFormatChoice(value, MonitorCapturePresentation.recordingLabel(format) ?: "Unknown",
-                aspect = CaptureFormatGroup("${value.width.toDouble() / value.height}", if (value.height > value.width) "Portrait" else if (value.height == value.width) "Square" else "Landscape"),
+                aspect = CaptureFormatGroup(value.aspectLabel, value.aspectLabel),
                 resolution = CaptureFormatGroup("${value.width}x${value.height}", dimensions?.let(MonitorCapturePresentation::resolutionLabel) ?: "Unknown"),
                 frameRate = rate?.let { CaptureFormatGroup(it.toString(), MonitorCapturePresentation.frameRate(it) + "p") },
                 isEditable = value in available)
         }
-        CaptureFormatPicker(choices, current, enabled && choices.isNotEmpty(), captured,
+        CaptureFormatPicker(choices, current, isCurrent() && choices.isNotEmpty(), captured,
             isCurrent = isCurrent, onSelect = { if (isCurrent()) session.setNativeRecordingFormat(it.value) })
     } else {
-        val choices = listOf(CameraColorProfile.STANDARD to "Standard", CameraColorProfile.LOG to "I-Log", CameraColorProfile.DOLBY_VISION to "Dolby Vision")
-        CaptureDrumWheel(choices.map { it.second }, choices.firstOrNull { it.first == color }?.second.orEmpty(),
-            interactive = enabled, onSelect = { label ->
-                if (isCurrent()) choices.firstOrNull { it.second == label }?.let { session.setNativeRecordingColor(it.first) }
+        val choices = nativeRecordingColorProfiles
+        CaptureDrumWheel(choices.map { it.label }, color?.takeIf { it in choices }?.label.orEmpty(),
+            interactive = isCurrent(), onSelect = { label ->
+                if (isCurrent()) choices.firstOrNull { it.label == label }?.let(session::setNativeRecordingColor)
             })
     }
 }

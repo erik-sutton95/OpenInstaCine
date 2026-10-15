@@ -48,12 +48,17 @@ class LunaNativePhotoPanelTest {
                     }
                 }
                 assertTrue("The real facade must report Photo before mounting", waitUntil { checkNotNull(model).session.status.value.isPhoto })
+                scenario.onActivity {
+                    val host = checkNotNull(model)
+                    val status = host.session.status.value
+                    assertNull("Photo has no native format quick choice", host.nativeCaptureQuick(LiveSheet.FORMAT, status))
+                    assertNull("Photo has no native colour quick choice", host.nativeCaptureQuick(LiveSheet.COLOR, status))
+                }
                 val drawn = CountDownLatch(1)
                 scenario.onActivity { activity -> activity.setContent {
                     OpenPocketCineTheme {
-                        // Current-toolchain lint adaptation mirroring LunaPlaybackScrubCancellationInputTest: reactive StateFlow read in composition.
                         val status by checkNotNull(model).session.status.collectAsState()
-                        Box(Modifier.fillMaxSize().semantics { contentDescription = "SIMULATED F04 photo249" }) {
+                        Box(Modifier.fillMaxSize().semantics { contentDescription = "SIMULATED photo drawer" }) {
                             LiveControlSheet(LiveSheet.FORMAT, checkNotNull(model), status,
                                 locked = false, onDismiss = {}, portrait = false)
                             LaunchedEffect(Unit) { withFrameNanos { }; withFrameNanos { }; drawn.countDown() }
@@ -63,7 +68,7 @@ class LunaNativePhotoPanelTest {
                 assertTrue("The native drawer must render", drawn.await(10,TimeUnit.SECONDS))
                 instrumentation.waitForIdleSync()
                 fun currentHost(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-                    if (node.contentDescription?.toString() == "SIMULATED F04 photo249") return node
+                    if (node.contentDescription?.toString() == "SIMULATED photo drawer") return node
                     for (index in 0 until node.childCount) node.getChild(index)?.let { currentHost(it)?.let { return it } }
                     return null
                 }

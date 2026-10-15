@@ -32,12 +32,12 @@ struct LunaNativeCapturePanel: View {
                     model.session.setNativeRecordingFormat(choice.value)
                 }
         } else {
-            let choices: [(LunaColorMode, String)] = [(.standard, "Standard"), (.iLog, "I-Log"), (.dolbyVision, "Dolby Vision")]
-            MonitorValueDrum(options: choices.map(\.1), selection: Binding(
-                get: { choices.first { $0.0 == model.session.nativeRecordingColor }?.1 ?? "" },
+            let choices = LunaColorMode.nativeRecordingChoices
+            MonitorValueDrum(options: choices.map(\.label), selection: Binding(
+                get: { model.session.nativeRecordingColor.flatMap { choices.contains($0) ? $0.label : nil } ?? "" },
                 set: { label in
-                    guard admitted(), let choice = choices.first(where: { $0.1 == label }) else { return }
-                    model.session.setNativeRecordingColor(choice.0)
+                    guard admitted(), let choice = choices.first(where: { $0.label == label }) else { return }
+                    model.session.setNativeRecordingColor(choice)
                 }), isInteractive: admitted(), haptics: model.hapticsEnabled,
                 interactionIdentity: { AnyHashable(captured) })
         }

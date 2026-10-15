@@ -35,7 +35,10 @@ import com.opencapture.opencine.vocabulary.GimbalRamp
 import com.opencapture.opencine.vocabulary.GimbalSpeed
 import com.opencapture.opencine.vocabulary.VideoFormat
 import com.opencapture.openinstacine.monitor.bridge.SwiftCore
+import com.opencapture.opencine.insta360.shell.CameraRecordFormat
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.label
+import com.opencapture.opencine.insta360.shell.nativeRecordingColorProfiles
 import com.opencapture.opencine.appkit.AppIntegration
 import com.opencapture.opencine.appkit.BodyRecordsV0
 import com.opencapture.opencine.appkit.CamerasModel
@@ -422,38 +425,41 @@ class AppModel(
 
     // CaptureSheetHost (camera-controls): the capture sheets read these values and commit through one typed entry.
     override val captureRouting = com.opencapture.opencine.cameracontrols.CaptureSheetRouting()
-    private val nativeColorChoices = listOf(
-        com.opencapture.opencine.insta360.shell.CameraColorProfile.STANDARD to "Standard",
-        com.opencapture.opencine.insta360.shell.CameraColorProfile.LOG to "I-Log",
-        com.opencapture.opencine.insta360.shell.CameraColorProfile.DOLBY_VISION to "Dolby Vision")
-    private fun nativeRateChoices(): List<com.opencapture.opencine.insta360.shell.CameraRecordFormat> {
+    private fun nativeRateChoices(): List<CameraRecordFormat> {
         val current = session.nativeFormat.value ?: return emptyList()
         return session.nativeFormats.value.filter { it.width == current.width && it.height == current.height }
             .distinctBy { com.opencapture.opencine.core.Rational.frameRate(it.fps) }
     }
+    private fun nativeRateLabel(value: CameraRecordFormat): String? =
+        com.opencapture.opencine.core.Rational.frameRate(value.fps)
+            ?.let(com.opencapture.opencine.appkit.MonitorCapturePresentation::frameRate)?.plus("p")
+
+    /** Video format and colour only: Photo keeps the shared fallback, as the native drawer does. */
     override fun nativeCaptureQuick(sheet: LiveSheet, status: CameraStatus): com.opencapture.monitorui.MonitorQuickControl? {
+        if (status.isPhoto) return null
         val enabled = session.phase == ConnectionPhase.LIVE && !operatorSession.locked &&
             session.control.state.value.snapshot?.recording?.value == com.opencapture.opencine.core.RecordingState.IDLE
-        fun rate(value: com.opencapture.opencine.insta360.shell.CameraRecordFormat) =
-            com.opencapture.opencine.core.Rational.frameRate(value.fps)?.let(com.opencapture.opencine.appkit.MonitorCapturePresentation::frameRate)?.plus("p").orEmpty()
         return when (sheet) {
             LiveSheet.FORMAT -> session.nativeFormat.value?.let { current ->
                 val values = nativeRateChoices()
-                com.opencapture.monitorui.MonitorQuickControl(values.map(::rate), rate(current), enabled = enabled,
+                com.opencapture.monitorui.MonitorQuickControl(values.map { nativeRateLabel(it).orEmpty() },
+                    nativeRateLabel(current).orEmpty(), enabled = enabled,
                     context = values.joinToString(":") { it.id.toString() } + "@" + current.id)
             }
-            LiveSheet.COLOR -> com.opencapture.monitorui.MonitorQuickControl(nativeColorChoices.map { it.second },
-                nativeColorChoices.firstOrNull { it.first == session.nativeColor.value }?.second.orEmpty(),
-                enabled = enabled, context = session.nativeColor.value?.name ?: "unknown")
+            LiveSheet.COLOR -> session.nativeColor.value.let { current ->
+                com.opencapture.monitorui.MonitorQuickControl(nativeRecordingColorProfiles.map { it.label },
+                    current?.takeIf { it in nativeRecordingColorProfiles }?.label.orEmpty(),
+                    enabled = enabled, context = current?.name ?: "unknown")
+            }
             else -> null
         }
     }
     override fun commitNativeCaptureQuick(sheet: LiveSheet, selection: String) {
         when (sheet) {
-            LiveSheet.FORMAT -> nativeRateChoices().firstOrNull { value ->
-                com.opencapture.opencine.core.Rational.frameRate(value.fps)?.let(com.opencapture.opencine.appkit.MonitorCapturePresentation::frameRate)?.plus("p") == selection
-            }?.let(session::setNativeRecordingFormat)
-            LiveSheet.COLOR -> nativeColorChoices.firstOrNull { it.second == selection }?.let { session.setNativeRecordingColor(it.first) }
+            LiveSheet.FORMAT -> nativeRateChoices().firstOrNull { nativeRateLabel(it) == selection }
+                ?.let(session::setNativeRecordingFormat)
+            LiveSheet.COLOR -> nativeRecordingColorProfiles.firstOrNull { it.label == selection }
+                ?.let(session::setNativeRecordingColor)
             else -> Unit
         }
     }
