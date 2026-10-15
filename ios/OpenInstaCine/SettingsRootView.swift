@@ -101,10 +101,21 @@ struct SettingsRootView: View {
         let transfer = model.monitorTransfer ?? model.monitorColorMode.map(MonitorTransfer.init) ?? .rec709
         return .init(safeArea: safeArea, phase: model.session.phase.label, isLive: model.isLive,
             sharingSubtitle: "Share this feed with OpenInstaCine devices on the same camera Wi-Fi.",
-            close: { if let onClose { onClose() } else { model.shell.dismissCover() } },
-            disconnect: model.disconnect, feedback: feedback, link: link, sharing: sharing, motion: motion,
-            account: .init(title: "Frame.io", help: SettingsHelpCopy.frameIO, state: accountState,
-                signIn: { Task { try? await model.frameio.connect() } }, signOut: model.frameio.disconnect),
+            close: {
+                model.settingsAccount.retire()
+                model.settingsSupport.retire()
+                if let onClose { onClose() } else { model.shell.dismissCover() }
+            },
+            disconnect: {
+                model.settingsAccount.retire()
+                model.settingsSupport.retire()
+                model.disconnect()
+            }, feedback: feedback, link: link, sharing: sharing, motion: motion,
+            account: .init(title: "Frame.io", help: SettingsHelpCopy.frameIO, model: model.settingsAccount,
+                actions: model.settingsAccountActions, readState: { accountState },
+                consentTitle: MonitorSettingsCopy.accountConsentTitle,
+                consentMessage: MonitorSettingsCopy.accountConsentMessage(service: "Frame.io"),
+                consentAction: MonitorSettingsCopy.accountConsentAction),
             cache: cache, support: support,
             information: .init(theme: "Charcoal", protocolName: "Insta360 / BLE + Wi-Fi", version: Self.appVersionText,
                 themeHelp: SettingsHelpCopy.themeHelp, protocolHelp: "Camera control speaks Insta360's protocol over Bluetooth and the camera's Wi-Fi. No Insta360 SDK is bundled or required.",
@@ -192,24 +203,30 @@ struct SettingsRootView: View {
     }
     private var accountState: MonitorAccountState {
         if !model.frameio.isConfigured { return .notConfigured }
-        if model.frameio.connecting { return .connecting }
+        if model.frameio.connecting || model.settingsAccount.busy { return .connecting }
         return model.frameio.isConnected ? .signedIn : .signedOut
     }
     private var cache: MonitorSettingsCacheSource { model.settingsCacheSource }
     private var support: MonitorSettingsSupportSource {
         .init(consent: Binding(get: { AppDiagnostics.reporting.isOptedIn }, set: AppDiagnostics.reporting.setConsent),
             available: AppDiagnostics.reporting.isAvailable, automaticHelp: SettingsHelpCopy.reliabilityReports,
-            unavailableHelp: SettingsHelpCopy.reliabilityUnavailable, deleteHelp: SettingsHelpCopy.deleteStoredIncidents,
+            unavailableHelp: SettingsHelpCopy.reliabilityUnavailable,
             sourceHelp: SettingsHelpCopy.sourceHelp, termsHelp: "How you can use OpenInstaCine.",
-            sourceURL: OpenInstaCineLinks.source, termsURL: OpenInstaCineLinks.terms,
-            saveReport: { DiagnosticCenter.shared.writeReport(session: model.session) },
-            deleteReports: { AppDiagnostics.incidents.deleteStoredIncidents {} },
+            model: model.settingsSupport, actions: model.settingsSupportActions, links: [], privacy: nil,
+            source: browserDestination("settings.source", "Source Code", OpenInstaCineLinks.source),
+            terms: browserDestination("settings.terms", "Terms of Use", OpenInstaCineLinks.terms),
+            reportTitle: "Report a problem", reportActionTitle: "Open", diagnosticsHelp: SettingsHelpCopy.shareDiagnostics,
             report: { AnyView(ProblemReportView().environment(model)) },
-            document: { kind, close in
-                let legal: LegalDocumentView.Kind = switch kind { case .privacy: .privacy; case .licenses: .licenses; case .notice: .notice }
-                return AnyView(LegalDocumentView(kind: legal, onClose: close))
-            }, shareReport: { AnyView(MonitorActivityShareSheet(items: [$0])) },
-            supportEmail: "support@opencapture.org")
+            shareReport: { AnyView(MonitorActivityShareSheet(items: [$0])) },
+            deleteStoredReports: { AppDiagnostics.incidents.deleteStoredIncidents {} },
+            deleteReportsHelp: SettingsHelpCopy.deleteStoredIncidents,
+            supportEmail: "support@opencapture.org", legal: .settings)
+    }
+    private func browserDestination(_ id: String, _ title: String, _ url: URL?) -> MonitorSettingsBrowserDestination? {
+        url.map {
+            .init(id: id, title: title, url: $0,
+                confirmationMessage: MonitorSettingsCopy.browserConfirmation(title: title, app: "OpenInstaCine"))
+        }
     }
     static var appVersionText: String { MonitorSettingsAppInformation.version() }
 }

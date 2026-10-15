@@ -9,6 +9,17 @@ val supportedAndroidAbi = "arm64-v8a"
 val swiftCoreJniLibsRoot = layout.buildDirectory.dir("generated/swiftCore/jniLibs")
 val swiftCoreArm64Directory = swiftCoreJniLibsRoot.map { it.dir(supportedAndroidAbi) }
 val repositoryRoot = rootProject.projectDir.parentFile.parentFile
+// The repository's LICENSE, THIRD-PARTY-NOTICES.md and NOTICE, staged as Java resources so the
+// in-app Licenses and NOTICE pages are those files, never a hand-written summary. Concrete path so
+// the SourceSet API accepts it.
+val stagedLegalResourcesDirectory = layout.buildDirectory.get().asFile.resolve("generated/legalResources")
+val stageLegalResources = tasks.register<Copy>("stageLegalResources") {
+    group = "build"
+    description = "Stage the repository legal files into the app resources."
+    from(repositoryRoot.resolve("LICENSE"), repositoryRoot.resolve("THIRD-PARTY-NOTICES.md"),
+        repositoryRoot.resolve("NOTICE"))
+    into(stagedLegalResourcesDirectory.resolve("openinstacine/legal"))
+}
 val stageSwiftCoreScript = repositoryRoot.resolve("scripts/android-stage-swift-core.sh")
 
 val resolvedVersionCode: Int =
@@ -66,6 +77,7 @@ android {
     }
 
     sourceSets {
+        getByName("main").resources.srcDir(stagedLegalResourcesDirectory)
         getByName("androidTest").kotlin.srcDir(
             gradle.includedBuild("opencine").projectDir.resolve("appkit-native/src/cacheOwnerProof/kotlin"))
         getByName("main").jniLibs.directories.apply {
@@ -173,6 +185,7 @@ val stageSwiftCore =
     }
 
 tasks.named("preBuild").configure {
+    dependsOn(stageLegalResources)
     dependsOn(stageSwiftCore)
 }
 
@@ -249,4 +262,9 @@ listOf("Debug", "Release").forEach { variant ->
     }
     tasks.matching { it.name == "bundle${variant}LocalLintAar" || it.name == "bundle${variant}Aar" }
         .configureEach { dependsOn(prepare) }
+}
+
+// Legal tests compare the staged pages with the repository files themselves.
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    systemProperty("openinstacine.repositoryRoot", repositoryRoot.absolutePath)
 }

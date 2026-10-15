@@ -37,6 +37,12 @@ targets:
         inputFiles:
           - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
         basedOnDependencyAnalysis: false
+      - name: Stage legal files
+        # The repository's NOTICE, LICENSE and THIRD-PARTY-NOTICES.md, copied into the bundle at
+        # build time (OpenCine scripts/stage-legal-resources.py), so the Licenses and NOTICE pages
+        # are those files and no copy is checked in.
+        script: python3 "${SRCROOT}/../../OpenCine/scripts/stage-legal-resources.py" --app "${SRCROOT}/.." "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Legal"
+        basedOnDependencyAnalysis: false
     dependencies:
       - package: OpenInstaViewCore
         product: OpenInstaViewCore
@@ -180,6 +186,9 @@ targets:
       # with a second MonitorUI (a second theme accent) inside.
       - package: OpenCine
         product: OpenCineApple
+      # The one hosted accessibility walk for in-process view tests.
+      - package: OpenCine
+        product: OpenCineHostedAccessibility
     settings:
       base:
         SWIFT_VERSION: "5.0"
