@@ -161,7 +161,7 @@ struct SettingsRootView: View {
             source: browserDestination("settings.source", "Source Code", OpenInstaCineLinks.source),
             terms: browserDestination("settings.terms", "Terms of Use", OpenInstaCineLinks.terms),
             reportTitle: "Report a problem", reportActionTitle: "Open", diagnosticsHelp: MonitorSettingsCopy.shareDiagnostics,
-            report: { AnyView(ProblemReportView().environment(model)) },
+            report: { model.isProblemReportPresented = true },
             shareReport: { AnyView(MonitorActivityShareSheet(items: [$0])) },
             deleteStoredReports: { AppDiagnostics.incidents.deleteStoredIncidents {} },
             deleteReportsHelp: MonitorSettingsCopy.deleteSavedFeedReports,

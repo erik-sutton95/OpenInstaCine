@@ -105,6 +105,24 @@ import XCTest
         XCTAssertTrue(rows[.system]?.contains("Automatic error reports") == true, "\(rows[.system] ?? [])")
     }
 
+    /// A2-24: Report a problem in Settings opens the app root's report, so a draft outlives the
+    /// camera session ending, which closes the Settings cover. Settings presents no sheet itself.
+    func testSettingsReportOpensTheRootReportThatOutlivesTheSession() async throws {
+        let model = AppModel()
+        model.operatorSession.settingsTab = .system
+        model.shell.present(ChromeEditorReturnTests.camera(model))
+        model.shell.open(.settings)
+        let fixture = try Fixture(SettingsRootView(onClose: {}).environment(model))
+        defer { fixture.close() }
+        let open = try await fixture.element("support.report.open")
+        XCTAssertTrue(open.accessibilityActivate())
+        XCTAssertTrue(model.isProblemReportPresented)
+        XCTAssertNil(fixture.host.presentedViewController, "Settings presents no report sheet of its own")
+        model.shell.close()
+        XCTAssertNil(model.shell.cover, "Ending the session closes the Settings cover")
+        XCTAssertTrue(model.isProblemReportPresented, "The root report survives the session ending")
+    }
+
     func testAMissingBundledPageSaysSoInsteadOfShowingAnEmptyPage() async throws {
         let documents = MonitorLegalDocuments(wordmark: "SIMULATED", privacy: .unavailable,
             terms: .unavailable, licenses: .unavailable, notice: .unavailable)
