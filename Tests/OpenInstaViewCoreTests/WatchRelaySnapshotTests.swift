@@ -35,13 +35,13 @@ struct WatchRelaySnapshotTests {
             let volume = StorageVolume(id: "active",
                 freeBytes: ObservedValue(bytes, origin: .cameraReported, at: nil),
                 totalBytes: ObservedValue(UInt64(2000), origin: .cameraReported, at: nil))
-            return .snapshot(status: status, phase: .live, cameraName: "SIMULATED", feedLive: true,
+            return .snapshot(status: status, timecode: "--:--:--", phase: .live, cameraName: "SIMULATED", feedLive: true,
                 storage: ObservedValue([volume], origin: .cameraReported, at: nil))
         }
         #expect(state(1001).media == "1 KB · 50%")
         #expect(state(0).media == "0 B · 0%")
         let unknown: StorageStatus = .unknown
-        #expect(WatchRelayState.snapshot(status: status, phase: .live, cameraName: "SIMULATED", feedLive: true,
+        #expect(WatchRelayState.snapshot(status: status, timecode: "--:--:--", phase: .live, cameraName: "SIMULATED", feedLive: true,
             storage: unknown).media == StorageReadout.unavailable)
     }
 
