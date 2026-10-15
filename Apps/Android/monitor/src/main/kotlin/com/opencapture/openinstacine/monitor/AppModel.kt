@@ -115,6 +115,11 @@ class AppModel(
     }
 
     val savedCameras: List<SavedCamera> get() = cameras.state.value.saved
+    /**
+     * The problem report, owned by the app root (A2-24): the cameras page and Settings both open
+     * it here, so a draft outlives the camera session ending and the Settings cover closing.
+     */
+    var problemReportOpen by mutableStateOf(false)
     /** Long-press on the tap-focus box locks it: feed taps no longer move focus. */
     var focusBoxLocked by mutableStateOf(false)
     var coreVersion by mutableStateOf<String?>(null)

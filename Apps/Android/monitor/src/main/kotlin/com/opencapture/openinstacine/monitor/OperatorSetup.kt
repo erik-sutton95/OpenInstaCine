@@ -77,8 +77,8 @@ internal fun operatorSetupApp(model: AppModel) = OperatorSetupApp(
         AppDiagnostics.reporting, AppDiagnostics.manualReport, AppDiagnostics.incidents,
         diagnosticText = { DiagnosticCenter.boundedDiagnosticText(model.session) },
         shareReport = { DiagnosticCenter.shareReport(it, model.session, copyForFeedback = false) },
-        reportActionMinimumTouchTarget = true,
     ),
+    reportProblem = { model.problemReportOpen = true },
     legal = InstaLegalDocuments,
     lutPicker = { onClose -> LUTPicker(model = model, onClose = onClose) },
     // Every camera bucket, retaining the current gallery's operation fencing and revision.
