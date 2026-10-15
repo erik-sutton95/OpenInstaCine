@@ -66,7 +66,7 @@ struct SettingsRootView: View {
             cache: .init(source: cache,
                 cacheOriginals: .init(value: Bindable(model).cacheFullResolution, help: MonitorSettingsCopy.cacheFullResolution),
                 clearHelp: MonitorSettingsCopy.clearAllCamerasCache),
-            account: .init(title: "Frame.io", help: MonitorSettingsCopy.frameIOAccount, model: model.settingsAccount,
+            account: .init(title: "Frame.io", help: MonitorSettingsCopy.accountHelp(service: "Frame.io"), model: model.settingsAccount,
                 actions: model.settingsAccountActions, readState: { accountState },
                 consentTitle: MonitorSettingsCopy.accountConsentTitle,
                 consentMessage: MonitorSettingsCopy.accountConsentMessage(service: "Frame.io"),

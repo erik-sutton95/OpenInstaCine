@@ -71,7 +71,7 @@ final class OperatorFacingCopyTests: XCTestCase {
             PocketDispMode.clean.settingsTitle,
             PocketDispMode.live.settingsCaption,
             PocketDispMode.clean.settingsCaption,
-            MonitorSettingsCopy.frameIOAccount,
+            MonitorSettingsCopy.accountHelp(service: "Frame.io"),
             MonitorSettingsCopy.shareThisFeed,
             MonitorSettingsCopy.broadcastPriority,
             MonitorSettingsCopy.watcherPasscode,
