@@ -288,11 +288,11 @@ final class AppModel {
     }
     @ObservationIgnored lazy var operatorSession = MonitorOperatorSessionModel(
         shell: shell, assist: assist, display: OperatorPrefs.display)
-    var dispLive: PocketDispChrome {
+    var dispLive: MonitorDisplayChrome {
         get { operatorSession.live }
         set { operatorSession.live = newValue }
     }
-    var dispClean: PocketDispChrome {
+    var dispClean: MonitorDisplayChrome {
         get { operatorSession.clean }
         set { operatorSession.clean = newValue }
     }
@@ -300,11 +300,11 @@ final class AppModel {
         get { operatorSession.settingsTab }
         set { operatorSession.settingsTab = newValue }
     }
-    var chromeEditorMode: PocketDispMode? {
+    var chromeEditorMode: MonitorDisplayMode? {
         get { operatorSession.editingMode }
         set { operatorSession.editingMode = newValue }
     }
-    var chromeEditorReturnMode: PocketDispMode? {
+    var chromeEditorReturnMode: MonitorDisplayMode? {
         get { operatorSession.returnedMode }
         set { operatorSession.returnedMode = newValue }
     }
@@ -442,22 +442,22 @@ final class AppModel {
             ssid: session.joinedSSID ?? session.cachedSSID)
     }
 
-    var currentDispMode: PocketDispMode { operatorSession.mode }
-    var dispChrome: PocketDispChrome { operatorSession.chrome }
+    var currentDispMode: MonitorDisplayMode { operatorSession.mode }
+    var dispChrome: MonitorDisplayChrome { operatorSession.chrome }
     var isEditingChrome: Bool { operatorSession.isEditing }
 
-    func chrome(for mode: PocketDispMode) -> PocketDispChrome { operatorSession.chrome(for: mode) }
+    func chrome(for mode: MonitorDisplayMode) -> MonitorDisplayChrome { operatorSession.chrome(for: mode) }
 
-    func chromeSectionMounts(_ section: PocketDispChrome.Section) -> Bool {
+    func chromeSectionMounts(_ section: MonitorDisplayChrome.Section) -> Bool {
         if section == .timecode, !OsmoMonitorPresentation.capabilities(session).timecode { return false }
         return operatorSession.mounts(section)
     }
 
-    func toggleChrome(_ section: PocketDispChrome.Section, for mode: PocketDispMode) {
+    func toggleChrome(_ section: MonitorDisplayChrome.Section, for mode: MonitorDisplayMode) {
         operatorSession.toggle(section, in: mode)
     }
 
-    func beginChromeEditing(_ mode: PocketDispMode) {
+    func beginChromeEditing(_ mode: MonitorDisplayMode) {
         liveGimbalPanel = .none
         operatorSession.beginEditing(mode)
     }

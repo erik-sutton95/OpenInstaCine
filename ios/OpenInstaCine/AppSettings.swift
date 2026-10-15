@@ -6,9 +6,6 @@ import OpenInstaViewCore
 import SwiftUI
 import UIKit
 
-typealias PocketDispMode = MonitorDisplayMode
-typealias PocketDispChrome = MonitorDisplayChrome
-
 enum OpenInstaCineLinks {
     static let source = URL(string: "https://github.com/erik-sutton95/OpenInstaCine")
     static let support = URL(
