@@ -77,6 +77,8 @@ class AppModel(
     val session = PocketCameraSession(context)
     // Internal so the Debug review seed stages into the app's own storage registry.
     internal val mediaStorage = com.opencapture.opencine.appkit.MonitorMediaCacheStorage()
+    // Keep the existing on-disk namespace; Settings and gallery share this declared parent.
+    internal val mediaCacheParent = java.io.File(appContext.noBackupFilesDir, "OpenPocketCine/media")
     private val initialMedia = com.opencapture.openinstacine.monitor.media.createLunaMediaLibrary(appContext, session, mediaStorage, null, scope)
     var mediaLibrary by mutableStateOf(initialMedia.first)
         private set

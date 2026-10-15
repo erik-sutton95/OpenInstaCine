@@ -158,3 +158,13 @@ Manual-clock iOS owner scenarios and Android codec/source-generation scenarios a
 SIMULATED checks. Physical camera recovery remains untested until the program's
 operator qualification. The public OpenCine pin remains unchanged during local
 parity development; these adapters require the matching reviewed Core adoption.
+
+## All-camera Storage cache scope
+
+Settings on iOS and Android count and clear every camera bucket through the shared
+cache owners. Valid interrupted Clear roots remain counted and prepared deletions
+can be retried. Live child symlinks do not redirect cache ownership. Clear removes
+cached clips, thumbnails and camera indexes; the current gallery retains its
+operation fencing and cache revision, and reloads from the camera when connected.
+Favorites, preference keys and existing on-disk namespace spellings stay unchanged.
+Physical verification of this adoption remains untested.
