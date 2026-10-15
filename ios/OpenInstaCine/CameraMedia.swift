@@ -54,6 +54,33 @@ enum MediaOperatorCopy {
         cacheRoot(cameraID: cameraID).appendingPathComponent(playbackAddress(file: file, path: path))
     }
     func cacheByteCount(cameraID: String) async -> UInt64 { await directory(cameraID: cameraID).totalByteCount() }
+
+    /// The settings cache scope is every camera bucket under the shared parent (A2-33), not
+    /// only the last connected one. Clear removes the camera indexes too, so a formatted card
+    /// cannot leave thumbnail-less rows behind; the camera re-enumerates the truth on the next
+    /// connected pass.
+    var mediaCacheParentPath: String { cacheParentRoot.path }
+
+    func cameraCacheDirectories() -> [MonitorMediaCacheDirectory] { storage.directories(under: cacheParentRoot) }
+
+    func cacheByteCountAllCameras() async -> UInt64 {
+        var total: UInt64 = 0
+        for directory in cameraCacheDirectories() { total += await directory.totalByteCount() }
+        return total
+    }
+
+    func clearAllCameraBuckets(except current: URL) async throws {
+        let currentPath = current.standardizedFileURL.path
+        for directory in cameraCacheDirectories()
+        where directory.root.standardizedFileURL.path != currentPath {
+            try await directory.clear(preserving: [])
+        }
+    }
+    private var cacheParentRoot: URL {
+        if let rootOverride { return rootOverride }
+        return fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("OpenInstaCine/media", isDirectory: true)
+    }
     func resolvedStorage(for file: MediaFile, singleSd: Bool) -> Int {
         MediaHTTP.resolvedStorage(stamped: file.storage, handle: file.handle != 0 ? file.handle : file.cmdHandle,
             winner: storageWinner[file.path], singleSdStorage: singleSd)
@@ -309,6 +336,15 @@ extension CameraSession {
         retirePlaybackTransfers(); mediaLibrary.close(); mediaLibraryServiceID = nil; mediaLibrary.bind(nil)
     }
     func clearMediaCache() async throws { retirePlaybackTransfers(); try await mediaLibrary.clearCache() }
+
+    /// Settings Clear (A2-33): the current camera's library retires its operations, drops its
+    /// camera indexes with the clips and reloads its entries, and every other camera bucket
+    /// under the shared parent clears the same way, so the scope is every camera on this phone.
+    func clearAllCamerasCache() async throws {
+        retirePlaybackTransfers()
+        try await mediaLibrary.clearCache(preservingMetadata: false)
+        try await cameraMedia.clearAllCameraBuckets(except: mediaLibrary.cache.directory.root)
+    }
     var mediaCameraID: String {
         let key = "opc.media.lastCameraID"
         if let id = connectedCamera?.id.uuidString {

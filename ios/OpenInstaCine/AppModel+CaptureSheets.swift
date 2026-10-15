@@ -90,7 +90,10 @@ extension AppModel: CaptureSheetHost {
     var focusOptions: [FocusOption] { CaptureLists.focusOptions }
     var shutterUsesAngle: Bool {
         get { OperatorPrefs.shutterUsesAngle }
-        set { OperatorPrefs.shutterUsesAngle = newValue }
+        set {
+            OperatorPrefs.shutterUsesAngle = newValue
+            session.configureShutterPresentation(usesAngle: newValue)
+        }
     }
     var shutterAngleDegrees: Double { OperatorPrefs.shutterAngleDegrees }
     var coverOpen: Bool { shell.cover != nil }
@@ -200,6 +203,7 @@ extension AppModel: CaptureSheetHost {
 
     func captureDrumDidCommit(_ value: SettingValue) {
         if value.key == .whiteBalance { session.autoWhiteBalanceLock = nil }
+        if case .shutter(.angle(let degrees)) = value { OperatorPrefs.shutterAngleDegrees = degrees }
     }
     func refreshIsoLimit() async { await session.refreshIsoLimit() }
 }

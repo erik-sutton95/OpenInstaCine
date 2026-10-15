@@ -7,7 +7,20 @@ import XCTest
 /// SIMULATED actual backend event consumer and snapshot builder; no connect, native decode or upload.
 @MainActor
 final class FeedIncidentProducerTests: XCTestCase {
-    func testAUArrivalIsMeasuredWithoutFabricatingPacketsNativeAdmissionOrPresentation() {
+  func testDuplicateAndReversedSnapshotClockCannotDiscardActualAUCount() {
+        let model = AppModel()
+        let session = model.session
+    let baseline = session.feedIncidentSnapshot(now: 100)
+    XCTAssertNil(baseline.rates.observed?.accessUnitHz)
+    session.backend.eventHandler?(.videoAccessUnit(Data(), timestampMilliseconds: 1))
+    XCTAssertNil(session.feedIncidentSnapshot(now: 100).rates.observed?.accessUnitHz)
+    XCTAssertNil(session.feedIncidentSnapshot(now: 99).rates.observed?.accessUnitHz)
+    let next = session.feedIncidentSnapshot(now: 101)
+    XCTAssertEqual(next.rates.observed?.accessUnitHz, 1)
+    XCTAssertNil(next.rates.observed?.packetHz)
+    XCTAssertNil(next.rates.observed?.ackHz)
+  }
+  func testAUArrivalIsMeasuredWithoutFabricatingPacketsNativeAdmissionOrPresentation() {
         let model = AppModel()
         let session = model.session
         let before = session.feedIncidentSnapshot(now: 100)

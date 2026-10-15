@@ -30,11 +30,11 @@ final class CapturePanelRenderComparisonTests: XCTestCase {
         status.focusMode = .continuous
         status.focusTrack = .subjectLock
         model.session.status = status
-        #if targetEnvironment(simulator)
-            // The production drawers now use common reports/descriptors. Bind the same
-            // isolated, report-decoding SIMULATED session used by rendered UI reviews.
-            model.control.bind(MonitorUIReview.simulatedSession(status: status))
-        #endif
+        // The production drawers use common reports/descriptors. Bind the same isolated,
+        // report-decoding SIMULATED session used by rendered UI reviews on every host:
+        // without it the details drawer renders "Setting not available" and the
+        // tap-vs-hold geometry loses the details the test compares.
+        model.control.bind(MonitorUIReview.simulatedSession(status: status))
         let size = CGSize(width: 874, height: 402)
         let host = UIHostingController(
             rootView: CaptureComparisonCanvas(model: model, held: false, size: size))

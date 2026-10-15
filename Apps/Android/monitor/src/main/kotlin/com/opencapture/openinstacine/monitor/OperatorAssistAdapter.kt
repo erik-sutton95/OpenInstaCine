@@ -2,6 +2,7 @@ package com.opencapture.openinstacine.monitor
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import com.opencapture.opencine.cameracontrols.AssistLutPicker
 import com.opencapture.opencine.cameracontrols.MonitorOperatorAssistSource
 import com.opencapture.opencine.vocabulary.CameraStatus
@@ -9,6 +10,7 @@ import com.opencapture.openinstacine.monitor.assists.AppAssistHost
 import com.opencapture.openinstacine.monitor.assists.AssistInspectorImagePreview
 import com.opencapture.openinstacine.monitor.feed.GpuOverlayBus
 import com.opencapture.openinstacine.monitor.lut.AppLutPickerCopy
+import com.opencapture.openinstacine.monitor.lut.appLutLibrary
 import kotlinx.coroutines.flow.map
 
 /** Native scope publications and one bounded native preview. Common owners compose every assist. */
@@ -16,7 +18,7 @@ import kotlinx.coroutines.flow.map
 internal fun rememberOperatorAssistSource(model: AppModel, status: CameraStatus): MonitorOperatorAssistSource {
     val publications = remember(model.scopeBus) { model.scopeBus.publications.map { it.bundle } }
     val selection = model.lutSelection
-    val look = AssistLutPicker(AppLutPickerCopy, selection, model::updateLutSelection,
+    val look = AssistLutPicker(AppLutPickerCopy, selection, model::updateLutSelection, appLutLibrary(LocalContext.current),
         profile = model.camera?.captureProfile?.looks ?: com.opencapture.openinstacine.monitor.session.LunaCameraLUTProfile.value,
         colorMode = status.monitorColorMode)
     return MonitorOperatorAssistSource(AppAssistHost, publications, { GpuOverlayBus.onSlotsMoved?.invoke() }, look, preview = { tool ->

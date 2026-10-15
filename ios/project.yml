@@ -58,6 +58,9 @@ targets:
         product: OpenCineWatch
       - package: OpenCine
         product: OpenCineFrameIO
+      # The shared Frame.io account, sign-in and uploads; Insta keeps its namespaces.
+      - package: OpenCine
+        product: OpenCineFrameIOApple
       - package: OpenCine
         product: MonitorUI
       - package: OpenCine
@@ -148,6 +151,7 @@ targets:
     platform: iOS
     sources:
       - OpenInstaCineTests
+      - ../../OpenCine/Tests/MonitorUITests/MonitorPortraitHeaderClearanceTests.swift
     dependencies:
       - target: OpenInstaCine
       - package: OpenInstaViewCore

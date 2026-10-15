@@ -21,6 +21,19 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertEqual(fourK25.value, 48)
     }
 
+    /// A5-11: CameraStatus storage fields are MiB (the DJI wire unit); 60e9 free of 128e9 bytes.
+    func testStorageIsPublishedInTheUnitTheStatusFieldMeans() throws {
+        let volume = try ProtoMessage.integer(field: 2, value: 60_000_000_000)
+            + ProtoMessage.integer(field: 3, value: 128_000_000_000)
+            + ProtoMessage.integer(field: 4, value: 2)
+        let device = try LunaDeviceStatus(
+            response: ProtoMessage.blob(field: 2, value: ProtoMessage.blob(field: 176, value: volume)))
+        var status = CameraStatus()
+        LunaShellMapping.apply(device: device, to: &status)
+        XCTAssertEqual(status.storageFreeMb, 57_220)
+        XCTAssertEqual(status.storageTotalMb, 122_070)
+    }
+
     /// ISO steps exactly as on Insta main, which always sorted the list by value. The shared
     /// stepping sorts only when 160 is listed; Insta's lists are ascending, so both agree.
     func testIsoSteppingMatchesMain() {

@@ -1,5 +1,6 @@
 #if DEBUG && targetEnvironment(simulator)
 import AVFoundation
+import Insta360Protocol
 import Observation
 import OpenCineApple
 import SwiftUI
@@ -55,7 +56,12 @@ private final class MonitorPlaybackReviewObserver {
             lastItem = itemID
         }
         let library = model.session.mediaLibrary
-        let service = MonitorUIReview.mediaService
+        // The review camera's link: each browse enters the album, each close starts live again
+        // (the connection's own first live start comes before any browse).
+        let link = MonitorUIReview.camera.received
+        let album = try? LunaProtocol.setAccessCameraFileState(LunaProtocol.albumAccessState)
+        let opens = link.filter { $0 == album }.count
+        let closes = album.flatMap { link.firstIndex(of: $0) }.map { link[$0...].filter { $0 == LunaProtocol.startLiveRequest }.count } ?? 0
         let null = NSNull()
         func value<T>(_ optional: T?) -> Any { optional.map { $0 as Any } ?? null }
         let time = player.map { CMTimeGetSeconds($0.currentTime()) }.flatMap { $0.isFinite ? $0 : nil }
@@ -68,7 +74,7 @@ private final class MonitorPlaybackReviewObserver {
             "library": value(identity(library)), "lifetime": value(library?.lifetimeToken.uuidString),
             "browsing": library?.browsing ?? false, "bound": library?.binding != nil,
             "galleryOrder": value(library?.displayedRecords.map { $0.asset.filename }),
-            "opens": service.opens, "closes": service.browse.closes,
+            "opens": opens, "closes": closes,
             "cover": model.shell.cover == .media ? "media" as Any : null,
             "host": value(identity(host)), "player": value(identity(player)),
             "item": value(itemID), "file": value((item?.asset as? AVURLAsset)?.url.lastPathComponent),

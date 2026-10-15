@@ -26,6 +26,9 @@ includeBuild("../../../OpenCine/Android") {
         substitute(module("com.opencapture.opencine:insta360-luna")).using(project(":insta360-luna"))
         substitute(module("com.opencapture.opencine:appkit")).using(project(":appkit"))
         substitute(module("com.opencapture.opencine:appkit-sentry")).using(project(":appkit-sentry"))
+        substitute(module("com.opencapture.opencine:media3")).using(project(":media3"))
         substitute(module("com.opencapture.opencine:camera-controls")).using(project(":camera-controls"))
+        substitute(module("com.opencapture.opencine:app-ui-testing")).using(project(":app-ui-testing"))
+        substitute(module("com.opencapture.opencine:appkit-native")).using(project(":appkit-native"))
     }
 }

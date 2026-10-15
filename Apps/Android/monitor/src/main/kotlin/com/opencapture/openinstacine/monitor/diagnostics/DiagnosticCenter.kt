@@ -8,6 +8,7 @@ import android.content.ClipboardManager
 import com.opencapture.opencine.platform.LocalVPNProbe
 import com.opencapture.opencine.vocabulary.PrivacyRedactor
 import com.opencapture.openinstacine.monitor.MonitorConfiguration
+import com.opencapture.openinstacine.monitor.OperatorPrefs
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -63,6 +64,7 @@ object DiagnosticCenter {
             persistBatch(exceptionFile(), batch, EXCEPTION_CAP, exceptionWritten, exceptionJournal)
         }
         filesDir()?.let { AppDiagnostics.incidents.install(it) }
+        AppDiagnostics.reporting.noteFeedUpscaler(OperatorPrefs.feedUpscaler(context).label)
         AppDiagnostics.reporting.install(context.applicationContext, AppDiagnostics.incidents)
         AppDiagnostics.manualReport.install(context.applicationContext)
         log("notice", "diagnostics", "boot", "diagnostics installed")

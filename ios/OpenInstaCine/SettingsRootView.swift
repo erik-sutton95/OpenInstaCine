@@ -1,7 +1,9 @@
 import MonitorPresentation
 import MonitorUI
 import OpenCineAppKit
+import OpenCineAppKitApple
 import OpenCineApple
+import OpenCineFrameIOApple
 import OpenCineCameraControls
 import OpenCineRelayApple
 import OpenInstaViewCore
@@ -64,7 +66,7 @@ enum SettingsHelpCopy {
     static let linkHealth =
         "How healthy the camera link is right now \u{2014} delivery, not radio RSSI."
     static let clearCache =
-        "Removes downloaded clip files from this phone. The clip list stays so you can cache them again from the camera."
+        "Removes downloaded clip files, thumbnails, and camera indexes for every camera. The on-device library is left intact."
     static let cacheFullResolution =
         "Download the original camera file when you open a clip. Off keeps only the 720p proxy to save space. Share needs the original \u{2014} connect the camera if it is not cached."
     static let shareDiagnostics =
@@ -102,7 +104,7 @@ struct SettingsRootView: View {
             close: { if let onClose { onClose() } else { model.shell.dismissCover() } },
             disconnect: model.disconnect, feedback: feedback, link: link, sharing: sharing, motion: motion,
             account: .init(title: "Frame.io", help: SettingsHelpCopy.frameIO, state: accountState,
-                signIn: { Task { try? await model.connectFrameio() } }, signOut: model.disconnectFrameio),
+                signIn: { Task { try? await model.frameio.connect() } }, signOut: model.frameio.disconnect),
             cache: cache, support: support,
             information: .init(theme: "Charcoal", protocolName: "Insta360 / BLE + Wi-Fi", version: Self.appVersionText,
                 themeHelp: SettingsHelpCopy.themeHelp, protocolHelp: "Camera control speaks Insta360's protocol over Bluetooth and the camera's Wi-Fi. No Insta360 SDK is bundled or required.",
@@ -188,18 +190,20 @@ struct SettingsRootView: View {
         })
     }
     private var accountState: MonitorAccountState {
-        if !model.isFrameioConfigured { return .notConfigured }
-        if model.frameioConnecting { return .connecting }
-        return model.isFrameioConnected ? .signedIn : .signedOut
+        if !model.frameio.isConfigured { return .notConfigured }
+        if model.frameio.connecting { return .connecting }
+        return model.frameio.isConnected ? .signedIn : .signedOut
     }
     private var cache: MonitorSettingsCacheSource {
-        let cameraID = model.session.mediaCameraID
         let revision = model.session.mediaCacheRevision
         let source = model.shell.monitor?.id
-        return .init(identity: .init(namespace: cameraID, source: source), revision: revision,
-            isCurrent: { model.shell.monitor?.id == source && model.session.mediaCameraID == cameraID && model.session.mediaCacheRevision == revision },
-            count: { await model.session.cameraMedia.cacheByteCount(cameraID: cameraID) },
-            clear: { try await model.session.clearMediaCache() })
+        // Delivery exports count and clear with the media cache (A2-58). The scope is every
+        // camera's cache on this phone (A2-33), so the identity is the shared cache parent.
+        return model.delivery.cacheSource(.init(
+            identity: .init(namespace: model.session.cameraMedia.mediaCacheParentPath, source: source), revision: revision,
+            isCurrent: { model.shell.monitor?.id == source && model.session.mediaCacheRevision == revision },
+            count: { await model.session.cameraMedia.cacheByteCountAllCameras() },
+            clear: { try await model.session.clearAllCamerasCache() }))
     }
     private var support: MonitorSettingsSupportSource {
         .init(consent: Binding(get: { AppDiagnostics.reporting.isOptedIn }, set: AppDiagnostics.reporting.setConsent),
@@ -213,7 +217,8 @@ struct SettingsRootView: View {
             document: { kind, close in
                 let legal: LegalDocumentView.Kind = switch kind { case .privacy: .privacy; case .licenses: .licenses; case .notice: .notice }
                 return AnyView(LegalDocumentView(kind: legal, onClose: close))
-            }, shareReport: { AnyView(DiagnosticActivityShareView(items: [$0])) })
+            }, shareReport: { AnyView(MonitorActivityShareSheet(items: [$0])) },
+            supportEmail: "support@opencapture.org")
     }
     static var appVersionText: String { MonitorSettingsAppInformation.version() }
 }

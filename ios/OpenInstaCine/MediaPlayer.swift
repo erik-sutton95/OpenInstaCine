@@ -10,61 +10,37 @@ import OpenInstaViewCore
 import SwiftUI
 import UIKit
 
-// MARK: - Shared chrome
-
-struct MediaShareSheet: UIViewControllerRepresentable {
-    let urls: [URL]
-    var onDismiss: () -> Void = {}
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: urls, applicationActivities: nil)
-        controller.completionWithItemsHandler = { _, _, _, _ in
-            onDismiss()
-        }
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
 // MARK: - Photo viewer
 
 /// Source addresses and bounded UIKit decoding; common UI owns the complete photo page.
 struct MediaPhotoViewer: View {
-    let file: MediaFile
-    var admission: MonitorMediaLibraryActionToken? = nil
+    let opening: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>
+    let library: MonitorMediaLibraryModel<LunaMediaLibraryPayload>
+    let session: CameraSession
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var delivery: MediaFile?
 
     var body: some View {
-        let captured = model.session
-        let library = captured.mediaLibrary!
+        let captured = session
         let origin = model.shell.monitor?.id
-        let token = admission ?? library.actionToken
-        Group {
-            if library.isCurrent(token), let record = captured.mediaRecord(for: file) {
-                MonitorOperatorPhotoScreen(library: library, record: record, admission: token,
-                    assist: model.assist, loaders: loaders(captured),
-                    operations: operations(captured),
-                    haptics: .app, coverPresented: delivery != nil, sourceCurrent: { [weak model, weak captured] in
-                        guard let model, let captured else { return false }
-                        return model.session === captured && model.shell.monitor?.id == origin
-                    }, close: { dismiss() }, share: { request in
-                        guard request.isCurrent() else { return }
-                        delivery = request.record.payload.file
-                    })
-            } else { Color.black.ignoresSafeArea() }
-        }
+        MonitorOperatorPhotoScreen(library: library, record: opening.record, admission: opening.admission,
+            assist: model.assist, loaders: loaders(captured),
+            operations: operations(captured),
+            haptics: .app, coverPresented: delivery != nil, sourceCurrent: { [weak model, weak captured] in
+                guard let model, let captured else { return false }
+                return model.session === captured && captured.mediaLibrary === library
+                    && model.shell.monitor?.id == origin
+            }, close: { dismiss() }, share: { request in
+                guard request.isCurrent() else { return }
+                delivery = request.record.payload.file
+            })
         .overlay {
             if let delivery {
                 MediaDeliveryPopupOverlay(files: [delivery]) { self.delivery = nil }
             }
         }
         .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
-        .sheet(item: model.delivery.sharePresentation) { payload in
-            MediaShareSheet(urls: payload.urls) { _ = model.delivery.completeSharePresentation(id: payload.id) }
-        }
         .onDisappear { delivery = nil }
         .onChange(of: library.lifetimeToken) { _, _ in delivery = nil }
     }
@@ -97,40 +73,37 @@ struct MediaPhotoViewer: View {
 // MARK: - Player
 
 struct MediaPlayerView: View {
-    let files: [MediaFile]
-    let first: MediaFile
+    let opening: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var source = LunaPlaybackPresentationSource()
     @State private var owner: MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>?
-    @State private var initial: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>?
+    @State private var sourceAdmission: MonitorPlaybackAdmission?
     @State private var pictureGeometry: MonitorPlaybackPictureGeometry?
-    @State private var deliveryPresentation: MediaDeliveryPresentation?
-    init(files: [MediaFile], startingAt file: MediaFile) { self.files = files; first = file }
+    @State private var deliveryFiles: [MediaFile]?
+    init(opening: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>) { self.opening = opening }
 
     var body: some View {
         Group {
-            if let owner, let initial {
-                player(owner, initial: initial)
+            if let owner {
+                player(owner, initial: opening)
                     .overlay {
-                        if let deliveryPresentation {
-                            MediaDeliveryPopupOverlay(files: deliveryPresentation.files) {
-                                self.deliveryPresentation = nil
+                        if let deliveryFiles {
+                            MediaDeliveryPopupOverlay(files: deliveryFiles) {
+                                self.deliveryFiles = nil
                             }.zIndex(5)
                         }
                     }
                     .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
-                    .sheet(item: model.delivery.sharePresentation) { payload in
-                        MediaShareSheet(urls: payload.urls) { _ = model.delivery.completeSharePresentation(id: payload.id) }
-                    }
-            } else { Color.black }
+            } else { MonitorOperatorMediaUnavailable(close: { dismiss() }) }
         }.onAppear {
-            guard owner == nil, let record = model.session.mediaPlaybackRecord(for: first) else { return }
-            let playlist = (files.contains { $0.id == first.id } ? files : [first])
-                .compactMap { model.session.mediaPlaybackRecord(for: $0) }
-            let current = source.makeOwner(model: model)
-            owner = current
-            initial = .init(record: record, playlist: playlist, admission: current.library.actionToken)
+            guard owner == nil else { return }
+            let captured = model.session, origin = model.shell.monitor?.id
+            sourceAdmission = .init { [weak model, weak captured] in
+                guard let model, let captured else { return false }
+                return model.session === captured && model.shell.monitor?.id == origin
+            }
+            owner = source.makeOwner(model: model)
         }
     }
     private func player(_ owner: MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>,
@@ -140,15 +113,16 @@ struct MediaPlayerView: View {
             assist: model.assist, stores: .app, looks: .app, palette: LiveDesign.self,
             haptics: .app, usage: $model.assistToolUsage,
             cacheOriginal: OperatorPrefs.cacheFullResolution,
-            deliveryPresented: deliveryPresentation != nil || model.delivery.isActive,
+            deliveryPresented: deliveryFiles != nil || model.delivery.isActive,
             operations: source.operations(model: model, owner: owner),
             source: { source.values(record: $0, model: model, owner: owner) },
             nativeAssists: { playback in
                 guard playback.native === source.native else { return nil }
                 return source.assists
             }, readScopes: { model.monitorSamples.displayBundle }, configureDisplay: scopeDisplay,
+            sourceCurrent: { sourceAdmission?.isCurrent() == true },
             close: { dismiss() }, share: { record in
-                deliveryPresentation = MediaDeliveryPresentation(files: [record.payload.file])
+                deliveryFiles = [record.payload.file]
             }, onGeometry: { geometry in
                 guard geometry.item == owner.playback?.token else { return }
                 pictureGeometry = geometry

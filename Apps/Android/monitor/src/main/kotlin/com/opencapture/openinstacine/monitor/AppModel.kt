@@ -1,5 +1,6 @@
 package com.opencapture.openinstacine.monitor
 
+import com.opencapture.opencine.cameracontrols.MonitorLegalPage
 import com.opencapture.opencine.appkit.MonitorOperatorSessionModel
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -67,14 +68,18 @@ import com.opencapture.opencine.cameracontrols.PortraitFeedAspect
 
 class AppModel(
     context: Context,
-) : GamepadHost, GimbalChromeHost, CaptureSheetHost, OperatorSetupModel {
+    val reviewLaunch: com.opencapture.monitorui.ReviewLaunch? = null,
+) : GamepadHost, GimbalChromeHost, CaptureSheetHost, OperatorSetupModel, AutoCloseable {
     private val appContext = context.applicationContext
     init {
         DiagnosticCenter.install(appContext)
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val session = PocketCameraSession(context)
-    private val mediaStorage = com.opencapture.opencine.appkit.MonitorMediaCacheStorage()
+    // Internal so the Debug review seed stages into the app's own storage registry.
+    internal val mediaStorage = com.opencapture.opencine.appkit.MonitorMediaCacheStorage()
+    // Keep the existing on-disk namespace; Settings and gallery share this declared parent.
+    internal val mediaCacheParent = java.io.File(appContext.noBackupFilesDir, "OpenPocketCine/media")
     private val initialMedia = com.opencapture.openinstacine.monitor.media.createLunaMediaLibrary(appContext, session, mediaStorage, null, scope)
     var mediaLibrary by mutableStateOf(initialMedia.first)
         private set
@@ -111,12 +116,11 @@ class AppModel(
     }
 
     val savedCameras: List<SavedCamera> get() = cameras.state.value.saved
-    var showsLaunchSplash by mutableStateOf(true)
     /** Long-press on the tap-focus box locks it: feed taps no longer move focus. */
     var focusBoxLocked by mutableStateOf(false)
     var coreVersion by mutableStateOf<String?>(null)
     /** A legal document over the cameras page (product composition, not a shell cover). */
-    var legal by mutableStateOf<LegalKind?>(null)
+    var legal by mutableStateOf<MonitorLegalPage?>(null)
     internal val operatorSession = MonitorOperatorSessionModel(shell, assist, OperatorPrefs.displayPreferences(appContext), scope)
     override var operatorSettingsTab: MonitorSettingsTab
         get() = operatorSession.settingsTab
@@ -304,6 +308,7 @@ class AppModel(
     fun updateShutterUsesAngle(value: Boolean) {
         shutterUsesAngle = value
         OperatorPrefs.setShutterUsesAngle(appContext, value)
+        session.configureShutterPresentation(value)
     }
 
     fun updateLutSelection(value: String) {
@@ -568,7 +573,7 @@ class AppModel(
         session.disconnect()
     }
 
-    fun close() {
+    override fun close() {
         mediaLibrary.close()
         inspectorPreview.close()
         gimbalGamepad.stopListening()

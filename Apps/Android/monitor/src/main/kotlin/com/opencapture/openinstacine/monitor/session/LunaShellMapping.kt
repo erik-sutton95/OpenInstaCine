@@ -244,18 +244,19 @@ internal object LunaShellMapping {
     fun applyDevice(readout: CameraReadout, status: CameraStatus, pins: LunaControlPins, now: Long): CameraStatus {
         var next = status
         readout.batteryPercent?.let { next = next.copy(batteryPercent = it, charging = readout.charging == true) }
+        // CameraStatus storage fields are MiB, the unit the DJI wire reports and Core reads.
         val storages = readout.storages
         (storages.firstOrNull { it.location == 2 } ?: storages.firstOrNull())?.let {
-            next = next.copy(internalTotalMb = (it.totalBytes / 1_000_000).toInt(), internalFreeMb = (it.freeBytes / 1_000_000).toInt())
+            next = next.copy(internalTotalMb = (it.totalBytes / MIB).toInt(), internalFreeMb = (it.freeBytes / MIB).toInt())
         }
         storages.firstOrNull { it.location == 3 && it.usable }?.let {
-            next = next.copy(sdTotalMb = (it.totalBytes / 1_000_000).toInt(), sdFreeMb = (it.freeBytes / 1_000_000).toInt())
+            next = next.copy(sdTotalMb = (it.totalBytes / MIB).toInt(), sdFreeMb = (it.freeBytes / MIB).toInt())
         }
         if (storages.isNotEmpty()) {
             val usable = storages.filter { it.usable }
             next = next.copy(
-                storageTotalMb = (usable.sumOf { it.totalBytes } / 1_000_000).toInt(),
-                storageFreeMb = (usable.sumOf { it.freeBytes } / 1_000_000).toInt(),
+                storageTotalMb = (usable.sumOf { it.totalBytes } / MIB).toInt(),
+                storageFreeMb = (usable.sumOf { it.freeBytes } / MIB).toInt(),
             )
         }
         readout.shootingMode?.let { mode ->
@@ -312,3 +313,5 @@ internal object LunaShellMapping {
         return next to table
     }
 }
+
+private const val MIB = 1_048_576L

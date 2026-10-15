@@ -4,6 +4,8 @@ import OpenCineAppKitApple
 import Observation
 import AVFoundation
 import Foundation
+import Insta360Apple
+import enum Insta360Protocol.LunaColorMode
 import OpenCineAppKit
 import OpenCineMedia
 import OpenInstaViewCore
@@ -84,12 +86,10 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
             clip = mode
         } else if let cached = shotColor(for: file) {
             clip = cached
-        } else if let gamma = record.payload.source?.metadata?.gammaMode?.lowercased() {
-            if gamma.contains("log") { clip = .iLog }
-            else if gamma.contains("dolby") || gamma.contains("hdr") { clip = .dolbyVision }
-            else if gamma.contains("standard") || gamma.contains("vivid") { clip = .normal }
-            else { clip = nil }
-        } else { clip = nil }
+        } else {
+            clip = LunaColorMode(gammaLabel: record.payload.source?.metadata?.gammaMode)
+                .map(LunaShellMapping.colorMode)
+        }
         guard let color = PlaybackLUTColor.resolve(clip: clip, live: status.colorMode,
             last: LUTPreferences.app.lastMonitorColorMode ?? previousColor) else { return nil }
         return .init(transfer: MonitorTransfer(color), source: .init(color: color, shotColor: clip,

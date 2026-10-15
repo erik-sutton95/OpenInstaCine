@@ -251,19 +251,20 @@ enum LunaShellMapping {
             status.batteryPercent = Int(battery.percent)
             status.charging = battery.isCharging
         }
+        // CameraStatus storage fields are MiB, the unit the DJI wire reports and Core reads.
         let storages = device.storageList.isEmpty ? device.storage.map { [$0] } ?? [] : device.storageList
         if let inner = storages.first(where: { $0.location == 2 }) ?? storages.first {
-            status.internalTotalMb = Int(inner.totalBytes / 1_000_000)
-            status.internalFreeMb = Int(inner.freeBytes / 1_000_000)
+            status.internalTotalMb = Int(inner.totalBytes / 1_048_576)
+            status.internalFreeMb = Int(inner.freeBytes / 1_048_576)
         }
         if let sd = storages.first(where: { $0.location == 3 }), sd.isUsable {
-            status.sdTotalMb = Int(sd.totalBytes / 1_000_000)
-            status.sdFreeMb = Int(sd.freeBytes / 1_000_000)
+            status.sdTotalMb = Int(sd.totalBytes / 1_048_576)
+            status.sdFreeMb = Int(sd.freeBytes / 1_048_576)
         }
         guard !storages.isEmpty else { return }
         let usable = storages.filter(\.isUsable)
-        status.storageTotalMb = Int(usable.reduce(0) { $0 + $1.totalBytes } / 1_000_000)
-        status.storageFreeMb = Int(usable.reduce(0) { $0 + $1.freeBytes } / 1_000_000)
+        status.storageTotalMb = Int(usable.reduce(0) { $0 + $1.totalBytes } / 1_048_576)
+        status.storageFreeMb = Int(usable.reduce(0) { $0 + $1.freeBytes } / 1_048_576)
     }
 
     static func apply(

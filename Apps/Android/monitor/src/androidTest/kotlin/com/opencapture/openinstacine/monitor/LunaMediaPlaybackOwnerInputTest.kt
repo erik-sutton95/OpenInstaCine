@@ -46,7 +46,7 @@ class LunaMediaPlaybackOwnerInputTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     @Before fun installActualBackend() {
         MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
-            val wifi = com.opencapture.openinstacine.monitor.pairing.CameraWifiCredentialStore(context)
+            val wifi = com.opencapture.opencine.platform.CameraWifiCredentialStore(context, com.opencapture.openinstacine.monitor.pairing.cameraWifiStorage)
             com.opencapture.opencine.insta360.luna.LunaBackend(context,
                 savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
         }
@@ -199,7 +199,7 @@ class LunaMediaPlaybackOwnerInputTest {
                 scenario.onActivity { activity ->
                     model = AppModel(context)
                     model!!.mediaLibrary.bind(source)
-                    activity.setContent { OpenPocketCineTheme { MediaLibraryScreen(model!!) { closed += 1 } } }
+                    activity.setContent { OpenInstaCineTheme { MediaLibraryScreen(model!!) { closed += 1 } } }
                     activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 }
                 await("One actual browse opens") { source.opens == 1 && model!!.mediaLibrary.binding != null && model!!.mediaLibrary.state.value.records.size == 2 }

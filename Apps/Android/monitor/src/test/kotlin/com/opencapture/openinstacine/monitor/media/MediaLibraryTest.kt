@@ -101,52 +101,6 @@ class MediaLibraryTest {
     }
 
     @Test
-    fun downloadFinishesAtContentLengthWithoutWaitingForEof() {
-        val body = ByteArray(100) { it.toByte() }
-        val padded = body + ByteArray(40) { 0xFF.toByte() }
-        val out = ByteArrayOutputStream()
-        val written = MediaTransfer.readUntilLength(ByteArrayInputStream(padded), out, expected = 100) { }
-        assertEquals(100L, written)
-        assertEquals(100, out.size())
-        assertEquals(body.toList(), out.toByteArray().toList())
-    }
-
-    @Test
-    fun ramCopyEnforcesMaxBytesForKnownAndUnknownLengths() {
-        data class Case(val name: String, val size: Int, val expected: Long, val rejects: Boolean)
-        val cases =
-            listOf(
-                Case("unknown length past max is rejected", size = 200, expected = 0, rejects = true),
-                Case("unknown length within max succeeds", size = 50, expected = 0, rejects = false),
-                Case("unknown length at exact max succeeds", size = 100, expected = 0, rejects = false),
-                Case("known length above max is rejected without copying", size = 200, expected = 200, rejects = true),
-            )
-        for (case in cases) {
-            val body = ByteArray(case.size) { it.toByte() }
-            val out = ByteArrayOutputStream()
-            val read = {
-                MediaTransfer.readUntilLength(
-                    ByteArrayInputStream(body),
-                    out,
-                    expected = case.expected,
-                    maxBytes = 100,
-                ) { }
-            }
-            if (case.rejects) {
-                assertFailsWith<MediaTransferError.BadResponse>(case.name) { read() }
-                if (case.expected == 0L) {
-                    assertTrue(out.size() <= 100, case.name)
-                } else {
-                    assertEquals(0, out.size(), case.name)
-                }
-            } else {
-                assertEquals(case.size.toLong(), read(), case.name)
-                assertEquals(body.toList(), out.toByteArray().toList(), case.name)
-            }
-        }
-    }
-
-    @Test
     fun downloadIsCompleteOnlyAtExactExpectedLength() {
         assertTrue(MediaCache.isCompleteDownload(100, 100))
         assertFalse(MediaCache.isCompleteDownload(90, 100))

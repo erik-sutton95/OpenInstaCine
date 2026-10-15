@@ -143,14 +143,10 @@ struct MediaLibraryView: View {
                     isCurrent: context.isCurrent, onDuration: context.duration)
             })
             .fullScreenCover(item: $presented) { request in
-                if library.isCurrent(request.admission) {
-                    let record = request.record
-                    let file = record.payload.file
-                    if (record.facts.presentationKind ?? record.asset.kind) == .photo {
-                        MediaPhotoViewer(file: file, admission: request.admission).environment(model)
-                    } else {
-                        MediaPlayerView(files: request.playlist.map { record in record.payload.file }, startingAt: file).environment(model)
-                    }
+                if (request.record.facts.presentationKind ?? request.record.asset.kind) == .photo {
+                    MediaPhotoViewer(opening: request, library: library, session: session).environment(model)
+                } else {
+                    MediaPlayerView(opening: request).environment(model)
                 }
             }
             .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .surface, remoteDisplayName: "Frame.io") }
@@ -159,15 +155,15 @@ struct MediaLibraryView: View {
                     MediaDeliveryPopupOverlay(files: deliveryFiles) { self.deliveryFiles = nil }
                 }
             }
-            // A player or photo cover presents its own share sheet; gate the binding, not the view.
-            .sheet(item: presented == nil ? model.delivery.sharePresentation : .constant(nil)) { payload in
-                MediaShareSheet(urls: payload.urls) { model.delivery.completeSharePresentation(id: payload.id) }
-            }
-            .onChange(of: library.lifetimeToken) { _, _ in presented = nil; deliveryFiles = nil }
+            .onChange(of: library.lifetimeToken) { _, _ in deliveryFiles = nil }
             #if DEBUG && targetEnvironment(simulator)
                 .task(id: library.displayedRecords.first?.asset.id) {
-                    // `ReviewLaunch(screen: .playback)`: open the first staged clip as a tap would.
-                    guard MonitorUIReview.opensFirstClip, let record = library.displayedRecords.first else { return }
+                    // `ReviewLaunch(screen: .playback)`: open the first staged clip as a tap would. A
+                    // connected camera's clip once the camera's own catalog lists it: the cached copy
+                    // shown before it carries no camera facts (deletable), as on a real connection.
+                    guard MonitorUIReview.opensFirstClip, let record = library.displayedRecords.first,
+                        MonitorUIReview.launch?.connected != true || record.asset.deletable == true
+                    else { return }
                     MonitorUIReview.opensFirstClip = false
                     presented = .init(record: record, playlist: library.displayedRecords, admission: library.actionToken)
                 }

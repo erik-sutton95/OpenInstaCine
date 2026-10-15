@@ -67,7 +67,8 @@ struct LiveViewScreen: View {
 
     private var nativeSurface: some View {
         GeometryReader { proxy in
-            let safeArea = LiveMonitorLayout.resolvedSafeArea(proxy.safeAreaInsets, scene: windowGeometry.safeArea)
+            let safeArea = OperatorPanelMetrics.resolvedDeviceSafeArea(
+                proxy.safeAreaInsets, window: windowGeometry.safeArea)
             let size = LiveMonitorLayout.canvasSize(layoutSize: proxy.size, safeArea: safeArea, screenSize: windowGeometry.validSize)
             let layout = LiveMonitorLayout.fieldMonitor(size: size, safeArea: safeArea,
                 sourceAspect: model.session.pictureAspect,
