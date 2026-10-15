@@ -158,14 +158,14 @@ final class LunaShellMappingTests: XCTestCase {
         let t = 1_790_758_270.54
         XCTAssertEqual(
             LunaFrameTimecode.timecode(unixSeconds: t, timeZoneSeconds: 7200),
-            CameraTimecode(hours: 10, minutes: 51, seconds: 10))
+            CameraTimecodeReading(hours: 10, minutes: 51, seconds: 10))
         // Wraps at midnight, west of GMT too.
         XCTAssertEqual(
             LunaFrameTimecode.timecode(unixSeconds: 86_399.99, timeZoneSeconds: 0),
-            CameraTimecode(hours: 23, minutes: 59, seconds: 59))
+            CameraTimecodeReading(hours: 23, minutes: 59, seconds: 59))
         XCTAssertEqual(
             LunaFrameTimecode.timecode(unixSeconds: 3600, timeZoneSeconds: -7200),
-            CameraTimecode(hours: 23, minutes: 0, seconds: 0))
+            CameraTimecodeReading(hours: 23, minutes: 0, seconds: 0))
     }
 
     func testInsta360FilenameDates() {

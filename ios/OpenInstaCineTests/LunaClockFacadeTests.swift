@@ -87,12 +87,12 @@ final class LunaClockFacadeTests: XCTestCase {
     func testFrameTimecodePinsTheEarliestArrivalAndChangesOncePerSecond() throws {
         let session = liveSession(Wire())
         let zoneSeconds = TimeZone.current.secondsFromGMT()
-        func expected(_ milliseconds: UInt64, _ offset: Double) -> CameraTimecode {
+        func expected(_ milliseconds: UInt64, _ offset: Double) -> CameraTimecodeReading {
             LunaFrameTimecode.timecode(
                 unixSeconds: Double(milliseconds) / 1000 + offset, timeZoneSeconds: zoneSeconds)
         }
         // The clock reaches the common session (seconds precision); the vocabulary keeps no text.
-        func clock() -> CameraTimecode? { session.lunaSession?.current.timecode.value }
+        func clock() -> CameraTimecodeReading? { session.lunaSession?.current.timecodeReading.value }
         let first: UInt64 = 100_000
         let before = Date().timeIntervalSince1970
         session.noteFrameClock(first)
