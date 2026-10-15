@@ -87,7 +87,7 @@ final class OperatorFacingCopyTests: XCTestCase {
             MonitorSettingsCopy.gimbalJoystick,
             MonitorSettingsCopy.gamepad,
             MonitorSettingsCopy.keepScreenAwake,
-            SettingsHelpCopy.hdrDisplay,
+            MonitorSettingsCopy.hdrPanel(cameraMode: "Dolby Vision color mode"),
             CaptureLists.nativeIsoHopTitle,
             CaptureLists.nativeIsoHopHelp,
             NDAssist.helpCopy,

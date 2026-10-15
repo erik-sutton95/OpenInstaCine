@@ -878,18 +878,7 @@ struct AppRoot: View {
         }
         #endif
         .environment(\.font, MonitorTheme.font(16))
-        .environment(
-            \.monitorHDRChromeGain,
-            model.hdrDisplayActive ? CGFloat(LiveHDRDisplay.app.presentGain) : 1
-        )
-        .background {
-            HDRChromeHost(display: .app, enabled: model.hdrDisplayActive).allowsHitTesting(false)
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)
-        ) { _ in
-            model.screenCaptured = UIScreen.main.isCaptured
-        }
+        .monitorHDRDisplay(.app, active: model.hdrDisplayActive, screenCaptured: Bindable(model).screenCaptured)
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showReliabilityPrompt) {
             ReliabilityConsentPrompt { enabled in
@@ -922,7 +911,6 @@ struct AppRoot: View {
             }
             model.prepareStartup()
             model.activateWatchRelay()
-            model.screenCaptured = UIScreen.main.isCaptured
         }
         .onChange(of: model.relayClient.status) { _, status in
             model.noteWatcherStatusChanged(status)

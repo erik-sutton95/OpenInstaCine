@@ -15,8 +15,6 @@ import UIKit
 enum SettingsHelpCopy {
     static let currentTransport =
         "Luna uses Bluetooth to pair, then the camera's own 5 GHz Wi-Fi for HEVC. USB-C, hotspot, and HDMI capture are not in this build."
-    static let hdrDisplay =
-        "Outdoor panel brightness, not a grade. WAVE, HISTO, PARADE, VECTOR, zebras and false color still read the decoded camera signal, so judge exposure there, not from how bright the picture looks. Screen recording and AirPlay drop back to a normal SDR picture so the file is not HDR-boosted. This is not the camera's Dolby Vision color mode. Off by default."
     static let themeHelp =
         "Charcoal field-monitor chrome with yellow accents, tuned for low reflection on set."
 }
@@ -61,7 +59,7 @@ struct SettingsRootView: View {
                 haptics: .init(value: Bindable(model).hapticsEnabled, help: MonitorSettingsCopy.gimbalHaptics),
                 keepAwake: .init(value: Bindable(model).keepScreenAwake, help: MonitorSettingsCopy.keepScreenAwake),
                 motion: motion),
-            display: .init(hdr: .init(value: Bindable(model).hdrDisplay, help: SettingsHelpCopy.hdrDisplay),
+            display: .init(hdr: .init(value: Bindable(model).hdrDisplay, help: MonitorSettingsCopy.hdrPanel(cameraMode: "Dolby Vision color mode")),
                 sections: availableDisplay),
             cache: .init(source: cache,
                 cacheOriginals: .init(value: Bindable(model).cacheFullResolution, help: MonitorSettingsCopy.cacheFullResolution),
