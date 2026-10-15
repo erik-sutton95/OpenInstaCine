@@ -85,6 +85,26 @@ import XCTest
         XCTAssertFalse(model.browserHandoff.isHolding)
     }
 
+    /// A2-35/A2-36: Settings composes the typed domains: every tab, the HDR panel and originals
+    /// caching present as values, the common Controls rows and the automatic-reports row.
+    func testSettingsRenderEveryTypedDomain() async throws {
+        let model = AppModel()
+        var rows: [MonitorSettingsTab: [String]] = [:]
+        for tab in MonitorSettingsTab.allCases {
+            model.operatorSession.settingsTab = tab
+            let fixture = try Fixture(SettingsRootView(onClose: {}).environment(model))
+            let rendered = try await fixture.settingsTitles()
+            fixture.close()
+            XCTAssertEqual(rendered.tabs, MonitorSettingsTab.allCases.map { "monitor.settings.tab.\($0.id)" },
+                "Every domain is present, in the shared order")
+            rows[tab] = rendered.rows
+        }
+        XCTAssertTrue(["Record confirmation", "Haptics", "Keep screen awake"].allSatisfy { rows[.controls]?.contains($0) == true })
+        XCTAssertTrue(rows[.display]?.contains("HDR display") == true, "\(rows[.display] ?? [])")
+        XCTAssertTrue(rows[.storage]?.contains("Full Resolution Caching") == true, "\(rows[.storage] ?? [])")
+        XCTAssertTrue(rows[.system]?.contains("Automatic error reports") == true, "\(rows[.system] ?? [])")
+    }
+
     func testAMissingBundledPageSaysSoInsteadOfShowingAnEmptyPage() async throws {
         let documents = MonitorLegalDocuments(wordmark: "SIMULATED", privacy: .unavailable,
             terms: .unavailable, licenses: .unavailable, notice: .unavailable)
@@ -146,6 +166,28 @@ import XCTest
     }
 
     struct MissingElement: Error { let identifier: String }
+
+    /// The settings tab identifiers and the card and row titles on screen, in order, once the
+    /// page stops changing.
+    func settingsTitles() async throws -> (tabs: [String], rows: [String]) {
+        var tabs: [String] = [], rows: [String] = [], settled = 0
+        for _ in 0..<200 {
+            host.view.layoutIfNeeded()
+            var nextTabs: [String] = [], nextRows: [String] = []
+            for element in HostedAccessibility.elements(in: host.view) {
+                guard let id = HostedAccessibility.identifier(element) else { continue }
+                if id.hasPrefix("monitor.settings.tab."), !nextTabs.contains(id) { nextTabs.append(id) }
+                if id == "monitor.settings.row.title" || id == "monitor.settings.card.title" {
+                    nextRows.append(element.accessibilityLabel ?? "")
+                }
+            }
+            settled = !nextTabs.isEmpty && nextTabs == tabs && nextRows == rows ? settled + 1 : 0
+            tabs = nextTabs; rows = nextRows
+            if settled >= 3 { return (tabs, rows) }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        throw MissingElement(identifier: "settled settings page")
+    }
 
     func close() {
         window.isHidden = true
