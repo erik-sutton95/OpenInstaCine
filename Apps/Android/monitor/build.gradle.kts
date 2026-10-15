@@ -66,6 +66,8 @@ android {
     }
 
     sourceSets {
+        getByName("androidTest").kotlin.srcDir(
+            gradle.includedBuild("opencine").projectDir.resolve("appkit-native/src/cacheOwnerProof/kotlin"))
         getByName("main").jniLibs.directories.apply {
             clear()
             add(swiftCoreJniLibsRoot.get().asFile.absolutePath)
@@ -191,6 +193,7 @@ dependencies {
     implementation(libs.opencine.appkit)
     // Capture sheets, live chrome and gimbal views over the camera vocabulary (camera-controls).
     implementation("com.opencapture.opencine:camera-controls:0.1.0-SNAPSHOT")
+    implementation("com.opencapture.opencine:appkit-native:0.1.0-SNAPSHOT")
     api(libs.opencine.monitor.ui)
     implementation("com.opencapture.opencine:media:0.1.0-SNAPSHOT")
     implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT")
