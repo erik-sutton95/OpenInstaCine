@@ -151,6 +151,7 @@ targets:
     platform: iOS
     sources:
       - OpenInstaCineTests
+      - ../../OpenCine/Tests/MonitorUITests/MonitorPortraitHeaderClearanceTests.swift
     dependencies:
       - target: OpenInstaCine
       - package: OpenInstaViewCore

@@ -165,6 +165,7 @@
             status.shootingMode = 1
             status.videoResolution = VideoResolution(rawValue: 0x10)
             status.fps = 25
+            status.videoFormat = VideoFormat(resolution: .p4K, frameRate: .fps25)
             // A real body lists several rates, so reviews show the frame-rate drum
             // with neighbours on both sides of the current 25p.
             status.availableVideoFormats = [
