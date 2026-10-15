@@ -81,8 +81,8 @@ internal fun operatorSetupApp(model: AppModel) = OperatorSetupApp(
     ),
     legal = InstaLegalDocuments,
     lutPicker = { onClose -> LUTPicker(model = model, onClose = onClose) },
-    // The gallery's own library: Settings counts and clears what the gallery writes.
-    cacheSource = { monitorSettingsCacheSource(model.mediaLibrary) },
+    // Every camera bucket, retaining the current gallery's operation fencing and revision.
+    cacheSource = { monitorSettingsCacheSource(model.mediaLibrary, model.mediaStorage, model.mediaCacheParent) },
 )
 
 @Composable
