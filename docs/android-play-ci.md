@@ -20,7 +20,7 @@ release.
 | Signed AAB | `./gradlew bundleRelease -PversionCode=…` with `ANDROID_KEYSTORE_*` |
 | `versionName` | `openinstacine.versionName` in [`Apps/Android/gradle.properties`](../Apps/Android/gradle.properties) (equal to iOS) |
 | `versionCode` | `ANDROID_VERSION_CODE_BASE` + `github.run_number` |
-| Sentry DSN / symbols | `SENTRY_DSN_ANDROID` -> `:monitor` `BuildConfig`; `tools/sentry-upload.py --platform android` when `SENTRY_UPLOAD_ENABLED=true` |
+| Sentry DSN / symbols | `SENTRY_DSN_ANDROID` -> `:monitor` `BuildConfig`; OpenCine's `scripts/sentry/sentry-upload.py --platform android` when `SENTRY_UPLOAD_ENABLED=true` |
 | Tester notes | [`Apps/Android/Play/WhatToTest.en-US.txt`](../Apps/Android/Play/WhatToTest.en-US.txt), Play "what's new" (500 characters) [`Apps/Android/Play/whatsnew/whatsnew-en-US`](../Apps/Android/Play/whatsnew/whatsnew-en-US) |
 | Upload | `r0adkll/upload-google-play`, package `com.opencapture.openinstacine`, track `Closed testing - Beta` |
 

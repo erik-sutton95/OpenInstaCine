@@ -9,7 +9,7 @@ val resolvedVersionName: String = property("openinstacine.versionName").toString
 android {
  namespace = "com.opencapture.openinstacine"
  compileSdk = 36
- defaultConfig { applicationId = "com.opencapture.openinstacine"; minSdk = 29; targetSdk = 36; versionCode = resolvedVersionCode; versionName = resolvedVersionName; manifestPlaceholders["sentryProguardUuid"] = System.getenv("SENTRY_PROGUARD_UUID").orEmpty(); ndk { abiFilters += "arm64-v8a" } }
+ defaultConfig { testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"; applicationId = "com.opencapture.openinstacine"; minSdk = 29; targetSdk = 36; versionCode = resolvedVersionCode; versionName = resolvedVersionName; manifestPlaceholders["sentryProguardUuid"] = System.getenv("SENTRY_PROGUARD_UUID").orEmpty(); ndk { abiFilters += "arm64-v8a" } }
 
  // Play and sideload builds sign with the keystore named in the environment
  // (docs/android-play-ci.md, docs/RELEASE.md). Unset keeps debug and an unsigned release possible.
@@ -47,4 +47,17 @@ android {
  kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 }
 afterEvaluate { tasks.matching { it.name.startsWith("check") && it.name.endsWith("AarMetadata") }.configureEach { enabled = false } }
-dependencies { implementation(project(":monitor")); implementation(libs.opencine.insta360.luna); implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT"); implementation(libs.kotlinx.coroutines.android) }
+
+// ML Kit instantiates its ComponentRegistrar classes reflectively; a shrunk bundle without their
+// constructors crashes face detection (OPENINSTACINE-ANDROID-1). Every bundleRelease checks the dex.
+val releaseBundle = layout.buildDirectory.file("outputs/bundle/release/app-release.aab")
+val verifyReleaseComponentRegistrars = tasks.register<Exec>("verifyReleaseComponentRegistrars") {
+ group = "verification"
+ description = "Fail when R8 strips a ComponentRegistrar constructor from the release bundle."
+ dependsOn("bundleRelease")
+ inputs.file(releaseBundle)
+ environment("ANDROID_HOME", androidComponents.sdkComponents.sdkDirectory.get().asFile.absolutePath)
+ commandLine("bash", rootProject.projectDir.resolve("../../../OpenCine/scripts/android-verify-component-registrars.sh").absolutePath, releaseBundle.get().asFile.absolutePath)
+}
+tasks.matching { it.name == "bundleRelease" }.configureEach { finalizedBy(verifyReleaseComponentRegistrars) }
+dependencies { androidTestImplementation("com.opencapture.opencine:app-ui-testing:0.1.0-SNAPSHOT"); implementation(project(":monitor")); implementation(libs.opencine.insta360.luna); implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT"); implementation("com.opencapture.opencine:platform:0.1.0-SNAPSHOT"); implementation(libs.kotlinx.coroutines.android) }

@@ -34,15 +34,9 @@ enum MediaOperatorCopy {
         storage: MonitorMediaCacheStorage? = nil, cacheRoot: URL? = nil) {
         self.fileManager = fileManager; self.storage = storage ?? MonitorMediaCacheStorage(fileManager: fileManager)
         nativeIO = LunaNativeMediaIO(configuration: httpConfiguration); rootOverride = cacheRoot
-        #if DEBUG && targetEnvironment(simulator)
-            MonitorMediaReview.prepareOwnedIndex()
-        #endif
     }
     func cacheRoot(cameraID: String) -> URL {
         if let rootOverride { return rootOverride.appendingPathComponent(cameraID, isDirectory: true) }
-        #if DEBUG && targetEnvironment(simulator)
-            if MonitorMediaReview.isActive { return MonitorMediaReview.cacheRoot }
-        #endif
         return fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("OpenInstaCine/media/\(cameraID)", isDirectory: true)
     }
@@ -189,12 +183,9 @@ extension CameraSession {
     var mediaNote: String? { playbackMediaNote ?? mediaLibrary.note }
     var isBrowsingMedia: Bool { mediaLibrary.browsing }
     var mediaCacheRevision: UInt64 { mediaLibrary.cacheRevision }
-    var mediaDownloadProgress: [String: Double] {
-        var values: [String: Double] = [:]
-        for record in mediaLibrary.records {
-            if let value = mediaLibrary.progress[record.asset.id] { values[record.payload.file.path] = value }
-        }
-        return values
+    /// One file's transfer progress, read from the library (the gallery reads it per record).
+    func mediaDownloadProgress(for file: MediaFile) -> Double? {
+        mediaRecord(for: file).flatMap { mediaLibrary.progress[$0.asset.id] }
     }
     func mediaRecord(for file: MediaFile) -> MonitorMediaRecord<LunaMediaLibraryPayload>? {
         var content = file; content.isStarred = false

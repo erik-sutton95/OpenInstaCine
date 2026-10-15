@@ -10,9 +10,6 @@ options:
   postGenCommand: sh sync-package-resolved.sh
 
 packages:
-  Sentry:
-    url: https://github.com/getsentry/sentry-cocoa
-    exactVersion: 9.24.0
   OpenInstaViewCore:
     path: ..
   # The OpenCine platform package: common camera contracts (OpenCineCore), portable media math
@@ -23,6 +20,9 @@ packages:
   # published. The app and tests call OpenCineMedia directly, so they link the product themselves.
   OpenCine:
     path: ../../OpenCine
+  # OpenCine's optional reporting adapter (sentry-cocoa), its own package in the same checkout.
+  OpenCineSentryApple:
+    path: ../../OpenCine/Packages/OpenCineSentryApple
 
 targets:
   OpenInstaCine:
@@ -32,11 +32,12 @@ targets:
       - OpenInstaCine
     postBuildScripts:
       - name: Stamp source revision
-        script: bash "${SRCROOT}/../tools/stamp-source-revision.sh"
+        script: bash "${SRCROOT}/../../OpenCine/scripts/sentry/stamp-source-revision.sh"
+        # Ordered after Info.plist processing, which otherwise may rerun after it and drop the stamp.
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
         basedOnDependencyAnalysis: false
     dependencies:
-      - package: Sentry
-        product: Sentry
       - package: OpenInstaViewCore
         product: OpenInstaViewCore
       - package: OpenCine
@@ -57,6 +58,9 @@ targets:
         product: OpenCineWatch
       - package: OpenCine
         product: OpenCineFrameIO
+      # The shared Frame.io account, sign-in and uploads; Insta keeps its namespaces.
+      - package: OpenCine
+        product: OpenCineFrameIOApple
       - package: OpenCine
         product: MonitorUI
       - package: OpenCine
@@ -71,6 +75,10 @@ targets:
       # pair screens over the Luna integration.
       - package: OpenCine
         product: OpenCineAppKit
+      # The shared reporting adapter: the app shell's reporting sink on the Sentry SDK
+      # (sentry-cocoa comes with it, at the version OpenCine pins).
+      - package: OpenCineSentryApple
+        product: OpenCineSentryApple
       # Apple media runtime (OpenCine plan MEDIA-02): the VideoToolbox decoder runtime under
       # HevcDecoder and decoded-frame leases. iOS app only; the watch never decodes live video.
       - package: OpenCine
@@ -220,13 +228,18 @@ targets:
       - OpenInstaCineUITests
     dependencies:
       - target: OpenInstaCine
-      # The UI tests every app shares (OpenCine OpenCineAppUITesting).
+      # The UI tests every app shares (OpenCine OpenCineAppUITesting) and the review contract
+      # and capabilities its conformance profile names (MonitorPresentation).
       - package: OpenCine
         product: OpenCineAppUITesting
+      - package: OpenCine
+        product: MonitorPresentation
     settings:
       base:
         SWIFT_VERSION: "5.0"
         GENERATE_INFOPLIST_FILE: YES
+        # Declares the conformance profile before any test runs (ConformanceApp.swift).
+        INFOPLIST_KEY_NSPrincipalClass: $(PRODUCT_MODULE_NAME).ConformanceApp
         PRODUCT_BUNDLE_IDENTIFIER: com.opencapture.openinstacine.uitests
         TEST_TARGET_NAME: OpenInstaCine
         DEVELOPMENT_TEAM: "4V4EGQ6LZA"

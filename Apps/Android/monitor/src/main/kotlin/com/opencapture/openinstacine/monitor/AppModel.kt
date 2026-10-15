@@ -1,11 +1,11 @@
 package com.opencapture.openinstacine.monitor
 
+import com.opencapture.opencine.cameracontrols.MonitorLegalPage
 import com.opencapture.opencine.appkit.MonitorOperatorSessionModel
 import androidx.compose.runtime.Composable
 import com.opencapture.opencine.appkit.MonitorCaptureField
 import com.opencapture.opencine.appkit.MonitorCapturePreferences
 import com.opencapture.opencine.appkit.captureField
-import com.opencapture.opencine.appkit.readPhoneBatteryReadout
 import com.opencapture.opencine.cameracontrols.CaptureRefresh
 import com.opencapture.opencine.cameracontrols.CaptureSheetHost
 import com.opencapture.opencine.cameracontrols.CaptureAudioService
@@ -19,9 +19,6 @@ import com.opencapture.opencine.cameracontrols.LiveSheet
 import com.opencapture.opencine.motion.GimbalWaypointSlot
 import com.opencapture.opencine.runtime.MonitorHDRDisplay
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.BatteryManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,14 +67,16 @@ import com.opencapture.opencine.cameracontrols.PortraitFeedAspect
 
 class AppModel(
     context: Context,
-) : GamepadHost, GimbalChromeHost, CaptureSheetHost, OperatorSetupModel {
+    val reviewLaunch: com.opencapture.monitorui.ReviewLaunch? = null,
+) : GamepadHost, GimbalChromeHost, CaptureSheetHost, OperatorSetupModel, AutoCloseable {
     private val appContext = context.applicationContext
     init {
         DiagnosticCenter.install(appContext)
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val session = PocketCameraSession(context)
-    private val mediaStorage = com.opencapture.opencine.appkit.MonitorMediaCacheStorage()
+    // Internal so the Debug review seed stages into the app's own storage registry.
+    internal val mediaStorage = com.opencapture.opencine.appkit.MonitorMediaCacheStorage()
     private val initialMedia = com.opencapture.openinstacine.monitor.media.createLunaMediaLibrary(appContext, session, mediaStorage, null, scope)
     var mediaLibrary by mutableStateOf(initialMedia.first)
         private set
@@ -114,12 +113,11 @@ class AppModel(
     }
 
     val savedCameras: List<SavedCamera> get() = cameras.state.value.saved
-    var showsLaunchSplash by mutableStateOf(true)
     /** Long-press on the tap-focus box locks it: feed taps no longer move focus. */
     var focusBoxLocked by mutableStateOf(false)
     var coreVersion by mutableStateOf<String?>(null)
     /** A legal document over the cameras page (product composition, not a shell cover). */
-    var legal by mutableStateOf<LegalKind?>(null)
+    var legal by mutableStateOf<MonitorLegalPage?>(null)
     internal val operatorSession = MonitorOperatorSessionModel(shell, assist, OperatorPrefs.displayPreferences(appContext), scope)
     override var operatorSettingsTab: MonitorSettingsTab
         get() = operatorSession.settingsTab
@@ -197,14 +195,6 @@ class AppModel(
         private set
     override var lutSelection by mutableStateOf(OperatorPrefs.lutSelection(appContext))
         private set
-    var assistClean: Boolean
-        get() = assist.clean
-        set(value) { assist.clean = value }
-    var phoneBatteryPercent by mutableIntStateOf(-1)
-        private set
-    var phoneCharging by mutableStateOf(false)
-        private set
-    var uiLocked by mutableStateOf(false)
     override val gimbalGamepad = GimbalGamepadDriver(OperatorPrefs::gimbalGamepadStick)
     override var gamepadConnected by mutableStateOf(false)
 
@@ -221,7 +211,7 @@ class AppModel(
     }
 
     fun endChromeEditing() = operatorSession.finishEditing()
-    fun setDisplayMode(clean: Boolean) { assist.clean = clean }
+    fun setDisplayMode(clean: Boolean) { operatorSession.select(if (clean) PocketDispMode.CLEAN else PocketDispMode.LIVE) }
 
     fun noteBecameLive() {
         operatorSession.synchronize(shell.state.value.monitor?.id)
@@ -315,6 +305,7 @@ class AppModel(
     fun updateShutterUsesAngle(value: Boolean) {
         shutterUsesAngle = value
         OperatorPrefs.setShutterUsesAngle(appContext, value)
+        session.configureShutterPresentation(value)
     }
 
     fun updateLutSelection(value: String) {
@@ -325,24 +316,6 @@ class AppModel(
     override fun updateCleanViewPinnedTools(value: Set<String>) {
         cleanViewPinnedTools = value
         OperatorPrefs.setCleanViewPinnedTools(appContext, value)
-    }
-
-    fun toggleUiLocked() {
-        uiLocked = !uiLocked
-    }
-
-    fun refreshPhoneBattery() {
-        val readout =
-            readPhoneBatteryReadout(
-                appContext.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)),
-                appContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager,
-            )
-        applyPhoneBattery(readout.percent ?: -1, readout.externalPower == true)
-    }
-
-    fun applyPhoneBattery(percent: Int, charging: Boolean) {
-        phoneBatteryPercent = percent
-        phoneCharging = charging
     }
 
     fun pressRecord() = session.pressRecord()
@@ -422,7 +395,7 @@ class AppModel(
     fun tapFocus(x: Float, y: Float) = session.tapFocus(x, y)
 
     fun updateGimbalStick(x: Float, y: Float) {
-        if (uiLocked) return
+        if (operatorSession.locked) return
         session.updateGimbalStick(
             x,
             y,
@@ -433,7 +406,7 @@ class AppModel(
     }
 
     override fun updateGimbalPadStick(x: Float, y: Float) {
-        if (uiLocked) return
+        if (operatorSession.locked) return
         session.updateGimbalStick(x, y, gimbalStickSensitivity, assist.mirrorsHorizontally)
     }
 
@@ -445,6 +418,7 @@ class AppModel(
     internal val operatorCaptureSource by lazy { makeOperatorCaptureSource() }
 
     // CaptureSheetHost (camera-controls): the capture sheets read these values and commit through one typed entry.
+    override val captureRouting = com.opencapture.opencine.cameracontrols.CaptureSheetRouting()
     override val camera get() = session.connectedCamera?.model
     override val audioService: CaptureAudioService? get() = null
     override fun captureField(sheet: LiveSheet, expoMode: Int): MonitorCaptureField? =
@@ -507,7 +481,7 @@ class AppModel(
 
     override fun canDriveGimbalPad(): Boolean =
         isLive &&
-            !uiLocked &&
+            !operatorSession.locked &&
             shell.state.value.cover == null &&
             !isEditingChrome &&
             !session.browsingMedia
@@ -555,7 +529,7 @@ class AppModel(
         session.disconnect()
     }
 
-    fun close() {
+    override fun close() {
         mediaLibrary.close()
         inspectorPreview.close()
         gimbalGamepad.stopListening()

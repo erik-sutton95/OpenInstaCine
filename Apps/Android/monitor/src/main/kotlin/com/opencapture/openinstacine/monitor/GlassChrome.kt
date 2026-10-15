@@ -7,12 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToInt
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.opencapture.monitorui.MonitorMaterial
 import com.opencapture.monitorui.monitorMaterial
@@ -59,15 +55,5 @@ fun Modifier.panelGlass(shape: Shape = ChromeShape): Modifier =
 fun Modifier.glass(shape: Shape = ChromeShape): Modifier = liveChromeGlass(shape)
 
 @Composable
-fun Modifier.overlayGlass(shape: Shape = ChromeShape): Modifier = pickerPanelGlass(shape)
-
-@Composable
 fun Modifier.liveChromeGlass(shape: Shape = ChromeShape): Modifier =
     monitorMaterial(MonitorMaterial.Compact, shape)
-
-@Composable
-fun Modifier.pickerPanelGlass(shape: Shape = ChromeShape): Modifier =
-    monitorMaterial(MonitorMaterial.Expanded, shape)
-
-fun Modifier.chipGlass(shape: Shape = ChromeShape): Modifier =
-    background(LiveDesign.tile, shape)

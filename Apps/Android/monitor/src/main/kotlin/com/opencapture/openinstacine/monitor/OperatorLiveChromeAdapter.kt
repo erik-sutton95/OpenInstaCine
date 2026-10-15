@@ -5,23 +5,25 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.opencapture.opencine.cameracontrols.MonitorOperatorLiveChromeSource
 import com.opencapture.opencine.cameracontrols.MonitorOperatorStickActions
-import com.opencapture.opencine.cameracontrols.MonitorOperatorZoomPresentation
+import com.opencapture.opencine.cameracontrols.operatorZoom
+import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.opencine.vocabulary.CamFov
 import com.opencapture.opencine.vocabulary.CameraStatus
 
 /** Native optical reports and SDK movement ports; chrome and picker policy live in CameraControls. */
 @Composable
-internal fun rememberOperatorChromeSource(model: AppModel, status: CameraStatus): MonitorOperatorLiveChromeSource<AppModel> {
+internal fun rememberOperatorChromeSource(model: AppModel, status: CameraStatus,
+    capabilities: MonitorLayoutCapabilities): MonitorOperatorLiveChromeSource<AppModel> {
     val zoomReadout by model.session.zoomReadout.collectAsState()
     val dial by model.session.zoomDialReadout.collectAsState()
     val pinching by model.session.zoomPinching.collectAsState()
-    val zoom = MonitorOperatorZoomPresentation(zoomReadout, dial, pinching,
+    val zoom = model.session.control.operatorZoom(zoomReadout, dial, pinching,
         CamFov.zoomNeedsColorHopWhileRecording(model.session.zoomNextJump(), status.colorMode, status.isRecording),
         model.session.zoomMax(), if (3.0 in model.session.zoomStops()) listOf(1.0, 3.0) else listOf(1.0),
-        model.monitorZoomStops(), model.session::zoomCycleFrom, { model.session.setZoom(it); Unit },
-        model.session::updateZoomPinch, model.session::endZoomPinch)
+        model.monitorZoomStops(), model.session::zoomCycleFrom, model.session::updateZoomPinch, model.session::endZoomPinch)
     return MonitorOperatorLiveChromeSource(model, model.shell, model.operatorSession,
         model.operatorCaptureSource, OperatorPrefs, model.portraitFeedAspect, model::updatePortraitFeedAspect,
         zoom, MonitorOperatorStickActions(model::updateGimbalStick, model::endGimbalStick,
-            model.session::performGimbalDoubleTap, model.session::flipGimbal))
+            model.session::performGimbalDoubleTap, model.session::flipGimbal),
+        status = status, capabilities = capabilities)
 }

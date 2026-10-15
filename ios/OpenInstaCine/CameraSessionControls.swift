@@ -25,6 +25,17 @@ struct LunaQueuedZoomWrite {
     let admission: LunaCommandAdmission?
 }
 
+/// A constructed shutter operation. A missing operation must never acknowledge a Watch press.
+enum ShutterPress {
+    case record
+    case photo(Task<Void, Never>)
+
+    var photoTask: Task<Void, Never>? {
+        if case .photo(let task) = self { return task }
+        return nil
+    }
+}
+
 extension CameraSession {
     // MARK: - Capabilities
 
@@ -46,6 +57,9 @@ extension CameraSession {
     /// The connection's Luna session: every request goes through it, and its admission is this
     /// facade's control link (it flips with the backend's handshake). Tests set the override.
     var lunaSession: LunaCameraSession? { lunaSessionOverride ?? backend.session }
+    func configureShutterPresentation(usesAngle: Bool) {
+        lunaSession?.configureShutter(presentation: usesAngle ? .emulatedAngle : .cameraValue)
+    }
     var hasControlLink: Bool { lunaSession?.admitsControl == true }
     var bodyFamily: CameraBodyFamily { .other }
     var colorModes: [ColorMode] { LunaShellMapping.colorModes }
@@ -179,16 +193,22 @@ extension CameraSession {
     /// Rec lamp: start/stop video, or take a still in Photo. Record never lies: the
     /// lamp holds `controlBusy` until the Core session reports the outcome.
     func pressShutter() {
-        pressShutter(suppliedAdmission: nil)
+        _ = makeShutterPress(admission: nil, record: { toggleRecording(); return true })
     }
 
     @discardableResult
     func pressShutter(admission: LunaCommandAdmission) -> Task<Void, Never>? {
-        pressShutter(suppliedAdmission: admission)
+        makeShutterPress(admission: admission, record: {
+            toggleRecording(admission: admission)
+            return true
+        })?.photoTask
     }
 
-    @discardableResult
-    private func pressShutter(suppliedAdmission admission: LunaCommandAdmission?) -> Task<Void, Never>? {
+    func shutterPress(admission: LunaCommandAdmission?) -> ShutterPress? {
+        makeShutterPress(admission: admission, record: { dispatchWatchRecording(admission: admission) })
+    }
+
+    private func makeShutterPress(admission: LunaCommandAdmission?, record: () -> Bool) -> ShutterPress? {
         let target: LunaCameraSession?
         if let admission {
             guard let captured = lunaSession, admission.admits(captured.commandOwner) else { return nil }
@@ -198,14 +218,12 @@ extension CameraSession {
         let photoEpoch = target?.current.epoch
         guard canSendControl else { return nil }
         guard currentShootingMode?.isPhoto == true else {
-            if let admission { toggleRecording(admission: admission) }
-            else { toggleRecording() }
-            return nil
+            return record() ? .record : nil
         }
         controlBusy = true
         pins.photoInFlight = true
         controlNote = "Photo"
-        return sendControl(
+        guard let task = sendControl(
             "Photo", { try LunaProtocol.takePicture(mode: .normal) }, through: target,
             suppliedAdmission: admission, refresh: false,
             onFail: { [weak self] in
@@ -230,7 +248,8 @@ extension CameraSession {
                 else { return }
                 self.pins.photoInFlight = false
                 self.controlBusy = false
-            })
+            }) else { return nil }
+        return .photo(task)
     }
 
     func setShootingMode(_ mode: ShootingMode) {
@@ -415,7 +434,8 @@ extension CameraSession {
             controlNote = "\(format.chipLabel) is not available in this mode."
             return
         }
-        let previous = status.videoFormat
+        let previousStatus = status
+        let previous = previousStatus.videoFormat
         pins.format = CameraValuePin(format, now: pinNow, settle: 3)
         var next = status
         next.videoFormat = format
@@ -432,12 +452,17 @@ extension CameraSession {
                 self.status.videoResolution = previous?.resolution
                 self.status.fps = previous?.frameRate.fps ?? self.status.fps
             })
-        // Angle mode is ours: keep the chosen degrees and rewrite 1/N for the new fps.
-        if OperatorPrefs.shutterUsesAngle, previous?.frameRate != frameRate, status.expoMode != .auto {
-            let denom = ShutterAngle.denom(
-                degrees: OperatorPrefs.shutterAngleDegrees, fps: frameRate.fps,
-                available: status.availableShutterDenoms)
-            if denom != status.shutterDenom { setShutterDenom(denom) }
+        // The shared rematch policy requires known manual video exposure and a reported cadence.
+        if let rematch = ShutterAngle.formatRematch(
+            degrees: OperatorPrefs.shutterAngleDegrees,
+            usesAngle: OperatorPrefs.shutterUsesAngle,
+            manual: previousStatus.expoMode == .manual,
+            isPhoto: currentShootingMode?.isPhoto != false,
+            previousFps: previousStatus.fps, nextFps: frameRate.fps,
+            available: previousStatus.availableShutterDenoms),
+            rematch.denom != previousStatus.shutterDenom
+        {
+            setShutterDenom(rematch.denom)
         }
     }
 
@@ -1408,7 +1433,7 @@ extension CameraSession {
         guard
             let timecode = frameTimecode.note(
                 frameClock: milliseconds, arrival: Date().timeIntervalSince1970,
-                timeZoneSeconds: TimeZone.current.secondsFromGMT(), fps: status.fps)
+                timeZoneSeconds: TimeZone.current.secondsFromGMT())
         else { return }
         status.timecode = LunaShellMapping.timecodeText(timecode)
         (coreSession as? LunaCameraSession)?.ingest(timecode: timecode)

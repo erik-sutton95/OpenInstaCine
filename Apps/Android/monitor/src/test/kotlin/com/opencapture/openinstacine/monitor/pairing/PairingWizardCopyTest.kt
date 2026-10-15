@@ -28,8 +28,12 @@ class PairingWizardCopyTest {
             ),
             wizard.bodies,
         )
-        assertEquals(listOf("Look for an Approve / pairing prompt", "Tap it on the camera screen"), wizard.approveLines)
-        assertEquals(listOf("Leave the camera on. It brings up its own Wi-Fi", "On 5.8 GHz that can take about a minute; we keep trying"), wizard.joinLines)
+        // A4-44: the Luna's own lines (iOS CamerasExperience), not the Pocket's Approve prompt and 5.8 GHz wait.
+        assertEquals(listOf("Look for the connection request", "Tap Allow on the camera screen"), wizard.approveLines)
+        assertEquals(
+            listOf("Leave the camera on. It brings up its own 5 GHz Wi-Fi", "Close the Insta360 app on other phones so the camera is free"),
+            wizard.joinLines,
+        )
         assertEquals(null, wizard.blocker)
     }
 

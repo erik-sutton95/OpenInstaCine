@@ -1,6 +1,7 @@
 import Insta360Apple
 import MonitorUI
 import OpenCineAppKit
+import OpenCineAppKitApple
 import OpenCineCameraControls
 import OpenCineCore
 import OpenInstaViewCore
@@ -49,6 +50,9 @@ struct LinkExperience: View {
         } page: { cover in
             AppPanelHost(cover: cover)
         }
+        .overlay { MonitorOperatorDeliveryChrome(model: model.delivery.lifetime, scope: .root, remoteDisplayName: "Frame.io") }
+        // The app's one share sheet, above any gallery, player or photo cover (A2-52).
+        .monitorDeliverySharePresenter(model.delivery.lifetime)
         .foregroundStyle(model.isLive ? AnyShapeStyle(.primary) : AnyShapeStyle(StartupColors.ink))
         .onAppear { orientation.start() }
         .onDisappear { orientation.stop() }

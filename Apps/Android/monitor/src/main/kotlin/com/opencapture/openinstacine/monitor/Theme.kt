@@ -118,7 +118,7 @@ private val OpcTypography =
     )
 
 @Composable
-fun OpenPocketCineTheme(content: @Composable () -> Unit) {
+fun OpenInstaCineTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme =
             darkColorScheme(

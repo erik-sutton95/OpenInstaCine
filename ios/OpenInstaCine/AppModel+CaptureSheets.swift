@@ -58,18 +58,21 @@ extension AppModel: CaptureSheetHost {
     var autoExposureLocked: Bool { session.autoExposureLock != nil }
     var autoWhiteBalanceLocked: Bool { session.autoWhiteBalanceLock != nil }
     var canLockAutoWhiteBalance: Bool { session.canLockAutoWhiteBalance }
+    var captureRouting: CaptureSheetRouting { .init() }
     var captureCapabilities: CaptureSheetCapabilities {
         CaptureSheetCapabilities(
             focusMode: session.supportsFocusMode, aperture: session.supportsAperture,
-            nativeIsoHop: session.supportsNativeIsoHop, isoLimit: session.supportsIsoLimit,
-            commonExposureCompensation: false, commonFocusMode: false,
+            nativeISO: .init(hop: session.supportsNativeIsoHop, ceiling: session.supportsIsoLimit),
             audio: audioService != nil,
             faceMetering: session.supportsFaceMetering)
     }
     var focusOptions: [FocusOption] { CaptureLists.focusOptions }
     var shutterUsesAngle: Bool {
         get { OperatorPrefs.shutterUsesAngle }
-        set { OperatorPrefs.shutterUsesAngle = newValue }
+        set {
+            OperatorPrefs.shutterUsesAngle = newValue
+            session.configureShutterPresentation(usesAngle: newValue)
+        }
     }
     var shutterAngleDegrees: Double { OperatorPrefs.shutterAngleDegrees }
     var coverOpen: Bool { shell.cover != nil }
@@ -143,6 +146,7 @@ extension AppModel: CaptureSheetHost {
 
     func captureDrumDidCommit(_ value: SettingValue) {
         if value.key == .whiteBalance { session.autoWhiteBalanceLock = nil }
+        if case .shutter(.angle(let degrees)) = value { OperatorPrefs.shutterAngleDegrees = degrees }
     }
     func refreshIsoLimit() async { await session.refreshIsoLimit() }
 }

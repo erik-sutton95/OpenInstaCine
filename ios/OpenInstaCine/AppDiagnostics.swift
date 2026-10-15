@@ -1,14 +1,12 @@
 import Foundation
 import OpenCineAppKit
+import OpenCineSentryApple
 import OpenInstaViewCore
 import UIKit
 
-#if DEBUG
-    import Sentry
-#endif
-
 /// The app's diagnostics: OpenCine's reporting runtime with this app's names, destination,
-/// camera network and Sentry.
+/// camera network and OpenCine's Sentry adapter. Luna keeps no network readable: the neutral
+/// redactor removes every SSID.
 enum AppDiagnostics {
     static let host = DiagnosticsHost(
         product: "OpenInstaCine", listingName: "Field monitor",
@@ -30,7 +28,7 @@ enum AppDiagnostics {
         ]
     }
     /// The camera network this app's cameras serve.
-    static let gate = ReliabilityReportingGate(cameraIPv4Prefix: "192.168.2.")
+    static let gate = ReliabilityReportingGate(cameraIPv4Prefix: "192.168.42.")
     static let origin: FeedIncidentOrigin = {
         #if DEBUG
             let verification = ReliabilityReportingVerification.mode != nil
@@ -46,28 +44,33 @@ enum AppDiagnostics {
     }()
     static let reporting = ReliabilityReporting(
         host: host, consent: consent, dsn: dsn, gate: gate, origin: origin,
-        sink: SentryReliabilitySink())
+        sink: SentryReliabilitySink(
+            host: host, consent: consent, urlProtocol: AppReliabilityURLProtocol.self))
     /// The SDK transport's forwarding session over this runtime (`AppReliabilityURLProtocol`).
     static let forwarder = ReliabilityReportingForwarder(reporting: reporting)
     #if DEBUG
         static let verification = ReliabilityReportingVerification(
-            reporting: reporting, sdkEnabled: { SentrySDK.isEnabled }, crash: { SentrySDK.crash() },
-            isActive: { UIApplication.shared.applicationState == .active })
+            sentry: reporting, isActive: { UIApplication.shared.applicationState == .active })
     #endif
     static let incidents = FeedIncidentRuntime(
         reporting: reporting,
         directory: DiagnosticCenter.diagnosticsDirectory?
             .appendingPathComponent("incidents", isDirectory: true))
+    @MainActor static func beginFeedSession(context: FeedIncidentSessionContext) -> FeedIncidentSessionSource {
+    incidents.beginBoundSession(context)
+  }
     @MainActor static let problemReporting = ProblemReporting(
         host: host, gate: gate, dsnProvider: dsn.configured,
         isForeground: { UIApplication.shared.applicationState == .active })
 
+    /// Only store builds report `production`; Xcode and ad hoc release installs are `local`.
     private static var environment: String {
         #if DEBUG
-            return ReliabilityReportingVerification.mode == nil ? "development" : "verification"
+            ReliabilityEnvironment.apple(
+                debug: true, verification: ReliabilityReportingVerification.mode != nil
+            ).rawValue
         #else
-            return Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
-                ? "testflight" : "production"
+            ReliabilityEnvironment.apple(debug: false, verification: false).rawValue
         #endif
     }
 }

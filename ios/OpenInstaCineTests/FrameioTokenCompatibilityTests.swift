@@ -1,4 +1,6 @@
 import Foundation
+import OpenCineFrameIO
+import OpenCineFrameIOApple
 import XCTest
 
 @testable import OpenInstaCine
@@ -23,5 +25,15 @@ final class FrameioTokenCompatibilityTests: XCTestCase {
                 try JSONSerialization.jsonObject(with: encoded) as? NSDictionary,
                 try JSONSerialization.jsonObject(with: original) as? NSDictionary)
         }
+    }
+
+    /// A2-57: the shared Frame.io account keeps Insta's keychain item, destination key and
+    /// history key, so saved sign-ins and projects survive.
+    @MainActor func testTokenDestinationAndHistoryStayInInstaNamespaces() {
+        let model = AppModel()
+        XCTAssertEqual(model.frameio.tokens.service, "OpenInstaCine.frameio")
+        XCTAssertEqual(model.frameio.tokens.account, "oauth-token")
+        XCTAssertEqual(model.frameio.destinations.key, "opc.frameio.destination.v1")
+        XCTAssertEqual(FrameioHostNamespace.openInstaCine.historyKey, "opc.frameio.uploaded.v1")
     }
 }

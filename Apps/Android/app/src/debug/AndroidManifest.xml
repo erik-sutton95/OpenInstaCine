@@ -2,7 +2,7 @@
     <application>
         <!-- Debug only, SIMULATED: SHELL-03 review driver over the real root. -->
         <activity android:name=".ShellReviewActivity" android:exported="true" android:launchMode="singleTop"
-            android:theme="@style/Theme.OpenPocketCine.Starting" android:screenOrientation="user"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
+            android:theme="@style/Theme.OpenInstaCine.Starting" android:screenOrientation="user"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale" />
     </application>
 </manifest>

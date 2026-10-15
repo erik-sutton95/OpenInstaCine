@@ -14,6 +14,13 @@ Organization **opencapture** (EU, `*.ingest.de.sentry.io`). Projects:
 Never point OpenInstaCine at the `openpocketcine-*` projects or DSNs. DSNs are
 never committed.
 
+The SDK adapters are OpenCine's optional reporting adapter (`OpenCineSentryApple`, its own
+package at `Packages/OpenCineSentryApple`, and Android `:appkit-sentry`); this app links them and
+keeps only its host values (`AppDiagnostics`). OpenCine pins Sentry Cocoa **9.24.0** and sentry-android **8.58.0**.
+The release tooling below is OpenCine's `scripts/sentry/`, checked out next to this repository;
+this app passes its project slug (`--project`) and, on Android, its modules (`--android-module
+app --android-module monitor`).
+
 ## Where the DSN comes from
 
 | Build | iOS | Android |
@@ -27,17 +34,17 @@ never committed.
 
 Gates:
 
-- Every successful Xcode Cloud archive runs `tools/sentry-verify-ios-dsn.py --require`
+- Every successful Xcode Cloud archive runs `scripts/sentry/sentry-verify-ios-dsn.py --require`
   on the packaged `Info.plist`. No DSN, no archive.
-- The Play workflow runs `tools/sentry-require-android-dsn.sh` before bundling
+- The Play workflow runs `scripts/sentry/sentry-require-android-dsn.sh` before bundling
   when `SENTRY_UPLOAD_ENABLED=true`.
 
 ## Symbol upload
 
 Off unless `SENTRY_UPLOAD_ENABLED` is exactly `true`. Then
-`tools/sentry-install.sh` installs the pinned `sentry-cli` (version in
-`tools/sentry-cli-version`, SHA-256 in `tools/sentry-cli-checksums.txt`) and
-`tools/sentry-upload.py --platform ios|android` checks and uploads:
+`scripts/sentry/sentry-install.sh` installs the pinned `sentry-cli` (version in
+`scripts/sentry/sentry-cli-version`, SHA-256 in `scripts/sentry/sentry-cli-checksums.txt`) and
+`scripts/sentry/sentry-upload.py --platform ios|android` checks and uploads:
 
 - iOS: the archive's dSYMs.
 - Android: native `.so` symbols from `:monitor` (Swift core, CMake), merged app

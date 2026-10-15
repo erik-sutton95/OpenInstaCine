@@ -1,5 +1,8 @@
 import AVFoundation
 import MonitorPresentation
+import OpenCineAppKit
+import OpenCineApple
+import OpenCineCameraControls
 import OpenInstaViewCore
 import XCTest
 
@@ -62,7 +65,7 @@ final class MediaLibraryTests: XCTestCase {
     func testPlaybackCompositionScalesWorkingSizeBackToTheRaster() {
         let working = CGRect(x: 0, y: 0, width: 1440, height: 810)
         let raster = CGRect(x: 0, y: 0, width: 3840, height: 2160)
-        let fitted = working.applying(MediaLUT.transformFitting(working, to: raster))
+        let fitted = working.applying(MonitorMediaExporter.transformFitting(working, to: raster))
         XCTAssertEqual(fitted.width, raster.width, accuracy: 0.5)
         XCTAssertEqual(fitted.height, raster.height, accuracy: 0.5)
         XCTAssertEqual(fitted.minX, 0, accuracy: 0.5)
@@ -77,33 +80,33 @@ final class MediaLibraryTests: XCTestCase {
             AVAssetExportPresetHighestQuality,
         ]
         XCTAssertEqual(
-            MediaLUT.exportPreset(bakingLUT: true, compatible: compatible),
+            MonitorMediaExporter.exportPreset(bakingLUT: true, compatible: compatible),
             AVAssetExportPresetHEVCHighestQuality)
         XCTAssertEqual(
-            MediaLUT.exportPreset(bakingLUT: false, compatible: compatible),
+            MonitorMediaExporter.exportPreset(bakingLUT: false, compatible: compatible),
             AVAssetExportPresetPassthrough)
         XCTAssertNotEqual(
-            MediaLUT.exportPreset(bakingLUT: true, compatible: compatible),
+            MonitorMediaExporter.exportPreset(bakingLUT: true, compatible: compatible),
             AVAssetExportPreset1280x720)
     }
 
     func testExportProgressMapsTheSessionBand() {
-        XCTAssertEqual(MediaLUT.mappedExportProgress(0), 0.05, accuracy: 0.0001)
-        XCTAssertEqual(MediaLUT.mappedExportProgress(0.5), 0.475, accuracy: 0.0001)
-        XCTAssertEqual(MediaLUT.mappedExportProgress(1), 0.90, accuracy: 0.0001)
-        XCTAssertEqual(MediaLUT.mappedExportProgress(1.4), 0.90, accuracy: 0.0001)
+        XCTAssertEqual(MonitorMediaExporter.mappedExportProgress(0), 0.05, accuracy: 0.0001)
+        XCTAssertEqual(MonitorMediaExporter.mappedExportProgress(0.5), 0.475, accuracy: 0.0001)
+        XCTAssertEqual(MonitorMediaExporter.mappedExportProgress(1), 0.90, accuracy: 0.0001)
+        XCTAssertEqual(MonitorMediaExporter.mappedExportProgress(1.4), 0.90, accuracy: 0.0001)
     }
 
     func testShareOverlaySaysExportingWhileTheSessionTicks() {
-        var state = MediaDeliveryOverlayState(
+        var state = MonitorDeliveryBatchProgress(
             destination: .nativeShare, totalClips: 1, clipIndex: 1, clipFraction: 0.05)
-        XCTAssertEqual(state.statusLine, "Exporting 5%")
+        XCTAssertEqual(state.statusLine(), "Exporting 5%")
         state.clipFraction = 0.5
-        XCTAssertEqual(state.statusLine, "Exporting 50%")
+        XCTAssertEqual(state.statusLine(), "Exporting 50%")
         state.clipFraction = 0.95
-        XCTAssertEqual(state.statusLine, "Preparing to share 95%")
+        XCTAssertEqual(state.statusLine(), "Preparing to share 95%")
         state.clipFraction = 1
-        XCTAssertEqual(state.statusLine, "Preparing to share 100%")
+        XCTAssertEqual(state.statusLine(), "Preparing to share 100%")
     }
 
     func testFiftyFpsClipOffersHalfSpeedConform() {
@@ -127,23 +130,23 @@ final class MediaLibraryTests: XCTestCase {
         let file = MediaFile(
             path: "DCIM/DJI_001/DJI_20260814125250_0034_D.MP4",
             thumbPath: "MISC/THM/clip.scr")
-        var config = MediaDeliveryConfiguration()
+        var config = MonitorClipDelivery.defaultConfiguration()
         config.bakeLUT = true
         config.exportFormat = .mov
         XCTAssertEqual(
-            MediaDelivery.filename(for: file, configuration: config),
+            MonitorClipDelivery.filename(for: file, configuration: config),
             "DJI_20260814125250_0034_D.mov")
         config.bakeLUT = false
-        XCTAssertEqual(MediaDelivery.filename(for: file, configuration: config), file.filename)
-        var exposure = MediaDeliveryConfiguration()
+        XCTAssertEqual(MonitorClipDelivery.filename(for: file, configuration: config), file.filename)
+        var exposure = MonitorClipDelivery.defaultConfiguration()
         XCTAssertTrue(exposure.bakeLUTExposure)
-        let baked = MediaDelivery.metadata(
+        let baked = MonitorClipDelivery.metadata(
             for: file, configuration: exposure, lutName: "Auto · D-Log2 → Rec.709",
             cameraName: nil, lutExposureStops: -1)
         XCTAssertEqual(baked?.lutExposureStops, -1)
         XCTAssertNil(baked?.convertLog)
         exposure.bakeLUTExposure = false
-        let cubeOnly = MediaDelivery.metadata(
+        let cubeOnly = MonitorClipDelivery.metadata(
             for: file, configuration: exposure, lutName: "Auto · D-Log2 → Rec.709",
             cameraName: nil, lutExposureStops: -1)
         XCTAssertNil(cubeOnly?.lutExposureStops)
@@ -153,61 +156,55 @@ final class MediaLibraryTests: XCTestCase {
         let file = MediaFile(
             path: "DCIM/DJI_001/DJI_20260814125250_0034_D.MP4",
             thumbPath: "MISC/THM/clip.scr")
-        var config = MediaDeliveryConfiguration()
+        var config = MonitorClipDelivery.defaultConfiguration()
         config.bakeLUT = false
         config.convertLog = true
         config.exportFormat = .mov
         XCTAssertEqual(
-            MediaDelivery.filename(
+            MonitorClipDelivery.filename(
                 for: file, configuration: config, transform: .dLogToDLog2),
             "DJI_20260814125250_0034_D.dlog2.mov")
         XCTAssertEqual(
-            MediaDelivery.filename(
+            MonitorClipDelivery.filename(
                 for: file, configuration: config, transform: .dLog2ToDLog),
             "DJI_20260814125250_0034_D.dlog.mov")
         config.convertLog = false
         XCTAssertEqual(
-            MediaDelivery.filename(
+            MonitorClipDelivery.filename(
                 for: file, configuration: config, transform: .dLogToDLog2),
             file.filename)
-        var converting = MediaDeliveryConfiguration()
+        var converting = MonitorClipDelivery.defaultConfiguration()
         converting.convertLog = true
         converting.bakeLUT = true
         converting.bakeLUTExposure = true
-        let meta = MediaDelivery.metadata(
+        let meta = MonitorClipDelivery.metadata(
             for: file, configuration: converting, lutName: "Auto · D-Log2 → Rec.709",
             cameraName: nil, lutExposureStops: -1, convertLog: .dLogToDLog2)
         XCTAssertEqual(meta?.convertLog, "D-Log → D-Log2")
         XCTAssertNil(meta?.lutName)
         XCTAssertNil(meta?.lutExposureStops)
-        XCTAssertEqual(MediaDeliveryCopy.convertLog, "Convert log")
-        XCTAssertFalse(MediaDeliveryCopy.convertLogHelp.isEmpty)
-        XCTAssertFalse(MediaDeliveryCopy.convertLogHelpUnavailable.isEmpty)
-        if case .convertLogNotLog(let name) = MediaDeliveryError.convertLogNotLog(file.filename) {
-            XCTAssertEqual(name, file.filename)
-        } else {
-            XCTFail("expected convertLogNotLog")
-        }
+        XCTAssertFalse(MonitorClipDeliveryCopy.openInstaCine.convertHelp.isEmpty)
+        XCTAssertFalse(MonitorClipDeliveryCopy.openInstaCine.convertUnavailableHelp.isEmpty)
         XCTAssertEqual(
-            MediaDeliveryError.convertLogNotLog(file.filename).errorDescription,
+            MonitorClipDeliveryCopy.openInstaCine.notLog(file.filename),
             "DJI_20260814125250_0034_D.MP4 isn't I-Log.")
         let photo = MediaFile(
             path: "DCIM/DJI_001/DJI_20260814125250_0034_D.JPG",
             thumbPath: "MISC/THM/clip.scr")
-        XCTAssertFalse(MediaDelivery.convertLogAvailable(files: [photo], shotColors: []))
-        XCTAssertTrue(MediaDelivery.convertLogAvailable(files: [file], shotColors: []))
-        XCTAssertTrue(MediaDelivery.convertLogAvailable(files: [file], shotColors: [.dLog]))
-        XCTAssertFalse(MediaDelivery.convertLogAvailable(files: [file], shotColors: [.normal]))
+        XCTAssertFalse(MonitorClipDelivery.convertLogAvailable(files: [photo], shotColors: []))
+        XCTAssertTrue(MonitorClipDelivery.convertLogAvailable(files: [file], shotColors: []))
+        XCTAssertTrue(MonitorClipDelivery.convertLogAvailable(files: [file], shotColors: [.dLog]))
+        XCTAssertFalse(MonitorClipDelivery.convertLogAvailable(files: [file], shotColors: [.normal]))
         XCTAssertTrue(
-            MediaDelivery.convertLogAvailable(files: [file, file], shotColors: [.normal, nil]))
+            MonitorClipDelivery.convertLogAvailable(files: [file, file], shotColors: [.normal, nil]))
         XCTAssertTrue(
-            MediaDelivery.convertLogAvailable(files: [file, file], shotColors: [nil, .normal]))
+            MonitorClipDelivery.convertLogAvailable(files: [file, file], shotColors: [nil, .normal]))
         XCTAssertFalse(
-            MediaDelivery.convertLogAvailable(files: [photo, file], shotColors: [nil, .normal]))
+            MonitorClipDelivery.convertLogAvailable(files: [photo, file], shotColors: [nil, .normal]))
         XCTAssertFalse(
-            MediaDelivery.convertLogAvailable(files: [file, file], shotColors: [.normal, .hdr]))
+            MonitorClipDelivery.convertLogAvailable(files: [file, file], shotColors: [.normal, .hdr]))
         XCTAssertTrue(
-            MediaDelivery.convertLogAvailable(files: [file, file], shotColors: [.dLog, .dLog2]))
+            MonitorClipDelivery.convertLogAvailable(files: [file, file], shotColors: [.dLog, .dLog2]))
     }
 
     func testPlaybackTransportFitsNarrowestPhone() {

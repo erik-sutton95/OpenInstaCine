@@ -1,0 +1,22 @@
+# Exact persistent preference-key exemption; default secret rules remain enabled.
+title = "OpenInstaCine secret scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Scanner configuration describes its exact rule"
+paths = ['''\.gitleaks\.toml$''']
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Exact persistent destination preference key, not a credential"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^opc\.frameio\.destination\.v1$''']
+paths = [
+  '''^ios/OpenInstaCine/MediaDelivery\.swift$''',
+  '''^ios/OpenInstaCineTests/FrameioTokenCompatibilityTests\.swift$''',
+]

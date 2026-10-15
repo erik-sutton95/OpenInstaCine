@@ -21,7 +21,7 @@ check:
     python3 tools/ble_lab.py --help > /dev/null
     python3 -m unittest discover -s tools -p 'test_ucd2.py'
     python3 -m unittest discover -s tools -p 'test_ios_archive_privacy.py'
-    bash tools/sentry-test.sh
+    just sentry-test
     ./scripts/ios-release-notes-check.sh
     ./scripts/android-release-notes-check.sh
     git diff --check
@@ -68,6 +68,11 @@ ios-run device: ios-generate
     xcrun devicectl device install app --device {{device}} .local/DDdev/Build/Products/Debug-iphoneos/OpenInstaCine.app
     xcrun devicectl device process launch --device {{device}} --activate --terminate-existing com.opencapture.openinstacine
 
+# The shared conformance scenarios (OpenCine docs/conformance/SCENARIOS.md) on the simulator `udid`,
+# which needs accessibility enabled (OpenCine scripts/ios-private-simulator.py create).
+conformance-ios udid result="": ios-generate
+    xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCineUIReview -destination 'platform=iOS Simulator,id={{udid}}' -parallel-testing-enabled NO {{ if result != "" { "-resultBundlePath " + result } else { "" } }} -only-testing:OpenInstaCineUITests/GalleryRoundTrip -only-testing:OpenInstaCineUITests/ShareRoundTrip -only-testing:OpenInstaCineUITests/ConfirmationCancel -only-testing:OpenInstaCineUITests/ChromeEditReturn -only-testing:OpenInstaCineUITests/AccessibilityTraversal -only-testing:OpenInstaCineUITests/ConformanceCoverageTests test
+
 # Select an isolated simulator with IOS_TEST_DEVICE_ID when running concurrent tasks.
 ios-test *args: ios-generate
     #!/usr/bin/env bash
@@ -106,7 +111,9 @@ android-check:
 
 # Offline Sentry release-tooling checks. No network, no uploads.
 sentry-test:
-    bash tools/sentry-test.sh
+    OPC_APP_ROOT=. OPC_APP_NAME=OpenInstaCine bash ../OpenCine/scripts/sentry/sentry-test.sh
+    python3 tools/ios-package-resolved-check.py
+    bash scripts/ios-package-resolved-test.sh
 
 testflight-notes:
     ./scripts/ios-release-notes-check.sh
@@ -134,7 +141,7 @@ ios-resolve: ios-generate
 
 # Local iOS builds: SENTRY_DSN_IOS from .local/reliability.properties -> ignored Reliability.local.xcconfig.
 ios-local-dsn:
-    SENTRY_DSN_IOS="$(sed -n 's/^SENTRY_DSN_IOS=//p' .local/reliability.properties)" python3 tools/sentry-dsn-xcconfig.py --out ios/OpenInstaCine/Reliability.local.xcconfig --require
+    SENTRY_DSN_IOS="$(sed -n 's/^SENTRY_DSN_IOS=//p' .local/reliability.properties)" python3 ../OpenCine/scripts/sentry/sentry-dsn-xcconfig.py --out ios/OpenInstaCine/Reliability.local.xcconfig --require
 
 # Signed Play bundle with the upload key from .local/play-signing.env. VERSION_CODE=n overrides the floor.
 android-bundle:

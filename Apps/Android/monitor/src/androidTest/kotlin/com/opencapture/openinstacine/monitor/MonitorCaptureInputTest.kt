@@ -46,6 +46,7 @@ import com.opencapture.monitorui.monitorReadoutGesture
 import com.opencapture.opencine.cameracontrols.LiveControlSheet
 import com.opencapture.opencine.cameracontrols.LivePickerHost
 import com.opencapture.opencine.cameracontrols.LiveSheet
+import com.opencapture.opencine.cameracontrols.MonitorChromeButton
 import com.opencapture.opencine.vocabulary.CameraStatus
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -62,7 +63,7 @@ class MonitorCaptureInputTest {
         // Library instrumentation does not run the brand launcher. Match its actual adapter
         // composition before constructing an AppModel; no test connects a camera.
         MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
-            val wifi = com.opencapture.openinstacine.monitor.pairing.CameraWifiCredentialStore(context)
+            val wifi = com.opencapture.opencine.platform.CameraWifiCredentialStore(context, com.opencapture.openinstacine.monitor.pairing.cameraWifiStorage)
             com.opencapture.opencine.insta360.luna.LunaBackend(context,
                 savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
         }
@@ -144,7 +145,7 @@ class MonitorCaptureInputTest {
                         activity.setContent { NavigationFixture(checkNotNull(model), probe, layoutProbe, tablet) }
                     }
                     awaitReady(scenario, layoutProbe)
-                    for ((label, destination) in listOf("Settings" to ShellModel.Cover.SETTINGS,
+                    for ((label, destination) in listOf("Operator Setup" to ShellModel.Cover.SETTINGS,
                         "Media" to ShellModel.Cover.MEDIA)) {
                         val target = nativeControlRect(scenario, label)
                         val down = SystemClock.uptimeMillis()
@@ -172,7 +173,7 @@ class MonitorCaptureInputTest {
                         }
                         settle()
                     }
-                    val oldSettings = nativeControlRect(scenario, "Settings")
+                    val oldSettings = nativeControlRect(scenario, "Operator Setup")
                     scenario.onActivity { probe.showsNavigation = false }
                     settle()
                     tap(scenario, oldSettings)
@@ -452,13 +453,11 @@ private fun NavigationFixture(model: AppModel, probe: NavigationProbe, layoutPro
                             display = false, media = probe.showsNavigation, settings = probe.showsNavigation),
                         interactive = accepts && probe.navigationEnabled, navigationHidden = false,
                         lock = {}, record = {}, display = {},
-                        settings = { enabled -> AuxCircleButton(enabled = enabled,
-                            onClick = { model.shell.open(ShellModel.Cover.SETTINGS) }) {
-                            MonitorIcon(MonitorIcon.SETTINGS, "Settings", Modifier.fillMaxSize(), it)
+                        settings = { enabled -> MonitorChromeButton(MonitorIcon.SETTINGS, "Operator Setup", enabled = enabled) {
+                            model.shell.open(ShellModel.Cover.SETTINGS)
                         } },
-                        media = { enabled -> AuxCircleButton(enabled = enabled,
-                            onClick = { model.shell.open(ShellModel.Cover.MEDIA) }) {
-                            MonitorIcon(MonitorIcon.FILM, "Media", Modifier.fillMaxSize(), it)
+                        media = { enabled -> MonitorChromeButton(MonitorIcon.FILM, "Media", enabled = enabled) {
+                            model.shell.open(ShellModel.Cover.MEDIA)
                         } })
                 }
             }, panels = {

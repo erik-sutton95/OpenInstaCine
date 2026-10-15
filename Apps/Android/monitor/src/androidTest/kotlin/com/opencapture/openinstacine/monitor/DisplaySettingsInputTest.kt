@@ -33,7 +33,7 @@ class DisplaySettingsInputTest {
         // Library instrumentation runs in its own package, without the brand launcher.
         // Use the launcher's actual backend composition; this fixture never starts discovery.
         MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
-            val wifi = com.opencapture.openinstacine.monitor.pairing.CameraWifiCredentialStore(context)
+            val wifi = com.opencapture.opencine.platform.CameraWifiCredentialStore(context, com.opencapture.openinstacine.monitor.pairing.cameraWifiStorage)
             com.opencapture.opencine.insta360.luna.LunaBackend(context,
                 savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
         }

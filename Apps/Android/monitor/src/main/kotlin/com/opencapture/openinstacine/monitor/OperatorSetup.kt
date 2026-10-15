@@ -9,12 +9,11 @@ import androidx.compose.ui.Modifier
 import com.opencapture.opencine.cameracontrols.OperatorAppInformation
 import com.opencapture.opencine.cameracontrols.OperatorDiagnostics
 import com.opencapture.opencine.cameracontrols.OperatorHelpCopy
-import com.opencapture.opencine.cameracontrols.OperatorLegalPage
 import com.opencapture.opencine.cameracontrols.OperatorLinkSample
-import com.opencapture.opencine.cameracontrols.OperatorMediaCacheDirs
 import com.opencapture.opencine.cameracontrols.OperatorSetupApp
 import com.opencapture.opencine.cameracontrols.OperatorSetupState
 import com.opencapture.opencine.cameracontrols.formatAppVersion
+import com.opencapture.opencine.cameracontrols.monitorSettingsCacheSource
 import com.opencapture.opencine.runtime.MonitorGlesUpscaler
 import com.opencapture.openinstacine.monitor.assists.AppAssistHost
 import com.opencapture.openinstacine.monitor.diagnostics.AppDiagnostics
@@ -22,7 +21,6 @@ import com.opencapture.openinstacine.monitor.diagnostics.DiagnosticCenter
 import com.opencapture.openinstacine.monitor.lut.LUTPicker
 import com.opencapture.openinstacine.monitor.session.vocabularyPhase
 import com.opencapture.openinstacine.monitor.settings.PanelCloseButton
-import java.io.File
 
 object SettingsHelpCopy : OperatorHelpCopy("OpenInstaCine")
 
@@ -36,8 +34,6 @@ object OpenPocketCineLinks {
     const val PRIVACY = "https://opencapture.org/openinstacine/privacy"
     const val TERMS = "https://opencapture.org/openinstacine/terms"
 }
-
-internal object OperatorMediaCache : OperatorMediaCacheDirs({ context -> listOf(File(context.filesDir, "OpenInstaCine/media")) })
 
 /** The link and body Operator Setup shows, from this app's session. */
 @Composable
@@ -60,8 +56,6 @@ internal fun operatorSetupApp(model: AppModel) = OperatorSetupApp(
     help = SettingsHelpCopy,
     prefs = OperatorPrefs,
     assistHost = AppAssistHost,
-    mediaCache = OperatorMediaCache,
-    clearMediaCache = { OperatorMediaCache.clear(it) },
     upscalers = MonitorGlesUpscaler.supported.map { it.label },
     upscaler = { OperatorPrefs.feedUpscaler(it).label },
     setUpscaler = { context, label -> OperatorPrefs.setFeedUpscaler(context, MonitorGlesUpscaler.fromStored(label)) },
@@ -79,44 +73,17 @@ internal fun operatorSetupApp(model: AppModel) = OperatorSetupApp(
         versionHelp = SettingsHelpCopy.APP_VERSION, termsHelp = "How you can use OpenInstaCine.",
     ),
     sourceUrl = OpenPocketCineLinks.SOURCE,
-    termsUrl = OpenPocketCineLinks.TERMS,
     diagnostics = OperatorDiagnostics(
         AppDiagnostics.reporting, AppDiagnostics.manualReport, AppDiagnostics.incidents,
         diagnosticText = { DiagnosticCenter.boundedDiagnosticText(model.session) },
         shareReport = { DiagnosticCenter.shareReport(it, model.session, copyForFeedback = false) },
         reportActionMinimumTouchTarget = true,
     ),
-    legalPage = { page, onClose -> LegalDocumentScreen(kind = page.kind, onClose = onClose) },
+    legal = InstaLegalDocuments,
     lutPicker = { onClose -> LUTPicker(model = model, onClose = onClose) },
-    cacheSource = { context ->
-        val library = model.mediaLibrary
-        val value by library.state.collectAsState()
-        val shell by model.shell.state.collectAsState()
-        val source = shell.monitor?.id
-        val admission = library.actionToken
-        val capturedRevision = value.cacheRevision
-        com.opencapture.opencine.appkit.MonitorSettingsCacheSource(
-            com.opencapture.opencine.appkit.MonitorSettingsCacheIdentity(
-                OperatorMediaCache.candidates(context).first().absolutePath,
-                "${source}/${value.lifetimeToken}"),
-            capturedRevision,
-            isCurrent = { model.mediaLibrary === library && model.shell.state.value.monitor?.id == source &&
-                library.isCurrent(admission) && library.state.value.cacheRevision == capturedRevision },
-            count = { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { OperatorMediaCache.byteCount(context) } },
-            clear = {
-                library.cache.directory.retireWrites()
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { OperatorMediaCache.clear(context) }
-            },
-        )
-    },
+    // The gallery's own library: Settings counts and clears what the gallery writes.
+    cacheSource = { monitorSettingsCacheSource(model.mediaLibrary) },
 )
-
-private val OperatorLegalPage.kind: LegalKind
-    get() = when (this) {
-        OperatorLegalPage.PRIVACY -> LegalKind.PRIVACY
-        OperatorLegalPage.LICENSES -> LegalKind.LICENSES
-        OperatorLegalPage.NOTICE -> LegalKind.NOTICE
-    }
 
 @Composable
 fun OperatorSetupScreen(model: AppModel, onClose: () -> Unit) {
