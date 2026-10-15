@@ -1,31 +1,16 @@
+import OpenCineAppKitApple
 import OpenCineCameraControls
+import OpenCineRelayApple
 import OpenInstaViewCore
+import UIKit
 
 typealias WatcherBrowseView = WatcherBrowse<AppModel>
 
-extension AppModel: WatcherBrowseHost {
-    var watcherJoinStatus: WatcherJoinStatus {
-        switch relayClient.status {
-        case .idle: .idle
-        case .connecting: .connecting
-        case .reconnecting(let attempt):
-            .reconnecting(attempt: attempt, maximum: WatcherRelayRecovery.maximumRetries)
-        case .needsPasscode: .needsPasscode
-        case .live: .live
-        case .failed(let message): .failed(message)
-        }
-    }
+/// Browse, join, passcode and leave are the shared watcher owner's; this app names its Keychain
+/// and closes its own covers when a join goes live.
+extension AppModel: WatcherBrowseHost, WatcherRelayViewer {
+    var relayKeychain: WatcherRelayKeychain { .app }
+    var watcherDeviceName: String { UIDevice.current.name }
 
-    var watcherFeeds: [WatcherFeedRow] {
-        relayBrowser.hosts.map {
-            WatcherFeedRow(id: $0.id, name: $0.name, cameraName: $0.cameraName)
-        }
-    }
-
-    var watcherBrowseError: String? { relayBrowser.browseError }
-
-    func joinWatcherFeed(id: String) {
-        guard let feed = relayBrowser.hosts.first(where: { $0.id == id }) else { return }
-        joinWatcher(feed)
-    }
+    func dismissCoversForWatching() { shell.dismissCover() }
 }
