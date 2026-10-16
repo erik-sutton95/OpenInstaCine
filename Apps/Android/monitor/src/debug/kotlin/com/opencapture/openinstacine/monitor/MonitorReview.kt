@@ -32,6 +32,7 @@ internal object MonitorReview {
     private val screens = setOf(
         ReviewLaunch.Screen.CAMERAS, ReviewLaunch.Screen.PAIR, ReviewLaunch.Screen.LIVE,
         ReviewLaunch.Screen.MEDIA, ReviewLaunch.Screen.PLAYBACK, ReviewLaunch.Screen.SETTINGS,
+        ReviewLaunch.Screen.CHROME_EDIT,
     )
 
     fun decode(intent: Intent?): ReviewLaunch? = ReviewLaunch.decode { intent?.getStringExtra(it) }
@@ -62,11 +63,13 @@ internal object MonitorReview {
             ReviewLaunch.Screen.PAIR -> model.shell.beginPairing()
             // The staged monitor is the real session's control seam, idle: the live chrome renders
             // over it, and no radio, connection or command ever reaches a camera.
-            ReviewLaunch.Screen.LIVE -> model.session.lunaPort?.openSession()?.let { session ->
+            ReviewLaunch.Screen.LIVE, ReviewLaunch.Screen.CHROME_EDIT -> model.session.lunaPort?.openSession()?.let { session ->
                 model.shell.present(ConnectedCamera(
                     SavedCamera(STAGED_CAMERA, LunaFailures.INTEGRATION,
                         advertisedName = "SIMULATED common input", model = "Luna Ultra"),
                     session))
+                // The chrome editor over the same staged monitor (iOS `beginChromeEditing`).
+                if (review.screen == ReviewLaunch.Screen.CHROME_EDIT) model.beginChromeEditing(model.currentDispMode)
             }
             ReviewLaunch.Screen.MEDIA, ReviewLaunch.Screen.PLAYBACK -> stageMedia(context, model, review)
             ReviewLaunch.Screen.SETTINGS -> {
