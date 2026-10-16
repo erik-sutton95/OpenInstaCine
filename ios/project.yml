@@ -154,6 +154,9 @@ targets:
       - ../../OpenCine/Tests/MonitorUITests/MonitorPortraitHeaderClearanceTests.swift
     dependencies:
       - target: OpenInstaCine
+      # Test support only: the shared hosted accessibility walk, which depends on nothing here.
+      - package: OpenCine
+        product: OpenCineHostedAccessibility
       - package: OpenInstaViewCore
         product: OpenInstaViewCore
       - package: OpenCine

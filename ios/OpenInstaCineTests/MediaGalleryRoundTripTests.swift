@@ -1,6 +1,7 @@
 import Foundation
 import MonitorPresentation
 import OpenCineAppKit
+import OpenCineHostedAccessibility
 import OpenCineMedia
 import OpenInstaViewCore
 import SwiftUI
@@ -69,9 +70,9 @@ import XCTest
             window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible()
         }
         let cellID = "monitor.media.clip." + captured.asset.id.rawValue
-        let cellReady = await openingSettled { Self.objects(window).contains { Self.identifier($0) == cellID } }
+        let cellReady = await openingSettled { HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == cellID } }
         try Self.reachableCell(cellReady)
-        let cell = try XCTUnwrap(Self.objects(window).first { Self.identifier($0) == cellID })
+        let cell = try XCTUnwrap(HostedAccessibility.elements(in: window).first { HostedAccessibility.identifier($0) == cellID })
         let admission = owner.actionToken
         XCTAssertTrue(cell.accessibilityActivate(), "Tap the actual gallery cell")
         if event == .refused { owner.close() }
@@ -87,7 +88,7 @@ import XCTest
         XCTAssertTrue(presented, "The captured opening must retain its cover even when refused")
         if event == .retired || event == .replaced {
             let originalReady = await openingSettled {
-                Self.objects(window).contains { Self.identifier($0) == (photo ? "monitor.photo.back" : "monitor.playback.back") }
+                HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == (photo ? "monitor.photo.back" : "monitor.playback.back") }
             }
             XCTAssertTrue(originalReady)
             if event == .retired { owner.close() }
@@ -102,15 +103,15 @@ import XCTest
         if event == .refreshed {
             let kept = await openingSettled {
                 guard let cover = host.presentedViewController?.view else { return false }
-                return Self.objects(cover).contains { $0.accessibilityLabel == captured.asset.filename }
+                return HostedAccessibility.elements(in: cover).contains { $0.accessibilityLabel == captured.asset.filename }
             }
             XCTAssertTrue(kept, "The cover must keep the displayed record captured before refresh")
             if let cover = host.presentedViewController?.view {
-                XCTAssertFalse(Self.objects(cover).contains { $0.accessibilityLabel == "SIMULATED-REFRESHED" + suffix })
+                XCTAssertFalse(HostedAccessibility.elements(in: cover).contains { $0.accessibilityLabel == "SIMULATED-REFRESHED" + suffix })
             }
         } else {
             let unavailable = await openingSettled {
-                Self.objects(window).contains { Self.identifier($0) == "monitor.media.unavailable" }
+                HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == "monitor.media.unavailable" }
             }
             XCTAssertTrue(unavailable, "Refused, retired and replaced sources must show the shared unavailable state")
         }
@@ -121,11 +122,11 @@ import XCTest
         attachment.name = "SIMULATED-APP-" + (photo ? "photo-" : "video-") + String(describing: event)
         attachment.lifetime = .keepAlways; add(attachment)
         let closeID = event == .refreshed ? (photo ? "monitor.photo.back" : "monitor.playback.back") : "monitor.media.unavailable.close"
-        let button = try XCTUnwrap(Self.objects(window).first { Self.identifier($0) == closeID }, "Close must be rendered")
+        let button = try XCTUnwrap(HostedAccessibility.elements(in: window).first { HostedAccessibility.identifier($0) == closeID }, "Close must be rendered")
         XCTAssertTrue(button.accessibilityActivate(), "Activate the actual Close control")
         let returned = await openingSettled { host.presentedViewController == nil }
         XCTAssertTrue(returned, "Close must return to the actual gallery")
-        let gallery = await openingSettled { Self.objects(window).contains { Self.identifier($0) == cellID } }
+        let gallery = await openingSettled { HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == cellID } }
         XCTAssertTrue(gallery)
     }
     private func openingSettled(_ predicate: @escaping @MainActor () -> Bool) async -> Bool {
@@ -196,8 +197,8 @@ import XCTest
         let before = scroll.contentOffset.y
         XCTAssertGreaterThan(before, 300, "The gallery must start the round trip scrolled")
         let visible: () -> NSObject? = {
-            Self.objects(host.view).first {
-                Self.identifier($0)?.hasPrefix("monitor.media.clip.") == true
+            HostedAccessibility.elements(in: host.view).first {
+                HostedAccessibility.identifier($0)?.hasPrefix("monitor.media.clip.") == true
                     && $0.accessibilityFrame.intersects(scroll.convert(scroll.bounds, to: nil))
             }
         }
@@ -230,25 +231,6 @@ import XCTest
     }
     private static func scrollViews(_ view: UIView) -> [UIScrollView] {
         ((view as? UIScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews)
-    }
-    private static func objects(_ object: NSObject) -> [NSObject] {
-        if object.accessibilityElementsHidden { return [] }
-        if let view = object as? UIView, view.isHidden || view.alpha < 0.01 { return [] }
-        let children: [NSObject]
-        if let values = object.accessibilityElements as? [NSObject], !values.isEmpty {
-            children = values
-        } else {
-            let count = object.accessibilityElementCount()
-            children = count > 0 && count != NSNotFound
-                ? (0..<count).compactMap { object.accessibilityElement(at: $0) as? NSObject }
-                : (object as? UIView)?.subviews ?? []
-        }
-        return [object] + children.flatMap(objects)
-    }
-    private static func identifier(_ object: NSObject) -> String? {
-        let getter = NSSelectorFromString("accessibilityIdentifier")
-        guard object.responds(to: getter) else { return nil }
-        return object.perform(getter)?.takeUnretainedValue() as? String
     }
 }
 
