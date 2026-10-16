@@ -1,3 +1,4 @@
+import MonitorPresentation
 import MonitorUI
 import SwiftUI
 import UIKit
@@ -68,8 +69,8 @@ struct OpenInstaCineWordmark: View {
 }
 
 enum LaunchSplashTiming {
-    static let visibleDuration: Duration = .milliseconds(2_250)
-    static let fadeOutDuration: TimeInterval = 0.35
+    static let visibleDuration = MonitorLaunchTiming.visibleDuration
+    static let fadeOutDuration = MonitorLaunchTiming.fadeOutDuration
 }
 
 struct BrandBackdrop: View {
@@ -103,29 +104,11 @@ struct LaunchSplashContent: View {
     var compact: Bool = false
 
     var body: some View {
-        GeometryReader { proxy in
-            let landscape = proxy.size.width >= proxy.size.height
-            let logoSize = min(proxy.size.width * (landscape ? 0.16 : 0.28), compact ? 72 : 96)
-
-            ZStack {
-                BrandBackdrop()
-
-                if landscape {
-                    HStack(spacing: max(32, proxy.size.width * 0.06)) {
-                        OPCMonogramMark(size: logoSize)
-                        OpenInstaCineWordmark(fontSize: compact ? 28 : 34)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, max(32, proxy.size.width * 0.08))
-                } else {
-                    VStack(spacing: 24) {
-                        OPCMonogramMark(size: logoSize)
-                        OpenInstaCineWordmark(fontSize: 30)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-        }
+        MonitorLaunchSplashContent(
+            compact: compact,
+            backdrop: { BrandBackdrop() },
+            mark: { OPCMonogramMark(size: $0) },
+            wordmark: { OpenInstaCineWordmark(fontSize: $0) })
     }
 }
 
@@ -133,9 +116,8 @@ struct LaunchSplashOverlay: View {
     @Binding var isVisible: Bool
 
     var body: some View {
-        LaunchSplashContent()
-            .opacity(isVisible ? 1 : 0)
-            .animation(.easeOut(duration: LaunchSplashTiming.fadeOutDuration), value: isVisible)
-            .allowsHitTesting(isVisible)
+        MonitorLaunchSplashOverlay(isVisible: $isVisible) {
+            LaunchSplashContent()
+        }
     }
 }
