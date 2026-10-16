@@ -1,4 +1,5 @@
 import OpenCineAppKitApple
+import OpenCineCameraControls
 import OpenCineMedia
 import CoreImage
 import OpenCineApple
