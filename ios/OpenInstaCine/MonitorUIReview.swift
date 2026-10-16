@@ -306,6 +306,22 @@
                 let options = try ProtoMessage.blob(field: 21, value: exposure)
                     + ProtoMessage.integer(field: 39, value: UInt64(status.whiteBalanceKelvin))
                 session.ingest(settings: try LunaPhotographySettings(response: ProtoMessage.blob(field: 2, value: options)))
+                // The staged recording format and colour, as the camera reports them (options 31
+                // and 35), so the review header shows the format like the other apps.
+                var recording = Data()
+                if let format = status.videoFormat,
+                    let raw = LunaShellMapping.formatTable(values: LunaShellMapping.videoFormatValues)[format]
+                {
+                    recording += try ProtoMessage.integer(field: 31, value: raw)
+                }
+                if let color = status.colorMode {
+                    recording += try ProtoMessage.integer(
+                        field: 35, value: LunaShellMapping.lunaColorMode(color).rawValue)
+                }
+                if !recording.isEmpty {
+                    session.ingest(settings: try LunaPhotographySettings(
+                        response: ProtoMessage.blob(field: 2, value: recording)))
+                }
                 let capture = try ProtoMessage.integer(field: 1, value: status.isRecording ? 1 : 0)
                 session.ingest(capture: try LunaCaptureStatus(notification: capture))
                 if let timecode = status.timecodeReading { session.ingest(timecode: timecode) }
