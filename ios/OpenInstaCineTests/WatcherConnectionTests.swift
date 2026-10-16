@@ -1,4 +1,5 @@
 import Network
+import OpenCineHostedTestSupport
 import OpenCineRelayApple
 import OpenInstaViewCore
 import XCTest
@@ -6,16 +7,10 @@ import XCTest
 @testable import OpenInstaCine
 
 final class WatcherConnectionTests: XCTestCase {
+    /// The loopback relay answers on its own network queue; wait for the state itself.
     @MainActor
-    private func waitUntil(_ predicate: @escaping @MainActor () -> Bool, timeout: Double = 5) async
-        -> Bool
-    {
-        let end = ProcessInfo.processInfo.systemUptime + timeout
-        while ProcessInfo.processInfo.systemUptime < end {
-            if predicate() { return true }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
-        return predicate()
+    private func waitUntil(_ predicate: @MainActor @Sendable () -> Bool) async -> Bool {
+        await HostedCondition.wait(until: predicate)
     }
 
     private func host(passcode: String = "") -> WatcherRelayTransport {
@@ -129,6 +124,7 @@ final class WatcherConnectionTests: XCTestCase {
         XCTAssertEqual(client.state.cameraName, "")
         XCTAssertFalse(client.token.holderIsRecipient)
         client.leave()
+        // Negative window past the first reconnect delay: a left client must not resolve again.
         try? await Task.sleep(for: .milliseconds(1300))
         XCTAssertEqual(client.status, .idle)
         XCTAssertEqual(resolutions, 0)

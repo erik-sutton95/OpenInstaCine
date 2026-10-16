@@ -1,5 +1,6 @@
 import Insta360Apple
 import Insta360Protocol
+import OpenCineHostedTestSupport
 import OpenCineMotion
 import OpenInstaViewCore
 import XCTest
@@ -37,13 +38,8 @@ final class GimbalWireFacadeTests: XCTestCase {
         return session
     }
 
-    private func waitUntil(_ predicate: () -> Bool, timeout: Double = 5) async -> Bool {
-        let end = ProcessInfo.processInfo.systemUptime + timeout
-        while ProcessInfo.processInfo.systemUptime < end {
-            if predicate() { return true }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return predicate()
+    private func waitUntil(_ predicate: @MainActor @Sendable () -> Bool) async -> Bool {
+        await HostedCondition.wait(until: predicate)
     }
 
     func testHeldStickStreamsMoveEvery50msZerosIncludedAndRestSendsOneRelease() async throws {
@@ -75,6 +71,7 @@ final class GimbalWireFacadeTests: XCTestCase {
         let released = await waitUntil { releases() == 1 }
         XCTAssertTrue(released)
         let count = wire.sent.count
+        // Negative window: the stream must stay ended within it.
         try await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(wire.sent.count, count, "the stream ends at rest")
     }
@@ -129,6 +126,7 @@ final class GimbalWireFacadeTests: XCTestCase {
         session.updateGimbalStick(x: 1, y: 0)
         session.recenterGimbal()
         session.flipGimbal()
+        // Negative window: nothing may reach a closed link within it.
         try await Task.sleep(for: .milliseconds(150))
         XCTAssertTrue(wire.sent.isEmpty)
         XCTAssertFalse(session.gimbalStick.isHeld)

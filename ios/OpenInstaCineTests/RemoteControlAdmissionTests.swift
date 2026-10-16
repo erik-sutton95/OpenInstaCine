@@ -3,6 +3,7 @@ import Insta360AppleTestSupport
 import Insta360Protocol
 import OpenCineAppKit
 import OpenCineCore
+import OpenCineHostedTestSupport
 import OpenCineRelay
 import OpenInstaViewCore
 import XCTest
@@ -536,11 +537,8 @@ final class RemoteControlAdmissionTests: XCTestCase {
     host.phase = .live
     return host
   }
-  private func drain(_ predicate: () -> Bool) async {
-    for _ in 0..<2000 {
-      if predicate() { return }
-      await Task.yield()
-    }
+  private func drain(_ predicate: @MainActor @Sendable () -> Bool) async {
+    if await HostedCondition.wait(until: predicate) { return }
     XCTFail("Controllable source did not publish the expected state")
   }
 }

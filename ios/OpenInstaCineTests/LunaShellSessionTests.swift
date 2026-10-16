@@ -2,6 +2,7 @@ import Insta360Apple
 import Insta360AppleTestSupport
 import Insta360Protocol
 import OpenCineCore
+import OpenCineHostedTestSupport
 import OpenCineMedia
 import OpenInstaViewCore
 import XCTest
@@ -13,9 +14,9 @@ import XCTest
 
 @MainActor
 final class CoreRecordControlTests: XCTestCase {
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<300 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
-        XCTAssertTrue(condition(), "timed out")
+    private func waitUntil(_ condition: @MainActor @Sendable () -> Bool) async throws {
+        let held = await HostedCondition.wait(until: condition)
+        XCTAssertTrue(held, "timed out")
     }
 
     func testRecordLampNeverTogglesBlind() async throws {
@@ -71,9 +72,9 @@ final class SessionIsolationTests: XCTestCase {
         catch let error as MediaServiceError { XCTAssertEqual(error, .unavailable) }
         next.close(.requested)
     }
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<300 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
-        XCTAssertTrue(condition(), "timed out")
+    private func waitUntil(_ condition: @MainActor @Sendable () -> Bool) async throws {
+        let held = await HostedCondition.wait(until: condition)
+        XCTAssertTrue(held, "timed out")
     }
 
     private static let otherProfile = CameraLabelProfile(
@@ -236,9 +237,9 @@ final class LunaLayoutTests: XCTestCase {
 /// video exposure (Core `ShutterAngle`); an unknown exposure never gets a hidden shutter SET.
 @MainActor
 final class ShutterAngleFormatRematchTests: XCTestCase {
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<300 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
-        XCTAssertTrue(condition(), "timed out")
+    private func waitUntil(_ condition: @MainActor @Sendable () -> Bool) async throws {
+        let held = await HostedCondition.wait(until: condition)
+        XCTAssertTrue(held, "timed out")
     }
 
     private static func isShutterWrite(_ request: LunaRequest) -> Bool {
@@ -292,6 +293,7 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
 
         shell.setVideoFormat(resolution: .p4K, frameRate: .fps30)
         try await waitUntil { camera.sent.contains { $0.command == .setPhotographyOptions } }
+        // Negative window: no hidden shutter SET may follow within it.
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertFalse(camera.sent.contains(where: Self.isShutterWrite), "no hidden shutter SET while exposure is unknown")
         shell.control.unbind()
