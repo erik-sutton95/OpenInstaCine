@@ -27,3 +27,5 @@ final class MonitorScreenshotLayoutTests: OpenCineAppUITesting.MonitorScreenshot
 
 /// SIMULATED: the colour readout opens the one codec and colour popup in both orientations.
 final class CodecColorPopupUITests: OpenCineAppUITesting.CodecColorPopupUITests {}
+/// SIMULATED: ISO, shutter, white balance and focus open the shared drawer and mode strip.
+final class CapturePopupUITests: OpenCineAppUITesting.CapturePopupUITests {}
