@@ -1,4 +1,5 @@
 import OpenCineAppKit
+import OpenCineCameraVocabulary
 import CoreGraphics
 import Foundation
 import Insta360Apple
@@ -40,20 +41,30 @@ enum ShutterPress {
 extension CameraSession {
     // MARK: - Capabilities
 
-    var hasGimbal: Bool { true }
-    var supportsZoom: Bool { true }
-    var supportsTapFocus: Bool { true }
+    /// Luna's static control facts come from the integration's capture profile
+    /// (`LunaCameraSession.captureProfile`), never app literals.
+    private var lunaProfile: CameraCaptureProfile { LunaCameraSession.captureProfile }
+    var hasGimbal: Bool { lunaProfile.hasGimbal == true }
+    var supportsZoom: Bool { lunaProfile.supportsZoom == true }
+    var supportsTapFocus: Bool { lunaProfile.supportsTapFocus == true }
     /// AF-C, AF-S and Product Showcase (option 93); see `LunaShellMapping.focusOptions`.
-    var supportsFocusMode: Bool { true }
+    var supportsFocusMode: Bool { lunaProfile.supportsFocusMode == true }
     /// Matrix / Face Priority metering (option 46), shown in the Exposure sheet.
-    var supportsFaceMetering: Bool { true }
-    var supportsAperture: Bool { false }
+    var supportsFaceMetering: Bool { lunaProfile.controls[.faceMetering] == .supported }
+    var supportsAperture: Bool { lunaProfile.supportsAperture == true }
     /// Luna sends no metered EV; the EV meter reads the picture.
     var reportsMeteredEV: Bool { false }
     /// Auto ISO ceiling and native-ISO hop are Osmo camcap features; Luna has neither.
-    var supportsIsoLimit: Bool { false }
+    var supportsIsoLimit: Bool { lunaProfile.nativeISO.ceiling == true }
     /// DJI camcap hop to the log curve's native ISO on a color change; the ISO sheet hides its toggle.
-    var supportsNativeIsoHop: Bool { false }
+    var supportsNativeIsoHop: Bool { lunaProfile.nativeISO.hop == true }
+    /// The one control model of the camera: the live session's when connected, else the shared
+    /// pre-connection rule over Luna's static profile (the shared capture UI reads this).
+    func controlCapabilities(codecColor: CaptureCodecColorChoices? = nil) -> ControlCapabilities {
+        lunaSession?.controlCapabilities(codecColor: codecColor)
+            ?? ControlCapabilities(beforeConnection: lunaProfile, motion: LunaCameraSession.motion,
+                codecColor: codecColor)
+    }
     /// Luna media browse runs over HTTP next to the live socket.
     /// The connection's Luna session: every request goes through it, and its admission is this
     /// facade's control link (it flips with the backend's handshake). Tests set the override.

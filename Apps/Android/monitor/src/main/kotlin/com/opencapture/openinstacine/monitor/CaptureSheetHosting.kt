@@ -35,6 +35,7 @@ internal fun captureSettingKey(sheet: LiveSheet): SettingKey? = when (sheet) {
  * The capture session state from the session's locks and format pin, the body's focus mode support
  * and the session's native ISO hop capability. The aperture rows draw whenever the APERTURE sheet is
  * open (the live view closes that sheet for a body without aperture). Read when the sheet reads them.
+ * While a Luna session is connected, [controls] is its one control model and the flags are unused.
  */
 internal fun instaCaptureSessionState(
     aeLock: () -> Any?,
@@ -45,6 +46,7 @@ internal fun instaCaptureSessionState(
     nativeIsoHopSupported: () -> Boolean,
     irisSupported: () -> Boolean = { false },
     isoCeilingSupported: () -> Boolean? = { null },
+    controls: () -> com.opencapture.opencine.vocabulary.ControlCapabilities? = { null },
 ): CaptureSessionState = object : CaptureSessionState {
     override val aeLocked get() = aeLock() != null
     override val awbLockKelvin get() = awbLockKelvin()
@@ -55,6 +57,7 @@ internal fun instaCaptureSessionState(
     override val nativeIsoHopSupported get() = nativeIsoHopSupported()
     override val nativeISO get() = com.opencapture.opencine.vocabulary.CaptureNativeISOCapabilities(
         hop = nativeIsoHopSupported(), ceiling = isoCeilingSupported())
+    override val controlCapabilities get() = controls()
 }
 
 @Composable
@@ -68,7 +71,7 @@ internal fun AppModel.observedCaptureSessionState(status: CameraStatus): Capture
     return instaCaptureSessionState({ aeLock }, { awbLock }, { session.autoWhiteBalanceLock(status) != null },
         { session.isFormatPinActive }, { CaptureLists.supportsFocusModeOrDefault(session.connectedCamera?.model) },
         { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true },
-        isoCeilingSupported = { false })
+        controls = session::controlCapabilities)
 }
 
 /** The Core drum for ISO, shutter and white balance Kelvin; EV is its own wheel on the typed path. */

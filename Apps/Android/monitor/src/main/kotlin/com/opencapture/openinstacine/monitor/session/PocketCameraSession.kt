@@ -55,7 +55,6 @@ import com.opencapture.opencine.appkit.MonitorControlModel
 import com.opencapture.opencine.appkit.MotionProgramSession
 import com.opencapture.opencine.appkit.diagnostics.ReliabilityCameraPathLease
 import com.opencapture.opencine.core.CameraCommandIntent
-import com.opencapture.opencine.core.CapabilitySnapshot
 import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.opencine.insta360.luna.LunaCameraSession
 import com.opencapture.opencine.insta360.luna.LunaConnectPort
@@ -577,10 +576,20 @@ class PocketCameraSession(
 
     /**
      * What the monitor lays out: the Luna session's projection (iOS `LunaCameraSession.layout`).
-     * No session: the Core projection of nothing keeps [base].
+     * No session: the pre-connection model's view over [base] (Luna's static profile).
      */
     fun layout(base: MonitorLayoutCapabilities): MonitorLayoutCapabilities =
-        (control.state.value.session as? LunaCameraSession)?.layout(base) ?: MonitorLayoutCapabilities(CapabilitySnapshot(), base)
+        (control.state.value.session as? LunaCameraSession)?.layout(base)
+            ?: com.opencapture.opencine.vocabulary.MonitorLayoutCapabilities(controlCapabilities(), base)
+
+    /**
+     * The Luna integration's one control model while a Luna session is connected, else the shared
+     * pre-connection rule over Luna's static profile (iOS `CameraSession.controlCapabilities`).
+     */
+    fun controlCapabilities(): com.opencapture.opencine.vocabulary.ControlCapabilities =
+        (control.state.value.session as? LunaCameraSession)?.controlCapabilities()
+            ?: com.opencapture.opencine.vocabulary.ControlCapabilities.beforeConnection(
+                LunaCameraSession.CAPTURE_PROFILE, LunaCameraSession.MOTION)
 
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     fun disconnect() {

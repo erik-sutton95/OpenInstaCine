@@ -2,6 +2,7 @@ import Insta360Protocol
 import MonitorPresentation
 import OpenCineAppKit
 import OpenCineCameraControls
+import OpenCineCameraVocabulary
 import OpenCineCore
 import OpenInstaViewCore
 import SwiftUI
@@ -88,13 +89,9 @@ extension AppModel: CaptureSheetHost {
     var autoWhiteBalanceLocked: Bool { session.autoWhiteBalanceLock != nil }
     var canLockAutoWhiteBalance: Bool { session.canLockAutoWhiteBalance }
     var captureRouting: CaptureSheetRouting { .init() }
-    var captureCapabilities: CaptureSheetCapabilities {
-        CaptureSheetCapabilities(
-            focusMode: session.supportsFocusMode, aperture: session.supportsAperture,
-            nativeISO: .init(hop: session.supportsNativeIsoHop, ceiling: session.supportsIsoLimit),
-            audio: audioService != nil,
-            faceMetering: session.supportsFaceMetering)
-    }
+    /// The Luna integration's model (focus, iris, native ISO extensions, audio, face metering).
+    var controlCapabilities: ControlCapabilities { session.controlCapabilities(codecColor: recordingCodecColor) }
+    var captureCapabilities: CaptureSheetCapabilities { CaptureSheetCapabilities(controls: controlCapabilities) }
     var focusOptions: [FocusOption] { CaptureLists.focusOptions }
     var shutterUsesAngle: Bool {
         get { OperatorPrefs.shutterUsesAngle }
