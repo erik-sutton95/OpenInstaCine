@@ -208,8 +208,11 @@
                     model.session.status.zoomLens = CamFov.lens1x
                 }
                 if ProcessInfo.processInfo.environment["OPV_UI_REVIEW_MOTION_RUNNING"] == "1" {
-                    model.session.programmedMoveState = .init(progress: .init(running: true,
-                        paused: ProcessInfo.processInfo.environment["OPV_UI_REVIEW_MOTION_PAUSED"] == "1"))
+                    let paused = ProcessInfo.processInfo.environment["OPV_UI_REVIEW_MOTION_PAUSED"] == "1"
+                    let session = model.session
+                    ShellModel.applyThroughLaunch {
+                        session.programmedMoveState = .init(progress: .init(running: true, paused: paused))
+                    }
                 }
             }
             model.session.liveSignalBars = 4
