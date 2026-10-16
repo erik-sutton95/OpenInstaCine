@@ -58,12 +58,12 @@ extension CameraSession {
     var supportsIsoLimit: Bool { profile.nativeISO.ceiling == true }
     /// DJI camcap hop to the log curve's native ISO on a color change; the ISO sheet hides its toggle.
     var supportsNativeIsoHop: Bool { profile.nativeISO.hop == true }
-    /// The one control model of the camera: the live session's when connected, else the static
-    /// profile (the shared capture UI reads this).
+    /// The one control model of the camera: the live session's when connected, else the shared
+    /// pre-connection rule over Luna's static profile (the shared capture UI reads this).
     func controlCapabilities(codecColor: CaptureCodecColorChoices? = nil) -> ControlCapabilities {
         lunaSession?.controlCapabilities(codecColor: codecColor)
-            ?? ControlCapabilities(snapshot: CapabilitySnapshot(), profile: profile,
-                motion: LunaCameraSession.motion, codecColor: codecColor)
+            ?? ControlCapabilities(beforeConnection: profile, motion: LunaCameraSession.motion,
+                codecColor: codecColor)
     }
     /// Luna media browse runs over HTTP next to the live socket.
     /// The connection's Luna session: every request goes through it, and its admission is this

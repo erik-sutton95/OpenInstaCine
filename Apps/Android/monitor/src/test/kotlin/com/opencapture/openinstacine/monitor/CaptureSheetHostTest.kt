@@ -70,4 +70,20 @@ class CaptureSheetHostTest {
         assertEquals(false, controls.nativeISO.hop)
         assertEquals(false, controls.nativeISO.ceiling)
     }
+
+    /**
+     * The shared pre-connection rule: Insta knows its camera is a Luna, so before connection it
+     * offers what Luna's static profile declares (focus, gimbal, zoom), as iOS does.
+     */
+    @Test fun beforeConnectionLunasStaticProfileIsOffered() {
+        val before = ControlCapabilities.beforeConnection(LunaCameraSession.CAPTURE_PROFILE, LunaCameraSession.MOTION)
+        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, { false }, { false },
+            controls = { before })
+        val controls = state.controls()
+        assertTrue(controls.focus.isOffered && controls.gimbal.isOffered && controls.zoom.isOffered)
+        assertFalse(controls.audio.isOffered || controls.iris.isOffered)
+        val layout = com.opencapture.opencine.vocabulary.MonitorLayoutCapabilities(before, appLayoutBase)
+        assertTrue(layout.focus && layout.gimbal && layout.zoom && layout.headTracking)
+        assertFalse(layout.audio)
+    }
 }
