@@ -26,14 +26,9 @@ struct LiveViewScreen: View {
         .monitorOperatorInteraction(host: model, interaction: interaction,
             covered: model.shell.cover != nil, motion: Bindable(model).liveGimbalPanel,
             orientation: orientationObserver.orientation, onInputAdmission: updateInputAdmission)
-        // Camera-body gallery follows DJI Mimo: open Media with it, and close
-        // Media (which returns the camera to live) when the body leaves it.
+        // The camera body's own gallery opens Media, and leaving it closes Media.
         .onChange(of: model.session.cameraGalleryOpen) { _, open in
-            if open, model.shell.cover == nil {
-                model.shell.open(.media)
-            } else if !open, model.shell.cover == .media {
-                model.shell.dismissCover()
-            }
+            model.shell.followCameraGallery(open: open)
         }
         .onChange(of: model.shell.cover) { oldPanel, panel in
             model.session.incidentSettingsCovered = panel == .settings
