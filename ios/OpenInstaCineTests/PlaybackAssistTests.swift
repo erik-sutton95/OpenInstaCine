@@ -602,7 +602,9 @@ final class PlaybackAssistTests: XCTestCase {
             ) {
                 done.fulfill()
             }
-            let wait = XCTWaiter.wait(for: [done], timeout: 2)
+            // Ends when the bake's completion fires; the bound only stops a broken bake from hanging.
+            // GPU work on a loaded simulator took longer than the old 2 s window.
+            let wait = XCTWaiter.wait(for: [done], timeout: 30)
             XCTAssertEqual(wait, .completed)
             guard let texture = baker.bakedTexture(for: drawable, pixelFormat: .bgra8Unorm) else {
                 XCTFail("baker must publish")
