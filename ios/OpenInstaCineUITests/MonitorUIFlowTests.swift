@@ -181,6 +181,61 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         }
     }
 
+    /// A2-24: the problem report opens over the app root and closing it returns to Settings,
+    /// in portrait and landscape.
+    func testSettingsReportOpensOverTheRootAndReturnsToSettings() {
+        launch(ReviewLaunch(screen: .settings))
+        let tabs = app.scrollViews["monitor.settings.tabs"]
+        XCTAssertTrue(tabs.waitForExistence(timeout: 10))
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
+            rotate(orientation)
+            let system = app.buttons["monitor.settings.tab.System"]
+            reveal(system, in: tabs, portrait: orientation == .portrait)
+            system.tap()
+            let report = app.buttons["support.report.open"]
+            XCTAssertTrue(report.waitForExistence(timeout: 5))
+            for _ in 0..<4 where !report.isHittable { app.swipeUp() }
+            report.tap()
+            XCTAssertTrue(app.textViews["What happened?"].waitForExistence(timeout: 5))
+            capture("settings-report-\(orientation.rawValue)")
+            app.buttons["Close"].firstMatch.tap()
+            XCTAssertTrue(system.waitForExistence(timeout: 5))
+            XCTAssertFalse(app.textViews["What happened?"].exists)
+            XCTAssertTrue(system.isSelected)
+        }
+    }
+
+    /// A2-84: Settings reopens on the tab it was left on, scrolled where it was left.
+    func testSettingsReopenOnTheLastTabAtItsScrollPosition() throws {
+        app.launch()
+        let open = app.buttons["monitor.system.settings"]
+        XCTAssertTrue(open.waitForExistence(timeout: 20))
+        open.tap()
+        let tabs = app.scrollViews["monitor.settings.tabs"]
+        let display = app.buttons["monitor.settings.tab.Display"]
+        XCTAssertTrue(tabs.waitForExistence(timeout: 10))
+        reveal(display, in: tabs, portrait: true)
+        display.tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+            .press(forDuration: 0.01,
+                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
+        Thread.sleep(forTimeInterval: 1)
+        let cards = app.staticTexts.matching(identifier: "monitor.settings.card.title")
+        let marker = try XCTUnwrap(cards.allElementsBoundByIndex.first { $0.isHittable })
+        let label = marker.label
+        let top = marker.frame.minY
+        capture("settings-scroll-before-close")
+        app.buttons["Back to live"].tap()
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        open.tap()
+        XCTAssertTrue(display.waitForExistence(timeout: 5))
+        XCTAssertTrue(display.isSelected, "Settings reopens on the last tab")
+        let again = cards.matching(NSPredicate(format: "label == %@", label)).firstMatch
+        XCTAssertTrue(again.waitForExistence(timeout: 5))
+        XCTAssertEqual(again.frame.minY, top, accuracy: 2, "The tab keeps its scroll position")
+        capture("settings-scroll-after-reopen")
+    }
+
     func testSettingsCoverageAndCardTitleSpacing() throws {
         app.launch()
         rotate(.landscapeLeft)
