@@ -24,3 +24,6 @@ final class PhysicalMigrationQualificationTests: OpenCineAppUITesting.PhysicalMi
 
 /// SIMULATED graphical conformance uses the same shared assertions as every app.
 final class MonitorScreenshotLayoutTests: OpenCineAppUITesting.MonitorScreenshotLayoutTests {}
+
+/// SIMULATED: the colour readout opens the one codec and colour popup in both orientations.
+final class CodecColorPopupUITests: OpenCineAppUITesting.CodecColorPopupUITests {}
