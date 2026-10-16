@@ -126,7 +126,7 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         let peak = app.buttons["monitor.assist.PEAK"]
         XCTAssertTrue(peak.waitForExistence(timeout: 5))
         XCTAssertTrue(peak.isHittable, "Portrait collapsed View Assist must show a favorite tool")
-        XCTAssertGreaterThanOrEqual(peak.frame.height, 50)
+        XCTAssertEqual(peak.frame.height, MonitorSystemButtonMetrics.side(tablet: UIDevice.current.userInterfaceIdiom == .pad), accuracy: 1)
         let tools = [
             app.buttons["monitor.assists.expand"],
             peak,
@@ -1364,7 +1364,8 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
             let back = app.buttons["Back to media"]
             XCTAssertTrue(back.waitForExistence(timeout: 10))
             XCTAssertTrue(back.isHittable)
-            XCTAssertEqual(back.frame.width, 54, accuracy: 1)
+            // One system button size on phone and tablet (48 pt since #447).
+            XCTAssertEqual(back.frame.width, MonitorSystemButtonMetrics.side(tablet: UIDevice.current.userInterfaceIdiom == .pad), accuracy: 1)
             for title in [
                 "Favorite clip", "Clip information", "Share clip", "Delete clip from camera",
             ] {
