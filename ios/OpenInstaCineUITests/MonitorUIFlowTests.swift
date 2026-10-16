@@ -72,11 +72,19 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
             let format = app.buttons["monitor.capture.format"]
             let tally = app.descendants(matching: .any)["monitor.recording.readout"].firstMatch
             XCTAssertTrue(tally.exists)
-            XCTAssertEqual(format.frame.midY, tally.frame.midY, accuracy: 1)
+            if orientation == .portrait {
+                // Portrait stacks the format over its detail in one trailing column, so the
+                // header aligns component tops (OpenCine docs/ui, MonitorScreenshotLayoutTests).
+                XCTAssertEqual(format.frame.minY, tally.frame.minY, accuracy: 1)
+            } else {
+                XCTAssertEqual(format.frame.midY, tally.frame.midY, accuracy: 1)
+            }
             let cameraBattery = app.descendants(matching: .any)["monitor.telemetry.camera"]
                 .firstMatch
             XCTAssertTrue(cameraBattery.exists)
-            XCTAssertTrue(cameraBattery.label.hasPrefix("Camera battery "))
+            // The shared gauge speaks its title as the label and the charge as the value.
+            XCTAssertEqual(cameraBattery.label, "Camera battery")
+            XCTAssertEqual(cameraBattery.value as? String, "68 percent")
             capture("monitor-\(orientation.rawValue)")
         }
     }
@@ -1348,7 +1356,8 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
             capture("centered-cameras-\(orientation.rawValue)")
         }
         app.terminate()
-        app.launchEnvironment.merge(ReviewLaunch(screen: .playback).environment) { $1 }
+        // Delete from the camera is offered for a connected camera clip, as Pocket checks it.
+        app.launchEnvironment.merge(ReviewLaunch(screen: .playback, source: .camera, connected: true).environment) { $1 }
         app.launch()
         for orientation in [UIDeviceOrientation.landscapeLeft, .landscapeRight, .portrait] {
             rotate(orientation)
