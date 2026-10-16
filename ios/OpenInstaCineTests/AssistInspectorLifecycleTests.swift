@@ -1,6 +1,7 @@
 import CoreImage
 import CoreVideo
 import OpenCineApple
+import OpenCineHostedTestSupport
 import SwiftUI
 import XCTest
 
@@ -165,13 +166,16 @@ final class AssistInspectorLifecycleTests: XCTestCase {
                 host.view.setNeedsLayout()
                 host.view.layoutIfNeeded()
                 // One real main-run-loop transaction per input, faster than
-                // human tapping while still mounting each selected tool.
+                // human tapping. The mount itself is awaited: SwiftUI decides when
+                // it lands, and a loaded simulator can take longer than one input.
                 try await Task.sleep(for: .milliseconds(20))
+                _ = await HostedCondition.wait { probe.selected == tool }
                 XCTAssertEqual(probe.selected, tool, "cycle \(cycle), tool \(tool.rawValue)")
                 XCTAssertTrue(host.view.window === window)
             }
             model.assist.configureTool = nil
             try await Task.sleep(for: .milliseconds(20))
+            _ = await HostedCondition.wait { probe.selected == nil }
             XCTAssertNil(probe.selected, "Dismissal must tear down the mounted inspector")
         }
         XCTAssertGreaterThan(publicationCount, tools.count * 12)

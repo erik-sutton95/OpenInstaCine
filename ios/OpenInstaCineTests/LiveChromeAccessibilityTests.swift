@@ -49,7 +49,8 @@ final class LiveChromeAccessibilityTests: XCTestCase {
         XCTAssertTrue(picker.contains("monitor.capture.close"), "Picker: \(picker.sorted())")
         XCTAssertFalse(picker.contains("monitor.system.zoom"), "Picker: \(picker.sorted())")
         model.captureSheet = nil
-        try await settle(host.view)
+        // The next step reaches the zoom chip, so wait until the closed picker uncovers it.
+        _ = try await exposed(host.view) { $0.contains("monitor.system.zoom") }
 
         // The zoom dial: the dimmed chrome beneath it is out of reach.
         let zoom = try element("monitor.system.zoom", in: host.view)
@@ -62,7 +63,7 @@ final class LiveChromeAccessibilityTests: XCTestCase {
         XCTAssertFalse(dial.contains { $0.hasPrefix("monitor.telemetry.") }, "Dial: \(dial.sorted())")
         let close = try XCTUnwrap(HostedAccessibility.reachable(in: host.view).first { $0.accessibilityLabel == "Close zoom dial" })
         XCTAssertTrue(close.accessibilityActivate())
-        try await settle(host.view)
+        _ = try await exposed(host.view) { !$0.contains("monitor.zoom.dial") }
 
         // A covering page.
         model.shell.open(.settings)
@@ -97,7 +98,7 @@ final class LiveChromeAccessibilityTests: XCTestCase {
             model.session.disconnect()
             model.assist.evMeter = wasOn
         }
-        try await settle(host.view)
+        _ = try await exposed(host.view) { !$0.isEmpty }
 
         // A SIMULATED picture whose luma samples all sit at one code.
         var luma = Array(repeating: 0, count: 256)
@@ -109,7 +110,15 @@ final class LiveChromeAccessibilityTests: XCTestCase {
         model.frameSamples.publish(
             source, source: nil, transfer: .rec709,
             bundle: ScopeAssistBundle(samples: samples, transfer: .rec709))
-        try await settle(host.view)
+        // The meter re-renders from the published samples when SwiftUI next updates.
+        _ = await HostedCondition.wait {
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            let meter = HostedAccessibility.reachable(in: host.view).first {
+                Self.identifier($0) == "monitor.ev.meter"
+            }
+            return meter?.accessibilityValue?.hasPrefix("Estimated from picture") == true
+        }
 
         // The established exclusion: a host with no accessibility tree cannot walk it.
         try XCTSkipIf(
@@ -118,13 +127,6 @@ final class LiveChromeAccessibilityTests: XCTestCase {
         let meter = try element("monitor.ev.meter", in: host.view)
         let value = meter.accessibilityValue ?? ""
         XCTAssertTrue(value.hasPrefix("Estimated from picture"), value)
-    }
-
-    private func settle(_ view: UIView) async throws {
-        view.setNeedsLayout()
-        view.layoutIfNeeded()
-        try await Task.sleep(for: .milliseconds(400))
-        view.layoutIfNeeded()
     }
 
     /// The identifiers VoiceOver reaches once `ready` holds for them: a render that is slow
