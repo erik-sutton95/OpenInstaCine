@@ -1,5 +1,6 @@
 import AVFoundation
 import OpenCineApple
+import OpenCineHostedTestSupport
 import XCTest
 
 @MainActor
@@ -98,9 +99,8 @@ final class PlaybackAudioOwnershipTests: XCTestCase {
         let item = AVPlayerItem(asset: composition)
         let runtime = MonitorPlaybackAudioMeterRuntime()
         runtime.attach(to: item)
-        let attached = XCTNSPredicateExpectation(predicate: NSPredicate(format: "audioMix != nil"),
-            object: item)
-        await fulfillment(of: [attached], timeout: 5)
+        // AVFoundation installs the tap asynchronously; wait for the item's actual mix.
+        _ = await HostedCondition.wait { item.audioMix != nil }
         let mix = try XCTUnwrap(item.audioMix)
         XCTAssertNotNil(mix.inputParameters.first?.audioTapProcessor)
         runtime.detach(from: item)

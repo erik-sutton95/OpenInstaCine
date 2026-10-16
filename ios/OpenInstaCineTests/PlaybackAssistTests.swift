@@ -7,6 +7,8 @@ import XCTest
 import OpenCineAppKit
 import OpenCineCameraControls
 import OpenCineApple
+import OpenCineHostedTestSupport
+import os
 import OpenCineMedia
 import MonitorPresentation
 
@@ -79,11 +81,16 @@ final class PlaybackAssistTests: XCTestCase {
         let session = PlaybackFeedSession()
         let release = DispatchSemaphore(value: 0)
         session.debugOnPullQueue { release.wait() }
-        // Bounded, so the old sync blocks 2 s and fails instead of hanging the run.
-        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { release.signal() }
-        let start = CACurrentMediaTime()
+        // Hang guard only: a synchronous wait would end when this fires, so the change must
+        // return while the pull is still blocked (an ordering fact, not a wall-clock budget).
+        let guardFired = OSAllocatedUnfairLock(initialState: false)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 10) {
+            guardFired.withLock { $0 = true }
+            release.signal()
+        }
         session.beginSourceChange()
-        XCTAssertLessThan(CACurrentMediaTime() - start, 0.5)
+        XCTAssertFalse(
+            guardFired.withLock { $0 }, "The source change returned only after the busy pull")
         release.signal()
         session.shutdown()
     }
@@ -101,6 +108,7 @@ final class PlaybackAssistTests: XCTestCase {
             var effects = LiveImageEffects()
             effects.zebra = true
             session.setEffects(effects, transfer: .rec709, sampleBus: LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile))
+            // Negative window: no seek may be issued for a nonnumeric time within it.
             try? await Task.sleep(for: .milliseconds(150))
             session.shutdown()
             XCTAssertEqual(player.seekCount, 0, "A ready output must still wait for a numeric time")
@@ -119,10 +127,7 @@ final class PlaybackAssistTests: XCTestCase {
         var effects = LiveImageEffects()
         effects.zebra = true
         session.setEffects(effects, transfer: .rec709, sampleBus: LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile))
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
-        while player.seekCount == 0, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        _ = await HostedCondition.wait { player.seekCount > 0 }
         session.shutdown()
         XCTAssertEqual(player.seekCount, 1, "A parked ready item still needs its first frame")
     }
@@ -473,7 +478,7 @@ final class PlaybackAssistTests: XCTestCase {
             XCTAssertFalse(result.unmanagedBake)
             presented.fulfill()
         }
-        await fulfillment(of: [presented], timeout: 2)
+        await fulfillment(of: [presented], timeout: 30)
     }
 
     func testEngineGradesPlaybackLUTAsReplace() async {
@@ -493,7 +498,7 @@ final class PlaybackAssistTests: XCTestCase {
             XCTAssertTrue(result.unmanagedBake)
             presented.fulfill()
         }
-        await fulfillment(of: [presented], timeout: 2)
+        await fulfillment(of: [presented], timeout: 30)
     }
 
     func testLUTReplacePresentsUnmanagedLikeLive() {

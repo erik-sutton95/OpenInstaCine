@@ -3,6 +3,7 @@ import Metal
 import QuartzCore
 import XCTest
 import OpenCineApple
+import OpenCineHostedTestSupport
 import os
 
 @testable import OpenInstaCine
@@ -14,6 +15,9 @@ private final class TestPresentationOptions {
 
 @MainActor
 final class FeedPresentationTests: XCTestCase {
+    // Every expectation here is fulfilled by the feed's own submit, encode or GPU completion
+    // callback, so its 30 s timeout is a hang guard, not a budget: a three-second window
+    // failed correct code under a loaded full suite ("First source submitted").
     func testNativeHostKeepsItsLayerWhenOperatorDisplayChoicesChange() {
         let options = TestPresentationOptions()
         let host = MonitorPictureHost(frame: CGRect(x: 0, y: 0, width: 64, height: 48),
@@ -80,10 +84,8 @@ final class FeedPresentationTests: XCTestCase {
         feed.presentOperations.acquire = { _ in drawable }
         feed.presentOperations.submit = { _, _, completed in completed(true) }
         XCTAssertTrue(feed.display(picture, timeNs: 10))
-        let heldDeadline = ContinuousClock.now.advanced(by: .seconds(2))
-        while !feed.hasPresentedFrame, ContinuousClock.now < heldDeadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        // GPU completion arrives off the main thread; wait for the presented state itself.
+        _ = await HostedCondition.wait { feed.hasPresentedFrame }
         let heldAt = try XCTUnwrap(feed.lastPresentedAt)
 
         let submitted = expectation(description: "Pre-recovery GPU work is pending")
@@ -93,7 +95,7 @@ final class FeedPresentationTests: XCTestCase {
             submitted.fulfill()
         }
         XCTAssertTrue(feed.display(picture, timeNs: 20))
-        await fulfillment(of: [submitted], timeout: 3)
+        await fulfillment(of: [submitted], timeout: 30)
         let oldCompletion = try XCTUnwrap(completion.withLock { $0 })
         let started = Date()
         decoder.flushForRecovery()
@@ -102,14 +104,10 @@ final class FeedPresentationTests: XCTestCase {
         let replacement = OSAllocatedUnfairLock<(@Sendable (Bool) -> Void)?>(initialState: nil)
         feed.presentOperations.submit = { _, _, done in replacement.withLock { $0 = done } }
         decoder.handleDecodedFrame(ScopeTestBuffers.makeEdgeBuffer(), timeNs: 30)
-        let sourceDeadline = ContinuousClock.now.advanced(by: .seconds(2))
-        while decoder.lastSourceFrameAt.map({ $0 > started }) != true,
-            ContinuousClock.now < sourceDeadline
-        {
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        _ = await HostedCondition.wait { decoder.lastSourceFrameAt.map { $0 > started } == true }
         XCTAssertGreaterThan(try XCTUnwrap(decoder.lastSourceFrameAt), started)
         oldCompletion(true)
+        // Negative window: the old flight must not replace the held image within it.
         try await Task.sleep(for: .milliseconds(40))
         XCTAssertEqual(
             feed.lastPresentedTimeNs, 10, "An old GPU flight cannot replace the held image")
@@ -133,7 +131,7 @@ final class FeedPresentationTests: XCTestCase {
             submitted.fulfill()
         }
         XCTAssertTrue(feed.display(picture, timeNs: 10))
-        await fulfillment(of: [submitted], timeout: 3)
+        await fulfillment(of: [submitted], timeout: 30)
         let successor = MonitorLiveVideoRuntime()
         successor.processedFeed = feed
         retired.close()
@@ -148,7 +146,7 @@ final class FeedPresentationTests: XCTestCase {
         feed.onSuccessfulPresent = { current.fulfill() }
         feed.presentOperations.submit = { _, _, completed in completed(true) }
         XCTAssertTrue(feed.display(picture, timeNs: 20))
-        await fulfillment(of: [current], timeout: 3)
+        await fulfillment(of: [current], timeout: 30)
         XCTAssertEqual(feed.lastPresentedTimeNs, 20)
         XCTAssertEqual(feed.presentedFrames, 1, "Old completion releases its flight without counting a new present")
         successor.close()
@@ -189,13 +187,13 @@ final class FeedPresentationTests: XCTestCase {
         feed.presentOperations.acquire = { _ in
             let heartbeat = DispatchSemaphore(value: 0)
             DispatchQueue.main.async { heartbeat.signal() }
-            let result = heartbeat.wait(timeout: .now() + .milliseconds(400))
+            let result = heartbeat.wait(timeout: .now() + .seconds(10))
             heartbeatRan.withLock { $0 = result == .success }
             finished.fulfill()
             return nil
         }
         XCTAssertTrue(feed.display(picture, timeNs: 1))
-        await fulfillment(of: [finished], timeout: 3)
+        await fulfillment(of: [finished], timeout: 30)
         XCTAssertTrue(heartbeatRan.withLock { $0 }, "Drawable wait must leave MainActor runnable")
     }
 
@@ -208,14 +206,14 @@ final class FeedPresentationTests: XCTestCase {
         feed.presentOperations.encode = { _, _, _ in
             let heartbeat = DispatchSemaphore(value: 0)
             DispatchQueue.main.async { heartbeat.signal() }
-            let result = heartbeat.wait(timeout: .now() + .milliseconds(400))
+            let result = heartbeat.wait(timeout: .now() + .seconds(10))
             heartbeatRan.withLock { $0 = result == .success }
             encoded.fulfill()
             return true
         }
         feed.presentOperations.submit = { _, _, completed in completed(true) }
         XCTAssertTrue(feed.display(picture, timeNs: 1))
-        await fulfillment(of: [encoded], timeout: 3)
+        await fulfillment(of: [encoded], timeout: 30)
         XCTAssertTrue(
             heartbeatRan.withLock { $0 }, "Model preparation must leave MainActor runnable")
     }
@@ -231,7 +229,7 @@ final class FeedPresentationTests: XCTestCase {
             submitted.fulfill()
         }
         XCTAssertTrue(feed.display(picture, timeNs: 10))
-        await fulfillment(of: [submitted], timeout: 3)
+        await fulfillment(of: [submitted], timeout: 30)
         XCTAssertFalse(feed.hasPresentedFrame)
         XCTAssertNil(feed.lastPresentedAt)
         XCTAssertEqual(feed.presentedFrames, 0)
@@ -252,7 +250,7 @@ final class FeedPresentationTests: XCTestCase {
             submitted.fulfill()
         }
         XCTAssertTrue(feed.display(picture, timeNs: 10))
-        await fulfillment(of: [submitted], timeout: 3)
+        await fulfillment(of: [submitted], timeout: 30)
         feed.resetPresentation()
         let done = try XCTUnwrap(completion.withLock { $0 })
         done(true)
@@ -266,7 +264,7 @@ final class FeedPresentationTests: XCTestCase {
         feed.onPresented = { current.fulfill() }
         feed.presentOperations.submit = { _, _, completed in completed(true) }
         XCTAssertTrue(feed.display(picture, timeNs: 20))
-        await fulfillment(of: [current], timeout: 3)
+        await fulfillment(of: [current], timeout: 30)
         XCTAssertEqual(feed.lastPresentedTimeNs, 20)
         XCTAssertEqual(feed.presentedFrames, 1, "Old completion must release the reservation")
     }
@@ -310,7 +308,7 @@ final class FeedPresentationTests: XCTestCase {
             }
             if attempt == 1 {
                 acquiring.fulfill()
-                _ = release.wait(timeout: .now() + 2)
+                _ = release.wait(timeout: .now() + 30)
             }
             return true
         }
@@ -319,7 +317,7 @@ final class FeedPresentationTests: XCTestCase {
             completed(true)
         }
         XCTAssertTrue(feed.display(picture, timeNs: 10))
-        await fulfillment(of: [acquiring], timeout: 3)
+        await fulfillment(of: [acquiring], timeout: 30)
         let generation = feed.debugPresentGeneration
         invalidate(feed)
         XCTAssertNotEqual(feed.debugPresentGeneration, generation)
@@ -328,7 +326,7 @@ final class FeedPresentationTests: XCTestCase {
         let current = expectation(description: "Replacement source presents")
         feed.onPresented = { current.fulfill() }
         release.signal()
-        await fulfillment(of: [current], timeout: 3)
+        await fulfillment(of: [current], timeout: 30)
         XCTAssertEqual(committed.withLock { $0 }, 1, "Old prepared frame must not submit")
         XCTAssertEqual(feed.lastPresentedTimeNs, 20)
     }
@@ -347,7 +345,7 @@ final class FeedPresentationTests: XCTestCase {
             }
             if attempt == 1 {
                 acquiring.fulfill()
-                _ = release.wait(timeout: .now() + 2)
+                _ = release.wait(timeout: .now() + 30)
             }
             return drawable
         }
@@ -356,7 +354,7 @@ final class FeedPresentationTests: XCTestCase {
             completed(true)
         }
         XCTAssertTrue(feed.display(picture, timeNs: 10))
-        await fulfillment(of: [acquiring], timeout: 3)
+        await fulfillment(of: [acquiring], timeout: 30)
         let generation = feed.debugPresentGeneration
         invalidate(feed)
         XCTAssertNotEqual(feed.debugPresentGeneration, generation)
@@ -365,7 +363,7 @@ final class FeedPresentationTests: XCTestCase {
         let current = expectation(description: "Replacement source presents")
         feed.onPresented = { current.fulfill() }
         release.signal()
-        await fulfillment(of: [current], timeout: 3)
+        await fulfillment(of: [current], timeout: 30)
         XCTAssertEqual(committed.withLock { $0 }, 1, "Old acquired drawable must not submit")
         XCTAssertEqual(feed.lastPresentedTimeNs, 20)
     }
@@ -384,13 +382,13 @@ final class FeedPresentationTests: XCTestCase {
             if first { firstSubmitted.fulfill() }
         }
         XCTAssertTrue(feed.display(picture, timeNs: 10))
-        await fulfillment(of: [firstSubmitted], timeout: 3)
+        await fulfillment(of: [firstSubmitted], timeout: 30)
         XCTAssertTrue(feed.display(picture, timeNs: 20))
         let firstPresented = expectation(description: "First source GPU completed")
         feed.onPresented = { firstPresented.fulfill() }
         let done = try XCTUnwrap(completions.withLock { $0.first })
         done(true)
-        await fulfillment(of: [firstPresented], timeout: 3)
+        await fulfillment(of: [firstPresented], timeout: 30)
         XCTAssertEqual(feed.lastPresentedTimeNs, 10, "Newest admission must not relabel old pixels")
         XCTAssertEqual(feed.presentedFrames, 1)
     }
@@ -412,7 +410,7 @@ final class FeedPresentationTests: XCTestCase {
             if first { firstSubmitted.fulfill() } else { repeated.fulfill() }
         }
         XCTAssertTrue(feed.display(picture, timeNs: 10))
-        await fulfillment(of: [firstSubmitted], timeout: 3)
+        await fulfillment(of: [firstSubmitted], timeout: 30)
         XCTAssertTrue(feed.display(picture, timeNs: 10))
         let done = try XCTUnwrap(completion.withLock { $0 })
         done(true)
@@ -428,7 +426,7 @@ final class FeedPresentationTests: XCTestCase {
         let overlayPresented = expectation(description: "Overlay is GPU complete")
         feed.onPresented = { overlayPresented.fulfill() }
         XCTAssertTrue(feed.display(picture, overlay: true, timeNs: 10))
-        await fulfillment(of: [overlayPresented], timeout: 3)
+        await fulfillment(of: [overlayPresented], timeout: 30)
         XCTAssertFalse(feed.isOpaque)
 
         let submitted = expectation(description: "Replacement waits for GPU completion")
@@ -438,14 +436,14 @@ final class FeedPresentationTests: XCTestCase {
             submitted.fulfill()
         }
         XCTAssertTrue(feed.display(picture, overlay: false, timeNs: 20))
-        await fulfillment(of: [submitted], timeout: 3)
+        await fulfillment(of: [submitted], timeout: 30)
         XCTAssertFalse(feed.isOpaque, "An admitted LUT must not restyle the old transparent frame")
         XCTAssertTrue(feed.lastPresentWasOverlay)
         let replacementPresented = expectation(description: "Replacement style matches its pixels")
         feed.onPresented = { replacementPresented.fulfill() }
         let done = try XCTUnwrap(completion.withLock { $0 })
         done(true)
-        await fulfillment(of: [replacementPresented], timeout: 3)
+        await fulfillment(of: [replacementPresented], timeout: 30)
         XCTAssertTrue(feed.isOpaque)
         XCTAssertFalse(feed.lastPresentWasOverlay)
     }
