@@ -159,7 +159,7 @@ final class DiagnosticCenter: NSObject, MXMetricManagerSubscriber {
             appBuild: info?["CFBundleVersion"] as? String ?? "0",
             osName: "iOS",
             osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-            deviceModel: Self.machineIdentifier,
+            deviceModel: DiagnosticsDevice.current.hardwareClass,
             cameraFamily: familyName,
             cameraModel: session.connectedCamera?.model.name ?? "none",
             phase: phase,
@@ -387,14 +387,6 @@ final class DiagnosticCenter: NSObject, MXMetricManagerSubscriber {
                 return nil
             }
             return (url.lastPathComponent, body)
-        }
-    }
-
-    nonisolated static var machineIdentifier: String {
-        var info = utsname()
-        uname(&info)
-        return withUnsafePointer(to: &info.machine) { ptr in
-            ptr.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) }
         }
     }
 }
