@@ -1,7 +1,6 @@
 import OpenCineApple
 import OpenCineCameraControls
 import OpenCineAppKitApple
-import Observation
 import AVFoundation
 import Foundation
 import Insta360Apple
