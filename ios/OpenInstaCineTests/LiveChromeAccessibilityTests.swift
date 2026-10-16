@@ -1,4 +1,5 @@
 import OpenCineHostedAccessibility
+import OpenCineHostedTestSupport
 import OpenCineMedia
 import SwiftUI
 import XCTest
@@ -126,17 +127,15 @@ final class LiveChromeAccessibilityTests: XCTestCase {
         view.layoutIfNeeded()
     }
 
-    /// The identifiers VoiceOver reaches once `ready` holds for them, laid out again every 20 ms
-    /// for at most 5 s: a render that is slow under load is never read half built. The caller's
-    /// assertions then state what must hold.
+    /// The identifiers VoiceOver reaches once `ready` holds for them: a render that is slow
+    /// under load is never read half built. The caller's assertions then state what must hold.
     private func exposed(_ view: UIView, when ready: (Set<String>) -> Bool) async throws -> Set<String> {
         var ids = Set<String>()
-        for _ in 0..<250 {
+        _ = await HostedCondition.wait {
             view.setNeedsLayout()
             view.layoutIfNeeded()
             ids = Set(HostedAccessibility.reachable(in: view).compactMap(Self.identifier))
-            if ready(ids) { break }
-            try await Task.sleep(for: .milliseconds(20))
+            return ready(ids)
         }
         // The shared walk turns the accessibility runtime on wherever it can (a simulator), so
         // only a host where it cannot (a device without assistive access) may skip.

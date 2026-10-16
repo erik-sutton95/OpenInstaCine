@@ -3,6 +3,7 @@ import OpenCineAppKit
 import OpenCineAppKitApple
 import OpenCineCameraControls
 import OpenCineHostedAccessibility
+import OpenCineHostedTestSupport
 import OpenInstaViewCore
 import SwiftUI
 import UIKit
@@ -85,11 +86,9 @@ import XCTest
         window.makeKeyAndVisible()
         host.view.frame = window.bounds
         defer { window.isHidden = true; window.rootViewController = nil }
-        var mounted = false
-        for _ in 0..<250 where !mounted {
+        let mounted = await HostedCondition.wait {
             host.view.layoutIfNeeded()
-            mounted = !Self.labels(host.view).isEmpty
-            if !mounted { try await Task.sleep(for: .milliseconds(20)) }
+            return !Self.labels(host.view).isEmpty
         }
         // The shared walk turns the accessibility runtime on wherever it can (a simulator), so
         // only a host where it cannot (a device without assistive access) may skip.
