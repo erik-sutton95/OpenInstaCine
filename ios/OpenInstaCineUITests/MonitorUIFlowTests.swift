@@ -545,7 +545,8 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
             rotate(orientation)
             let identifiers =
-                ["iso", "shutter", "exposure", "wb", "focus", "audio", "format"]
+                // A Luna body reports no camera audio, so there is no AUDIO picker.
+                ["iso", "shutter", "exposure", "wb", "focus", "format"]
                 + (orientation == .landscapeLeft ? ["color", "mode"] : [])
             for id in identifiers {
                 app.buttons["monitor.capture.\(id)"].tap()
@@ -618,34 +619,17 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         }
     }
 
-    func testAudioMeterMovesAndRetainsOrientationOptions() {
+    /// A Luna body reports no camera audio: neither the AUDIO readout nor the audio meter tool is
+    /// offered (Pocket, whose bodies record audio, keeps the meter test).
+    func testCameraWithoutAudioOffersNoAudioReadoutOrMeter() {
         app.launch()
         rotate(.landscapeLeft)
+        XCTAssertTrue(app.buttons["monitor.capture.iso"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["monitor.capture.audio"].exists)
         app.buttons["monitor.assists.expand"].tap()
-        let audio = app.buttons["monitor.assist.AUDIO"]
-        XCTAssertTrue(audio.waitForExistence(timeout: 5))
-        audio.tap()
-        app.buttons["Collapse View Assist tools"].tap()
-        let meter = app.descendants(matching: .any)["monitor.audio.meter"].firstMatch
-        XCTAssertTrue(meter.waitForExistence(timeout: 5))
-        let original = meter.frame
-        XCTAssertEqual(original.width, 28, accuracy: 1)
-        XCTAssertEqual(original.height, 168, accuracy: 1)
-        XCTAssertLessThan(original.midX, app.frame.midX)
-        XCTAssertEqual(original.midY, app.frame.midY, accuracy: 1)
-        let start = meter.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 130, dy: -40)))
-        XCTAssertGreaterThan(meter.frame.midX, original.midX + 90)
-        meter.press(forDuration: 0.55)
-        let horizontal = app.buttons["Horizontal"].firstMatch
-        XCTAssertTrue(horizontal.waitForExistence(timeout: 5))
-        horizontal.tap()
-        app.switches["Show dB values"].tap()
-        capture("audio-options-horizontal-db")
-        app.buttons["Close Audio Levels"].tap()
-        XCTAssertEqual(meter.frame.width, 168, accuracy: 1)
-        XCTAssertEqual(meter.frame.height, 28, accuracy: 1)
-        capture("audio-meter-moved-horizontal")
+        XCTAssertTrue(app.buttons["monitor.assist.PEAK"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["monitor.assist.AUDIO"].exists)
+        capture("no-camera-audio")
     }
 
     func testFalseColorReferenceStartsCenteredAndCanBePlaced() {
