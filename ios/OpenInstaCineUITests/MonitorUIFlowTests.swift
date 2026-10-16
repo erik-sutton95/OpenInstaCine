@@ -212,24 +212,28 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         XCTAssertTrue(open.waitForExistence(timeout: 20))
         open.tap()
         let tabs = app.scrollViews["monitor.settings.tabs"]
-        let display = app.buttons["monitor.settings.tab.Display"]
+        let assist = app.buttons["monitor.settings.tab.View Assist"]
         XCTAssertTrue(tabs.waitForExistence(timeout: 10))
-        reveal(display, in: tabs, portrait: true)
-        display.tap()
+        reveal(assist, in: tabs, portrait: true)
+        assist.tap()
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
             .press(forDuration: 0.01,
                 thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
         Thread.sleep(forTimeInterval: 1)
         let cards = app.staticTexts.matching(identifier: "monitor.settings.card.title")
-        let marker = try XCTUnwrap(cards.allElementsBoundByIndex.first { $0.isHittable })
+        let window = app.frame
+        // The first card title fully inside the page, below the tab rail.
+        let marker = try XCTUnwrap(cards.allElementsBoundByIndex.first {
+            $0.frame.minY > window.minY + 160 && $0.frame.maxY < window.maxY - 60
+        }, "A card title is on screen after scrolling")
         let label = marker.label
         let top = marker.frame.minY
         capture("settings-scroll-before-close")
         app.buttons["Back to live"].tap()
         XCTAssertTrue(open.waitForExistence(timeout: 5))
         open.tap()
-        XCTAssertTrue(display.waitForExistence(timeout: 5))
-        XCTAssertTrue(display.isSelected, "Settings reopens on the last tab")
+        XCTAssertTrue(assist.waitForExistence(timeout: 5))
+        XCTAssertTrue(assist.isSelected, "Settings reopens on the last tab")
         let again = cards.matching(NSPredicate(format: "label == %@", label)).firstMatch
         XCTAssertTrue(again.waitForExistence(timeout: 5))
         XCTAssertEqual(again.frame.minY, top, accuracy: 2, "The tab keeps its scroll position")
