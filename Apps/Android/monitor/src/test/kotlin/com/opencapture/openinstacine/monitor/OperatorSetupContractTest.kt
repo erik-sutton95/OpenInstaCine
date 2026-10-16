@@ -3,6 +3,7 @@ package com.opencapture.openinstacine.monitor
 import com.opencapture.opencine.cameracontrols.toggledCleanPins
 import com.opencapture.opencine.cameracontrols.MonitorLegalDocument
 import com.opencapture.opencine.cameracontrols.MonitorLegalPage
+import com.opencapture.opencine.cameracontrols.MonitorPlatformLegalNotices
 import com.opencapture.opencine.cameracontrols.lutLookLabel
 import com.opencapture.opencine.vocabulary.ConnectionPhase
 import com.opencapture.opencine.vocabulary.CameraCommands
@@ -10,6 +11,7 @@ import com.opencapture.opencine.vocabulary.GamepadGimbalStick
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.json.JSONObject
 import com.opencapture.opencine.runtime.MonitorGlesUpscaler
@@ -135,8 +137,16 @@ class OperatorSetupContractTest {
         assertTrue(privacy.contains("Automatic reports exclude all images"))
         assertFalse(privacy.contains("prepares an email to support@opencapture.org"))
         assertFalse(privacy.contains("does not send analytics, crash reports"))
-        assertTrue(InstaLegalDocuments.notice.body.contains("Apache License, Version 2.0"))
-        assertTrue(InstaLegalDocuments.licenses.body.contains("No Insta360 SDK is included or required."))
+        val root = java.io.File(System.getProperty("openinstacine.repositoryRoot"))
+        val notice = InstaLegalDocuments.notice
+        assertTrue(notice.available)
+        assertEquals(root.resolve("NOTICE").readText().trim(), notice.body)
+        val licenses = InstaLegalDocuments.licenses
+        assertTrue(licenses.available)
+        val platform = assertNotNull(MonitorPlatformLegalNotices.text)
+        assertTrue(platform.contains(root.resolve("../OpenCine/THIRD-PARTY-NOTICES.md").readText().trim()))
+        assertEquals(listOf(root.resolve("LICENSE").readText().trim(),
+            root.resolve("THIRD-PARTY-NOTICES.md").readText().trim(), platform).joinToString("\n\n"), licenses.body)
     }
 
     @Test
