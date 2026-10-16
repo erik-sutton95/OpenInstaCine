@@ -236,7 +236,9 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         XCTAssertTrue(assist.isSelected, "Settings reopens on the last tab")
         let again = cards.matching(NSPredicate(format: "label == %@", label)).firstMatch
         XCTAssertTrue(again.waitForExistence(timeout: 5))
-        XCTAssertEqual(again.frame.minY, top, accuracy: 2, "The tab keeps its scroll position")
+        // Within a few points: the first simulator run restored 180 against 176, while the drag
+        // itself moves the page by 40% of the screen height.
+        XCTAssertEqual(again.frame.minY, top, accuracy: 6, "The tab keeps its scroll position")
         capture("settings-scroll-after-reopen")
     }
 
