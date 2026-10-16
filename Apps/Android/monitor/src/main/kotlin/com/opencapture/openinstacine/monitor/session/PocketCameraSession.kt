@@ -582,6 +582,13 @@ class PocketCameraSession(
     fun layout(base: MonitorLayoutCapabilities): MonitorLayoutCapabilities =
         (control.state.value.session as? LunaCameraSession)?.layout(base) ?: MonitorLayoutCapabilities(CapabilitySnapshot(), base)
 
+    /**
+     * The Luna integration's one control model while a Luna session is connected (iOS
+     * `CameraSession.controlCapabilities`). Null before connection keeps the capture flags.
+     */
+    fun controlCapabilities(): com.opencapture.opencine.vocabulary.ControlCapabilities? =
+        (control.state.value.session as? LunaCameraSession)?.controlCapabilities()
+
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     fun disconnect() {
         retireNativeCaptureRequests()
