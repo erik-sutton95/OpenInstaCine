@@ -325,6 +325,12 @@ final class AppModel {
     /// The app-scoped delivery owner: runs survive leaving the gallery or the player.
     let delivery = MonitorDeliveryCoordinator()
     let frameio = FrameioAccountModel(namespace: .openInstaCine)
+    /// The Settings account operation, owned here so a settings rehost keeps an accepted sign-in.
+    @ObservationIgnored let settingsAccount = MonitorSettingsAccountModel()
+    /// The Settings support operations (reports and browser links), kept across a settings rehost.
+    @ObservationIgnored let settingsSupport = MonitorSettingsSupportModel()
+    /// Settings browser links through the one internet hop; the root reports background and return.
+    @ObservationIgnored lazy var browserHandoff = MonitorBrowserInternetHandoff(hop: internetHop)
     var relayHost = WatcherRelayHost(
         versionMismatchReason: WatcherRelayJoin.versionMismatchReason,
         logSubsystem: "com.opencapture.openinstacine", journal: { ControlLiveLog.line($0) })
@@ -384,6 +390,34 @@ final class AppModel {
 
     /// On the Luna's own network (192.168.42.x), from the integration (SHELL-02 D10).
     var isOnCameraAccessPoint: Bool { internetHop.onCameraNetwork }
+
+    /// Settings reports and browser links (A2-22): the report is this app's diagnostic file, and a
+    /// page opened on the camera's Wi-Fi asks, then leaves through the one internet hop.
+    var settingsSupportActions: MonitorSettingsSupportActions {
+        .init(
+            identity: ObjectIdentifier(self), isCurrent: { [weak self] in self != nil },
+            requiresInternetConsent: isOnCameraAccessPoint,
+            makeReport: { [weak self] in
+                guard let self, let url = DiagnosticCenter.shared.writeReport(session: self.session) else {
+                    throw MonitorSettingsReportUnavailable(supportEmail: "support@opencapture.org")
+                }
+                return url
+            },
+            prepareBrowser: { [weak self] admission in
+                guard let self else { return nil }
+                return await self.browserHandoff.prepare(route: self.hopRoute, admission: admission)
+            },
+            open: { await UIApplication.shared.open($0) },
+            internetFailure: MonitorSettingsCopy.browserInternetFailure(app: "OpenInstaCine"))
+    }
+
+    /// Frame.io sign-in from Settings: on the camera's Wi-Fi it asks, then leaves through the one
+    /// internet hop and comes back (A2-23).
+    var settingsAccountActions: MonitorSettingsAccountActions {
+        frameio.settingsActions(
+            hop: internetHop, route: { [weak self] in self?.hopRoute },
+            internetFailure: MonitorSettingsCopy.accountInternetFailure)
+    }
 
     /// Where a hop leaves from: the current session, its camera and the network it joined.
     var hopRoute: InstaHopRoute {
@@ -874,6 +908,7 @@ struct AppRoot: View {
         }
         .onAppear { model.assist.inspectorSceneActive = scenePhase == .active }
         .monitorShellSceneActivity(model.shell)
+        .monitorBrowserHandoffReturn(model.browserHandoff)
     }
 }
 
