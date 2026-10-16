@@ -186,7 +186,6 @@ struct SettingsRootView: View {
         return Set(MonitorDisplayChrome.Section.allCases.filter {
             if $0 == .zoomChip { return capabilities.zoom }
             if $0 == .gimbalStick { return capabilities.gimbal }
-            if $0 == .timecode { return capabilities.timecode }
             return true
         })
     }

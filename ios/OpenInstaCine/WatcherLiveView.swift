@@ -126,7 +126,7 @@ struct WatcherLiveView: View {
             readings: [.init("FORMAT", value: client.state.format), .init("COLOR", value: client.state.color),
                 .init("SHUTTER", value: client.state.shutter), .init("ISO", value: client.state.iso),
                 .init("ZOOM", value: client.state.zoom),
-                .init("BATTERY", value: client.state.batteryPercent >= 0 ? "\(client.state.batteryPercent)%" : nil)],
+                .init("BATTERY", value: MonitorOperatorPowerReading.readoutLabel(client.state.batteryReading))],
             settings: settings, holderName: client.token.holderName,
             canRequestControl: client.status == .live && client.state.allowsControlRequests,
             controlRequested: client.controlRequested, notice: notice)

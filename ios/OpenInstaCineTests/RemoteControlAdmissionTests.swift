@@ -3,6 +3,7 @@ import Insta360AppleTestSupport
 import Insta360Protocol
 import OpenCineAppKit
 import OpenCineCore
+import OpenCineCameraControls
 import OpenCineRelay
 import OpenInstaViewCore
 import XCTest
@@ -12,6 +13,110 @@ import XCTest
 /// SIMULATED actual facade and controllable first-send ports. No wall-clock wait or camera I/O.
 @MainActor
 final class RemoteControlAdmissionTests: XCTestCase {
+  func testNativeHeldReadoutsUseRecordingFactsInsteadOfTheLegacyWireProjection() throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    let model = AppModel(session: facade)
+    defer { facade.disconnect(); core.close(.requested) }
+    facade.status.videoFormat = VideoFormat(resolution: .p4K, frameRate: .fps30)
+    facade.status.colorMode = .normal
+    facade.status.availableColorModes = LunaShellMapping.colorModes
+    facade.nativeRecordingFormat = try XCTUnwrap(LunaVideoResolution(rawValue: 48))
+    facade.nativeRecordingColor = .iLog
+    XCTAssertEqual(model.quickSnapshot(.resolution)?.selection, "25p")
+    XCTAssertEqual(model.quickSnapshot(.color)?.selection, "I-Log")
+  }
+
+  /// Twin of Android `LunaNativePhotoPanelTest`: Photo keeps the shared fallback, as the drawer does.
+  func testPhotoOffersNoNativeFormatOrColorQuickChoice() throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    let model = AppModel(session: facade)
+    defer { facade.disconnect(); core.close(.requested) }
+    facade.status.shootingMode = Int(ShootingMode.photo.rawValue)
+    facade.nativeRecordingFormat = try XCTUnwrap(LunaVideoResolution(rawValue: 48))
+    facade.nativeRecordingColor = .iLog
+    XCTAssertTrue(facade.status.isPhoto)
+    XCTAssertNil(model.quickSnapshot(.resolution)?.nativeSheet)
+    XCTAssertNil(model.quickSnapshot(.color)?.nativeSheet)
+    XCTAssertNil(model.nativeCapturePanel(.resolution, enabled: true))
+    facade.status.shootingMode = Int(ShootingMode.video.rawValue)
+    XCTAssertEqual(model.quickSnapshot(.resolution)?.nativeSheet, .resolution)
+    XCTAssertEqual(model.quickSnapshot(.color)?.nativeSheet, .color)
+  }
+
+  func testUnknownRecordingFactCannotSendANativeFormatOrColorWrite() throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    defer { facade.disconnect(); core.close(.requested) }
+    facade.status.shootingMode = Int(ShootingMode.video.rawValue)
+    facade.status.isRecording = false
+    let current = try XCTUnwrap(LunaVideoResolution(rawValue: 48))
+    facade.nativeRecordingFormat = current
+    facade.nativeRecordingColor = .standard
+    wire.camera.captureState = 4
+    wire.camera.reportCapture()
+    XCTAssertNil(core.current.recording.value, "A photo capture report declares no movie recording state")
+    facade.setNativeRecordingFormat(try XCTUnwrap(LunaVideoResolution(rawValue: 49)))
+    facade.setNativeRecordingColor(.iLog)
+    XCTAssertEqual(facade.nativeRecordingFormat, current)
+    XCTAssertEqual(facade.nativeRecordingColor, .standard)
+    XCTAssertNil(facade.nativeFormatPin)
+    XCTAssertNil(facade.nativeColorPin)
+    XCTAssertTrue(wire.queued.isEmpty)
+    XCTAssertTrue(wire.writes.isEmpty)
+  }
+
+  private func meterReadout(_ model: AppModel) throws -> MonitorOperatorSupplementaryCaptureReadout<CaptureSheet, Int> {
+    let inputs = MonitorOperatorCaptureInputs<CaptureSheet, Int, MonitorOperatorLegacyCaptureIdentity>.captureSheetHost(model)
+    return try XCTUnwrap(inputs.supplementaryReadouts.first { $0.id == "native.metering" })
+  }
+  func testNativeMeteringUnknownLockAndRetiredSourceNeverQueueACommand() async throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    let model = AppModel(session: facade)
+    defer { facade.disconnect(); core.close(.requested) }
+    await drain { facade.control.snapshot?.session == core.id }
+    facade.faceMetering = nil
+    let unknown = try meterReadout(model)
+    XCTAssertEqual(unknown.accessibilityValue, "Unknown")
+    XCTAssertFalse(unknown.perform(admitted: true))
+    facade.faceMetering = false
+    let known = try meterReadout(model)
+    XCTAssertEqual(known.accessibilityValue, "Matrix")
+    XCTAssertFalse(known.perform(admitted: false), "Hidden, inactive, held or covered input is not admitted")
+    facade.isLocked = true
+    XCTAssertFalse(known.perform(admitted: true))
+    facade.isLocked = false
+    core.commandOwner.replaceSource()
+    XCTAssertFalse(known.perform(admitted: true))
+    XCTAssertEqual(facade.faceMetering, false)
+    XCTAssertTrue(wire.queued.isEmpty)
+    XCTAssertTrue(wire.writes.isEmpty)
+  }
+  func testNativeMeteringKnownFactQueuesTheActualOption46ForItsOwner() async throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    let model = AppModel(session: facade)
+    defer { facade.disconnect(); core.close(.requested) }
+    await drain { facade.control.snapshot?.session == core.id }
+    facade.faceMetering = false
+    let shown = try meterReadout(model)
+    XCTAssertTrue(shown.perform(admitted: true))
+    await wire.waitUntilQueued(1)
+    XCTAssertTrue(wire.enter(0))
+    XCTAssertEqual(wire.writes, [try LunaProtocol.setFaceMetering(true, functionMode: LunaFunctionMode.normalVideo.rawValue)])
+    XCTAssertEqual(facade.faceMetering, true)
+    XCTAssertFalse(shown.perform(admitted: true), "The old Matrix readout cannot replay against the new Face target")
+    wire.answer(0)
+    XCTAssertTrue(wire.direct.isEmpty)
+  }
+
   /// SIMULATED: a live link without a recording observation supplies no actual record command.
   func testWatchRefusesNilRecordingCommandFromActualCommonControl() async {
     let wire = RemoteLunaWire()
