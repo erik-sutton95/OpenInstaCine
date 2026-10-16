@@ -73,6 +73,14 @@ extension AppModel: CaptureSheetHost {
     var labelProfile: CameraLabelProfile { session.profile }
     var audioService: CaptureAudioService? { nil }
     var colorModes: [ColorMode] { session.colorModes }
+    /// The one codec and colour popup. The Luna offers no codec choice, so it lists its native
+    /// recording colours only, the same ones its colour drum writes.
+    var recordingCodecColor: CaptureCodecColorChoices {
+        let choices = LunaColorMode.nativeRecordingChoices
+        return CaptureCodecColorChoices(
+            colors: choices.map { CaptureCodecColorChoice(id: String($0.rawValue), label: $0.label) },
+            selectedColor: session.nativeRecordingColor.map { String($0.rawValue) })
+    }
     var currentShootingMode: ShootingMode? { session.currentShootingMode }
     var sessionLocked: Bool { session.isLocked }
     var formatPinActive: Bool { session.isFormatPinActive }
