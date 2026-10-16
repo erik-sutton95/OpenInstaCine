@@ -1,6 +1,8 @@
 import Foundation
 import MonitorPresentation
 import OpenCineAppKit
+import OpenCineHostedAccessibility
+import OpenCineHostedTestSupport
 import OpenCineMedia
 import OpenInstaViewCore
 import SwiftUI
@@ -69,9 +71,13 @@ import XCTest
             window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible()
         }
         let cellID = "monitor.media.clip." + captured.asset.id.rawValue
-        let cellReady = await openingSettled { Self.objects(window).contains { Self.identifier($0) == cellID } }
+        // The gallery begins its lifetime when it appears; a tap before that would open with the
+        // outgoing admission. The in-process walk can vend the cell first, so await both.
+        let cellReady = await openingSettled {
+            owner.browsing && HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == cellID }
+        }
         try Self.reachableCell(cellReady)
-        let cell = try XCTUnwrap(Self.objects(window).first { Self.identifier($0) == cellID })
+        let cell = try XCTUnwrap(HostedAccessibility.elements(in: window).first { HostedAccessibility.identifier($0) == cellID })
         let admission = owner.actionToken
         XCTAssertTrue(cell.accessibilityActivate(), "Tap the actual gallery cell")
         if event == .refused { owner.close() }
@@ -87,7 +93,7 @@ import XCTest
         XCTAssertTrue(presented, "The captured opening must retain its cover even when refused")
         if event == .retired || event == .replaced {
             let originalReady = await openingSettled {
-                Self.objects(window).contains { Self.identifier($0) == (photo ? "monitor.photo.back" : "monitor.playback.back") }
+                HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == (photo ? "monitor.photo.back" : "monitor.playback.back") }
             }
             XCTAssertTrue(originalReady)
             if event == .retired { owner.close() }
@@ -102,15 +108,15 @@ import XCTest
         if event == .refreshed {
             let kept = await openingSettled {
                 guard let cover = host.presentedViewController?.view else { return false }
-                return Self.objects(cover).contains { $0.accessibilityLabel == captured.asset.filename }
+                return HostedAccessibility.elements(in: cover).contains { $0.accessibilityLabel == captured.asset.filename }
             }
             XCTAssertTrue(kept, "The cover must keep the displayed record captured before refresh")
             if let cover = host.presentedViewController?.view {
-                XCTAssertFalse(Self.objects(cover).contains { $0.accessibilityLabel == "SIMULATED-REFRESHED" + suffix })
+                XCTAssertFalse(HostedAccessibility.elements(in: cover).contains { $0.accessibilityLabel == "SIMULATED-REFRESHED" + suffix })
             }
         } else {
             let unavailable = await openingSettled {
-                Self.objects(window).contains { Self.identifier($0) == "monitor.media.unavailable" }
+                HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == "monitor.media.unavailable" }
             }
             XCTAssertTrue(unavailable, "Refused, retired and replaced sources must show the shared unavailable state")
         }
@@ -121,18 +127,17 @@ import XCTest
         attachment.name = "SIMULATED-APP-" + (photo ? "photo-" : "video-") + String(describing: event)
         attachment.lifetime = .keepAlways; add(attachment)
         let closeID = event == .refreshed ? (photo ? "monitor.photo.back" : "monitor.playback.back") : "monitor.media.unavailable.close"
-        let button = try XCTUnwrap(Self.objects(window).first { Self.identifier($0) == closeID }, "Close must be rendered")
+        let button = try XCTUnwrap(HostedAccessibility.elements(in: window).first { HostedAccessibility.identifier($0) == closeID }, "Close must be rendered")
         XCTAssertTrue(button.accessibilityActivate(), "Activate the actual Close control")
         let returned = await openingSettled { host.presentedViewController == nil }
         XCTAssertTrue(returned, "Close must return to the actual gallery")
-        let gallery = await openingSettled { Self.objects(window).contains { Self.identifier($0) == cellID } }
+        let gallery = await openingSettled { HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == cellID } }
         XCTAssertTrue(gallery)
     }
-    private func openingSettled(_ predicate: @escaping @MainActor () -> Bool) async -> Bool {
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            MainActor.assumeIsolated { predicate() }
-        }, object: nil)
-        return await XCTWaiter.fulfillment(of: [expectation], timeout: 5) == .completed
+    /// Waits for the actual presentation state. A five-second window failed correct code when
+    /// load stalled the main thread (first AVFoundation use) past it before a re-check.
+    private func openingSettled(_ predicate: @MainActor () -> Bool) async -> Bool {
+        await HostedCondition.wait(until: predicate)
     }
 
     /// The round trip drives the gallery through its accessibility elements. On physical
@@ -187,7 +192,7 @@ import XCTest
         host.view.frame = window.bounds
         let ready = await settled {
             host.view.layoutIfNeeded()
-            return Self.scrollViews(host.view).contains { $0.contentSize.height > $0.bounds.height + 500 }
+            return owner.browsing && Self.scrollViews(host.view).contains { $0.contentSize.height > $0.bounds.height + 500 }
         }
         XCTAssertTrue(ready, "The cached stills must fill a scrolling gallery")
         let scroll = try XCTUnwrap(Self.scrollViews(host.view).first { $0.contentSize.height > $0.bounds.height + 500 })
@@ -196,8 +201,8 @@ import XCTest
         let before = scroll.contentOffset.y
         XCTAssertGreaterThan(before, 300, "The gallery must start the round trip scrolled")
         let visible: () -> NSObject? = {
-            Self.objects(host.view).first {
-                Self.identifier($0)?.hasPrefix("monitor.media.clip.") == true
+            HostedAccessibility.elements(in: host.view).first {
+                HostedAccessibility.identifier($0)?.hasPrefix("monitor.media.clip.") == true
                     && $0.accessibilityFrame.intersects(scroll.convert(scroll.bounds, to: nil))
             }
         }
@@ -223,32 +228,11 @@ import XCTest
         }
     }
 
-    private func settled(_ predicate: () -> Bool) async -> Bool {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while !predicate(), ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(20)) }
-        return predicate()
+    private func settled(_ predicate: @MainActor () -> Bool) async -> Bool {
+        await HostedCondition.wait(until: predicate)
     }
     private static func scrollViews(_ view: UIView) -> [UIScrollView] {
         ((view as? UIScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews)
-    }
-    private static func objects(_ object: NSObject) -> [NSObject] {
-        if object.accessibilityElementsHidden { return [] }
-        if let view = object as? UIView, view.isHidden || view.alpha < 0.01 { return [] }
-        let children: [NSObject]
-        if let values = object.accessibilityElements as? [NSObject], !values.isEmpty {
-            children = values
-        } else {
-            let count = object.accessibilityElementCount()
-            children = count > 0 && count != NSNotFound
-                ? (0..<count).compactMap { object.accessibilityElement(at: $0) as? NSObject }
-                : (object as? UIView)?.subviews ?? []
-        }
-        return [object] + children.flatMap(objects)
-    }
-    private static func identifier(_ object: NSObject) -> String? {
-        let getter = NSSelectorFromString("accessibilityIdentifier")
-        guard object.responds(to: getter) else { return nil }
-        return object.perform(getter)?.takeUnretainedValue() as? String
     }
 }
 
@@ -267,14 +251,11 @@ import XCTest
             let message = error.localizedDescription
             Task { @MainActor in result.error = message }
         }
-        let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            MainActor.assumeIsolated {
-                result.error != nil || (scene.interfaceOrientation.isLandscape == landscape
-                    && (scene.coordinateSpace.bounds.width > scene.coordinateSpace.bounds.height) == landscape)
-            }
-        }, object: nil)
-        let settledResult = await XCTWaiter.fulfillment(of: [settled], timeout: 5)
-        XCTAssertEqual(settledResult, .completed)
+        let settled = await HostedCondition.wait {
+            result.error != nil || (scene.interfaceOrientation.isLandscape == landscape
+                && (scene.coordinateSpace.bounds.width > scene.coordinateSpace.bounds.height) == landscape)
+        }
+        XCTAssertTrue(settled)
         if let refusal = result.error {
             // A real multitasking window (physical iPad) refuses programmatic
             // rotation outright: "The current windowing mode does not allow for
@@ -286,14 +267,11 @@ import XCTest
             landscape = scene.interfaceOrientation.isLandscape
         }
     }
-    let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-        MainActor.assumeIsolated {
-            result.error != nil || (scene.interfaceOrientation.isLandscape == landscape
-                && (scene.coordinateSpace.bounds.width > scene.coordinateSpace.bounds.height) == landscape)
-        }
-    }, object: nil)
-    let ready = await XCTWaiter.fulfillment(of: [expectation], timeout: 5)
-    XCTAssertEqual(ready, .completed)
+    let ready = await HostedCondition.wait {
+        result.error != nil || (scene.interfaceOrientation.isLandscape == landscape
+            && (scene.coordinateSpace.bounds.width > scene.coordinateSpace.bounds.height) == landscape)
+    }
+    XCTAssertTrue(ready)
     XCTAssertNil(result.error, "Actual scene orientation request must succeed")
     XCTAssertEqual(scene.interfaceOrientation.isLandscape, landscape)
     print("S02_ACTUAL_GEOMETRY", requested, scene.coordinateSpace.bounds, scene.interfaceOrientation.rawValue)

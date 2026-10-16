@@ -159,7 +159,13 @@ targets:
       - OpenInstaCineTests
       - ../../OpenCine/Tests/MonitorUITests/MonitorPortraitHeaderClearanceTests.swift
     dependencies:
+      # The shared hosted-test wait; dependency-free, so no second copy of a host module.
+      - package: OpenCine
+        product: OpenCineHostedTestSupport
       - target: OpenInstaCine
+      # Test support only: the shared hosted accessibility walk, which depends on nothing here.
+      - package: OpenCine
+        product: OpenCineHostedAccessibility
       - package: OpenInstaViewCore
         product: OpenInstaViewCore
       - package: OpenCine

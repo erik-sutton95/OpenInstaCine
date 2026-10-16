@@ -2,6 +2,8 @@ import Foundation
 import OpenCineAppKit
 import OpenCineAppKitApple
 import OpenCineCameraControls
+import OpenCineHostedAccessibility
+import OpenCineHostedTestSupport
 import OpenInstaViewCore
 import SwiftUI
 import UIKit
@@ -84,8 +86,13 @@ import XCTest
         window.makeKeyAndVisible()
         host.view.frame = window.bounds
         defer { window.isHidden = true; window.rootViewController = nil }
-        try await Task.sleep(for: .milliseconds(300))
-        try XCTSkipIf(Self.labels(host.view).isEmpty, "No accessibility tree: enable app accessibility")
+        let mounted = await HostedCondition.wait {
+            host.view.layoutIfNeeded()
+            return !Self.labels(host.view).isEmpty
+        }
+        // The shared walk turns the accessibility runtime on wherever it can (a simulator), so
+        // only a host where it cannot (a device without assistive access) may skip.
+        try XCTSkipIf(!mounted && !HostedAccessibility.enableRuntime(), "No accessibility tree: enable app accessibility")
         model.delivery.fail("Export settings are unavailable.")
         var announced = false
         for _ in 0..<60 where !announced {
@@ -96,14 +103,8 @@ import XCTest
         XCTAssertTrue(announced, "The failed delivery's outcome must be visible")
     }
 
-    private static func labels(_ object: NSObject, depth: Int = 0) -> [String] {
-        guard depth < 64, !object.accessibilityElementsHidden else { return [] }
-        if let view = object as? UIView, view.isHidden || view.alpha < 0.01 { return [] }
-        let own = object.accessibilityLabel.map { [$0] } ?? []
-        if let elements = object.accessibilityElements as? [NSObject], !elements.isEmpty {
-            return own + elements.flatMap { labels($0, depth: depth + 1) }
-        }
-        return own + ((object as? UIView)?.subviews ?? []).flatMap { labels($0, depth: depth + 1) }
+    private static func labels(_ view: UIView) -> [String] {
+        HostedAccessibility.elements(in: view).compactMap(\.accessibilityLabel)
     }
 }
 
