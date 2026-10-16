@@ -1,5 +1,6 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineCameraControls
 import SwiftUI
 
 /// In-app legal pages. Canonical website copy lives at opencapture.org/openinstacine/privacy and /terms.
@@ -26,9 +27,7 @@ extension MonitorLegalDocuments {
 
         OpenCapture is the data controller. Privacy or deletion requests: support@opencapture.org.
 
-        Optional reliability reports
-        With your consent, configured builds send crash, hang and feed diagnostics, app/OS/device versions and session health counts through Sentry. No footage, screenshots, raw camera packets or GPS location are included. Sentry receives the connection IP; stored event IP and derived geography are removed. Event storage uses Germany. Some provider processing may occur internationally.
-        Turn reporting off in Operator Setup at any time without losing app features. This clears pending SDK uploads, but does not delete reports already received. Contact us privately to request deletion. The website policy explains retention, transfers and your rights.
+        \(MonitorSettingsCopy.reliabilityReportsPrivacy)
 
         Reporting a problem yourself
         Report a problem sends your description and any optional reply email to OpenCapture through Sentry when you tap Send report. Technical details are included only if you choose them and can be reviewed first. You can choose up to three photos or screenshots and review or remove them before sending. Selected images are resized and re-encoded without original filenames or location metadata. Only share images you have permission to send; no images are attached automatically. This one-off submission does not enable automatic reports. Unsent reports stay privately on this phone, expire after 7 days (removed when the app next runs), wait until you leave camera Wi-Fi, and can be removed before delivery. Do not include passwords or other sensitive information in your message. You can decline the first-launch prompt and enable automatic reports later in System.

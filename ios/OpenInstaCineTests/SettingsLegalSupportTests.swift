@@ -1,5 +1,6 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineCameraControls
 import OpenCineHostedAccessibility
 import SwiftUI
 import UIKit
@@ -103,6 +104,14 @@ import XCTest
         XCTAssertTrue(rows[.display]?.contains("HDR display") == true, "\(rows[.display] ?? [])")
         XCTAssertTrue(rows[.storage]?.contains("Full Resolution Caching") == true, "\(rows[.storage] ?? [])")
         XCTAssertTrue(rows[.system]?.contains("Automatic error reports") == true, "\(rows[.system] ?? [])")
+    }
+
+    /// In-app privacy matches the website (2026-10-16): it reads the shared reliability paragraph,
+    /// which names the random install identifier deleted on opt-out.
+    func testPrivacyReadsTheSharedReliabilityParagraph() throws {
+        guard case .text(let privacy) = MonitorLegalDocuments.app.privacy else { return XCTFail("privacy is bundled text") }
+        XCTAssertTrue(privacy.contains(MonitorSettingsCopy.reliabilityReportsPrivacy))
+        XCTAssertTrue(privacy.contains("install identifier"))
     }
 
     func testAMissingBundledPageSaysSoInsteadOfShowingAnEmptyPage() async throws {
