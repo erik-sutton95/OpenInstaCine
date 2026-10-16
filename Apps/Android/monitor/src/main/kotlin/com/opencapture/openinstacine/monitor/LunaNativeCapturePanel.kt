@@ -13,6 +13,7 @@ import com.opencapture.opencine.core.CameraRecordingFormat
 import com.opencapture.opencine.core.Rational
 import com.opencapture.opencine.insta360.shell.aspectLabel
 import com.opencapture.opencine.insta360.shell.label
+import com.opencapture.opencine.insta360.shell.nativeRecordingColorDrum
 import com.opencapture.opencine.insta360.shell.nativeRecordingColorProfiles
 
 /** Native values keep the backend's identifiers; the shared sheet owns all chrome. */
@@ -44,8 +45,9 @@ import com.opencapture.opencine.insta360.shell.nativeRecordingColorProfiles
         CaptureFormatPicker(choices, current, isCurrent() && choices.isNotEmpty(), captured,
             isCurrent = isCurrent, onSelect = { if (isCurrent()) session.setNativeRecordingFormat(it.value) })
     } else {
+        // The drum opens on the reported colour; only a native choice is ever sent.
         val choices = nativeRecordingColorProfiles
-        CaptureDrumWheel(choices.map { it.label }, color?.takeIf { it in choices }?.label.orEmpty(),
+        CaptureDrumWheel(nativeRecordingColorDrum(color).map { it.label }, color?.label.orEmpty(),
             interactive = isCurrent(), onSelect = { label ->
                 if (isCurrent()) choices.firstOrNull { it.label == label }?.let(session::setNativeRecordingColor)
             })
