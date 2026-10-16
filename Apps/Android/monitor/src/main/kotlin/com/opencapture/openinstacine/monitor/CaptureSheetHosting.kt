@@ -61,6 +61,10 @@ internal fun instaCaptureSessionState(
 internal fun AppModel.observedCaptureSessionState(status: CameraStatus): CaptureSessionState {
     val aeLock by session.aeLock.collectAsState()
     val awbLock by session.awbLockKelvin.collectAsState()
+    // `nativeCaptureQuick` builds the format and colour quick choices from these reports. The strip,
+    // drawer and sheets that ask for them read this state, so observing the reports here recomposes
+    // each of them when the camera or an operator choice changes a native value.
+    listOf(session.nativeFormat, session.nativeFormats, session.nativeColor).forEach { it.collectAsState().value }
     return instaCaptureSessionState({ aeLock }, { awbLock }, { session.autoWhiteBalanceLock(status) != null },
         { session.isFormatPinActive }, { CaptureLists.supportsFocusModeOrDefault(session.connectedCamera?.model) },
         { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true },
