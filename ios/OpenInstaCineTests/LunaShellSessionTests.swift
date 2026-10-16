@@ -224,8 +224,9 @@ final class LunaLayoutTests: XCTestCase {
         let core = camera.connectedSession()
         shell.control.bind(core)
         var luna = base
-        (luna.gimbal, luna.headTracking, luna.focus, luna.timecode) = (true, true, true, true)
-        XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), luna, "unconfigured lens range stays unknown")
+        // Luna lays out its one control model: zoom from its declared stops before the live range.
+        (luna.gimbal, luna.zoom, luna.headTracking, luna.focus, luna.timecode) = (true, true, true, true, true)
+        XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), luna, "declared zoom before the live range")
         core.configureLens(zoomDomain: 1...4)
         luna.zoom = true
         XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), luna, "no audio levels, no iris")
