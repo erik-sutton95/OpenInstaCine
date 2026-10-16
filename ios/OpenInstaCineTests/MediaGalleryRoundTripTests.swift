@@ -2,6 +2,7 @@ import Foundation
 import MonitorPresentation
 import OpenCineAppKit
 import OpenCineHostedAccessibility
+import OpenCineHostedTestSupport
 import OpenCineMedia
 import OpenInstaViewCore
 import SwiftUI
@@ -70,7 +71,11 @@ import XCTest
             window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible()
         }
         let cellID = "monitor.media.clip." + captured.asset.id.rawValue
-        let cellReady = await openingSettled { HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == cellID } }
+        // The gallery begins its lifetime when it appears; a tap before that would open with the
+        // outgoing admission. The in-process walk can vend the cell first, so await both.
+        let cellReady = await openingSettled {
+            owner.browsing && HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == cellID }
+        }
         try Self.reachableCell(cellReady)
         let cell = try XCTUnwrap(HostedAccessibility.elements(in: window).first { HostedAccessibility.identifier($0) == cellID })
         let admission = owner.actionToken
@@ -129,11 +134,10 @@ import XCTest
         let gallery = await openingSettled { HostedAccessibility.elements(in: window).contains { HostedAccessibility.identifier($0) == cellID } }
         XCTAssertTrue(gallery)
     }
-    private func openingSettled(_ predicate: @escaping @MainActor () -> Bool) async -> Bool {
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            MainActor.assumeIsolated { predicate() }
-        }, object: nil)
-        return await XCTWaiter.fulfillment(of: [expectation], timeout: 5) == .completed
+    /// Waits for the actual presentation state. A five-second window failed correct code when
+    /// load stalled the main thread (first AVFoundation use) past it before a re-check.
+    private func openingSettled(_ predicate: @MainActor () -> Bool) async -> Bool {
+        await HostedCondition.wait(until: predicate)
     }
 
     /// The round trip drives the gallery through its accessibility elements. On physical
@@ -188,7 +192,7 @@ import XCTest
         host.view.frame = window.bounds
         let ready = await settled {
             host.view.layoutIfNeeded()
-            return Self.scrollViews(host.view).contains { $0.contentSize.height > $0.bounds.height + 500 }
+            return owner.browsing && Self.scrollViews(host.view).contains { $0.contentSize.height > $0.bounds.height + 500 }
         }
         XCTAssertTrue(ready, "The cached stills must fill a scrolling gallery")
         let scroll = try XCTUnwrap(Self.scrollViews(host.view).first { $0.contentSize.height > $0.bounds.height + 500 })
@@ -224,10 +228,8 @@ import XCTest
         }
     }
 
-    private func settled(_ predicate: () -> Bool) async -> Bool {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while !predicate(), ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(20)) }
-        return predicate()
+    private func settled(_ predicate: @MainActor () -> Bool) async -> Bool {
+        await HostedCondition.wait(until: predicate)
     }
     private static func scrollViews(_ view: UIView) -> [UIScrollView] {
         ((view as? UIScrollView).map { [$0] } ?? []) + view.subviews.flatMap(scrollViews)
@@ -249,14 +251,11 @@ import XCTest
             let message = error.localizedDescription
             Task { @MainActor in result.error = message }
         }
-        let settled = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            MainActor.assumeIsolated {
-                result.error != nil || (scene.interfaceOrientation.isLandscape == landscape
-                    && (scene.coordinateSpace.bounds.width > scene.coordinateSpace.bounds.height) == landscape)
-            }
-        }, object: nil)
-        let settledResult = await XCTWaiter.fulfillment(of: [settled], timeout: 5)
-        XCTAssertEqual(settledResult, .completed)
+        let settled = await HostedCondition.wait {
+            result.error != nil || (scene.interfaceOrientation.isLandscape == landscape
+                && (scene.coordinateSpace.bounds.width > scene.coordinateSpace.bounds.height) == landscape)
+        }
+        XCTAssertTrue(settled)
         if let refusal = result.error {
             // A real multitasking window (physical iPad) refuses programmatic
             // rotation outright: "The current windowing mode does not allow for
@@ -268,14 +267,11 @@ import XCTest
             landscape = scene.interfaceOrientation.isLandscape
         }
     }
-    let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-        MainActor.assumeIsolated {
-            result.error != nil || (scene.interfaceOrientation.isLandscape == landscape
-                && (scene.coordinateSpace.bounds.width > scene.coordinateSpace.bounds.height) == landscape)
-        }
-    }, object: nil)
-    let ready = await XCTWaiter.fulfillment(of: [expectation], timeout: 5)
-    XCTAssertEqual(ready, .completed)
+    let ready = await HostedCondition.wait {
+        result.error != nil || (scene.interfaceOrientation.isLandscape == landscape
+            && (scene.coordinateSpace.bounds.width > scene.coordinateSpace.bounds.height) == landscape)
+    }
+    XCTAssertTrue(ready)
     XCTAssertNil(result.error, "Actual scene orientation request must succeed")
     XCTAssertEqual(scene.interfaceOrientation.isLandscape, landscape)
     print("S02_ACTUAL_GEOMETRY", requested, scene.coordinateSpace.bounds, scene.interfaceOrientation.rawValue)
