@@ -312,8 +312,7 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         XCTAssertTrue(panel.waitForExistence(timeout: 5))
         for (control, backLabel) in [("settings", "Back to live"), ("media", "Back")] {
             let navigation = app.buttons["monitor.system.\(control)"]
-            XCTAssertTrue(navigation.isHittable)
-            navigation.tap()
+            tapWhenReady(navigation)
             let back = app.buttons[backLabel].firstMatch
             XCTAssertTrue(back.waitForExistence(timeout: 5))
             capture("covered-picker-\(control)")
@@ -324,7 +323,8 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
             XCTAssertFalse(app.buttons["monitor.capture.iso"].isHittable)
             XCTAssertFalse(navigation.isHittable)
             back.tap()
-            XCTAssertTrue(panel.isHittable, "The same picker returns after \(control)")
+            // The page closes with a transition; read the monitor once it has settled.
+            XCTAssertTrue(waitUntilReady(panel), "The same picker returns after \(control)")
             XCTAssertTrue(app.buttons["monitor.capture.close"].isHittable)
             XCTAssertTrue(app.buttons["monitor.system.record"].isHittable)
         }
