@@ -49,7 +49,7 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
                     file.durationSeconds.takeIf { it > 0 }?.let(MediaClipFormatting::durationLabel),
                     controller.downloadProgress[file.path])
             }, begin = { library.begin(); model.session.beginMediaBrowse() }, refresh = library::refresh, close = ::dismiss,
-            thumbnail = { MediaCatalogPicture(it, controller) },
+            thumbnail = { MonitorMediaCatalogPicture(it, it.record.payload.file, controller) },
             player = { page ->
                 MediaPlayerScreen(opening = page.request, files = page.request.playlist.map(::file), startingAt = file(page.request.record),
                     controller = controller, model = model, coverPresented = page.coverPresented || deliveryActive,
