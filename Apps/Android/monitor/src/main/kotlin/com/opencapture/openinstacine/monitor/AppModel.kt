@@ -464,6 +464,18 @@ class AppModel(
         }
     }
 
+    /**
+     * The one codec and colour popup. The Luna offers no codec choice, so it lists its native
+     * recording colours only, the same ones its colour drum writes.
+     */
+    override fun recordingCodecColor(status: CameraStatus): com.opencapture.opencine.vocabulary.CaptureCodecColorChoices =
+        com.opencapture.opencine.vocabulary.CaptureCodecColorChoices(
+            colors = nativeRecordingColorProfiles.map {
+                com.opencapture.opencine.vocabulary.CaptureCodecColorChoice(it.name, it.label)
+            },
+            selectedColor = session.nativeColor.value?.name,
+        )
+
     @Composable override fun nativeCapturePanel(sheet: LiveSheet, enabled: Boolean): (@Composable () -> Unit)? {
         val status by session.status.collectAsState()
         return if (!status.isPhoto && (sheet == LiveSheet.FORMAT || sheet == LiveSheet.COLOR))
