@@ -10,6 +10,7 @@ import OpenCineCameraControls
 import class OpenCineCore.LocalVPNNotice
 import struct OpenCineCore.CameraSessionID
 import struct OpenCineCore.CameraValuePin
+import struct OpenCineCore.HostClock
 import OpenCineMedia
 import OpenCineMotion
 import OpenInstaViewCore
@@ -103,6 +104,8 @@ final class CameraSession {
     @ObservationIgnored private var statusFlushTask: Task<Void, Never>?
     @ObservationIgnored private var linkTicker: Task<Void, Never>?
     @ObservationIgnored private var lastIFrameRequestAt = Date.distantPast
+    /// The keyframe rate limit's clock. Tests advance a manual clock instead of waiting a second.
+    @ObservationIgnored var clock: HostClock = .live
 
     @ObservationIgnored let backend: LunaCameraBackend
     /// False for a lease (borrowed decoder or controls-only editor) on another session's backend.
@@ -675,8 +678,9 @@ final class CameraSession {
     /// Luna `IFRAME_REQUEST` (105). Rate limited: the body already sends a GOP every ~2 s.
     func requestKeyframe(reason: String) {
         guard hasControlLink, !isBrowsingMedia else { return }
-        guard Date().timeIntervalSince(lastIFrameRequestAt) > 1 else { return }
-        lastIFrameRequestAt = Date()
+        let now = clock.date()
+        guard now.timeIntervalSince(lastIFrameRequestAt) > 1 else { return }
+        lastIFrameRequestAt = now
         ControlLiveLog.line("feed: I-frame request (\(reason))")
         Task { [weak self] in _ = try? await self?.sendLuna(LunaProtocol.keyframeRequest) }
     }
