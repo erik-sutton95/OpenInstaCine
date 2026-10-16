@@ -1,5 +1,7 @@
 package com.opencapture.openinstacine.monitor.session
 
+import kotlin.math.roundToInt
+import com.opencapture.opencine.insta360.shell.label
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
@@ -147,6 +149,7 @@ import com.opencapture.opencine.media.LivePipelineCadence
 class PocketCameraSession(
     context: Context,
     incidentSink: com.opencapture.opencine.media.FeedIncidentSink = AppDiagnostics.incidents,
+    private val nativePinNow: () -> Long = SystemClock::elapsedRealtime,
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -224,7 +227,7 @@ class PocketCameraSession(
     init {
         control.onNote = { presentControlNote(it) }
         control.noteFor = CorePresentation::note
-        control.onChange = { _status.update(::projectControls) }
+        control.onChange = { retireChangedNativeCaptureSource(); _status.update(::projectControls) }
         control.onRecordFinished = { receipt ->
             val stopped = receipt.intent == CameraCommandIntent.StopRecording && receipt.stage == CommandStage.Confirmed
             if (stopped) _mediaCaptured.tryEmit(Unit)
@@ -238,6 +241,49 @@ class PocketCameraSession(
     }
     private var formatTable: Map<VideoFormat, Long> = emptyMap()
     private var lastReadout = CameraReadout()
+    private val _nativeFormats = MutableStateFlow<List<com.opencapture.opencine.insta360.shell.CameraRecordFormat>>(emptyList())
+    val nativeFormats = _nativeFormats.asStateFlow()
+    private val _nativeFormat = MutableStateFlow<com.opencapture.opencine.insta360.shell.CameraRecordFormat?>(null)
+    val nativeFormat = _nativeFormat.asStateFlow()
+    private val _nativeColor = MutableStateFlow<com.opencapture.opencine.insta360.shell.CameraColorProfile?>(null)
+    val nativeColor = _nativeColor.asStateFlow()
+    private data class NativeCaptureSource(
+        val session: com.opencapture.opencine.core.CameraSession,
+        val epoch: com.opencapture.opencine.core.ControlEpoch,
+        val authority: com.opencapture.opencine.core.ControlAuthority,
+        val connectionGeneration: Long?,
+        val lifetime: Long,
+    )
+    /** Each instance is the unique request token, even when an operator repeats a value. */
+    private class NativeCapturePin<T>(val source: NativeCaptureSource, val value: com.opencapture.opencine.core.CameraValuePin<T>)
+    private var nativeCaptureLifetime = 0L
+    private var nativeFormatPin: NativeCapturePin<com.opencapture.opencine.insta360.shell.CameraRecordFormat>? = null
+    private var nativeColorPin: NativeCapturePin<com.opencapture.opencine.insta360.shell.CameraColorProfile>? = null
+
+    private fun nativeCaptureSource(): NativeCaptureSource? {
+        val state = control.state.value
+        val session = state.session ?: return null
+        val snapshot = state.snapshot ?: return null
+        if (closed || phase != ConnectionPhase.LIVE || snapshot.session != session.id ||
+            snapshot.connection != com.opencapture.opencine.core.ConnectionState.Ready ||
+            (snapshot.authority != com.opencapture.opencine.core.ControlAuthority.Owner &&
+                snapshot.authority !is com.opencapture.opencine.core.ControlAuthority.Lease)) return null
+        return NativeCaptureSource(session, snapshot.epoch, snapshot.authority, backend.frameConnectionGeneration, nativeCaptureLifetime)
+    }
+    private fun retireChangedNativeCaptureSource() {
+        val source = nativeCaptureSource()
+        if (nativeFormatPin?.source != source) nativeFormatPin = null
+        if (nativeColorPin?.source != source) nativeColorPin = null
+    }
+    private fun retireNativeCaptureRequests() {
+        nativeCaptureLifetime += 1
+        nativeFormatPin = null; nativeColorPin = null; pins.faceMetering = null
+    }
+    private fun <T> nativeReadout(pin: NativeCapturePin<T>?, reported: T?, now: Long): Pair<T?, NativeCapturePin<T>?> {
+        if (reported == null || pin == null || pin.source != nativeCaptureSource()) return reported to null
+        val (held, retained) = com.opencapture.opencine.core.CameraValuePin.reconcile(pin.value, reported, now)
+        return (held ?: reported) to if (retained == null) null else pin
+    }
     private var recordStartedAt: Long? = null
     private val _focusPoint = MutableStateFlow(0.5f to 0.5f)
     val focusPoint: StateFlow<Pair<Float, Float>> = _focusPoint.asStateFlow()
@@ -427,7 +473,7 @@ class PocketCameraSession(
                 if (value != ConnectionPhase.IDLE && value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED && !incidentSessionActive) beginFeedIncidentSession()
                 if (value == ConnectionPhase.IDLE) releaseReportingCameraPath()
                 else if (value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED) holdReportingCameraPath()
-                if (value != ConnectionPhase.LIVE) cancelProgrammedMove()
+                if (value != ConnectionPhase.LIVE) { cancelProgrammedMove(); retireNativeCaptureRequests() }
                 when (value) {
                     ConnectionPhase.LIVE -> {
                         holdsMonitor = true; resetFrameClock()
@@ -538,6 +584,7 @@ class PocketCameraSession(
 
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     fun disconnect() {
+        retireNativeCaptureRequests()
         endFeedIncidentSession()
         retireRecovery()
         releaseReportingCameraPath()
@@ -548,6 +595,7 @@ class PocketCameraSession(
     }
     fun close() {
         if (closed) return
+        retireNativeCaptureRequests()
         endFeedIncidentSession()
         releaseReportingCameraPath()
         closed = true
@@ -733,6 +781,14 @@ class PocketCameraSession(
     // Status mapping (Luna readout to the shared CameraStatus), iOS `applyDeviceStatus`/`applySettings`/`applyCapture`.
     private fun applyReadout(readout: CameraReadout) {
         lastReadout = readout
+        _nativeFormats.value = readout.recordFormats
+        if (nativeFormatPin?.value?.expected?.let { it !in readout.recordFormats } == true) nativeFormatPin = null
+        val nativeNow = nativePinNow()
+        val (format, formatPin) = nativeReadout(nativeFormatPin, readout.recordFormat, nativeNow)
+        val (color, colorPin) = nativeReadout(nativeColorPin, readout.color, nativeNow)
+        nativeFormatPin = formatPin; nativeColorPin = colorPin
+        _nativeFormat.value = format
+        _nativeColor.value = color
         val now = SystemClock.elapsedRealtime()
         var next = LunaShellMapping.applyDevice(readout, _status.value, pins, now)
         val (settled, table) = LunaShellMapping.applySettings(readout, next, pins, now)
@@ -753,15 +809,13 @@ class PocketCameraSession(
         if (!recording) recordStartedAt = null
         val elapsed = if (recording) maxOf(readout.captureSeconds, recordStartedAt?.let { ((now - it) / 1_000).toInt() } ?: 0) else 0
         next = next.copy(recordElapsedSec = elapsed)
-        // The frame clock owns the timecode (set from the decode thread).
-        _status.update { next.copy(timecode = it.timecode) }
+        _status.value = next
         if (_controlBusy.value && !pins.photoInFlight) _controlBusy.value = false
         publishFaceDetectWanted()
     }
 
     private fun resetFrameClock() {
         frameTimecode.reset()
-        _status.update { it.copy(timecode = null) }
     }
 
     /** [stampMicros]: the frame's camera clock (Luna: its u64 ms header stamp, in microseconds). */
@@ -769,7 +823,6 @@ class PocketCameraSession(
         // The HUD shows HH:MM:SS: published once per displayed second.
         val timecode = frameTimecode.note(stampMicros / 1_000, System.currentTimeMillis(), java.util.TimeZone.getDefault())
             ?: return
-        _status.update { it.copy(timecode = LunaShellMapping.timecodeText(timecode)) }
         (control.state.value.session as? LunaCameraSession)?.ingest(timecode)
     }
 
@@ -785,13 +838,17 @@ class PocketCameraSession(
         refresh: Boolean = true,
         onFail: () -> Unit = {},
         onSuccess: () -> Unit = {},
+        admission: () -> Boolean = { true },
         request: suspend CameraControls.() -> Boolean,
     ) {
         val link = controls ?: return
         scope.launch {
-            if (link.request()) {
+            if (!admission()) return@launch
+            val applied = link.request()
+            if (!admission()) return@launch
+            if (applied) {
                 onSuccess()
-                if (refresh) link.requestSettingsRefresh()
+                if (refresh && admission()) link.requestSettingsRefresh()
             } else {
                 presentControlNote("$name was not applied by the camera.")
                 onFail()
@@ -1319,11 +1376,16 @@ class PocketCameraSession(
     fun setFaceMetering(on: Boolean) {
         if (!canSendControl()) return
         val previous = _faceMetering.value
-        pins.faceMetering = pin(on, SystemClock.elapsedRealtime(), 6_000)
+        val pin = pin(on, SystemClock.elapsedRealtime(), 6_000)
+        val source = nativeCaptureSource()
+        pins.faceMetering = pin
         _faceMetering.value = on
+        // A later choice, or a replaced session or camera, owns the value: this request's callbacks retire.
+        val current = { pins.faceMetering === pin && nativeCaptureSource() == source }
         // The usual read 0.4 s after the SET is too early for 46; read again before the pin lapses.
-        sendControl(if (on) "Metering Face" else "Metering Matrix", onFail = { pins.faceMetering = null; _faceMetering.value = previous },
-            onSuccess = { scope.launch { delay(5_200); controls?.requestSettingsRefresh() } }) {
+        sendControl(if (on) "Metering Face" else "Metering Matrix", admission = current,
+            onFail = { pins.faceMetering = null; _faceMetering.value = previous },
+            onSuccess = { scope.launch { delay(5_200); if (current()) controls?.requestSettingsRefresh() } }) {
             setFaceMetering(on)
         }
     }
@@ -1338,6 +1400,47 @@ class PocketCameraSession(
         sendControl(CameraCommands.colorLabel(mode, profile = profile.labels), onFail = { pins.color = null; _status.value = _status.value.copy(colorMode = previous) }) {
             setColorProfile(LunaShellMapping.colorProfile(mode))
         }
+    }
+
+    fun setNativeRecordingFormat(value: com.opencapture.opencine.insta360.shell.CameraRecordFormat): Boolean {
+        if (!canSendControl() || lastReadout?.shootingMode == null || _status.value.isPhoto ||
+            control.state.value.snapshot?.recording?.value != com.opencapture.opencine.core.RecordingState.IDLE || value !in _nativeFormats.value) return false
+        val source = nativeCaptureSource() ?: return false
+        val previous = _nativeFormat.value
+        val pin = NativeCapturePin(source, pin(value, nativePinNow(), 3_000))
+        nativeFormatPin = pin
+        _nativeFormat.value = value
+        val dimensions = com.opencapture.opencine.core.CameraRecordingFormat.Dimensions.measured(value.width, value.height)
+        val format = com.opencapture.opencine.core.CameraRecordingFormat.measured(dimensions, com.opencapture.opencine.core.Rational.frameRate(value.fps))
+        val label = com.opencapture.opencine.appkit.MonitorCapturePresentation.recordingLabel(format) ?: "Format"
+        sendControl(label, admission = { nativeFormatPin === pin && pin.source == nativeCaptureSource() },
+            onFail = { nativeFormatPin = null; _nativeFormat.value = previous }) { setRecordFormat(value.id) }
+        val report = control.state.value.snapshot
+        val rematch = previous?.let {
+            com.opencapture.opencine.media.ShutterAngle.formatRematch(OperatorPrefs.shutterAngleDegrees(appContext),
+                usesAngle = OperatorPrefs.shutterUsesAngle(appContext),
+                manual = report?.exposureProgram?.value == com.opencapture.opencine.core.CameraExposureProgram.MANUAL,
+                isPhoto = _status.value.isPhoto, previousFps = it.fps.roundToInt(), nextFps = value.fps.roundToInt(),
+                available = _status.value.availableShutterDenoms)
+        }
+        val heldAsDuration = (report?.value(com.opencapture.opencine.core.SettingKey.SHUTTER)?.value as?
+            com.opencapture.opencine.core.SettingValue.Shutter)?.value is com.opencapture.opencine.core.ShutterValue.Duration
+        if (rematch != null && heldAsDuration && rematch.denom != _status.value.shutterDenom) setShutterDenom(rematch.denom)
+        return true
+    }
+
+    fun setNativeRecordingColor(value: com.opencapture.opencine.insta360.shell.CameraColorProfile): Boolean {
+        if (!canSendControl() || lastReadout?.shootingMode == null ||
+            control.state.value.snapshot?.recording?.value != com.opencapture.opencine.core.RecordingState.IDLE ||
+            value !in com.opencapture.opencine.insta360.shell.nativeRecordingColorProfiles) return false
+        val source = nativeCaptureSource() ?: return false
+        val previous = _nativeColor.value
+        val pin = NativeCapturePin(source, pin(value, nativePinNow(), 3_000))
+        nativeColorPin = pin
+        _nativeColor.value = value
+        sendControl(value.label, admission = { nativeColorPin === pin && pin.source == nativeCaptureSource() },
+            onFail = { nativeColorPin = null; _nativeColor.value = previous }) { setColorProfile(value) }
+        return true
     }
 
     fun setVideoFormat(format: VideoFormat, fromOperator: Boolean = true): Boolean {

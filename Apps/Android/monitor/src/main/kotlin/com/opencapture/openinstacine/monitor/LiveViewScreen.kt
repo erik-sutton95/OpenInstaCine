@@ -256,7 +256,15 @@ fun LiveViewScreen(model: AppModel) {
         val flipV = assist.flipsVertically
         val focusOffCenter = session.isFocusResetAvailable
         val faceMetering by session.faceMetering.collectAsState()
-        val metering = faceMetering?.let { MonitorOperatorMeteringTile(it) { session.setFaceMetering(!it) } }
+        // The tile acts only for the session, epoch and phase it was drawn for; unknown shows a dash.
+        val meterControl by session.control.state.collectAsState()
+        val meterSource = meterControl.snapshot?.let { it.session to it.epoch }
+        val meterPhase by session.phaseFlow.collectAsState()
+        val face = faceMetering
+        val metering = MonitorOperatorMeteringTile(face, isCurrent = {
+            model.session === session && session.control.state.value.snapshot?.let { it.session to it.epoch } == meterSource
+                && session.phase == meterPhase && session.faceMetering.value == face
+        }) { face?.let { session.setFaceMetering(!it) } }
         val chrome = rememberOperatorChromeSource(model, status, capabilities)
         val focus = MonitorOperatorFocusObservation(focusPoint, trackingHud, session.supportsTapFocus,
             aeLock != null, model.focusBoxLocked, focusOffCenter)

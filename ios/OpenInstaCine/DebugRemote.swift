@@ -118,7 +118,7 @@
                 "storageTotalMb": st.storageTotalMb,
                 "recording": st.isRecording,
                 "recordElapsed": st.recordElapsedSec,
-                "timecode": st.timecode ?? "",
+                "timecode": model.liveStatus.timecode ?? "",
                 "frameClock": model.session.lastFrameClock,
                 "frameClockOffset": model.session.frameClockOffset ?? 0,
                 "shootingMode": s.currentShootingMode?.label(in: s.profile) ?? "\(st.shootingMode)",

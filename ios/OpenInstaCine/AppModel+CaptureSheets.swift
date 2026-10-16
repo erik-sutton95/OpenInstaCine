@@ -1,3 +1,4 @@
+import Insta360Protocol
 import MonitorPresentation
 import OpenCineAppKit
 import OpenCineCameraControls
@@ -41,6 +42,26 @@ extension CaptureQuickSnapshot {
 /// commit through the common fields they open, readout drums and the rest as typed calls.
 extension AppModel: CaptureSheetHost {
     typealias Palette = LiveDesign
+    typealias NativeCapturePanel = LunaNativeCapturePanel
+    func nativeCapturePanel(_ sheet: CaptureSheet, enabled: Bool) -> LunaNativeCapturePanel? {
+        guard [.resolution, .color].contains(sheet), !cameraStatus.isPhoto else { return nil }
+        return LunaNativeCapturePanel(model: self, sheet: sheet, enabled: enabled)
+    }
+
+    var nativeMeteringSource: CaptureNativeMeteringSource? {
+        guard session.supportsFaceMetering else { return nil }
+        let owner = session
+        let camera = control.snapshot?.session, epoch = control.snapshot?.epoch
+        let phase = owner.phase, face = owner.faceMetering
+        let nativeOwner = owner.lunaSession, nativeSource = nativeOwner?.commandOwner.source
+        return .init(face: face, isCurrent: { [weak self, weak owner] in
+            guard let self, let owner else { return false }
+            return self.session === owner && self.control.snapshot?.session == camera
+                && self.control.snapshot?.epoch == epoch && owner.phase == phase
+                && owner.lunaSession === nativeOwner && nativeOwner?.commandOwner.source == nativeSource
+                && owner.faceMetering == face && owner.supportsFaceMetering && owner.canSendControl
+        }, setFace: { [weak owner] in owner?.setFaceMetering($0) })
+    }
 
     var cameraStatus: CameraStatus { session.status }
     var displayStatus: CameraStatus { session.status }
@@ -78,8 +99,45 @@ extension AppModel: CaptureSheetHost {
     var coverOpen: Bool { shell.cover != nil }
     var operatorPanelOpen: Bool { shell.cover != nil }
 
+    /// Video format and colour are native quick choices; Photo keeps the shared fallback, as the
+    /// native drawer does (`nativeCapturePanel`).
     func quickSnapshot(_ sheet: CaptureSheet) -> CaptureQuickSnapshot? {
-        CaptureQuickSnapshot.primary(sheet, model: self)
+        guard [.resolution, .color].contains(sheet), !cameraStatus.isPhoto else {
+            return CaptureQuickSnapshot.primary(sheet, model: self)
+        }
+        let enabled = session.phase == .live && session.hasControlLink && !session.isLocked && control.isRecording == false
+        let source = session.lunaSession?.commandOwner.source.uuidString ?? "none"
+        if sheet == .resolution {
+            guard let current = session.nativeRecordingFormat, let currentRate = Rational.frameRate(current.framesPerSecond) else { return nil }
+            let values = nativeRateChoices(for: current)
+            let labels = values.compactMap { Rational.frameRate($0.framesPerSecond).map { MonitorCapturePresentation.frameRate($0) + "p" } }
+            return .native(sheet: .resolution, title: "Frame rate", options: labels,
+                selection: MonitorCapturePresentation.frameRate(currentRate) + "p",
+                context: values.map { String($0.rawValue) }.joined(separator: ":") + "@" + String(current.rawValue) + "/" + source, enabled: enabled)
+        }
+        let choices = LunaColorMode.nativeRecordingChoices
+        let current = session.nativeRecordingColor.flatMap { choices.contains($0) ? $0 : nil }
+        return .native(sheet: .color, title: "Color", options: choices.map(\.label),
+            selection: current?.label ?? "",
+            context: (session.nativeRecordingColor.map { String($0.rawValue) } ?? "unknown") + "/" + source, enabled: enabled)
+    }
+
+    private func nativeRateChoices(for current: LunaVideoResolution) -> [LunaVideoResolution] {
+        var rates = Set<Rational>()
+        return LunaShellMapping.videoFormatValues.compactMap(LunaVideoResolution.init(rawValue:)).filter {
+            guard $0.width == current.width, $0.height == current.height,
+                let rate = Rational.frameRate($0.framesPerSecond) else { return false }
+            return rates.insert(rate).inserted
+        }
+    }
+    func commitNativeCaptureQuick(_ sheet: CaptureSheet, selection: String) {
+        if sheet == .resolution, let current = session.nativeRecordingFormat,
+            let value = nativeRateChoices(for: current).first(where: {
+                Rational.frameRate($0.framesPerSecond).map { MonitorCapturePresentation.frameRate($0) + "p" } == selection
+            }) { session.setNativeRecordingFormat(value) }
+        else if sheet == .color, let value = LunaColorMode.nativeRecordingChoices.first(where: { $0.label == selection }) {
+            session.setNativeRecordingColor(value)
+        }
     }
 
     func commit(_ setting: CaptureSetting, from origin: CaptureCommitOrigin) {
