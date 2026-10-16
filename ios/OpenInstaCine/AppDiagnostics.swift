@@ -1,5 +1,6 @@
 import Foundation
 import OpenCineAppKit
+import OpenCineCameraControls
 import OpenCineSentryApple
 import OpenInstaViewCore
 import UIKit

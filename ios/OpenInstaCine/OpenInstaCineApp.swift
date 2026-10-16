@@ -1,5 +1,6 @@
 import MonitorUI
 import OpenCineAppKit
+import OpenCineCameraControls
 import SwiftUI
 
 @main
@@ -15,7 +16,9 @@ struct OpenInstaCineApp: App {
         #endif
         OpenInstaCineBrand.apply()
         MonitorTheme.prepareResources()
-        FeedStressAutomation.installIfRequested()
+        FeedStressAutomation.installIfRequested(
+            host: { AppModelDiagnosticsAnchor.model },
+            onInjectionActivated: { AppDiagnostics.reporting.noteCurrentTestSource(.faultInjection) })
     }
 
     var body: some Scene {

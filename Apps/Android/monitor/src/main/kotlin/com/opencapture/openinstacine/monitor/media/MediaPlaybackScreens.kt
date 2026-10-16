@@ -21,7 +21,9 @@ import com.opencapture.opencine.vocabulary.colorMode
 
 import com.opencapture.monitorui.LocalMonitorBackdrops
 import com.opencapture.monitorui.monitorBackdropSource
-import com.opencapture.openinstacine.monitor.feed.rememberMonitorBackdropFeed
+import com.opencapture.opencine.appkitnative.MonitorPlaybackFeedView
+import com.opencapture.openinstacine.monitor.feed.LiveFeed
+import com.opencapture.opencine.appkitnative.rememberMonitorBackdropFeed
 import android.graphics.Bitmap
 import com.opencapture.opencine.appkit.MonitorBitmapDecoder
 import androidx.activity.compose.BackHandler
@@ -226,7 +228,7 @@ fun MediaPlayerScreen(files: List<MediaFile>, startingAt: MediaFile, controller:
             if (native != null) {
                 val current by player.state.collectAsState()
                 val mirror = model.assist.isPlaybackVisible(com.opencapture.monitorui.MonitorAssistTool.MIRROR)
-                PlaybackFeedView(native, model.scopeBus, model.inspectorPreview, backdrop, plan,
+                MonitorPlaybackFeedView(native, LiveFeed, model.scopeBus, model.inspectorPreview, backdrop, plan,
                     mirrored = mirror && model.assist.mirrorHorizontal, flippedVertically = mirror && model.assist.mirrorVertical,
                     zoom = geometry.zoom, sourceWidth = native.player.videoSize.width.takeIf { it > 1 } ?: 1280,
                     sourceHeight = native.player.videoSize.height.takeIf { it > 1 } ?: 720,
