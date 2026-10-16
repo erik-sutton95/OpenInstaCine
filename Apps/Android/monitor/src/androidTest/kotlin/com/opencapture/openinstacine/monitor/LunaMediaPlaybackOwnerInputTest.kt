@@ -218,7 +218,7 @@ class LunaMediaPlaybackOwnerInputTest {
                 // Loop and Pause before the evidence capture: on a loaded emulator the capture can
                 // outlast the 12 s clip, and a pause near 3 s lets the paused scrub below accept
                 // before its own seek frame lands.
-                tap("Loop clip")
+                tap("Loop playback")
                 tap("Pause")
                 await("Actual native pause reaches UI") { node("Play") != null }
                 val first = checkNotNull(readPicture(scenario))
