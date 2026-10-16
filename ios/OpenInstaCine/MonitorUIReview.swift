@@ -181,6 +181,11 @@
             ]
             status.availableShutterDenoms = [25, 50, 100, 200, 500]
             model.session.status = status
+            // The native format and colour drums read these app-session values: stage what the
+            // header reports so each drum opens on it.
+            let native = nativeRecording(status: status)
+            model.session.nativeRecordingFormat = native.format
+            model.session.nativeRecordingColor = native.color
             // SIMULATED reports go through the real common session and descriptors. Native
             // integration-only readouts keep the fixture status above.
             if let launch, ![.cameras, .pair].contains(launch.screen) {
@@ -268,6 +273,14 @@
                     model: "Luna Ultra")
         }
 
+        /// The staged recording format and colour as Luna reports them (options 31 and 35).
+        static func nativeRecording(status: CameraStatus) -> (format: LunaVideoResolution?, color: LunaColorMode?) {
+            let format = status.videoFormat
+                .flatMap { LunaShellMapping.formatTable(values: LunaShellMapping.videoFormatValues)[$0] }
+                .flatMap(LunaVideoResolution.init(rawValue:))
+            return (format, status.colorMode.map(LunaShellMapping.lunaColorMode))
+        }
+
         /// Uses Luna's actual report decoding and capability projection. UI writes fail locally,
         /// so these fixtures can exercise confirmation/editing without a camera or ACK-as-report.
         static func simulatedSession(status: CameraStatus) -> LunaCameraSession {
@@ -313,14 +326,12 @@
                 // The staged recording format and colour, as the camera reports them (options 31
                 // and 35), so the review header shows the format like the other apps.
                 var recording = Data()
-                if let format = status.videoFormat,
-                    let raw = LunaShellMapping.formatTable(values: LunaShellMapping.videoFormatValues)[format]
-                {
-                    recording += try ProtoMessage.integer(field: 31, value: raw)
+                let native = nativeRecording(status: status)
+                if let format = native.format {
+                    recording += try ProtoMessage.integer(field: 31, value: format.rawValue)
                 }
-                if let color = status.colorMode {
-                    recording += try ProtoMessage.integer(
-                        field: 35, value: LunaShellMapping.lunaColorMode(color).rawValue)
+                if let color = native.color {
+                    recording += try ProtoMessage.integer(field: 35, value: color.rawValue)
                 }
                 if !recording.isEmpty {
                     session.ingest(settings: try LunaPhotographySettings(
