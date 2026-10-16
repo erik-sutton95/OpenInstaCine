@@ -67,7 +67,9 @@ final class LiveChromeAccessibilityTests: XCTestCase {
 
         // A covering page.
         model.shell.open(.settings)
-        let covered = try await exposed(host.view) { !$0.isEmpty && $0.isDisjoint(with: live) }
+        // The covering page carries no monitor identifiers, so an empty set is the covered state;
+        // requiring a non-empty one held the wait to its 30 s hang guard on every run.
+        let covered = try await exposed(host.view) { $0.isDisjoint(with: live) }
         XCTAssertTrue(covered.isDisjoint(with: live), "Covered: \(covered.sorted())")
     }
 
