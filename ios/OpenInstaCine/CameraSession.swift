@@ -399,6 +399,7 @@ final class CameraSession {
         backend.onTrackFrame = { [weak self] in self?.applyTrackFrame($0) }
         backend.onIMU = { [weak self] in self?.ingestIMU($0) }
         backend.onLog = { ControlLiveLog.line($0) }
+        backend.onLocalNetworkEvidence = { LocalNetworkAccess.privacy.note($0, source: "camera link") }
     }
 
     // MARK: - Discovery and connection
@@ -551,7 +552,7 @@ final class CameraSession {
         backend.stopScan()
         backend.disconnect()
         expectedDisconnect = false
-        if let ssid = joinedSSID { WiFiJoiner.leave(ssid: ssid) }
+        if let ssid = joinedSSID { backend.leaveNetwork(ssid: ssid) }
         joinedSSID = nil
         connectedCamera = nil
         phase = .idle
