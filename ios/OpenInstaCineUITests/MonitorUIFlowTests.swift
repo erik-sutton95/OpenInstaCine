@@ -219,8 +219,15 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
             .press(forDuration: 0.01,
                 thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
-        Thread.sleep(forTimeInterval: 1)
         let cards = app.staticTexts.matching(identifier: "monitor.settings.card.title")
+        // Measure where the page comes to rest after the fling, the position it must keep.
+        var resting = CGRect.null
+        for _ in 0..<20 {
+            Thread.sleep(forTimeInterval: 0.3)
+            let frame = cards.firstMatch.frame
+            if frame == resting { break }
+            resting = frame
+        }
         let window = app.frame
         // The first card title fully inside the page, below the tab rail.
         let marker = try XCTUnwrap(cards.allElementsBoundByIndex.first {
@@ -236,9 +243,8 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         XCTAssertTrue(assist.isSelected, "Settings reopens on the last tab")
         let again = cards.matching(NSPredicate(format: "label == %@", label)).firstMatch
         XCTAssertTrue(again.waitForExistence(timeout: 5))
-        // Within a few points: the first simulator run restored 180 against 176, while the drag
-        // itself moves the page by 40% of the screen height.
-        XCTAssertEqual(again.frame.minY, top, accuracy: 6, "The tab keeps its scroll position")
+        // Exact: the page commits the offset it comes to rest at, not the last throttled sample.
+        XCTAssertEqual(again.frame.minY, top, accuracy: 0.5, "The tab keeps its scroll position")
         capture("settings-scroll-after-reopen")
     }
 
