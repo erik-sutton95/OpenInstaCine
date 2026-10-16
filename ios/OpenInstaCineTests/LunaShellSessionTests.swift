@@ -210,15 +210,15 @@ final class SessionIsolationTests: XCTestCase {
 @MainActor
 final class LunaLayoutTests: XCTestCase {
     /// SHELL-01: the live monitor lays out what the Luna integration declares over the app base
-    /// (clip delete, clip star, internet hop); with no camera, Settings keeps main's rows (gimbal,
-    /// joystick, head tracking, zoom chip, timecode).
+    /// (clip delete, clip star, internet hop). Settings keeps its routing rows before connection;
+    /// the counter capability stays unknown until the common session declares it.
     func testMonitorLaysOutTheLunaProjection() {
         let shell = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
         var base = MonitorLayoutCapabilities()
         (base.clipDelete, base.clipStar, base.requiresInternetHop) = (true, true, true)
         var unconnected = base
         (unconnected.gimbal, unconnected.zoom, unconnected.focus, unconnected.headTracking, unconnected.timecode) =
-            (true, true, true, true, true)
+            (true, true, true, true, false)
         XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), unconnected)
         let camera = FakeLuna()
         let core = camera.connectedSession()

@@ -37,18 +37,6 @@ extension LiveSystemRail where Host == AppModel, Record == LiveRecordButton, Dis
     }
 }
 
-/// The shared capture strip with this app's face metering tile after EXPOSURE.
-struct LiveCameraControlBar: View {
-    var columns = 6
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        CaptureControlBar<AppModel, LunaMeteringTile>(columns: columns) {
-            LunaMeteringTile(session: model.session)
-        }
-    }
-}
-
 extension LiveAssistPalette where Host == AppModel, Icon == AssistToolIcon {
     init(
         layout: LiveMonitorLayout, isLocked: Bool, otherOverlayPresented: Bool = false,
@@ -89,7 +77,6 @@ extension AppModel: LiveChromeHost {
     var liveStatus: MonitorStatusPresentation {
         control.statusPresentation(elapsedSeconds: session.status.recordElapsedSec)
     }
-    var timecodeAvailable: Bool { true }
     var liveSignalBars: Int { session.liveSignalBars }
     var liveFPS: String { session.liveFPS }
     var gimbalPanelOpen: Bool { liveGimbalPanel != .none }

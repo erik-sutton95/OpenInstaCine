@@ -3,6 +3,7 @@ package com.opencapture.openinstacine.monitor
 import com.opencapture.opencine.cameracontrols.MonitorLegalPage
 import com.opencapture.opencine.appkit.MonitorOperatorSessionModel
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import com.opencapture.opencine.appkit.MonitorCaptureField
 import com.opencapture.opencine.appkit.MonitorCapturePreferences
 import com.opencapture.opencine.appkit.captureField
@@ -34,7 +35,10 @@ import com.opencapture.opencine.vocabulary.GimbalRamp
 import com.opencapture.opencine.vocabulary.GimbalSpeed
 import com.opencapture.opencine.vocabulary.VideoFormat
 import com.opencapture.openinstacine.monitor.bridge.SwiftCore
+import com.opencapture.opencine.insta360.shell.CameraRecordFormat
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
+import com.opencapture.opencine.insta360.shell.label
+import com.opencapture.opencine.insta360.shell.nativeRecordingColorProfiles
 import com.opencapture.opencine.appkit.AppIntegration
 import com.opencapture.opencine.appkit.BodyRecordsV0
 import com.opencapture.opencine.appkit.CamerasModel
@@ -421,6 +425,50 @@ class AppModel(
 
     // CaptureSheetHost (camera-controls): the capture sheets read these values and commit through one typed entry.
     override val captureRouting = com.opencapture.opencine.cameracontrols.CaptureSheetRouting()
+    private fun nativeRateChoices(): List<CameraRecordFormat> {
+        val current = session.nativeFormat.value ?: return emptyList()
+        return session.nativeFormats.value.filter { it.width == current.width && it.height == current.height }
+            .distinctBy { com.opencapture.opencine.core.Rational.frameRate(it.fps) }
+    }
+    private fun nativeRateLabel(value: CameraRecordFormat): String? =
+        com.opencapture.opencine.core.Rational.frameRate(value.fps)
+            ?.let(com.opencapture.opencine.appkit.MonitorCapturePresentation::frameRate)?.plus("p")
+
+    /** Video format and colour only: Photo keeps the shared fallback, as the native drawer does. */
+    override fun nativeCaptureQuick(sheet: LiveSheet, status: CameraStatus): com.opencapture.monitorui.MonitorQuickControl? {
+        if (status.isPhoto) return null
+        val enabled = session.phase == ConnectionPhase.LIVE && !operatorSession.locked &&
+            session.control.state.value.snapshot?.recording?.value == com.opencapture.opencine.core.RecordingState.IDLE
+        return when (sheet) {
+            LiveSheet.FORMAT -> session.nativeFormat.value?.let { current ->
+                val values = nativeRateChoices()
+                com.opencapture.monitorui.MonitorQuickControl(values.map { nativeRateLabel(it).orEmpty() },
+                    nativeRateLabel(current).orEmpty(), enabled = enabled,
+                    context = values.joinToString(":") { it.id.toString() } + "@" + current.id)
+            }
+            LiveSheet.COLOR -> session.nativeColor.value.let { current ->
+                com.opencapture.monitorui.MonitorQuickControl(nativeRecordingColorProfiles.map { it.label },
+                    current?.takeIf { it in nativeRecordingColorProfiles }?.label.orEmpty(),
+                    enabled = enabled, context = current?.name ?: "unknown")
+            }
+            else -> null
+        }
+    }
+    override fun commitNativeCaptureQuick(sheet: LiveSheet, selection: String) {
+        when (sheet) {
+            LiveSheet.FORMAT -> nativeRateChoices().firstOrNull { nativeRateLabel(it) == selection }
+                ?.let(session::setNativeRecordingFormat)
+            LiveSheet.COLOR -> nativeRecordingColorProfiles.firstOrNull { it.label == selection }
+                ?.let(session::setNativeRecordingColor)
+            else -> Unit
+        }
+    }
+
+    @Composable override fun nativeCapturePanel(sheet: LiveSheet, enabled: Boolean): (@Composable () -> Unit)? {
+        val status by session.status.collectAsState()
+        return if (!status.isPhoto && (sheet == LiveSheet.FORMAT || sheet == LiveSheet.COLOR))
+            ({ LunaNativeCapturePanel(this, sheet, enabled) }) else null
+    }
     override val camera get() = session.connectedCamera?.model
     override val audioService: CaptureAudioService? get() = null
     override fun captureField(sheet: LiveSheet, expoMode: Int): MonitorCaptureField? =

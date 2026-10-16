@@ -1,5 +1,5 @@
-import MonitorPresentation
 import OpenCineAppUITesting
+import OpenCineCore
 import XCTest
 
 /// The bundle's principal class (`NSPrincipalClass` in project.yml), created before any test runs.
@@ -11,7 +11,7 @@ final class ConformanceApp: NSObject {
     override init() {
         ConformanceProfile.current = ConformanceProfile(
             app: "OpenInstaCine",
-            capabilities: MonitorCapabilities(
+            capabilities: MonitorLayoutCapabilities(
                 gimbal: true, zoom: true, focus: true, iris: false, audio: false, headTracking: true,
                 clipDelete: true, clipStar: true, requiresInternetHop: true, timecode: true))
         super.init()

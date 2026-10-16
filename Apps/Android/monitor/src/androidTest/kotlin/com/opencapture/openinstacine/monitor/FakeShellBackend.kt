@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
  * A live Luna-shaped shell backend for session facade tests: records every control call with its
  * time and answers [accepts]; frames, track frames and notices are emitted by the test.
  */
-internal class FakeShellBackend(
+internal open class FakeShellBackend(
     override val capabilities: Set<CameraCapability> = setOf(
         CameraCapability.LIVE_VIDEO, CameraCapability.CAMERA_SETTINGS, CameraCapability.GIMBAL,
         CameraCapability.FOCUS, CameraCapability.TRACKING,

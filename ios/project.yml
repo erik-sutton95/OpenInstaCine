@@ -157,6 +157,7 @@ targets:
     platform: iOS
     sources:
       - OpenInstaCineTests
+      - ../../OpenCine/Tests/MonitorUITests/MonitorPortraitHeaderClearanceTests.swift
     dependencies:
       - target: OpenInstaCine
       - package: OpenInstaViewCore
@@ -237,12 +238,14 @@ targets:
       - OpenInstaCineUITests
     dependencies:
       - target: OpenInstaCine
-      # The UI tests every app shares (OpenCine OpenCineAppUITesting) and the review contract
-      # and capabilities its conformance profile names (MonitorPresentation).
+      # The UI tests every app shares (OpenCine OpenCineAppUITesting), the review contract
+      # (MonitorPresentation) and the layout capabilities its conformance profile names (OpenCineCore).
       - package: OpenCine
         product: OpenCineAppUITesting
       - package: OpenCine
         product: MonitorPresentation
+      - package: OpenCine
+        product: OpenCineCore
     settings:
       base:
         SWIFT_VERSION: "5.0"
