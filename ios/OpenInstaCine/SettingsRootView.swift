@@ -15,8 +15,6 @@ import UIKit
 enum SettingsHelpCopy {
     static let currentTransport =
         "Luna uses Bluetooth to pair, then the camera's own 5 GHz Wi-Fi for HEVC. USB-C, hotspot, and HDMI capture are not in this build."
-    static let hdrDisplay =
-        "Outdoor panel brightness, not a grade. WAVE, HISTO, PARADE, VECTOR, zebras and false color still read the decoded camera signal, so judge exposure there, not from how bright the picture looks. Screen recording and AirPlay drop back to a normal SDR picture so the file is not HDR-boosted. This is not the camera's Dolby Vision color mode. Off by default."
     static let themeHelp =
         "Charcoal field-monitor chrome with yellow accents, tuned for low reflection on set."
 }
@@ -61,7 +59,7 @@ struct SettingsRootView: View {
                 haptics: .init(value: Bindable(model).hapticsEnabled, help: MonitorSettingsCopy.gimbalHaptics),
                 keepAwake: .init(value: Bindable(model).keepScreenAwake, help: MonitorSettingsCopy.keepScreenAwake),
                 motion: motion),
-            display: .init(hdr: .init(value: Bindable(model).hdrDisplay, help: SettingsHelpCopy.hdrDisplay),
+            display: .init(hdr: .init(value: Bindable(model).hdrDisplay, help: MonitorSettingsCopy.hdrPanel(cameraMode: "Dolby Vision color mode")),
                 sections: availableDisplay),
             cache: .init(source: cache,
                 cacheOriginals: .init(value: Bindable(model).cacheFullResolution, help: MonitorSettingsCopy.cacheFullResolution),
@@ -89,11 +87,8 @@ struct SettingsRootView: View {
                 return .init(id: camera.id, name: camera.displayName,
                     detail: camera.model + (network.map { " · \($0)" } ?? ""), network: network)
             }, savedHelp: "Pair from the home list. Settings does not start a new pair; that stays on Your cameras.",
-            processing: MonitorUpscaler.supportedOnThisDevice.count > 1 ? .init(
-                options: MonitorUpscaler.supportedOnThisDevice.map(\.rawValue),
-                selection: Binding(get: { FeedUpscaleSwitch.shared.upscaler.rawValue }, set: {
-                    if let value = MonitorUpscaler(rawValue: $0) { FeedUpscaleSwitch.shared.upscaler = value }
-                }), help: SettingsHelpCopy.feedUpscaler) : nil)
+            processing: .init(upscaler: Binding(get: { FeedUpscaleSwitch.shared.upscaler },
+                set: { FeedUpscaleSwitch.shared.upscaler = $0 })))
     }
 
     private var sharing: MonitorSettingsSharingSource {
@@ -160,7 +155,7 @@ struct SettingsRootView: View {
             source: browserDestination("settings.source", "Source Code", OpenInstaCineLinks.source),
             terms: browserDestination("settings.terms", "Terms of Use", OpenInstaCineLinks.terms),
             reportTitle: "Report a problem", reportActionTitle: "Open", diagnosticsHelp: MonitorSettingsCopy.shareDiagnostics,
-            report: { AnyView(ProblemReportView().environment(model)) },
+            report: { model.isProblemReportPresented = true },
             shareReport: { AnyView(MonitorActivityShareSheet(items: [$0])) },
             deleteStoredReports: { AppDiagnostics.incidents.deleteStoredIncidents {} },
             deleteReportsHelp: MonitorSettingsCopy.deleteSavedFeedReports,

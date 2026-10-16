@@ -14,7 +14,6 @@ struct LinkExperience: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var diagnostics: MonitorDiagnosticsShareItem?
     @State private var diagnosticsFailure: String?
-    @State private var showProblemReport = false
 
     var body: some View {
         AppShell(
@@ -26,7 +25,7 @@ struct LinkExperience: View {
                     case .failed(let message): diagnosticsFailure = message
                     }
                 },
-                reportProblem: { showProblemReport = true },
+                reportProblem: { model.isProblemReportPresented = true },
                 // No Multiview entry: this app qualifies no multicam budget (one camera).
                 watchFeed: {
                     if model.shell.route == .pair || model.cameras.attempts.isEmpty { model.openWatcherBrowse() }
@@ -60,7 +59,9 @@ struct LinkExperience: View {
         } message: {
             Text(diagnosticsFailure ?? "")
         }
-        .sheet(isPresented: $showProblemReport) { ProblemReportView().environment(model) }
+        // The app's one problem report, above every cover: a draft opened from Settings
+        // survives the camera session ending and the cover closing (A2-24).
+        .sheet(isPresented: Bindable(model).isProblemReportPresented) { ProblemReportView().environment(model) }
         .onChange(of: model.session.phase) { _, phase in
             if phase == .openingDatalink { LocalVPNNotice.app.noteIfActive() }
         }
