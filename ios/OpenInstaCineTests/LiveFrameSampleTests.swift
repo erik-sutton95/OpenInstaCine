@@ -288,9 +288,9 @@ final class LiveFrameSampleTests: XCTestCase {
     }
 
     func testFastUpscalerDoesNotStealIdentityLayer() {
-        let previous = FeedUpscaleSwitch.rendererReadsUpscaler
-        FeedUpscaleSwitch.rendererReadsUpscaler = .lanczos
-        defer { FeedUpscaleSwitch.rendererReadsUpscaler = previous }
+        let previous = FeedUpscaleSwitch.shared.upscaler
+        FeedUpscaleSwitch.shared.upscaler = .lanczos
+        defer { FeedUpscaleSwitch.shared.upscaler = previous }
 
         let decoder = HevcDecoder()
         decoder.feedUpscaler = .lanczos

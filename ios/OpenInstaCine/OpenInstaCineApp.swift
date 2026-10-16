@@ -8,7 +8,7 @@ struct OpenInstaCineApp: App {
         #if DEBUG
             AppDiagnostics.verification.prepareIfRequested()
         #endif
-        AppDiagnostics.reporting.noteFeedUpscaler(FeedUpscaleSwitch.rendererReadsUpscaler.rawValue)
+        AppDiagnostics.reporting.noteFeedUpscaler(FeedUpscaleSwitch.shared.upscaler.rawValue)
         AppDiagnostics.reporting.install()
         #if DEBUG
             AppDiagnostics.verification.runIfRequested()
