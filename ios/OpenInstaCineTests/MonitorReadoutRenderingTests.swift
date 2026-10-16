@@ -56,19 +56,25 @@ final class MonitorReadoutRenderingTests: XCTestCase {
             headerTop, Int(layout.presentation!.gauges.y),
             "Storage stays inside the restored corner band, lifted above the gauge corner"
         )
-        var lowestPaintedRow = headerTop
-        let whitePixels = (headerTop..<headerBottom).reduce(0) { count, y in
-            let painted = (10..<180).filter { x in
+        // White glyph pixels per row of the storage crop. The crop is 48 points tall, so its
+        // lower rows reach into the status band, where the shared standby/recording chip
+        // ("Standby / recording chip on the status bar", MonitorDisplayChrome) paints white
+        // once a camera is connected. Only the first contiguous run of painted rows is the
+        // storage readout; the band's own glyphs below the gap belong to the band.
+        let paintedPerRow = (headerTop..<headerBottom).map { y in
+            (10..<180).filter { x in
                 let index = (y * image.width + x) * 4
                 return bytes[index] > 220 && bytes[index + 1] > 220 && bytes[index + 2] > 220
             }.count
-            if painted > 0 { lowestPaintedRow = y }
-            return count + painted
         }
+        let storageFirst = try XCTUnwrap(
+            paintedPerRow.firstIndex { $0 > 0 }, "Storage must paint in the safe header")
+        let storageRows = paintedPerRow[storageFirst...].prefix { $0 > 0 }
+        let lowestStorageRow = headerTop + storageFirst + storageRows.count - 1
         // The 48-point touch target may extend below the band; painted glyphs must clear it.
-        XCTAssertLessThan(lowestPaintedRow, Int(layout.topDeck.minY))
+        XCTAssertLessThan(lowestStorageRow, Int(layout.topDeck.minY))
         XCTAssertGreaterThan(
-            whitePixels, 100,
+            storageRows.reduce(0, +), 100,
             "Storage must remain visible in the safe header, above the lower status band's raster bounds"
         )
     }

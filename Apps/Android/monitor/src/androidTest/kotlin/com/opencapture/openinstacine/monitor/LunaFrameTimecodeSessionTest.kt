@@ -2,6 +2,10 @@ package com.opencapture.openinstacine.monitor
 
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.opencapture.monitorui.MonitorTimecodeFormat
+import com.opencapture.opencine.appkit.label
+import com.opencapture.opencine.core.TimecodePrecision
+import com.opencapture.opencine.insta360.luna.LunaCameraSession
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.opencine.insta360.shell.EncodedVideoFrame
 import com.opencapture.openinstacine.monitor.session.PocketCameraSession
@@ -26,7 +30,11 @@ class LunaFrameTimecodeSessionTest {
     @Before fun open() { session = liveSession(backend) }
     @After fun close() { onMain { session.close() } }
 
-    private fun timecode() = onMain { session.status.value.timecode }
+    /** The clock the common Luna session publishes, formatted by the shared rule (seconds, D2). */
+    private fun timecode() = onMain {
+        (session.control.state.value.session as? LunaCameraSession)?.snapshots?.value?.timecode?.value
+            ?.let { MonitorTimecodeFormat.label(it, TimecodePrecision.Seconds) }
+    }
 
     /** Emits a frame stamped [stampMs] on the frame clock (the backend reports microseconds). */
     private fun frame(stampMs: Long) {

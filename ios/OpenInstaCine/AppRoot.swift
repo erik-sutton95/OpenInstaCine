@@ -399,7 +399,6 @@ final class AppModel {
     func chrome(for mode: PocketDispMode) -> PocketDispChrome { operatorSession.chrome(for: mode) }
 
     func chromeSectionMounts(_ section: PocketDispChrome.Section) -> Bool {
-        if section == .timecode, !OsmoMonitorPresentation.capabilities(session).timecode { return false }
         return operatorSession.mounts(section)
     }
 
@@ -518,7 +517,9 @@ final class AppModel {
                     available: s.availableShutterDenoms, current: s.shutterDenom),
                 zoomHundredths: session.zoomStops.map { Int(($0 * 100).rounded()) }),
             cameraModel: session.connectedCamera?.model.name,
-            isNano: session.bodyFamily == .nano)
+            isNano: session.bodyFamily == .nano,
+            batteryReading: control.snapshot?.power.batteryReading,
+            batteryExhausted: control.snapshot?.power.exhausted.value)
         return state
     }
 
@@ -686,7 +687,7 @@ final class AppModel {
                 image, source: source, unmanaged: unmanaged,
                 mirrored: self.session.decoder.presentedPictureFlip ?? false,
                 flippedVertically: self.assist.flipsVertically,
-                timecode: self.session.status.timecodeClock,
+                timecode: self.liveStatus.clock,
                 isRecording: self.session.status.isRecording)
         }
         session.onChromePublished = { [weak self] in
@@ -713,10 +714,12 @@ final class AppModel {
         watchRelay.ingestState(
             WatchRelayState.snapshot(
                 status: session.status,
+                timecode: liveStatus.clock,
                 phase: session.phase,
                 cameraName: session.connectedCamera?.name ?? "",
                 feedLive: session.decoder.lastPresentedAt != nil,
-                storage: shell.control.snapshot?.storage ?? .unknown))
+                power: control.snapshot?.power ?? .unknown,
+                storage: control.snapshot?.storage ?? .unknown))
     }
 
     func watchToggleRecord() -> WatchCommandResult {

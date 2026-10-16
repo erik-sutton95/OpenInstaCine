@@ -142,7 +142,8 @@
             status.whiteBalanceKelvin = 5600
             status.focusMode = .continuous
             status.audioChannel = .stereo
-            status.timecode = "15:39:50:00"
+            // Luna's clock is the phone's time of day in whole seconds (D2): no frame field.
+            status.timecodeReading = CameraTimecodeReading(hours: 15, minutes: 39, seconds: 50)
             status.colorMode = .iLog
             if let ev = launch?.meteredEV {
                 // The camera meters in thirds of a stop: the nearest one it could report.
@@ -280,6 +281,12 @@
                 var device = try LunaDeviceStatus(response: Data())
                 device.photoSubMode = 100; device.videoSubMode = 0
                 session.ingest(device: device)
+                if (0...100).contains(status.batteryPercent) {
+                    let battery = try ProtoMessage.integer(field: 2, value: UInt64(status.batteryPercent))
+                        + ProtoMessage.integer(field: 1, value: status.charging ? 1 : 0)
+                    let options = try ProtoMessage.blob(field: 11, value: battery)
+                    session.ingest(device: try LunaDeviceStatus(response: ProtoMessage.blob(field: 2, value: options)))
+                }
                 if status.storageTotalMb > 0, status.storageFreeMb >= 0 {
                     // The legacy review input is MiB; publish its exact bytes through the
                     // same device-report decoder as a connected source, including zero free.
@@ -301,10 +308,7 @@
                 session.ingest(settings: try LunaPhotographySettings(response: ProtoMessage.blob(field: 2, value: options)))
                 let capture = try ProtoMessage.integer(field: 1, value: status.isRecording ? 1 : 0)
                 session.ingest(capture: try LunaCaptureStatus(notification: capture))
-                let clock = (status.timecode ?? "").split(separator: ":").compactMap { Int($0) }
-                if clock.count == 4 {
-                    session.ingest(timecode: CameraTimecode(hours: clock[0], minutes: clock[1], seconds: clock[2], frames: clock[3]))
-                }
+                if let timecode = status.timecodeReading { session.ingest(timecode: timecode) }
             } catch { assertionFailure("Invalid SIMULATED monitor fixture: \(error)") }
         }
 
