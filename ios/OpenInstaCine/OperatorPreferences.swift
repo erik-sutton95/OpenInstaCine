@@ -121,12 +121,12 @@ enum OperatorPrefs {
 
     static var virtualJoystickMapping: GimbalStick.Mapping { motion.joystickMapping }
 
-    static var dispLive: PocketDispChrome {
+    static var dispLive: MonitorDisplayChrome {
         get { display.live }
         set { display.live = newValue }
     }
 
-    static var dispClean: PocketDispChrome {
+    static var dispClean: MonitorDisplayChrome {
         get { display.clean }
         set { display.clean = newValue }
     }

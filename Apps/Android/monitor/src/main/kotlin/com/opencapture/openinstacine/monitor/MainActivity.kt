@@ -140,7 +140,6 @@ open class MainActivity : ComponentActivity() {
 private fun OpenInstaCineApp(model: AppModel) {
     val shell by model.shell.state.collectAsState()
     val context = LocalContext.current
-    var showProblemReport by remember { mutableStateOf(false) }
     var showReportingPrivacy by remember { mutableStateOf(false) }
     val activity = LocalActivity.current
     lateinit var discovery: PermissionGate
@@ -198,7 +197,7 @@ private fun OpenInstaCineApp(model: AppModel) {
                 ShellBrand(MonitorConfiguration.identity.wordmark),
                 ShellActions(
                     diagnostics = { DiagnosticCenter.shareReport(context, model.session) },
-                    reportProblem = { showProblemReport = true },
+                    reportProblem = { model.problemReportOpen = true },
                 ),
                 monitor = { LiveViewScreen(model) },
                 page = { cover -> ShellPage(model, cover) },
@@ -225,8 +224,8 @@ private fun OpenInstaCineApp(model: AppModel) {
             model.legal?.let { page -> if (!showLive) MonitorLegalDocumentScreen(InstaLegalDocuments, page) { model.legal = null } }
         }
     }
-    if (showProblemReport) {
-        ManualProblemReportDialog(model = model, onClose = { showProblemReport = false }, onPrivacy = { showReportingPrivacy = true })
+    if (model.problemReportOpen) {
+        ManualProblemReportDialog(model = model, onClose = { model.problemReportOpen = false }, onPrivacy = { showReportingPrivacy = true })
     }
     if (showReportingPrivacy) {
         Dialog(onDismissRequest = { showReportingPrivacy = false }, properties = DialogProperties(usePlatformDefaultWidth = false)) {

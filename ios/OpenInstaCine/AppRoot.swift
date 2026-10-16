@@ -177,6 +177,9 @@ final class AppModel {
         session.decoder.incomingColorMode = LiveMonitorColorScience.colorMode(
             isPhoto: photo, colorMode: raw)
     }
+    /// The problem report sheet, owned by the app root (A2-24): the cameras page and Settings
+    /// both open it here, so a draft outlives the camera session and the Settings cover.
+    var isProblemReportPresented = false
     var captureSheet: CaptureSheet?
     var captureDrum: CaptureDrumPresentation?
     var keepScreenAwake: Bool = OperatorPrefs.keepScreenAwake {
@@ -288,11 +291,11 @@ final class AppModel {
     }
     @ObservationIgnored lazy var operatorSession = MonitorOperatorSessionModel(
         shell: shell, assist: assist, display: OperatorPrefs.display)
-    var dispLive: PocketDispChrome {
+    var dispLive: MonitorDisplayChrome {
         get { operatorSession.live }
         set { operatorSession.live = newValue }
     }
-    var dispClean: PocketDispChrome {
+    var dispClean: MonitorDisplayChrome {
         get { operatorSession.clean }
         set { operatorSession.clean = newValue }
     }
@@ -300,11 +303,11 @@ final class AppModel {
         get { operatorSession.settingsTab }
         set { operatorSession.settingsTab = newValue }
     }
-    var chromeEditorMode: PocketDispMode? {
+    var chromeEditorMode: MonitorDisplayMode? {
         get { operatorSession.editingMode }
         set { operatorSession.editingMode = newValue }
     }
-    var chromeEditorReturnMode: PocketDispMode? {
+    var chromeEditorReturnMode: MonitorDisplayMode? {
         get { operatorSession.returnedMode }
         set { operatorSession.returnedMode = newValue }
     }
@@ -426,21 +429,21 @@ final class AppModel {
             ssid: session.joinedSSID ?? session.cachedSSID)
     }
 
-    var currentDispMode: PocketDispMode { operatorSession.mode }
-    var dispChrome: PocketDispChrome { operatorSession.chrome }
+    var currentDispMode: MonitorDisplayMode { operatorSession.mode }
+    var dispChrome: MonitorDisplayChrome { operatorSession.chrome }
     var isEditingChrome: Bool { operatorSession.isEditing }
 
-    func chrome(for mode: PocketDispMode) -> PocketDispChrome { operatorSession.chrome(for: mode) }
+    func chrome(for mode: MonitorDisplayMode) -> MonitorDisplayChrome { operatorSession.chrome(for: mode) }
 
-    func chromeSectionMounts(_ section: PocketDispChrome.Section) -> Bool {
+    func chromeSectionMounts(_ section: MonitorDisplayChrome.Section) -> Bool {
         return operatorSession.mounts(section)
     }
 
-    func toggleChrome(_ section: PocketDispChrome.Section, for mode: PocketDispMode) {
+    func toggleChrome(_ section: MonitorDisplayChrome.Section, for mode: MonitorDisplayMode) {
         operatorSession.toggle(section, in: mode)
     }
 
-    func beginChromeEditing(_ mode: PocketDispMode) {
+    func beginChromeEditing(_ mode: MonitorDisplayMode) {
         liveGimbalPanel = .none
         operatorSession.beginEditing(mode)
     }
@@ -848,18 +851,7 @@ struct AppRoot: View {
         }
         #endif
         .environment(\.font, MonitorTheme.font(16))
-        .environment(
-            \.monitorHDRChromeGain,
-            model.hdrDisplayActive ? CGFloat(LiveHDRDisplay.app.presentGain) : 1
-        )
-        .background {
-            HDRChromeHost(display: .app, enabled: model.hdrDisplayActive).allowsHitTesting(false)
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)
-        ) { _ in
-            model.screenCaptured = UIScreen.main.isCaptured
-        }
+        .monitorHDRDisplay(.app, active: model.hdrDisplayActive, screenCaptured: Bindable(model).screenCaptured)
         .preferredColorScheme(.dark)
         .monitorAppStartup(startup, splashVisible: Bindable(model).showsLaunchSplash) { choice in
             ReliabilityConsentPrompt(onChoice: choice).environment(model)
@@ -883,7 +875,6 @@ struct AppRoot: View {
             }
             model.prepareStartup()
             model.activateWatchRelay()
-            model.screenCaptured = UIScreen.main.isCaptured
         }
         .onChange(of: model.relayClient.status) { _, status in
             model.noteWatcherStatusChanged(status)
