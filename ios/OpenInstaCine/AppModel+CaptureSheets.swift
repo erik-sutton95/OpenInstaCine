@@ -120,10 +120,10 @@ extension AppModel: CaptureSheetHost {
                 selection: MonitorCapturePresentation.frameRate(currentRate) + "p",
                 context: values.map { String($0.rawValue) }.joined(separator: ":") + "@" + String(current.rawValue) + "/" + source, enabled: enabled)
         }
-        let choices = LunaColorMode.nativeRecordingChoices
-        let current = session.nativeRecordingColor.flatMap { choices.contains($0) ? $0 : nil }
-        return .native(sheet: .color, title: "Color", options: choices.map(\.label),
-            selection: current?.label ?? "",
+        // The drum opens on the reported colour; `commitNativeCaptureQuick` sends only native choices.
+        let drum = LunaColorMode.recordingDrum(current: session.nativeRecordingColor)
+        return .native(sheet: .color, title: "Color", options: drum.map(\.label),
+            selection: session.nativeRecordingColor?.label ?? "",
             context: (session.nativeRecordingColor.map { String($0.rawValue) } ?? "unknown") + "/" + source, enabled: enabled)
     }
 

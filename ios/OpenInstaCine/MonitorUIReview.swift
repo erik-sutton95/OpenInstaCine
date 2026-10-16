@@ -133,17 +133,20 @@
             model.recordConfirmationEnabled = true
             model.portraitFeedAspect =
                 ProcessInfo.processInfo.environment["OPV_UI_REVIEW_FIT"] == "1" ? .fit16x9 : .fill
+            // The one SIMULATED live fixture every app stages (Fixtures/review-live-values.tsv).
+            let live = ReviewLiveValues.simulated
             var status = CameraStatus()
-            status.iso = 1600
+            status.iso = live.iso
             status.isoIndex = .iso1600
-            status.shutterDenom = 50
+            status.shutterDenom = live.shutterDenominator
             status.expoMode = .manual
-            status.whiteBalance = .custom(kelvin: 5600, tint: 0)
-            status.whiteBalanceKelvin = 5600
+            status.whiteBalance = .custom(kelvin: live.whiteBalanceKelvin, tint: 0)
+            status.whiteBalanceKelvin = live.whiteBalanceKelvin
             status.focusMode = .continuous
             status.audioChannel = .stereo
             // Luna's clock is the phone's time of day in whole seconds (D2): no frame field.
-            status.timecodeReading = CameraTimecodeReading(hours: 15, minutes: 39, seconds: 50)
+            status.timecodeReading = CameraTimecodeReading(
+                hours: live.timecodeHours, minutes: live.timecodeMinutes, seconds: live.timecodeSeconds)
             status.colorMode = .iLog
             if let ev = launch?.meteredEV {
                 // The camera meters in thirds of a stop: the nearest one it could report.
@@ -160,12 +163,13 @@
                     status.zoomLens = CamFov.lens1x
                 }
             #endif
-            status.batteryPercent = 68
-            status.storageFreeMb = 107 * 1024
-            status.storageTotalMb = 128 * 1024
+            status.batteryPercent = live.batteryPercent
+            status.storageFreeMb = Int(live.storageFreeMebibytes)
+            status.storageTotalMb = Int(live.storageTotalMebibytes)
             status.shootingMode = 1
             status.videoResolution = VideoResolution(rawValue: 0x10)
-            status.fps = 25
+            status.fps = live.framesPerSecond
+            // 4K 25p in the camera's own format codes (live.recordWidth x live.recordHeight).
             status.videoFormat = VideoFormat(resolution: .p4K, frameRate: .fps25)
             // A real body lists several rates, so reviews show the frame-rate drum
             // with neighbours on both sides of the current 25p.
@@ -177,6 +181,11 @@
             ]
             status.availableShutterDenoms = [25, 50, 100, 200, 500]
             model.session.status = status
+            // The native format and colour drums read these app-session values: stage what the
+            // header reports so each drum opens on it.
+            let native = nativeRecording(status: status)
+            model.session.nativeRecordingFormat = native.format
+            model.session.nativeRecordingColor = native.color
             // SIMULATED reports go through the real common session and descriptors. Native
             // integration-only readouts keep the fixture status above.
             if let launch, ![.cameras, .pair].contains(launch.screen) {
@@ -264,6 +273,14 @@
                     model: "Luna Ultra")
         }
 
+        /// The staged recording format and colour as Luna reports them (options 31 and 35).
+        static func nativeRecording(status: CameraStatus) -> (format: LunaVideoResolution?, color: LunaColorMode?) {
+            let format = status.videoFormat
+                .flatMap { LunaShellMapping.formatTable(values: LunaShellMapping.videoFormatValues)[$0] }
+                .flatMap(LunaVideoResolution.init(rawValue:))
+            return (format, status.colorMode.map(LunaShellMapping.lunaColorMode))
+        }
+
         /// Uses Luna's actual report decoding and capability projection. UI writes fail locally,
         /// so these fixtures can exercise confirmation/editing without a camera or ACK-as-report.
         static func simulatedSession(status: CameraStatus) -> LunaCameraSession {
@@ -306,6 +323,20 @@
                 let options = try ProtoMessage.blob(field: 21, value: exposure)
                     + ProtoMessage.integer(field: 39, value: UInt64(status.whiteBalanceKelvin))
                 session.ingest(settings: try LunaPhotographySettings(response: ProtoMessage.blob(field: 2, value: options)))
+                // The staged recording format and colour, as the camera reports them (options 31
+                // and 35), so the review header shows the format like the other apps.
+                var recording = Data()
+                let native = nativeRecording(status: status)
+                if let format = native.format {
+                    recording += try ProtoMessage.integer(field: 31, value: format.rawValue)
+                }
+                if let color = native.color {
+                    recording += try ProtoMessage.integer(field: 35, value: color.rawValue)
+                }
+                if !recording.isEmpty {
+                    session.ingest(settings: try LunaPhotographySettings(
+                        response: ProtoMessage.blob(field: 2, value: recording)))
+                }
                 let capture = try ProtoMessage.integer(field: 1, value: status.isRecording ? 1 : 0)
                 session.ingest(capture: try LunaCaptureStatus(notification: capture))
                 if let timecode = status.timecodeReading { session.ingest(timecode: timecode) }

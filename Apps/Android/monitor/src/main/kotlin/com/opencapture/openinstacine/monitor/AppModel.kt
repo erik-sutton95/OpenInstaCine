@@ -38,6 +38,7 @@ import com.opencapture.openinstacine.monitor.bridge.SwiftCore
 import com.opencapture.opencine.insta360.shell.CameraRecordFormat
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.opencine.insta360.shell.label
+import com.opencapture.opencine.insta360.shell.nativeRecordingColorDrum
 import com.opencapture.opencine.insta360.shell.nativeRecordingColorProfiles
 import com.opencapture.opencine.appkit.AppIntegration
 import com.opencapture.opencine.appkit.BodyRecordsV0
@@ -455,8 +456,9 @@ class AppModel(
                     context = values.joinToString(":") { it.id.toString() } + "@" + current.id)
             }
             LiveSheet.COLOR -> session.nativeColor.value.let { current ->
-                com.opencapture.monitorui.MonitorQuickControl(nativeRecordingColorProfiles.map { it.label },
-                    current?.takeIf { it in nativeRecordingColorProfiles }?.label.orEmpty(),
+                // The drum opens on the reported colour; commitNativeCaptureQuick sends only native choices.
+                com.opencapture.monitorui.MonitorQuickControl(nativeRecordingColorDrum(current).map { it.label },
+                    current?.label.orEmpty(),
                     enabled = enabled, context = current?.name ?: "unknown")
             }
             else -> null

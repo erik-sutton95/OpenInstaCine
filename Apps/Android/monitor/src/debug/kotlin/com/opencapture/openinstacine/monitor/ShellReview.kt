@@ -38,7 +38,8 @@ import kotlinx.coroutines.flow.StateFlow
  * Media with a scripted session. No camera, no network, never a command on a wire.
  */
 object ShellReview {
-    private val camera = SavedCamera(
+    /** The one SIMULATED saved camera every Insta debug review shows. */
+    val camera = SavedCamera(
         id = "review-simulated-1", integration = LunaFailures.INTEGRATION, advertisedName = "SIMULATED Luna Ultra",
         model = "Luna Ultra", routes = listOf(SavedRoute(key = "ap", kind = RouteKind.CAMERA_ACCESS_POINT, network = "SIMULATED")),
     )
