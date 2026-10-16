@@ -1491,6 +1491,37 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         }
     }
 
+    /// A2-32 product ruling 2026-10-16: the remote shutter row sits in Controls with Z's wording and
+    /// its choice survives a relaunch.
+    func testRemoteShutterSettingAppearsAndPersistsAfterRelaunch() throws {
+        app.launchEnvironment.merge(ReviewLaunch(screen: .settings).environment) { $1 }
+        app.launch()
+        func remoteShutter() -> XCUIElement {
+            let tabs = app.scrollViews["monitor.settings.tabs"]
+            XCTAssertTrue(tabs.waitForExistence(timeout: 10))
+            let tab = app.buttons["monitor.settings.tab.Controls"]
+            reveal(tab, in: tabs, portrait: true)
+            tab.tap()
+            let row = app.buttons["Bluetooth Remote Shutter"]
+            for _ in 0..<12 where !row.isHittable { app.swipeUp() }
+            XCTAssertTrue(row.isHittable, "The remote shutter row is in Controls: \(app.debugDescription)")
+            return row
+        }
+        let row = remoteShutter()
+        let original = try XCTUnwrap(row.value as? String)
+        XCTAssertTrue(["On", "Off"].contains(original))
+        row.tap()
+        let changed = original == "On" ? "Off" : "On"
+        XCTAssertEqual(row.value as? String, changed)
+        capture("SIMULATED-remote-shutter-setting")
+        app.terminate()
+        app.launch()
+        let restored = remoteShutter()
+        XCTAssertEqual(restored.value as? String, changed, "The remote shutter choice persists")
+        restored.tap()
+        XCTAssertEqual(restored.value as? String, original)
+    }
+
     private func reveal(_ tab: XCUIElement, in rail: XCUIElement, portrait: Bool) {
         for _ in 0..<6 where !tab.isHittable {
             if portrait {

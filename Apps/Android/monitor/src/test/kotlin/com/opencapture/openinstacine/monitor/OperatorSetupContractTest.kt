@@ -4,6 +4,7 @@ import com.opencapture.opencine.cameracontrols.toggledCleanPins
 import com.opencapture.opencine.cameracontrols.MonitorLegalDocument
 import com.opencapture.opencine.cameracontrols.MonitorLegalPage
 import com.opencapture.opencine.cameracontrols.MonitorPlatformLegalNotices
+import com.opencapture.opencine.cameracontrols.MonitorSettingsCopy
 import com.opencapture.opencine.cameracontrols.lutLookLabel
 import com.opencapture.opencine.vocabulary.ConnectionPhase
 import com.opencapture.opencine.vocabulary.CameraCommands
@@ -129,6 +130,12 @@ class OperatorSetupContractTest {
         assertFalse(privacy.contains("iOS Keychain"))
         assertTrue(privacy.contains("Android may ask for location"))
         assertTrue(privacy.contains("OpenCapture is the data controller"))
+        // In-app privacy matches the website (2026-10-16): the shared reliability paragraph with the
+        // install identifier, no Frame.io on Android, and Android's share wording.
+        assertTrue(privacy.contains(MonitorSettingsCopy.reliabilityReportsPrivacy))
+        assertFalse(privacy.contains("Frame.io"))
+        assertTrue(privacy.contains("Android or the app you pick"))
+        assertFalse(privacy.contains("Apple"))
         assertTrue(privacy.contains("support@opencapture.org"))
         assertTrue(privacy.contains("optional and off by default"))
         assertTrue(privacy.contains("sends your description and any optional reply email"))

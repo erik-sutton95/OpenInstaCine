@@ -1,5 +1,6 @@
 import MonitorPresentation
 import MonitorUI
+import OpenCineCameraControls
 import OpenCineHostedAccessibility
 import SwiftUI
 import UIKit
@@ -126,6 +127,14 @@ import XCTest
         model.shell.close()
         XCTAssertNil(model.shell.cover, "Ending the session closes the Settings cover")
         XCTAssertTrue(model.isProblemReportPresented, "The root report survives the session ending")
+    }
+
+    /// In-app privacy matches the website (2026-10-16): it reads the shared reliability paragraph,
+    /// which names the random install identifier deleted on opt-out.
+    func testPrivacyReadsTheSharedReliabilityParagraph() throws {
+        guard case .text(let privacy) = MonitorLegalDocuments.app.privacy else { return XCTFail("privacy is bundled text") }
+        XCTAssertTrue(privacy.contains(MonitorSettingsCopy.reliabilityReportsPrivacy))
+        XCTAssertTrue(privacy.contains("install identifier"))
     }
 
     func testAMissingBundledPageSaysSoInsteadOfShowingAnEmptyPage() async throws {

@@ -203,6 +203,9 @@ final class AppModel {
     var recordConfirmationEnabled: Bool = OperatorPrefs.recordConfirmationEnabled {
         didSet { OperatorPrefs.recordConfirmationEnabled = recordConfirmationEnabled }
     }
+    var remoteShutterEnabled: Bool = OperatorPrefs.remoteShutterEnabled {
+        didSet { OperatorPrefs.remoteShutterEnabled = remoteShutterEnabled }
+    }
     var hapticsEnabled: Bool = OperatorPrefs.hapticsEnabled {
         didSet { OperatorPrefs.hapticsEnabled = hapticsEnabled }
     }
@@ -759,6 +762,22 @@ final class AppModel {
                 storage: control.snapshot?.storage ?? .unknown))
     }
 
+    // MARK: Remote shutter (A2-32)
+
+    /// The live monitor is up front: no Settings or Media cover and not watching a
+    /// shared feed. Anywhere else the volume keys behave normally.
+    var remoteShutterLiveViewFront: Bool {
+        shell.monitor != nil && shell.cover == nil && !isWatchingFeed
+    }
+
+    /// One remote press toggles recording like the Record button, without the phone-side
+    /// confirmation (an unseen dialog would strand the take), as on OpenZCine. The shared owner has
+    /// already debounced it; an unknown or pending record state sends nothing.
+    func remoteShutterRecord() {
+        guard !operatorSession.locked, !session.isLocked, !session.controlBusy, !session.status.isPhoto else { return }
+        control.record(start: nil)
+    }
+
     func watchToggleRecord() -> WatchCommandResult {
         watchShutter(photo: false)
     }
@@ -880,6 +899,8 @@ struct AppRoot: View {
             model.noteWatcherStatusChanged(status)
         }
         .monitorScreenWake(enabled: model.keepScreenAwake)
+        .monitorRemoteShutter(enabled: model.remoteShutterEnabled,
+            liveViewFront: model.remoteShutterLiveViewFront, subsystem: "OpenInstaCine") { model.remoteShutterRecord() }
         .onChange(of: model.gimbalAnalogHeld) { _, held in
             if held { model.relayHost.reclaimControl() }
         }
