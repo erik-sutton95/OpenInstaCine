@@ -98,7 +98,10 @@ final class AppModel {
         #if targetEnvironment(simulator)
             LunaCameraBackend(useExistingNetwork: true, configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO())
         #else
-            LunaCameraBackend(configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO())
+            // One hotspot owner for this backend's lifetime. Luna keeps waiting for a pending
+            // native join after its own 35 s timeout (the system Join alert may still be up).
+            LunaCameraBackend(configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO(),
+                hotspot: CameraHotspotSystem(cancellation: .awaitNativeCompletion).host)
         #endif
     }
 
@@ -369,8 +372,8 @@ final class AppModel {
     @ObservationIgnored lazy var internetHop = MonitorInternetHop<InstaHopRoute>(
         port: .init(
             onCameraNetwork: { [weak self] in self?.session.backend.isOnCameraNetwork ?? false },
-            leave: { route, _ in
-                if let ssid = route.ssid { WiFiJoiner.leave(ssid: ssid) }
+            leave: { route, current in
+                if let ssid = route.ssid { route.session.backend.leaveNetwork(ssid: ssid, isCurrent: current) }
                 return route
             },
             admitsReturn: { [weak self] route in
