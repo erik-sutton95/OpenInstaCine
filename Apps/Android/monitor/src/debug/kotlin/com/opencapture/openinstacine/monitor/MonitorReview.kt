@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import com.opencapture.monitorui.ReviewLaunch
 import com.opencapture.opencine.appkit.ShellModel
+import com.opencapture.opencine.core.ConnectedCamera
 import com.opencapture.opencine.appkit.MonitorMediaCatalogCapture
 import com.opencapture.opencine.platform.ReviewMediaSeed
 import com.opencapture.opencine.vocabulary.MediaFile
@@ -20,20 +21,38 @@ import org.json.JSONArray
 internal fun Modifier.reviewMetadata(review: ReviewLaunch?): Modifier =
     if (review == null) this else semantics { testTagsAsResourceId = true }
 
-/** SIMULATED local review through the production Luna cache, shared catalog and native player. */
+/**
+ * SIMULATED reviews: the local media review through the production Luna cache, shared catalog and
+ * native player, and the live review (`ReviewLaunch` LIVE) through the production Luna session,
+ * monitor and capture popups over [SimulatedLiveBackend], with no radio, network or decoder.
+ */
 internal object MonitorReview {
     private const val NAMESPACE = "SIMULATED-S1"
 
     fun decode(intent: Intent?): ReviewLaunch? = ReviewLaunch.decode { intent?.getStringExtra(it) }
-        ?.takeIf { it.screen == ReviewLaunch.Screen.MEDIA && it.source == ReviewLaunch.Source.LOCAL && !it.connected }
+        ?.takeIf {
+            it.screen == ReviewLaunch.Screen.LIVE ||
+                (it.screen == ReviewLaunch.Screen.MEDIA && it.source == ReviewLaunch.Source.LOCAL && !it.connected)
+        }
 
-    /** Set the existing cache address before the normal model constructs its library. */
+    /**
+     * Set the existing cache address before the normal model constructs its library; a live review
+     * also replaces the camera backend with the SIMULATED live one before the session is built.
+     */
     fun prepare(context: Context, review: ReviewLaunch?) {
         if (review != null) context.getSharedPreferences("openpocketcine.media", Context.MODE_PRIVATE)
             .edit().putString("opc.media.lastCameraID", NAMESPACE).apply()
+        if (review?.screen == ReviewLaunch.Screen.LIVE) {
+            MonitorConfiguration.replaceBackend { SimulatedLiveBackend() }
+            ShellReview.seed(context)
+        }
     }
 
     suspend fun start(context: Context, model: AppModel, review: ReviewLaunch) {
+        if (review.screen == ReviewLaunch.Screen.LIVE) {
+            model.shell.present(ConnectedCamera(ShellReview.camera, ReviewLiveSession()))
+            return
+        }
         val records = withContext(Dispatchers.IO) {
             val cache = MediaCache(context.noBackupFilesDir,
                 context.getSharedPreferences("openpocketcine.media", Context.MODE_PRIVATE), model.mediaStorage)
