@@ -59,7 +59,7 @@ class DisplaySettingsInputTest {
                         activity.setContent {
                             Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(12.dp)
                                 .semantics { testTagsAsResourceId = true }) {
-                                OperatorDisplayRows(fresh, fresh.operatorSetupState(), operatorSetupApp(fresh), isLive = false)
+                                OperatorDisplayRows(fresh, fresh.operatorSetupState(), operatorSetupApp(fresh))
                             }
                         }
                     }

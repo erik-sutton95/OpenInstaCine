@@ -42,9 +42,11 @@ internal fun AppModel.operatorSetupState(): OperatorSetupState {
     val failure by session.failure.collectAsState()
     val status by session.chromeStatus.collectAsState()
     val camera = session.connectedCamera
+    val shown by shell.state.collectAsState()
     return OperatorSetupState(phase.vocabularyPhase(), failure, status.monitorColorMode, session.joinedSSID, camera?.name,
         camera?.model?.family, remember(status) { monitorLayout() },
-        lookProfile = camera?.model?.captureProfile?.looks ?: com.opencapture.openinstacine.monitor.session.LunaCameraLUTProfile.value)
+        lookProfile = camera?.model?.captureProfile?.looks ?: com.opencapture.openinstacine.monitor.session.LunaCameraLUTProfile.value,
+        monitorPresented = shown.monitor != null)
 }
 
 /**
