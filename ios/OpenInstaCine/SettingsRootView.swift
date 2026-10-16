@@ -56,7 +56,7 @@ enum SettingsHelpCopy {
     static let gamepad =
         "A connected game controller. The selected gimbal joystick pans and tilts. Cross/A records. Circle/B recenters. Square/X is rotate-180. Triangle/Y tracks a face. L1/R1 jump zoom out/in. L2/R2 hold-to-zoom (deeper is faster). D-pad up/down ISO, left/right shutter. Unplug rests the stick. On-screen stick wins while you hold it."
     static let keepScreenAwake =
-        "Prevents auto-lock while OpenInstaCine is open. A monitor should stay lit. iOS may still dim when the device overheats."
+        MonitorSettingsCopy.keepScreenAwake
     static let hdrDisplay =
         "Outdoor panel brightness, not a grade. WAVE, HISTO, PARADE, VECTOR, zebras and false color still read the decoded camera signal, so judge exposure there, not from how bright the picture looks. Screen recording and AirPlay drop back to a normal SDR picture so the file is not HDR-boosted. This is not the camera's Dolby Vision color mode. Off by default."
     static let themeHelp =
@@ -195,17 +195,7 @@ struct SettingsRootView: View {
         if model.frameio.connecting { return .connecting }
         return model.frameio.isConnected ? .signedIn : .signedOut
     }
-    private var cache: MonitorSettingsCacheSource {
-        let revision = model.session.mediaCacheRevision
-        let source = model.shell.monitor?.id
-        // Delivery exports count and clear with the media cache (A2-58). The scope is every
-        // camera's cache on this phone (A2-33), so the identity is the shared cache parent.
-        return model.delivery.cacheSource(.init(
-            identity: .init(namespace: model.session.cameraMedia.mediaCacheParentPath, source: source), revision: revision,
-            isCurrent: { model.shell.monitor?.id == source && model.session.mediaCacheRevision == revision },
-            count: { await model.session.cameraMedia.cacheByteCountAllCameras() },
-            clear: { try await model.session.clearAllCamerasCache() }))
-    }
+    private var cache: MonitorSettingsCacheSource { model.settingsCacheSource }
     private var support: MonitorSettingsSupportSource {
         .init(consent: Binding(get: { AppDiagnostics.reporting.isOptedIn }, set: AppDiagnostics.reporting.setConsent),
             available: AppDiagnostics.reporting.isAvailable, automaticHelp: SettingsHelpCopy.reliabilityReports,
@@ -222,4 +212,21 @@ struct SettingsRootView: View {
             supportEmail: "support@opencapture.org")
     }
     static var appVersionText: String { MonitorSettingsAppInformation.version() }
+}
+
+
+extension AppModel {
+    var settingsCacheSource: MonitorSettingsCacheSource {
+        let model = self
+        let session = model.session
+        let revision = session.mediaCacheRevision
+        let source = model.shell.monitor?.id
+        // Delivery exports count and clear with the media cache (A2-58). The scope is every
+        // camera's cache on this phone (A2-33), so the identity is the shared cache parent.
+        return model.delivery.cacheSource(.init(
+            identity: .init(namespace: session.cameraMedia.mediaCacheParentPath, source: source), revision: revision,
+            isCurrent: { model.session === session && model.shell.monitor?.id == source },
+            count: { await session.cameraMedia.cacheByteCountAllCameras() },
+            clear: { try await session.clearAllCamerasCache() }))
+    }
 }
