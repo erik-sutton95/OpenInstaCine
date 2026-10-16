@@ -335,22 +335,6 @@ final class AppModel {
     var relayBrowser = WatcherRelayBrowser()
     var relayClient = WatcherRelayClient()
     var isWatchingFeed = false
-    /// Once accepted, transport failure belongs on the watcher screen until explicit Leave.
-    var showsWatcherMonitor: Bool { isWatchingFeed }
-
-    func noteWatcherStatusChanged(_ status: WatcherRelayClientStatus) {
-        if status == .needsPasscode, isWatchingFeed {
-            isWatchingFeed = false
-            showsWatcherBrowse = true
-            startWatcherBrowse()
-        }
-        if status == .live, showsWatcherBrowse {
-            isWatchingFeed = true
-            showsWatcherBrowse = false
-            shell.dismissCover()
-        }
-    }
-
     var showsWatcherBrowse = false
     var shareThisFeed: Bool = OperatorPrefs.shareThisFeed
     var sharePasscode: String = WatcherRelayKeychain.app.hostPasscode
@@ -474,7 +458,17 @@ final class AppModel {
 
     func startRelayHost() {
         guard isLive, shareThisFeed else { return }
-        WatcherRelayKeychain.app.hostPasscode = sharePasscode
+        // An empty shown passcode may only mean the Keychain was locked at launch: ask it again,
+        // and never broadcast unprotected while it cannot answer.
+        if sharePasscode.isEmpty {
+            guard let stored = WatcherRelayKeychain.app.hostPasscodeLookup().usableValue else {
+                shareThisFeed = false
+                OperatorPrefs.shareThisFeed = false
+                session.controlNote = "Sharing could not start"
+                return
+            }
+            sharePasscode = stored
+        }
         let name = UIDevice.current.name
         let camera = session.connectedCamera?.name ?? ""
         relaySource = shell.monitor?.id
@@ -523,42 +517,6 @@ final class AppModel {
             cameraModel: session.connectedCamera?.model.name,
             isNano: session.bodyFamily == .nano)
         return state
-    }
-
-    func openWatcherBrowse() {
-        showsWatcherBrowse = true
-        relayClient.resolveEndpoint = { [weak self] name in
-            self?.relayBrowser.hosts.first { $0.name == name }?.endpoint
-        }
-        relayClient.onReconnect = { [weak self] in self?.startWatcherBrowse() }
-        startWatcherBrowse()
-    }
-
-    func startWatcherBrowse() {
-        guard !isLive else { return }
-        relayBrowser.start()
-    }
-
-    func joinWatcher(_ host: WatcherRelayDiscovery) {
-        let code = WatcherRelayKeychain.app.rememberedPasscode(forHost: host.name)
-        relayClient.join(
-            endpoint: host.endpoint,
-            hostName: host.name,
-            passcode: code,
-            watcherID: WatcherRelayKeychain.app.installID,
-            deviceName: UIDevice.current.name)
-    }
-
-    func retryWatcherPasscode(_ code: String) {
-        WatcherRelayKeychain.app.rememberPasscode(code, forHost: relayClient.hostTitle)
-        relayClient.retryPasscode(code)
-    }
-
-    func stopWatching() {
-        relayClient.leave()
-        isWatchingFeed = false
-        showsWatcherBrowse = false
-        relayBrowser.stop()
     }
 
     func handleWatcherRelayCommand(_ delivery: WatcherRelayCommandDelivery) {
