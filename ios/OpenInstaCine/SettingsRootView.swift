@@ -60,6 +60,7 @@ struct SettingsRootView: View {
             controls: .init(recordConfirmation: Bindable(model).recordConfirmationEnabled,
                 haptics: .init(value: Bindable(model).hapticsEnabled, help: MonitorSettingsCopy.gimbalHaptics),
                 keepAwake: .init(value: Bindable(model).keepScreenAwake, help: MonitorSettingsCopy.keepScreenAwake),
+                input: .init(remoteShutter: .volumeButtons(enabled: Bindable(model).remoteShutterEnabled)),
                 motion: motion),
             display: .init(hdr: .init(value: Bindable(model).hdrDisplay, help: SettingsHelpCopy.hdrDisplay),
                 sections: availableDisplay),

@@ -22,7 +22,8 @@ enum OperatorPrefs {
             hdrDisplay: "OpenInstaCine.HDRDisplay",
             recordConfirmation: "OpenInstaCine.RecordConfirmation",
             haptics: "OpenInstaCine.HapticsEnabled",
-            cacheOriginals: "OpenInstaCine.CacheFullResolution"))
+            cacheOriginals: "OpenInstaCine.CacheFullResolution",
+            remoteShutter: "OpenInstaCine.RemoteShutter"))
     private static let cleanPinsKey = "OpenInstaCine.CleanViewPins.v1"
 
     static var shareThisFeed: Bool {
@@ -61,6 +62,12 @@ enum OperatorPrefs {
     static var recordConfirmationEnabled: Bool {
         get { common.recordConfirmation }
         set { common.recordConfirmation = newValue }
+    }
+
+    /// Volume and media presses toggle recording while the live view is in front (A2-32); on by default.
+    static var remoteShutterEnabled: Bool {
+        get { common.remoteShutter }
+        set { common.remoteShutter = newValue }
     }
 
     static var hapticsEnabled: Bool {

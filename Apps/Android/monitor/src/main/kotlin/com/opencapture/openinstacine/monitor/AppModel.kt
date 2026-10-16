@@ -146,6 +146,9 @@ class AppModel(
         private set
     override var recordConfirmationEnabled by mutableStateOf(OperatorPrefs.recordConfirmationEnabled(appContext))
         private set
+    /** Volume and media presses toggle recording while the live view is in front (A2-32), as on OpenZCine. */
+    override var remoteShutterEnabled: Boolean by mutableStateOf(OperatorPrefs.remoteShutterEnabled(appContext))
+        private set
     override var hapticsEnabled by mutableStateOf(OperatorPrefs.hapticsEnabled(appContext))
         private set
     override var gimbalStickSensitivity by mutableIntStateOf(OperatorPrefs.gimbalStickSensitivity(appContext))
@@ -241,6 +244,11 @@ class AppModel(
     override fun updateRecordConfirmationEnabled(value: Boolean) {
         recordConfirmationEnabled = value
         OperatorPrefs.setRecordConfirmationEnabled(appContext, value)
+    }
+
+    override fun updateRemoteShutterEnabled(value: Boolean) {
+        remoteShutterEnabled = value
+        OperatorPrefs.setRemoteShutterEnabled(appContext, value)
     }
 
     override fun updateHapticsEnabled(value: Boolean) {
