@@ -456,7 +456,8 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         capture("assist-inspector-portrait")
         rotate(.landscapeRight)
         XCTAssertTrue(inspector.exists)
-        app.buttons["Zebra"].firstMatch.tap()
+        // The palette chips keep the same labels in the tree under the inspector: use its tab.
+        inspector.buttons["Zebra"].tap()
         XCTAssertTrue(app.buttons["Close Zebra"].waitForExistence(timeout: 5))
         capture("assist-inspector-landscape")
     }
@@ -513,7 +514,8 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         let initialFrame = inspector.frame
         for iteration in 0..<20 {
             for title in ["False Color", "Zebra", "Peaking"] {
-                app.buttons[title].firstMatch.tap()
+                // The palette chips under the inspector share these labels: tap the inspector's tab.
+                inspector.buttons[title].tap()
                 XCTAssertEqual(
                     app.state, .runningForeground, "Terminated at \(iteration): \(title)")
                 XCTAssertTrue(app.buttons["Close \(title)"].waitForExistence(timeout: 3))
