@@ -10,6 +10,9 @@ import SwiftUI
 
 @testable import OpenInstaCine
 
+// Expectations in this file are fulfilled by the owners' own events (decode, delivery, HTTP,
+// render); every 30 s timeout is a hang guard, not a budget.
+
 @MainActor
 final class VideoDisplayOwnershipTests: XCTestCase {
     /// SIMULATED marks exercise the actual native renderer and retained hosting controller.
@@ -39,11 +42,11 @@ final class VideoDisplayOwnershipTests: XCTestCase {
             host.view.frame = window.bounds
             host.view.setNeedsLayout()
             host.view.layoutIfNeeded()
-            await fulfillment(of: [ready], timeout: 5)
+            await fulfillment(of: [ready], timeout: 30)
             let displayed = expectation(description: "native tracking marks submitted")
             let frames = NativeFrameProbe(ready: displayed)
             frames.start()
-            await fulfillment(of: [displayed], timeout: 5)
+            await fulfillment(of: [displayed], timeout: 30)
             frames.stop()
             let format = UIGraphicsImageRendererFormat()
             format.scale = 1
@@ -115,11 +118,11 @@ final class VideoDisplayOwnershipTests: XCTestCase {
             host.view.frame = window.bounds
             host.view.setNeedsLayout()
             host.view.layoutIfNeeded()
-            await fulfillment(of: [ready], timeout: 5)
+            await fulfillment(of: [ready], timeout: 30)
             let displayed = expectation(description: "native ND chip submitted")
             let frames = NativeFrameProbe(ready: displayed)
             frames.start()
-            await fulfillment(of: [displayed], timeout: 5)
+            await fulfillment(of: [displayed], timeout: 30)
             frames.stop()
             let format = UIGraphicsImageRendererFormat()
             format.scale = 2
@@ -184,11 +187,11 @@ final class VideoDisplayOwnershipTests: XCTestCase {
             host.view.frame = window.bounds
             host.view.setNeedsLayout()
             host.view.layoutIfNeeded()
-            await fulfillment(of: [ready], timeout: 5)
+            await fulfillment(of: [ready], timeout: 30)
             let displayed = expectation(description: "native level canvas submitted")
             let frames = NativeFrameProbe(ready: displayed)
             frames.start()
-            await fulfillment(of: [displayed], timeout: 5)
+            await fulfillment(of: [displayed], timeout: 30)
             frames.stop()
             let format = UIGraphicsImageRendererFormat()
             format.scale = 1
@@ -255,11 +258,11 @@ final class VideoDisplayOwnershipTests: XCTestCase {
             host.view.frame = window.bounds
             host.view.setNeedsLayout()
             host.view.layoutIfNeeded()
-            await fulfillment(of: [ready], timeout: 5)
+            await fulfillment(of: [ready], timeout: 30)
             let displayed = expectation(description: "native audio canvas submitted")
             let frames = NativeFrameProbe(ready: displayed)
             frames.start()
-            await fulfillment(of: [displayed], timeout: 5)
+            await fulfillment(of: [displayed], timeout: 30)
             frames.stop()
             let format = UIGraphicsImageRendererFormat()
             format.scale = 2
@@ -375,7 +378,7 @@ final class VideoDisplayOwnershipTests: XCTestCase {
             host.view.frame = window.bounds
             host.view.setNeedsLayout()
             host.view.layoutIfNeeded()
-            await fulfillment(of: [ready], timeout: 5)
+            await fulfillment(of: [ready], timeout: 30)
             let format = UIGraphicsImageRendererFormat()
             format.scale = 2
             let captured = UIGraphicsImageRenderer(bounds: host.view.bounds, format: format).image { _ in
@@ -511,7 +514,7 @@ final class VideoDisplayOwnershipTests: XCTestCase {
             host.view.frame = canvas
             host.view.setNeedsLayout()
             host.view.layoutIfNeeded()
-            await fulfillment(of: [ready], timeout: 5)
+            await fulfillment(of: [ready], timeout: 30)
             XCTAssertTrue(probe.window === window)
             let frame = probe.convert(probe.bounds, to: host.view)
             XCTAssertEqual(frame.width, layout.size.width, accuracy: 1)
@@ -567,7 +570,7 @@ final class VideoDisplayOwnershipTests: XCTestCase {
         window.makeKeyAndVisible()
         defer { window.isHidden = true }
         root.view.layoutIfNeeded()
-        await fulfillment(of: initial, timeout: 5)
+        await fulfillment(of: initial, timeout: 30)
         let held = try XCTUnwrap(subject.view)
         let other = try XCTUnwrap(peer.view)
         XCTAssertFalse(held === other)
@@ -578,7 +581,7 @@ final class VideoDisplayOwnershipTests: XCTestCase {
         host.view.frame.size = CGSize(width: 280, height: 220)
         host.view.setNeedsLayout()
         host.view.layoutIfNeeded()
-        await fulfillment(of: [updated], timeout: 5)
+        await fulfillment(of: [updated], timeout: 30)
         XCTAssertTrue(subject.view === held, "Mode, rotation geometry and display policy retain the MTKView")
         XCTAssertEqual(held.colorPixelFormat, .rgba16Float)
         XCTAssertTrue(peer.view === other)

@@ -20,6 +20,23 @@ final class LUTPresentPerfTests: XCTestCase {
         XCTAssertEqual(MonitorWorkingRaster.targetSize(width: 1920, height: 1080).width, 1440)
     }
 
+    /// The 4K regression the old 80 ms bake budget caught, asserted on the graph itself: the cube
+    /// product a 4K source hands the baker is already capped at the working width. A wall-clock
+    /// budget measured the machine's load instead (a loaded simulator took 582 ms).
+    func testFourKLUTProductReachesTheBakerAtTheWorkingWidth() {
+        let cube = BuiltInLook.mono.cube()
+        var fx = LiveImageEffects()
+        fx.lutDimension = cube.size
+        fx.lutRGBA = cube.rgbaComponents.withUnsafeBytes { Data($0) }
+        let buffer = ScopeTestBuffers.makeFlatBuffer(code: 78, width: 3840, height: 2160)
+        let source = CIImage(cvPixelBuffer: buffer, options: MonitorWorkingSpace.imageOptions)
+        let product = LiveMonitorCompositor.applyProduct(
+            to: source, effects: fx, display: CIImage(cvPixelBuffer: buffer))
+        XCTAssertTrue(product.unmanagedBake, "An armed cube is the baked product")
+        XCTAssertEqual(product.image.extent.width, 1440)
+        XCTAssertEqual(product.image.extent.height, 810)
+    }
+
     func testLUTBakeOf720pProxyIsCheapRelativeToFourK() throws {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw XCTSkip("Metal required")
@@ -56,12 +73,11 @@ final class LUTPresentPerfTests: XCTestCase {
         try XCTSkipIf(
             ProcessInfo.processInfo.environment["CI"] != nil,
             "timing asserted on real hardware only")
+        // The 4K cap is asserted deterministically above; only the proxy frame budget is timed.
+        // That budget is the physical SLO and stays sensitive to simulator load by nature.
         XCTAssertLessThan(
             proxy, 16,
             "720p LUT bake+GPU must stay inside one 60 Hz frame after warmup (was \(proxy) ms)")
-        XCTAssertLessThan(
-            fourK, 80,
-            "4K must cap at 1440 before the cube; bake was \(fourK) ms")
     }
 
     private func measureBake(
@@ -90,7 +106,8 @@ final class LUTPresentPerfTests: XCTestCase {
                 }
                 done.fulfill()
             }
-            wait(for: [done], timeout: 5)
+            // Ends on the bake's completion; the bound only stops a broken bake from hanging.
+            wait(for: [done], timeout: 30)
             if let texture = baker.bakedTexture(for: drawable, pixelFormat: .bgra8Unorm) {
                 baker.releaseBakedTexture(texture)
             }

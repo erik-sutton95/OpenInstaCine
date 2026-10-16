@@ -1,4 +1,5 @@
 import OpenCineApple
+import OpenCineHostedTestSupport
 import OpenInstaViewCore
 import QuartzCore
 import VideoToolbox
@@ -23,10 +24,7 @@ final class FirstConnectTests: XCTestCase {
         decoder.onPresentedFrame = { heartbeats += 1 }
         let buffer = ScopeTestBuffers.makeEdgeBuffer()
         decoder.handleDecodedFrame(buffer)
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline, decoder.lastPresentedAt == nil {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { decoder.lastPresentedAt != nil }
         let source = try XCTUnwrap(decoder.lastSourceFrameAt)
         let presented = try XCTUnwrap(decoder.lastPresentedAt)
         let decoded = bus.decodedFrames
@@ -34,10 +32,7 @@ final class FirstConnectTests: XCTestCase {
         let firstHeartbeats = heartbeats
         let firstCompletions = completions
         decoder.handleDecodedFrame(buffer, isNewSourceFrame: false)
-        let redrawDeadline = Date().addingTimeInterval(2)
-        while Date() < redrawDeadline, completions == firstCompletions {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { completions != firstCompletions }
         XCTAssertGreaterThan(completions, firstCompletions, "Exercise the cached repaint")
         XCTAssertEqual(decoder.lastPresentedAt, presented)
         XCTAssertEqual(decoder.lastSourceFrameAt, source)
@@ -51,7 +46,7 @@ final class FirstConnectTests: XCTestCase {
         XCTAssertEqual(decoder.health.pipeline.assistOutput, health.pipeline.assistOutput)
         XCTAssertEqual(bus.decodedFrames, decoded)
         XCTAssertEqual(heartbeats, firstHeartbeats)
-        await fulfillment(of: [identity], timeout: 1)
+        await fulfillment(of: [identity], timeout: 30)
 
         // Dropping the final assist re-enqueues the held identity buffer directly.
         let container = CALayer()
@@ -432,10 +427,7 @@ final class FirstConnectTests: XCTestCase {
             accessUnit: Self.startCodes + Self.vps + Self.startCodes + Self.sps
                 + Self.startCodes + Self.pps)
         decoder.handleDecodedFrame(ScopeTestBuffers.makeEdgeBuffer())
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline, decoder.lastPresentedAt == nil {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { decoder.lastPresentedAt != nil }
         XCTAssertNotNil(decoder.lastPresentedAt)
         XCTAssertEqual(idrRequests, 0, "first present must not send 0x09/0xa8")
         decoder.unlockHardwareDecoder()

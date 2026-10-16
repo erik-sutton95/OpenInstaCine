@@ -8,6 +8,9 @@ import XCTest
 
 @testable import OpenInstaCine
 
+// Expectations in this file are fulfilled by the owners' own events (decode, delivery, HTTP,
+// render); every 30 s timeout is a hang guard, not a budget.
+
 @MainActor
 final class MonitorBackdropLifecycleTests: XCTestCase {
     /// This test's monitored source (XCTest makes a fresh one per test).
@@ -195,7 +198,7 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
             operation: { _, _ in
                 if calls.increment() == 1 {
                     started.fulfill()
-                    _ = release.wait(timeout: .now() + 3)
+                    _ = release.wait(timeout: .now() + 30)  // hang guard; the test signals it
                 }
                 return snapshot
             })
@@ -204,7 +207,7 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
         let pending = Task {
             await renderer.render(owner: owner, canvasSize: snapshot.canvasSize) { [source] }
         }
-        await fulfillment(of: [started], timeout: 2)
+        await fulfillment(of: [started], timeout: 30)
         pending.cancel()
         let nextOwner = UUID()
         renderer.activate(nextOwner)
@@ -329,7 +332,7 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(50))
         XCTAssertEqual(releases.value, 0)
         renderer.deactivate(owner)
-        await fulfillment(of: [released], timeout: 2)
+        await fulfillment(of: [released], timeout: 30)
         XCTAssertEqual(releases.value, 1)
     }
 
@@ -382,7 +385,7 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
             clock: { clock.now }, minimumInterval: { 1 },
             operation: { _, _ in
                 started.fulfill()
-                _ = release.wait(timeout: .now() + 3)
+                _ = release.wait(timeout: .now() + 30)  // hang guard; the test signals it
                 return nil
             })
         let first = UUID()
@@ -390,7 +393,7 @@ final class MonitorBackdropLifecycleTests: XCTestCase {
         let pending = Task {
             await renderer.render(owner: first, canvasSize: CGSize(width: 900, height: 600)) { [] }
         }
-        await fulfillment(of: [started], timeout: 2)
+        await fulfillment(of: [started], timeout: 30)
         pending.cancel()
         let second = UUID()
         renderer.activate(second)

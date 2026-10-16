@@ -1,6 +1,7 @@
 import Insta360Apple
 import Insta360Protocol
 import OpenCineCore
+import OpenCineHostedTestSupport
 import OpenInstaViewCore
 import XCTest
 
@@ -32,13 +33,8 @@ final class LunaClockFacadeTests: XCTestCase {
         return session
     }
 
-    private func waitUntil(_ predicate: () -> Bool, timeout: Double = 5) async -> Bool {
-        let end = ProcessInfo.processInfo.systemUptime + timeout
-        while ProcessInfo.processInfo.systemUptime < end {
-            if predicate() { return true }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return predicate()
+    private func waitUntil(_ predicate: @MainActor @Sendable () -> Bool) async -> Bool {
+        await HostedCondition.wait(until: predicate)
     }
 
     func testClockSyncSetsTheClockThenSyncsToTheMillisecondTwice() async throws {
@@ -68,6 +64,7 @@ final class LunaClockFacadeTests: XCTestCase {
                 }, "cmd 214 count \(count), stamped at send")
         }
         XCTAssertEqual(wire.sent.map(\.timeout), [.seconds(2), .seconds(2), .seconds(2)])
+        // Negative window: no fourth request may follow within it.
         try await Task.sleep(for: .milliseconds(100))
         XCTAssertEqual(wire.sent.count, 3)
     }
@@ -79,6 +76,7 @@ final class LunaClockFacadeTests: XCTestCase {
         session.syncCameraClock()
         let tried = await waitUntil { wire.sent.count == 1 }
         XCTAssertTrue(tried)
+        // Negative window: no millisecond sync may follow a refused clock within it.
         try await Task.sleep(for: .milliseconds(150))
         XCTAssertEqual(wire.sent.count, 1)
         XCTAssertNotEqual(wire.sent.first?.request.wireCode, LunaProtocol.syncTimeAccurateCode)

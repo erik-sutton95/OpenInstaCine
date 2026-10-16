@@ -9,6 +9,9 @@ import os
 
 @testable import OpenInstaCine
 
+// Expectations in this file are fulfilled by the owners' own events (decode, delivery, HTTP,
+// render); every 30 s timeout is a hang guard, not a budget.
+
 /// SIMULATED real HTTP plus Library IO and a Luna session epoch. The backend TCP handshake is
 /// deliberately not simulated as ready; its actual facade refusal is separately asserted.
 @MainActor final class LunaMediaOriginalImageOwnerTests: XCTestCase {
@@ -63,9 +66,9 @@ import os
         LunaOriginalImageOwnerURLProtocol.state.withLock { $0 = .init(hold: true, ready: ready, stopped: stopped) }
         defer { LunaOriginalImageOwnerURLProtocol.state.withLock { $0 = .init() } }
         let request = Task { let bytes = try? await fixture.read(file); completed.fulfill(); return bytes }
-        await fulfillment(of: [ready], timeout: 5)
+        await fulfillment(of: [ready], timeout: 30)
         fixture.facade.mediaLibrary.close()
-        await fulfillment(of: [stopped, completed], timeout: 5)
+        await fulfillment(of: [stopped, completed], timeout: 30)
         let cancelled = LunaOriginalImageOwnerURLProtocol.state.withLock { $0.didStop }
         if !cancelled { LunaOriginalImageOwnerURLProtocol.state.withLock { $0.pending }?.finishBody() }
         let bytes = await request.value
@@ -85,9 +88,9 @@ import os
         LunaOriginalImageOwnerURLProtocol.state.withLock { $0 = .init(hold: true, ready: ready, stopped: stopped) }
         defer { LunaOriginalImageOwnerURLProtocol.state.withLock { $0 = .init() } }
         let request = Task { let bytes = try? await fixture.read(file); completed.fulfill(); return bytes }
-        await fulfillment(of: [ready], timeout: 5)
+        await fulfillment(of: [ready], timeout: 30)
         request.cancel()
-        await fulfillment(of: [stopped, completed], timeout: 5)
+        await fulfillment(of: [stopped, completed], timeout: 30)
         let cancelled = LunaOriginalImageOwnerURLProtocol.state.withLock { $0.didStop }
         if !cancelled { LunaOriginalImageOwnerURLProtocol.state.withLock { $0.pending }?.finishBody() }
         let bytes = await request.value
@@ -104,7 +107,7 @@ import os
         LunaOriginalImageOwnerURLProtocol.state.withLock { $0 = .init(hold: true, ready: ready) }
         defer { LunaOriginalImageOwnerURLProtocol.state.withLock { $0 = .init() } }
         let request = Task { try? await fixture.read(file) }
-        await fulfillment(of: [ready], timeout: 5)
+        await fulfillment(of: [ready], timeout: 30)
         let epoch = fixture.source.current.epoch
         fixture.source.linkChanged(.idle, serial: nil)
         fixture.source.linkChanged(.streaming, serial: "SIMULATED-ORIGINAL")
@@ -129,10 +132,10 @@ import os
         LunaOriginalImageOwnerURLProtocol.state.withLock { $0 = .init(hold: true, ready: ready, stopped: stopped) }
         defer { LunaOriginalImageOwnerURLProtocol.state.withLock { $0 = .init() } }
         let request = Task { let bytes = try? await fixture.read(file); completed.fulfill(); return bytes }
-        await fulfillment(of: [ready], timeout: 5)
+        await fulfillment(of: [ready], timeout: 30)
         let library = try XCTUnwrap(fixture.facade.mediaLibrary)
         try library.applyLocalRecords(.init(resetLibrary: true, upserts: []), token: library.actionToken)
-        await fulfillment(of: [stopped, completed], timeout: 5)
+        await fulfillment(of: [stopped, completed], timeout: 30)
         let cancelled = LunaOriginalImageOwnerURLProtocol.state.withLock { $0.didStop }
         if !cancelled { LunaOriginalImageOwnerURLProtocol.state.withLock { $0.pending }?.finishBody() }
         let bytes = await request.value

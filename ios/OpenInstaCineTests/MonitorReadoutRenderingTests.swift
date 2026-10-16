@@ -1,5 +1,6 @@
 import Insta360AppleTestSupport
 import Insta360Protocol
+import OpenCineHostedTestSupport
 import SwiftUI
 import XCTest
 
@@ -21,7 +22,7 @@ final class MonitorReadoutRenderingTests: XCTestCase {
             ProtoMessage.blob(field: 2, value: ProtoMessage.blob(field: 176, value: volume))))
         model.control.bind(session)
         defer { model.control.unbind() }
-        for _ in 0..<100 where model.control.snapshot?.storage.value == nil { await Task.yield() }
+        _ = await HostedCondition.wait { model.control.snapshot?.storage.value != nil }
         XCTAssertEqual(model.control.snapshot?.storage.value?.first?.freeBytes.value, 107_374_182_400,
             "The native fixture renders the same storage through the common Luna observation")
         let layout = LiveMonitorLayout.fieldMonitor(

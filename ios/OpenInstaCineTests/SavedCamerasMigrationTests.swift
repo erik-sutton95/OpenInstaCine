@@ -3,6 +3,7 @@ import Insta360Apple
 import Insta360AppleTestSupport
 import OpenCineAppKit
 import OpenCineCore
+import OpenCineHostedTestSupport
 import XCTest
 
 @testable import OpenInstaCine
@@ -249,8 +250,8 @@ final class SavedCamerasMigrationTests: XCTestCase {
         XCTAssertEqual(old[1].customName, "Edited")
     }
 
-    private func until(_ condition: () -> Bool) async throws {
-        for _ in 0..<500 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
-        XCTAssertTrue(condition())
+    private func until(_ condition: @MainActor @Sendable () -> Bool) async throws {
+        let held = await HostedCondition.wait(until: condition)
+        XCTAssertTrue(held)
     }
 }
