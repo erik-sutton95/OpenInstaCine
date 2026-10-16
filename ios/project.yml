@@ -193,9 +193,6 @@ targets:
       # with a second MonitorUI (a second theme accent) inside.
       - package: OpenCine
         product: OpenCineApple
-      # The one hosted accessibility walk for in-process view tests.
-      - package: OpenCine
-        product: OpenCineHostedAccessibility
     settings:
       base:
         SWIFT_VERSION: "5.0"
