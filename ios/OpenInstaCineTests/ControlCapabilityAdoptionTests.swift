@@ -44,4 +44,23 @@ final class ControlCapabilityAdoptionTests: XCTestCase {
         XCTAssertEqual(controls.audio.support, .unsupported)
         XCTAssertEqual(controls.zoom.offer?.stops, [1, 2, 3, 6, 15])
     }
+
+    func testBackendInputsRestrictConnectedControlsWithoutChangingPreConnectionProfile() {
+        let camera = FakeLuna()
+        var declarations: CameraCapabilities? = []
+        let luna = camera.connectedSession(backendCapabilities: { declarations })
+        let facade = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
+        facade.lunaSessionOverride = luna
+        let model = AppModel(session: facade)
+        XCTAssertEqual(model.controlCapabilities.focus.support, .unsupported)
+        XCTAssertFalse(facade.supportsFocusMode || facade.supportsTapFocus || facade.supportsZoom
+            || facade.hasGimbal || facade.supportsFaceMetering)
+        XCTAssertFalse(model.captureCapabilities.focusMode || model.captureCapabilities.faceMetering)
+        declarations = [.focus, .zoom, .gimbal, .exposure]
+        XCTAssertTrue(facade.supportsFocusMode && facade.supportsTapFocus && facade.supportsZoom
+            && facade.hasGimbal && facade.supportsFaceMetering)
+        facade.lunaSessionOverride = nil
+        XCTAssertTrue(facade.supportsFocusMode && facade.supportsZoom && facade.hasGimbal,
+            "a disconnected known model returns to the agreed static profile")
+    }
 }

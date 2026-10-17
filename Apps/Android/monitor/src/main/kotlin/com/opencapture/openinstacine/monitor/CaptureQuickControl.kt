@@ -10,8 +10,6 @@ internal fun AppModel.makeOperatorCaptureSource(): MonitorOperatorCaptureSource 
     readStatus = { session.status.value }, readSessionState = {
         instaCaptureSessionState({ session.aeLock.value }, { session.awbLockKelvin.value },
         { session.autoWhiteBalanceLock(session.status.value) != null }, { session.isFormatPinActive },
-        { com.opencapture.opencine.cameracontrols.CaptureLists.supportsFocusModeOrDefault(camera) },
-        { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true },
         controls = session::controlCapabilities)
     }, ready = { session.phase == ConnectionPhase.LIVE }, busy = { session.controlBusy.value },
     nativeExposureCompensation = true,

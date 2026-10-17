@@ -3,9 +3,14 @@ package com.opencapture.openinstacine.monitor
 import com.opencapture.opencine.cameracontrols.LiveSheet
 import com.opencapture.opencine.core.CapabilitySnapshot
 import com.opencapture.opencine.core.SettingKey
+import com.opencapture.opencine.core.SettingAccess
+import com.opencapture.opencine.core.SupportStatus
 import com.opencapture.opencine.insta360.luna.LunaCameraSession
 import com.opencapture.opencine.vocabulary.ControlCapabilities
-import com.opencapture.opencine.vocabulary.controls
+import com.opencapture.opencine.vocabulary.ControlFamily
+import com.opencapture.opencine.vocabulary.ControlStatus
+import com.opencapture.opencine.vocabulary.CameraCaptureProfile
+import com.opencapture.opencine.vocabulary.CaptureNativeISOCapabilities
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -14,6 +19,24 @@ import kotlin.test.assertTrue
 
 /** The capture sheet host values, as on main. */
 class CaptureSheetHostTest {
+    @Test fun typedModelControlsEveryHostProjectionAndKeepsUnknown() {
+        var model = ControlCapabilities()
+        val state = instaCaptureSessionState({ null }, { null }, { false }, { false },
+            controls = { model })
+        assertFalse(state.focusModeSupported)
+        assertFalse(state.irisSupported)
+        assertFalse(state.nativeIsoHopSupported)
+        assertNull(state.nativeISO.hop)
+        assertNull(state.nativeISO.ceiling)
+        model = ControlCapabilities.beforeConnection(CameraCaptureProfile(supportsFocusMode = true,
+            supportsAperture = true, nativeISO = CaptureNativeISOCapabilities(hop = true, ceiling = false)))
+        assertTrue(state.focusModeSupported && state.irisSupported && state.nativeIsoHopSupported)
+        assertEquals(false, state.nativeISO.ceiling)
+        model = model.restricting(mapOf(ControlFamily.FOCUS to ControlStatus(SupportStatus.SUPPORTED, SettingAccess.READ_ONLY),
+            ControlFamily.IRIS to ControlStatus(SupportStatus.UNSUPPORTED)))
+        assertFalse(state.focusModeSupported || state.irisSupported)
+    }
+
     @Test fun onlyIsoShutterAndWhiteBalanceOpenThroughCore() {
         assertEquals(SettingKey.ISO, captureSettingKey(LiveSheet.ISO))
         assertEquals(SettingKey.SHUTTER, captureSettingKey(LiveSheet.SHUTTER))
@@ -27,7 +50,7 @@ class CaptureSheetHostTest {
         var aeLock: Any? = null
         var awbKelvin: Int? = null
         var pinned = true
-        val state = instaCaptureSessionState({ aeLock }, { awbKelvin }, { false }, { pinned }, { true }, { false })
+        val state = instaCaptureSessionState({ aeLock }, { awbKelvin }, { false }, { pinned }, { ControlCapabilities() })
         assertFalse(state.aeLocked)
         assertNull(state.awbLockKelvin)
         assertFalse(state.awbLockOffered)
@@ -41,27 +64,26 @@ class CaptureSheetHostTest {
     }
 
     @Test fun declaredApertureRowsDrawWhileFocusAndNativeIsoHopFollowTheSession() {
-        var focus = false
-        var hop = false
-        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, { focus }, { hop }, irisSupported = { true })
+        var model = ControlCapabilities.beforeConnection(CameraCaptureProfile(supportsAperture = true))
+        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, controls = { model })
         assertTrue(state.irisSupported)
-        assertFalse(instaCaptureSessionState({ null }, { null }, { false }, { false }, { false }, { false }).irisSupported)
+        assertFalse(instaCaptureSessionState({ null }, { null }, { false }, { false },
+            { ControlCapabilities() }).irisSupported)
         assertFalse(state.focusModeSupported)
         assertFalse(state.nativeIsoHopSupported, "No native ISO hop toggle without the session capability")
-        focus = true
-        hop = true
+        model = ControlCapabilities.beforeConnection(CameraCaptureProfile(supportsFocusMode = true,
+            supportsAperture = true, nativeISO = CaptureNativeISOCapabilities(hop = true)))
         assertTrue(state.focusModeSupported)
         assertTrue(state.nativeIsoHopSupported)
     }
 
-    /** A connected Luna session's model replaces the flags; before connection the flags stay. */
+    /** The provider follows the integration from no known body to connected facts and back. */
     @Test fun theConnectedLunaModelDecidesTheCaptureGates() {
-        var connected: ControlCapabilities? = null
-        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, { false }, { false },
-            controls = { connected })
-        assertFalse(state.controls().focus.isOffered, "before connection: the flags")
+        var connected = ControlCapabilities.beforeConnection(null)
+        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, controls = { connected })
+        assertFalse(state.controlCapabilities.focus.isOffered, "no known body")
         connected = ControlCapabilities.derive(CapabilitySnapshot(), LunaCameraSession.CAPTURE_PROFILE, LunaCameraSession.MOTION)
-        val controls = state.controls()
+        val controls = state.controlCapabilities
         assertTrue(controls.focus.isOffered)
         assertFalse(controls.iris.isOffered)
         assertFalse(controls.audio.isOffered)
@@ -69,6 +91,9 @@ class CaptureSheetHostTest {
         assertTrue(controls.zoom.isOffered && controls.gimbal.isOffered)
         assertEquals(false, controls.nativeISO.hop)
         assertEquals(false, controls.nativeISO.ceiling)
+        connected = ControlCapabilities.beforeConnection(null)
+        assertFalse(state.controlCapabilities.focus.isOffered)
+        assertNull(state.nativeISO.hop)
     }
 
     /**
@@ -77,9 +102,8 @@ class CaptureSheetHostTest {
      */
     @Test fun beforeConnectionLunasStaticProfileIsOffered() {
         val before = ControlCapabilities.beforeConnection(LunaCameraSession.CAPTURE_PROFILE, LunaCameraSession.MOTION)
-        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, { false }, { false },
-            controls = { before })
-        val controls = state.controls()
+        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, controls = { before })
+        val controls = state.controlCapabilities
         assertTrue(controls.focus.isOffered && controls.gimbal.isOffered && controls.zoom.isOffered)
         assertFalse(controls.audio.isOffered || controls.iris.isOffered)
         val layout = com.opencapture.opencine.vocabulary.MonitorLayoutCapabilities(before, appLayoutBase)

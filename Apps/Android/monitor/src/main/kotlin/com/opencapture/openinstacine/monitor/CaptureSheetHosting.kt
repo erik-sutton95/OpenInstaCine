@@ -22,6 +22,7 @@ import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.opencine.vocabulary.CaptureSessionState
 import com.opencapture.opencine.vocabulary.CaptureSetting
+import com.opencapture.opencine.vocabulary.ControlCapabilities
 
 /** ISO, shutter and white balance open through Core; EV and focus stay typed. */
 internal fun captureSettingKey(sheet: LiveSheet): SettingKey? = when (sheet) {
@@ -32,31 +33,20 @@ internal fun captureSettingKey(sheet: LiveSheet): SettingKey? = when (sheet) {
 }
 
 /**
- * The capture session state from the session's locks and format pin, the body's focus mode support
- * and the session's native ISO hop capability. The aperture rows draw whenever the APERTURE sheet is
- * open (the live view closes that sheet for a body without aperture). Read when the sheet reads them.
- * While a Luna session is connected, [controls] is its one control model and the flags are unused.
+ * Locks and the expiring format pin stay session facts. Every camera support projection reads
+ * [controls], including before connection; the integration owns its known-model declaration.
  */
 internal fun instaCaptureSessionState(
     aeLock: () -> Any?,
     awbLockKelvin: () -> Int?,
     awbLockOffered: () -> Boolean,
     formatPinned: () -> Boolean,
-    focusModeSupported: () -> Boolean,
-    nativeIsoHopSupported: () -> Boolean,
-    irisSupported: () -> Boolean = { false },
-    isoCeilingSupported: () -> Boolean? = { null },
-    controls: () -> com.opencapture.opencine.vocabulary.ControlCapabilities? = { null },
+    controls: () -> ControlCapabilities,
 ): CaptureSessionState = object : CaptureSessionState {
     override val aeLocked get() = aeLock() != null
     override val awbLockKelvin get() = awbLockKelvin()
     override val awbLockOffered get() = awbLockOffered()
     override val formatPinned get() = formatPinned()
-    override val focusModeSupported get() = focusModeSupported()
-    override val irisSupported get() = irisSupported()
-    override val nativeIsoHopSupported get() = nativeIsoHopSupported()
-    override val nativeISO get() = com.opencapture.opencine.vocabulary.CaptureNativeISOCapabilities(
-        hop = nativeIsoHopSupported(), ceiling = isoCeilingSupported())
     override val controlCapabilities get() = controls()
 }
 
@@ -69,9 +59,7 @@ internal fun AppModel.observedCaptureSessionState(status: CameraStatus): Capture
     // each of them when the camera or an operator choice changes a native value.
     listOf(session.nativeFormat, session.nativeFormats, session.nativeColor).forEach { it.collectAsState().value }
     return instaCaptureSessionState({ aeLock }, { awbLock }, { session.autoWhiteBalanceLock(status) != null },
-        { session.isFormatPinActive }, { CaptureLists.supportsFocusModeOrDefault(session.connectedCamera?.model) },
-        { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true },
-        controls = session::controlCapabilities)
+        { session.isFormatPinActive }, controls = session::controlCapabilities)
 }
 
 /** The Core drum for ISO, shutter and white balance Kelvin; EV is its own wheel on the typed path. */
