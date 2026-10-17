@@ -17,6 +17,7 @@ import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.inspector.WindowInspector
 import android.accessibilityservice.AccessibilityServiceInfo
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
@@ -34,6 +35,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Before
@@ -268,7 +270,9 @@ class LunaMediaPlaybackOwnerInputTest {
                 tap("Close clip information")
                 tap("Share clip"); await("Actual Share cover appears") { node("Nearby Share, Files, and other apps") != null }
                 borrowed(); assertPictureIdentity(scenario, viewIdentity, surfaceIdentity)
-                tap("Close"); await("Donor Share return stays paused") { node("Play") != null }
+                tapShareClose()
+                await("Actual Share cover dismisses") { node("Nearby Share, Files, and other apps") == null }
+                await("Donor Share return stays paused") { node("Play") != null }
                 for (orientation in listOf(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE, ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)) {
                     scenario.onActivity { it.requestedOrientation = orientation }
                     val landscape = orientation != ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -466,8 +470,69 @@ class LunaMediaPlaybackOwnerInputTest {
         return Rect().also { checkNotNull(node(label)).getBoundsInScreen(it); assertFalse(it.isEmpty) }
     }
     private fun progress(): Float = node("Playback position")?.rangeInfo?.current ?: Float.NaN
-    private fun tap(label: String) {
-        val rect = bounds(label); val down = SystemClock.uptimeMillis()
+    // Share is a new native Dialog, unlike the in-activity clip information cover. Its
+    // semantics can exist before its focused input owner has committed a drawable frame.
+    // Admit the real owner/frame, then inject the same single public pointer gesture.
+    private fun tapShareClose() {
+        val automation = instrumentation.uiAutomation
+        val observations = JSONArray()
+        fun snapshot(): Pair<Int, Rect>? {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) automation.clearCache()
+            val target = node("Close") ?: return null
+            val window = automation.windows.singleOrNull { it.id == target.windowId } ?: return null
+            val bounds = Rect().also(target::getBoundsInScreen)
+            val frame = Rect().also(window::getBoundsInScreen)
+            observations.put(JSONObject().put("uptime", SystemClock.uptimeMillis()).put("window", window.id)
+                .put("active", window.isActive).put("focused", window.isFocused)
+                .put("bounds", bounds.toString()).put("frame", frame.toString())
+                .put("resourceID", target.viewIdResourceName).put("clickable", target.isClickable))
+            if (window.root?.packageName?.toString() != instrumentation.targetContext.packageName ||
+                !window.isActive || !window.isFocused || !target.isEnabled || !target.isClickable ||
+                bounds.isEmpty || !frame.contains(bounds)) return null
+            return window.id to bounds
+        }
+        var owner: View? = null
+        var frameCommitted = AtomicBoolean(false)
+        var admitted: Pair<Int, Rect>? = null
+        val folder = File(instrumentation.targetContext.getExternalFilesDir(null), "i5b-playback-native-proof").apply { mkdirs() }
+        try {
+            await("Actual Share Close has a focused native owner and committed frame") {
+                val candidate = snapshot() ?: return@await false
+                var ready = false
+                instrumentation.runOnMainSync {
+                    val decor = WindowInspector.getGlobalWindowViews().singleOrNull { view ->
+                        val native = view.createAccessibilityNodeInfo()
+                        try { native?.windowId == candidate.first } finally { native?.recycle() }
+                    }
+                    if (decor == null || !decor.isAttachedToWindow || !decor.isShown || !decor.hasWindowFocus() ||
+                        decor.isLayoutRequested || decor.width <= 0 || decor.height <= 0) return@runOnMainSync
+                    if (owner !== decor) {
+                        owner = decor
+                        val committed = AtomicBoolean(false)
+                        frameCommitted = committed
+                        decor.viewTreeObserver.registerFrameCommitCallback { committed.set(true) }
+                        decor.invalidate()
+                    }
+                    ready = frameCommitted.get()
+                }
+                if (!ready) return@await false
+                // Read again after the rendered frame; never reuse the pre-frame hit bounds.
+                val current = snapshot() ?: return@await false
+                if (current != candidate) return@await false
+                admitted = current
+                true
+            }
+            val target = checkNotNull(admitted)
+            tap(target.second)
+        } finally {
+            File(folder, "Share-close-native.json").writeText(JSONObject().put("observations", observations)
+                .put("frameCommitted", frameCommitted.get()).put("admittedWindow", admitted?.first)
+                .put("admittedBounds", admitted?.second?.toString()).toString(2))
+        }
+    }
+    private fun tap(label: String) = tap(bounds(label))
+    private fun tap(rect: Rect) {
+        val down = SystemClock.uptimeMillis()
         pointer(MotionEvent.ACTION_DOWN, rect.exactCenterX(), rect.exactCenterY(), down)
         SystemClock.sleep(40); pointer(MotionEvent.ACTION_UP, rect.exactCenterX(), rect.exactCenterY(), down); settle()
     }
