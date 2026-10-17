@@ -3,6 +3,7 @@ import Insta360Apple
 import Insta360Protocol
 import OpenCineCore
 import OpenCineAppKit
+import OpenCineHostedTestSupport
 import OpenCineMedia
 import OpenInstaViewCore
 import XCTest
@@ -81,9 +82,9 @@ import XCTest
         OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder(),
             cameraMedia: CameraMedia(storage: storage, cacheRoot: root), controlsOnly: true)
     }
-    private func settle(_ condition: () -> Bool) async {
-        for _ in 0..<500 where !condition() { await Task.yield() }
-        XCTAssertTrue(condition(), "The owned operation did not settle")
+    private func settle(_ condition: @MainActor @Sendable () -> Bool) async {
+        let held = await HostedCondition.wait(until: condition)
+        XCTAssertTrue(held, "The owned operation did not settle")
     }
     private func seedPlayback(_ session: OpenInstaCine.CameraSession) throws -> MediaFile {
         let file = MediaFile(path: "/DCIM/VID_fixture.MP4", thumbPath: "", sizeBytes: 4, durationSeconds: 2,

@@ -23,6 +23,9 @@ internal fun mediaColorOptions(
 fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
     val controller = model.mediaPlayback
     val library = model.mediaLibrary
+    // Hoisted so the staged SIMULATED review can open its first clip (iOS `MediaLibraryStub`
+    // `opensFirstClip`); the screen's own host is this same remembered construction.
+    val mediaHost = remember(library) { com.opencapture.opencine.appkit.MonitorOperatorMediaHost(library) }
     val state by library.state.collectAsState()
     val phase by model.session.phaseFlow.collectAsState()
     val isLive = library.canRefresh && phase == ConnectionPhase.LIVE
@@ -40,6 +43,19 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
     )
     val colors = mediaColorOptions(library.records(state.category).map { it.facts.color }, model.session.profile)
         .map { it.first.toString() to it.second }
+    // `ReviewLaunch(screen: .playback)`: open the first staged clip once, as a tap would. The
+    // gallery's own begin retires the lifetime it starts with, so the open waits for the browsing
+    // lifetime and retries on every relist until the presentation holds.
+    if (model.reviewLaunch?.screen == com.opencapture.monitorui.ReviewLaunch.Screen.PLAYBACK) {
+        var stagedClipOpened by remember { mutableStateOf(false) }
+        LaunchedEffect(mediaHost, state.lifetimeToken, library.displayedRecords.firstOrNull()?.asset?.id) {
+            if (stagedClipOpened || !state.browsing) return@LaunchedEffect
+            val records = library.displayedRecords
+            val first = records.firstOrNull() ?: return@LaunchedEffect
+            if (mediaHost.open(com.opencapture.opencine.appkit.MonitorMediaGalleryOpen(first, records,
+                library.actionToken))) stagedClipOpened = true
+        }
+    }
     CompositionLocalProvider(LocalMonitorGlass provides null, LocalMediaBackdropGlass provides false) {
         MonitorOperatorMediaScreen(library, model.session.connectedCamera?.name ?: "OpenInstaCine", isLive,
             operations = operations, colorChoices = colors,
@@ -64,6 +80,7 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
                 if (library.isCurrent(token)) deliveryFiles = records.map(::file)
             }, dismiss = { deliveryFiles = null }),
             presentationChanged = { shown -> activity?.playbackHidesSystemNavigation = shown; activity?.updateSystemBars() },
+            host = mediaHost,
             overlays = {
                 MediaDeliveryHost(files = deliveryFiles, controller = controller, onDismissPopup = { deliveryFiles = null },
                     onPresentationChange = { deliveryActive = it })

@@ -12,7 +12,7 @@ internal fun AppModel.makeOperatorCaptureSource(): MonitorOperatorCaptureSource 
         { session.autoWhiteBalanceLock(session.status.value) != null }, { session.isFormatPinActive },
         { com.opencapture.opencine.cameracontrols.CaptureLists.supportsFocusModeOrDefault(camera) },
         { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true },
-        isoCeilingSupported = { false })
+        controls = session::controlCapabilities)
     }, ready = { session.phase == ConnectionPhase.LIVE }, busy = { session.controlBusy.value },
     nativeExposureCompensation = true,
     confirmRecording = { recordConfirmationEnabled }, takePhoto = ::pressShutter,

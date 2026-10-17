@@ -241,6 +241,8 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:core:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
+    // Its manifest registers the run listener that keeps Android's full screen tutorial off.
+    androidTestImplementation("com.opencapture.opencine:system-hints-testing:0.1.0-SNAPSHOT")
     androidTestImplementation(libs.kotlin.test.junit)
     androidTestImplementation(testFixtures("com.opencapture.opencine:core:0.1.0-SNAPSHOT"))
 

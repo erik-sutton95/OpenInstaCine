@@ -3,11 +3,15 @@ import CoreImage
 import CoreVideo
 import MonitorUI
 import OpenCineApple
+import OpenCineHostedTestSupport
 import OpenCineCameraControls
 import OpenInstaViewCore
 import XCTest
 
 @testable import OpenInstaCine
+
+// Expectations in this file are fulfilled by the owners' own events (decode, delivery, HTTP,
+// render); every 30 s timeout is a hang guard, not a budget.
 
 /// App-layer pipeline: decoder → `LiveAssistEngine` → `LiveFrameSampleBus` →
 /// `ScopeAssistBundle`. Curve math itself is covered by the core suite — these
@@ -29,7 +33,7 @@ final class LiveFrameSampleTests: XCTestCase {
             XCTAssertEqual(bundle.transfer, .dlog2)
             sampled.fulfill()
         }
-        await fulfillment(of: [sampled], timeout: 2)
+        await fulfillment(of: [sampled], timeout: 30)
     }
 
     func testPhotoScopesDoNotInferLogFromSceneBrightness() async {
@@ -49,7 +53,7 @@ final class LiveFrameSampleTests: XCTestCase {
             XCTAssertEqual(bundle.transfer, .rec709)
             sampled.fulfill()
         }
-        await fulfillment(of: [sampled], timeout: 2)
+        await fulfillment(of: [sampled], timeout: 30)
     }
 
     func testImageInspectorReceivesLatestRawPictureWithAllScopesOff() async throws {
@@ -63,10 +67,7 @@ final class LiveFrameSampleTests: XCTestCase {
         for _ in 0..<2 {
             let source = ScopeTestBuffers.makeEdgeBuffer()
             decoder.handleDecodedFrame(source, effects: effects, transfer: .dlog2)
-            let deadline = Date().addingTimeInterval(1)
-            while bus.inspectorSource?.buffer !== source, Date() < deadline {
-                try await Task.sleep(for: .milliseconds(10))
-            }
+            _ = await HostedCondition.wait { bus.inspectorSource?.buffer === source }
             XCTAssertTrue(
                 bus.inspectorSource?.buffer === source,
                 "The inspector must borrow the newest raw main-feed buffer without a scope")
@@ -90,10 +91,7 @@ final class LiveFrameSampleTests: XCTestCase {
                 kCFAllocatorDefault, 1, 1, kCVPixelFormatType_32BGRA, nil, &buffer),
             kCVReturnSuccess)
         decoder.handleDecodedFrame(try XCTUnwrap(buffer))
-        let deadline = Date().addingTimeInterval(2)
-        while bus.decodedFrames == 0, Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { bus.decodedFrames > 0 }
         XCTAssertEqual(bus.decodedFrames, 1, "Exercise the real assist completion")
         XCTAssertEqual(heartbeats, 0, "A rejected display buffer must not hide a picture stall")
         XCTAssertNil(decoder.lastPresentedAt)
@@ -111,11 +109,7 @@ final class LiveFrameSampleTests: XCTestCase {
         decoder.handleDecodedFrame(
             ScopeTestBuffers.makeEdgeBuffer(), effects: fx, transfer: .rec709)
 
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline {
-            if bus.decodedFrames >= 1, bus.publishedScopes >= 1 { break }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { bus.decodedFrames >= 1 && bus.publishedScopes >= 1 }
 
         XCTAssertGreaterThanOrEqual(
             bus.decodedFrames, 1, "pixel-buffer callback must increment decodedFrames")
@@ -147,23 +141,15 @@ final class LiveFrameSampleTests: XCTestCase {
 
         decoder.handleDecodedFrame(
             ScopeTestBuffers.makeEdgeBuffer(), effects: fx, transfer: .rec709)
-        let firstDeadline = Date().addingTimeInterval(2)
-        while Date() < firstDeadline {
-            if bus.generation >= 1 { break }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { bus.generation >= 1 }
         let first = bus.generation
         XCTAssertGreaterThanOrEqual(first, 1, "first scoped sample must tick generation")
 
-        // Past the 25 Hz gate.
+        // Past the 25 Hz gate (a lower bound: a longer stall only passes it further).
         try? await Task.sleep(for: .milliseconds(50))
         decoder.handleDecodedFrame(
             ScopeTestBuffers.makeFlatBuffer(code: 200), effects: fx, transfer: .rec709)
-        let secondDeadline = Date().addingTimeInterval(2)
-        while Date() < secondDeadline {
-            if bus.generation > first { break }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { bus.generation > first }
 
         XCTAssertGreaterThan(
             bus.generation, first, "each scoped sample past the 25 Hz gate must tick generation")
@@ -210,11 +196,7 @@ final class LiveFrameSampleTests: XCTestCase {
         decoder.effects = fx
         decoder.handleDecodedFrame(
             ScopeTestBuffers.makeEdgeBuffer(), effects: fx, transfer: .rec709)
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline {
-            if bus.decodedFrames >= 1 { break }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { bus.decodedFrames >= 1 }
         XCTAssertGreaterThanOrEqual(bus.decodedFrames, 1)
 
         decoder.effects = LiveImageEffects()
@@ -367,13 +349,10 @@ final class LiveFrameSampleTests: XCTestCase {
 
         decoder.handleDecodedFrame(
             ScopeTestBuffers.makeEdgeBuffer(), effects: fx, transfer: .rec709)
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline {
-            if bus.decodedFrames >= 1 { break }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { bus.decodedFrames >= 1 }
 
         XCTAssertGreaterThanOrEqual(bus.decodedFrames, 1)
+        // Negative window: a LUT-only present must not tick the scope generation within it.
         try? await Task.sleep(for: .milliseconds(80))
         XCTAssertEqual(bus.generation, 0, "LUT present must not invalidate the chrome tree")
         XCTAssertEqual(bus.publishedScopes, 0)
@@ -400,10 +379,7 @@ final class LiveFrameSampleTests: XCTestCase {
         let a = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let b = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
         let decoders = [feed(a, max: 233, iso: 800), feed(b, max: 160)]
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline, a.publishedScopes < 1 || b.publishedScopes < 1 {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { a.publishedScopes >= 1 && b.publishedScopes >= 1 }
         XCTAssertEqual(a.bundle.clipByte, 233, "camera A ratchets its own ISO 800 ceiling")
         XCTAssertEqual(b.bundle.clipByte, 247, "camera B keeps the reference ceiling")
         XCTAssertEqual(b.exposureCeiling.resolvedISO(), ScopeExposureCeiling.referenceEI)
@@ -426,11 +402,7 @@ final class LiveFrameSampleTests: XCTestCase {
         decoder.handleDecodedFrame(
             ScopeTestBuffers.makeFlatBuffer(code: 78), effects: fx, transfer: .dlog2)
 
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline {
-            if bus.publishedScopes >= 1, bus.colorMode == .dLog2 { break }
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await HostedCondition.wait { bus.publishedScopes >= 1 && bus.colorMode == .dLog2 }
 
         XCTAssertEqual(bus.transfer, .dlog2, "ColorMode D-Log2 must become MonitorTransfer.dlog2")
         XCTAssertEqual(bus.colorMode, .dLog2)
@@ -486,10 +458,8 @@ final class LiveFrameSampleTests: XCTestCase {
             ScopeTestBuffers.makeBGRA { x, _ in x < 64 ? 16 : 247 },
             effects: fx, transfer: .rec709)
 
-        let deadline = Date().addingTimeInterval(2)
-        while Date() < deadline {
-            if bus.publishedScopes >= 1, bus.bundle.transfer == .dlog2 { break }
-            try? await Task.sleep(for: .milliseconds(20))
+        _ = await HostedCondition.wait {
+            bus.publishedScopes >= 1 && bus.bundle.transfer == .dlog2
         }
 
         XCTAssertEqual(
@@ -699,10 +669,8 @@ final class LiveFrameSampleTests: XCTestCase {
 
         decoder.handleDecodedFrame(buffer, effects: fx, transfer: .dlog)
 
-        let deadline = Date().addingTimeInterval(3)
-        while Date() < deadline {
-            if bus.publishedScopes >= 1, !bus.bundle.samples.points.isEmpty { break }
-            try? await Task.sleep(for: .milliseconds(20))
+        _ = await HostedCondition.wait {
+            bus.publishedScopes >= 1 && !bus.bundle.samples.points.isEmpty
         }
 
         XCTAssertGreaterThanOrEqual(bus.publishedScopes, 1)
@@ -725,10 +693,8 @@ final class LiveFrameSampleTests: XCTestCase {
             ScopeTestBuffers.make420v(width: 64, height: 48, leftY: 48, rightY: 200),
             effects: fx, transfer: .dlog2)
 
-        let deadline = Date().addingTimeInterval(3)
-        while Date() < deadline {
-            if bus.publishedScopes >= 1, !bus.bundle.samples.points.isEmpty { break }
-            try? await Task.sleep(for: .milliseconds(20))
+        _ = await HostedCondition.wait {
+            bus.publishedScopes >= 1 && !bus.bundle.samples.points.isEmpty
         }
 
         XCTAssertGreaterThanOrEqual(

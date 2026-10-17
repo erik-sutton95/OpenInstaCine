@@ -1,5 +1,6 @@
 import MonitorPresentation
 import OpenCineCameraControls
+import OpenCineHostedTestSupport
 import OpenInstaViewCore
 import SwiftUI
 import XCTest
@@ -105,13 +106,24 @@ final class CapturePanelRenderComparisonTests: XCTestCase {
     private func render(_ view: UIView) async -> UIImage {
         view.setNeedsLayout()
         view.layoutIfNeeded()
-        // UIKit material, font registration and SwiftUI content-height discovery
-        // must finish before comparing the settled production views.
+        // UIKit material and font registration have no completion to observe, so a short floor
+        // stays; SwiftUI content-height discovery is awaited: the view is settled once two
+        // consecutive renders agree, however long a loaded machine takes to get there.
         try? await Task.sleep(for: .milliseconds(400))
-        view.layoutIfNeeded()
-        return UIGraphicsImageRenderer(size: view.bounds.size, format: renderFormat).image { _ in
-            XCTAssertTrue(view.drawHierarchy(in: view.bounds, afterScreenUpdates: true))
+        var image = UIImage()
+        var drawn = false
+        var previous: Data?
+        _ = await HostedCondition.wait {
+            view.layoutIfNeeded()
+            image = UIGraphicsImageRenderer(size: view.bounds.size, format: renderFormat).image { _ in
+                drawn = view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+            }
+            let pixels = image.pngData()
+            defer { previous = pixels }
+            return drawn && pixels != nil && pixels == previous
         }
+        XCTAssertTrue(drawn)
+        return image
     }
 
     private func attach(_ image: UIImage, name: String) {

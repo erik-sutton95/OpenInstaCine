@@ -1,7 +1,11 @@
 package com.opencapture.openinstacine.monitor
 
 import com.opencapture.opencine.cameracontrols.LiveSheet
+import com.opencapture.opencine.core.CapabilitySnapshot
 import com.opencapture.opencine.core.SettingKey
+import com.opencapture.opencine.insta360.luna.LunaCameraSession
+import com.opencapture.opencine.vocabulary.ControlCapabilities
+import com.opencapture.opencine.vocabulary.controls
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -48,5 +52,38 @@ class CaptureSheetHostTest {
         hop = true
         assertTrue(state.focusModeSupported)
         assertTrue(state.nativeIsoHopSupported)
+    }
+
+    /** A connected Luna session's model replaces the flags; before connection the flags stay. */
+    @Test fun theConnectedLunaModelDecidesTheCaptureGates() {
+        var connected: ControlCapabilities? = null
+        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, { false }, { false },
+            controls = { connected })
+        assertFalse(state.controls().focus.isOffered, "before connection: the flags")
+        connected = ControlCapabilities.derive(CapabilitySnapshot(), LunaCameraSession.CAPTURE_PROFILE, LunaCameraSession.MOTION)
+        val controls = state.controls()
+        assertTrue(controls.focus.isOffered)
+        assertFalse(controls.iris.isOffered)
+        assertFalse(controls.audio.isOffered)
+        assertTrue(controls.faceMetering.isOffered)
+        assertTrue(controls.zoom.isOffered && controls.gimbal.isOffered)
+        assertEquals(false, controls.nativeISO.hop)
+        assertEquals(false, controls.nativeISO.ceiling)
+    }
+
+    /**
+     * The shared pre-connection rule: Insta knows its camera is a Luna, so before connection it
+     * offers what Luna's static profile declares (focus, gimbal, zoom), as iOS does.
+     */
+    @Test fun beforeConnectionLunasStaticProfileIsOffered() {
+        val before = ControlCapabilities.beforeConnection(LunaCameraSession.CAPTURE_PROFILE, LunaCameraSession.MOTION)
+        val state = instaCaptureSessionState({ null }, { null }, { false }, { false }, { false }, { false },
+            controls = { before })
+        val controls = state.controls()
+        assertTrue(controls.focus.isOffered && controls.gimbal.isOffered && controls.zoom.isOffered)
+        assertFalse(controls.audio.isOffered || controls.iris.isOffered)
+        val layout = com.opencapture.opencine.vocabulary.MonitorLayoutCapabilities(before, appLayoutBase)
+        assertTrue(layout.focus && layout.gimbal && layout.zoom && layout.headTracking)
+        assertFalse(layout.audio)
     }
 }

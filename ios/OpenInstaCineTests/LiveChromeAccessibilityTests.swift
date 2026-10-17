@@ -1,3 +1,5 @@
+import OpenCineHostedAccessibility
+import OpenCineHostedTestSupport
 import OpenCineMedia
 import SwiftUI
 import XCTest
@@ -34,8 +36,7 @@ final class LiveChromeAccessibilityTests: XCTestCase {
             model.session.disconnect()
         }
 
-        try await settle(host.view)
-        let live = try exposed(host.view)
+        let live = try await exposed(host.view) { Self.chrome.isSubset(of: $0) && $0.contains("monitor.assists.expand") }
         XCTAssertTrue(Self.chrome.isSubset(of: live), "Live: \(live.sorted())")
         // The palette handle is its own element (its glyph hides itself). Under the zoom dial
         // the palette stays reachable, dimmed, as on main.
@@ -44,31 +45,31 @@ final class LiveChromeAccessibilityTests: XCTestCase {
         // An open picker hides the zoom chip beneath it; the chip hides itself. (The readout
         // opens through its own gesture, so the test sets the state a tap sets.)
         model.captureSheet = .iso
-        try await settle(host.view)
-        let picker = try exposed(host.view)
+        let picker = try await exposed(host.view) { $0.contains("monitor.capture.close") && !$0.contains("monitor.system.zoom") }
         XCTAssertTrue(picker.contains("monitor.capture.close"), "Picker: \(picker.sorted())")
         XCTAssertFalse(picker.contains("monitor.system.zoom"), "Picker: \(picker.sorted())")
         model.captureSheet = nil
-        try await settle(host.view)
+        // The next step reaches the zoom chip, so wait until the closed picker uncovers it.
+        _ = try await exposed(host.view) { $0.contains("monitor.system.zoom") }
 
         // The zoom dial: the dimmed chrome beneath it is out of reach.
         let zoom = try element("monitor.system.zoom", in: host.view)
         let continuous = try XCTUnwrap(
             zoom.accessibilityCustomActions?.first { $0.name == "Continuous zoom" })
         XCTAssertTrue(continuous.actionHandler?(continuous) ?? false)
-        try await settle(host.view)
-        let dial = try exposed(host.view)
+        let dial = try await exposed(host.view) { $0.contains("monitor.zoom.dial") && $0.isDisjoint(with: Self.chrome) }
         XCTAssertTrue(dial.contains("monitor.zoom.dial"), "Dial: \(dial.sorted())")
         XCTAssertTrue(dial.isDisjoint(with: Self.chrome), "Dial: \(dial.sorted())")
         XCTAssertFalse(dial.contains { $0.hasPrefix("monitor.telemetry.") }, "Dial: \(dial.sorted())")
-        let close = try XCTUnwrap(Self.nodes(host.view).first { $0.accessibilityLabel == "Close zoom dial" })
+        let close = try XCTUnwrap(HostedAccessibility.reachable(in: host.view).first { $0.accessibilityLabel == "Close zoom dial" })
         XCTAssertTrue(close.accessibilityActivate())
-        try await settle(host.view)
+        _ = try await exposed(host.view) { !$0.contains("monitor.zoom.dial") }
 
         // A covering page.
         model.shell.open(.settings)
-        try await settle(host.view)
-        let covered = try exposed(host.view)
+        // The covering page carries no monitor identifiers, so an empty set is the covered state;
+        // requiring a non-empty one held the wait to its 30 s hang guard on every run.
+        let covered = try await exposed(host.view) { $0.isDisjoint(with: live) }
         XCTAssertTrue(covered.isDisjoint(with: live), "Covered: \(covered.sorted())")
     }
 
@@ -99,7 +100,7 @@ final class LiveChromeAccessibilityTests: XCTestCase {
             model.session.disconnect()
             model.assist.evMeter = wasOn
         }
-        try await settle(host.view)
+        _ = try await exposed(host.view) { !$0.isEmpty }
 
         // A SIMULATED picture whose luma samples all sit at one code.
         var luma = Array(repeating: 0, count: 256)
@@ -111,10 +112,20 @@ final class LiveChromeAccessibilityTests: XCTestCase {
         model.frameSamples.publish(
             source, source: nil, transfer: .rec709,
             bundle: ScopeAssistBundle(samples: samples, transfer: .rec709))
-        try await settle(host.view)
+        // The meter re-renders from the published samples when SwiftUI next updates.
+        _ = await HostedCondition.wait {
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            let meter = HostedAccessibility.reachable(in: host.view).first {
+                Self.identifier($0) == "monitor.ev.meter"
+            }
+            return meter?.accessibilityValue?.hasPrefix("Estimated from picture") == true
+        }
 
         // The established exclusion: a host with no accessibility tree cannot walk it.
-        try XCTSkipIf(Self.nodes(host.view).isEmpty, "No accessibility tree: enable app accessibility")
+        try XCTSkipIf(
+            HostedAccessibility.reachable(in: host.view).isEmpty && !HostedAccessibility.enableRuntime(),
+            "No accessibility tree: enable app accessibility")
         let meter = try element("monitor.ev.meter", in: host.view)
         let value = meter.accessibilityValue ?? ""
         XCTAssertTrue(value.hasPrefix("Estimated from picture"), value)
@@ -131,49 +142,44 @@ final class LiveChromeAccessibilityTests: XCTestCase {
         window.rootViewController = host; window.makeKeyAndVisible(); host.view.frame = window.bounds
         defer { window.isHidden = true; window.rootViewController = nil; model.session.disconnect() }
         let cases: [(Bool?, String)] = [(false, "Matrix"), (true, "Face Priority"), (nil, "Unknown")]
+        _ = try await exposed(host.view) { $0.contains("monitor.capture.metering") }
         for (face, label) in cases {
             model.session.faceMetering = face
-            try await settle(host.view)
+            // Wait for the readout to carry the new value rather than a fixed delay (TEST-INFRA-2).
+            _ = await HostedCondition.wait {
+                host.view.setNeedsLayout()
+                host.view.layoutIfNeeded()
+                return HostedAccessibility.reachable(in: host.view)
+                    .first { Self.identifier($0) == "monitor.capture.metering" }?.accessibilityValue == label
+            }
             let meter = try element("monitor.capture.metering", in: host.view)
             XCTAssertEqual(meter.accessibilityValue, label)
         }
     }
 
-    private func settle(_ view: UIView) async throws {
-        view.setNeedsLayout()
-        view.layoutIfNeeded()
-        try await Task.sleep(for: .milliseconds(400))
-        view.layoutIfNeeded()
-    }
-
-    private func exposed(_ view: UIView) throws -> Set<String> {
-        let ids = Set(Self.nodes(view).compactMap(Self.identifier))
-        try XCTSkipIf(ids.isEmpty, "No accessibility tree: enable app accessibility")
+    /// The identifiers VoiceOver reaches once `ready` holds for them: a render that is slow
+    /// under load is never read half built. The caller's assertions then state what must hold.
+    private func exposed(_ view: UIView, when ready: (Set<String>) -> Bool) async throws -> Set<String> {
+        var ids = Set<String>()
+        _ = await HostedCondition.wait {
+            view.setNeedsLayout()
+            view.layoutIfNeeded()
+            ids = Set(HostedAccessibility.reachable(in: view).compactMap(Self.identifier))
+            return ready(ids)
+        }
+        // The shared walk turns the accessibility runtime on wherever it can (a simulator), so
+        // only a host where it cannot (a device without assistive access) may skip.
+        try XCTSkipIf(ids.isEmpty && !HostedAccessibility.enableRuntime(), "No accessibility tree: enable app accessibility")
         return ids
     }
 
     private func element(_ id: String, in view: UIView) throws -> NSObject {
-        try XCTUnwrap(Self.nodes(view).first { Self.identifier($0) == id }, id)
+        try XCTUnwrap(HostedAccessibility.reachable(in: view).first { Self.identifier($0) == id }, id)
     }
 
-    /// The VoiceOver walk: SwiftUI vends nodes through `accessibilityElements`, a plain view
-    /// its subviews, and an element stops the walk. Hidden subtrees are skipped. Containers
-    /// count too: Record and the zoom dial carry their identifiers on one.
-    private static func nodes(_ object: NSObject) -> [NSObject] {
-        if object.accessibilityElementsHidden { return [] }
-        if let view = object as? UIView, view.isHidden || view.alpha < 0.01 { return [] }
-        if object.isAccessibilityElement { return [object] }
-        if let elements = object.accessibilityElements as? [NSObject], !elements.isEmpty {
-            return [object] + elements.flatMap(nodes)
-        }
-        return [object] + ((object as? UIView)?.subviews ?? []).flatMap(nodes)
-    }
-
+    /// The `monitor.` identifiers VoiceOver reaches; containers count too, since Record and the
+    /// zoom dial carry their identifiers on one.
     private static func identifier(_ object: NSObject) -> String? {
-        let getter = NSSelectorFromString("accessibilityIdentifier")
-        guard object.responds(to: getter),
-            let id = object.perform(getter)?.takeUnretainedValue() as? String, id.hasPrefix("monitor.")
-        else { return nil }
-        return id
+        HostedAccessibility.identifier(object).flatMap { $0.hasPrefix("monitor.") ? $0 : nil }
     }
 }

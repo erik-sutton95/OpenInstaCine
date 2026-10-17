@@ -148,6 +148,8 @@ private fun OpenInstaCineApp(model: AppModel) {
             if (discovery.granted) model.session.startScan()
         }
     fun requestBluetoothOn() {
+        // A staged SIMULATED review has no camera services and never asks for a real radio.
+        if (model.reviewLaunch != null) return
         // Without Nearby devices the enable prompt throws; Bluetooth settings still work.
         runCatching { enableBluetooth.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }
             .recoverCatching { activity?.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
@@ -214,7 +216,9 @@ private fun OpenInstaCineApp(model: AppModel) {
                     granted = discovery.granted, needsSettings = discovery.needsSettings, radioOn = radioOn,
                 ).flow(
                     model.cameras, onDone = model.shell::endPairing, rescan = model.session::startScan,
-                    onBlocker = { if (!discovery.granted) discovery.request() else requestBluetoothOn() },
+                    // A staged SIMULATED review never requests real permissions or radios; the typed
+                    // local startup guard's sibling for the pairing wizard's blocker step.
+                    onBlocker = { if (model.reviewLaunch == null) { if (!discovery.granted) discovery.request() else requestBluetoothOn() } },
                     content = { PairingCallouts(model, discovery) { requestBluetoothOn() } },
                 ),
             )
