@@ -47,4 +47,17 @@ android {
  kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 }
 afterEvaluate { tasks.matching { it.name.startsWith("check") && it.name.endsWith("AarMetadata") }.configureEach { enabled = false } }
+
+// ML Kit instantiates its ComponentRegistrar classes reflectively; a shrunk bundle without their
+// constructors crashes face detection (OPENINSTACINE-ANDROID-1). Every bundleRelease checks the dex.
+val releaseBundle = layout.buildDirectory.file("outputs/bundle/release/app-release.aab")
+val verifyReleaseComponentRegistrars = tasks.register<Exec>("verifyReleaseComponentRegistrars") {
+ group = "verification"
+ description = "Fail when R8 strips a ComponentRegistrar constructor from the release bundle."
+ dependsOn("bundleRelease")
+ inputs.file(releaseBundle)
+ environment("ANDROID_HOME", androidComponents.sdkComponents.sdkDirectory.get().asFile.absolutePath)
+ commandLine("bash", rootProject.projectDir.resolve("../../../OpenCine/scripts/android-verify-component-registrars.sh").absolutePath, releaseBundle.get().asFile.absolutePath)
+}
+tasks.matching { it.name == "bundleRelease" }.configureEach { finalizedBy(verifyReleaseComponentRegistrars) }
 dependencies { implementation(project(":monitor")); implementation(libs.opencine.insta360.luna); implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT"); implementation(libs.kotlinx.coroutines.android) }

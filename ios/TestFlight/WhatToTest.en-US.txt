@@ -1,6 +1,6 @@
 New and changed
 
-- Playback controls follow the player's real playing and buffering state.
+- Playback controls show whether a clip is playing or waiting for data.
 - For Luna Ultra on firmware 1.1.15. Live audio controls and meters remain unavailable.
 
 Fixes
