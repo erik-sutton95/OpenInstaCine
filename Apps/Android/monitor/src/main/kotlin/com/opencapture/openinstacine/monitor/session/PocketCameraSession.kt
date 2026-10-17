@@ -17,7 +17,6 @@ import com.opencapture.opencine.motion.WorldLevelSnap
 import com.opencapture.opencine.vocabulary.AutoExposureLock
 import com.opencapture.opencine.vocabulary.CamFov
 import com.opencapture.opencine.vocabulary.CameraCommands
-import com.opencapture.opencine.vocabulary.CameraCaptureProfile
 import com.opencapture.opencine.vocabulary.CameraZoomProfile
 import com.opencapture.opencine.vocabulary.CameraModel
 import com.opencapture.opencine.vocabulary.CameraStatus
@@ -313,8 +312,8 @@ class PocketCameraSession(
         .stateIn(scope, SharingStarted.Eagerly, false)
     val gimbalMoveRunning: StateFlow<Boolean> = programmedMove.state.map { it.progress.running }
         .stateIn(scope, SharingStarted.Eagerly, false)
-    val hasGimbal: Boolean get() = connectedCamera != null && can(CameraCapability.GIMBAL)
-    val supportsZoom: Boolean get() = connectedCamera != null && can(CameraCapability.ZOOM)
+    val hasGimbal: Boolean get() = connectedCamera != null && controls != null && controlCapabilities().gimbal.isOffered
+    val supportsZoom: Boolean get() = connectedCamera != null && controls != null && controlCapabilities().zoom.isOffered
     val canRunProgrammedMove: Boolean
         get() = programmedZoomUnavailableReason() == null && phase == ConnectionPhase.LIVE && hasVideoFormat &&
             _gimbalProgram.value.canRun
@@ -329,12 +328,12 @@ class PocketCameraSession(
     var connectedCamera: FoundCamera? = null
     var joinedSSID: String? = null
     /** iOS `supportsFocusMode`: AF-S, AF-C and Product Showcase (option 93). */
-    val supportsFocusMode: Boolean get() = can(CameraCapability.CAMERA_SETTINGS)
-    val supportsTapFocus: Boolean get() = can(CameraCapability.FOCUS)
+    val supportsFocusMode: Boolean get() = controls != null && controlCapabilities().focus.isOffered
+    val supportsTapFocus: Boolean get() = controls != null && controlCapabilities().tapFocus.isOffered
     /** iOS `reportsMeteredEV`: the Luna sends none, so the EV meter reads the picture. */
     val reportsMeteredEV: Boolean get() = CameraCapability.METERED_EV in capabilities
     /** DJI camcap hop to the log curve's native ISO on a color change; the Luna has none, so the ISO sheet hides the toggle. */
-    val supportsNativeIsoHop: Boolean get() = CameraCapability.NATIVE_ISO_HOP in capabilities
+    val supportsNativeIsoHop: Boolean get() = controlCapabilities().nativeISO.hop == true
     /** iOS `faceMetering`: true Face Priority, false Matrix, null until the camera reports it (METER tile hidden). */
     private val _faceMetering = MutableStateFlow<Boolean?>(null)
     val faceMetering: StateFlow<Boolean?> = _faceMetering.asStateFlow()
@@ -516,21 +515,21 @@ class PocketCameraSession(
         }
     }
 
-    private fun displayCamera(value: CameraIdentity) = FoundCamera(
-        value.id, value.id, value.advertisedName,
-        CameraModel(
-            name = value.modelName, datalinkPort = 0, tcpPoke = false, verified = true, pairingToken = "luna",
-            family = "generic", supportsTapFocus = CameraCapability.FOCUS in capabilities, supportsFocusMode = supportsFocusMode,
-            usesCapturedLiveEnable = false, zoomStops = lunaZoomStops(), hasGimbal = CameraCapability.GIMBAL in capabilities,
-            supportsZoom = CameraCapability.ZOOM in capabilities, sendsLiveViewPrepare = false, supportsAperture = false,
-            captureProfile = CameraCaptureProfile(labels = profile.labels,
-                supportsFocusMode = supportsFocusMode, supportsTapFocus = CameraCapability.FOCUS in capabilities,
-                supportsAperture = false, hasGimbal = CameraCapability.GIMBAL in capabilities,
-                supportsZoom = CameraCapability.ZOOM in capabilities,
-                zoom = CameraZoomProfile(stops = lunaZoomStops()), looks = LunaCameraLUTProfile.value),
-        ),
-        null,
-    )
+    private fun displayCamera(value: CameraIdentity): FoundCamera {
+        val facts = controlCapabilities()
+        return FoundCamera(
+            value.id, value.id, value.advertisedName,
+            CameraModel(
+                name = value.modelName, datalinkPort = 0, tcpPoke = false, verified = true, pairingToken = "luna",
+                family = "generic", supportsTapFocus = facts.tapFocus.isOffered, supportsFocusMode = facts.focus.isOffered,
+                usesCapturedLiveEnable = false, zoomStops = lunaZoomStops(), hasGimbal = facts.gimbal.isOffered,
+                supportsZoom = facts.zoom.isOffered, sendsLiveViewPrepare = false, supportsAperture = facts.iris.isOffered,
+                captureProfile = LunaCameraSession.CAPTURE_PROFILE.copy(labels = profile.labels,
+                    zoom = CameraZoomProfile(stops = lunaZoomStops()), looks = LunaCameraLUTProfile.value),
+            ),
+            null,
+        )
+    }
 
     private fun lunaZoomStops(): List<Double> {
         val ceiling = controls?.zoomRange?.endInclusive ?: 1.0
@@ -579,17 +578,20 @@ class PocketCameraSession(
      * No session: the pre-connection model's view over [base] (Luna's static profile).
      */
     fun layout(base: MonitorLayoutCapabilities): MonitorLayoutCapabilities =
-        (control.state.value.session as? LunaCameraSession)?.layout(base)
-            ?: com.opencapture.opencine.vocabulary.MonitorLayoutCapabilities(controlCapabilities(), base)
+        com.opencapture.opencine.vocabulary.MonitorLayoutCapabilities(controlCapabilities(), base)
 
     /**
      * The Luna integration's one control model while a Luna session is connected, else the shared
      * pre-connection rule over Luna's static profile (iOS `CameraSession.controlCapabilities`).
      */
-    fun controlCapabilities(): com.opencapture.opencine.vocabulary.ControlCapabilities =
-        (control.state.value.session as? LunaCameraSession)?.controlCapabilities()
-            ?: com.opencapture.opencine.vocabulary.ControlCapabilities.beforeConnection(
-                LunaCameraSession.CAPTURE_PROFILE, LunaCameraSession.MOTION)
+    fun controlCapabilities(): com.opencapture.opencine.vocabulary.ControlCapabilities {
+        val state = control.state.value
+        (state.session as? LunaCameraSession)?.let { return it.controlCapabilities() }
+        if (backend.connected.value != null) return LunaCameraSession.controlCapabilities(
+            state.snapshot?.capabilities ?: com.opencapture.opencine.core.CapabilitySnapshot(), backend.capabilities)
+        return com.opencapture.opencine.vocabulary.ControlCapabilities.beforeConnection(
+            LunaCameraSession.CAPTURE_PROFILE, LunaCameraSession.MOTION)
+    }
 
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     fun disconnect() {

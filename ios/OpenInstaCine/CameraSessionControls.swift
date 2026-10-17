@@ -44,20 +44,20 @@ extension CameraSession {
     /// Luna's static control facts come from the integration's capture profile
     /// (`LunaCameraSession.captureProfile`), never app literals.
     private var lunaProfile: CameraCaptureProfile { LunaCameraSession.captureProfile }
-    var hasGimbal: Bool { lunaProfile.hasGimbal == true }
-    var supportsZoom: Bool { lunaProfile.supportsZoom == true }
-    var supportsTapFocus: Bool { lunaProfile.supportsTapFocus == true }
+    var hasGimbal: Bool { controlCapabilities().gimbal.isOffered }
+    var supportsZoom: Bool { controlCapabilities().zoom.isOffered }
+    var supportsTapFocus: Bool { controlCapabilities().tapFocus.isOffered }
     /// AF-C, AF-S and Product Showcase (option 93); see `LunaShellMapping.focusOptions`.
-    var supportsFocusMode: Bool { lunaProfile.supportsFocusMode == true }
+    var supportsFocusMode: Bool { controlCapabilities().focus.isOffered }
     /// Matrix / Face Priority metering (option 46), shown in the Exposure sheet.
-    var supportsFaceMetering: Bool { lunaProfile.controls[.faceMetering] == .supported }
-    var supportsAperture: Bool { lunaProfile.supportsAperture == true }
+    var supportsFaceMetering: Bool { controlCapabilities().faceMetering.isOffered }
+    var supportsAperture: Bool { controlCapabilities().iris.isOffered }
     /// Luna sends no metered EV; the EV meter reads the picture.
     var reportsMeteredEV: Bool { false }
     /// Auto ISO ceiling and native-ISO hop are Osmo camcap features; Luna has neither.
-    var supportsIsoLimit: Bool { lunaProfile.nativeISO.ceiling == true }
+    var supportsIsoLimit: Bool { controlCapabilities().nativeISO.ceiling == true }
     /// DJI camcap hop to the log curve's native ISO on a color change; the ISO sheet hides its toggle.
-    var supportsNativeIsoHop: Bool { lunaProfile.nativeISO.hop == true }
+    var supportsNativeIsoHop: Bool { controlCapabilities().nativeISO.hop == true }
     /// The one control model of the camera: the live session's when connected, else the shared
     /// pre-connection rule over Luna's static profile (the shared capture UI reads this).
     func controlCapabilities(codecColor: CaptureCodecColorChoices? = nil) -> ControlCapabilities {
