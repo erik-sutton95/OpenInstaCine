@@ -19,9 +19,12 @@ import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityServiceInfo
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.opencapture.opencine.cameracontrols.LocalMonitorDeliveryCoordinator
+import com.opencapture.opencine.cameracontrols.rememberMonitorDeliveryCoordinator
 import com.opencapture.opencine.core.CameraSessionID
 import com.opencapture.opencine.core.ControlEpoch
 import com.opencapture.opencine.media.*
@@ -199,7 +202,15 @@ class LunaMediaPlaybackOwnerInputTest {
                 scenario.onActivity { activity ->
                     model = AppModel(context)
                     model!!.mediaLibrary.bind(source)
-                    activity.setContent { OpenInstaCineTheme { MediaLibraryScreen(model!!) { closed += 1 } } }
+                    activity.setContent {
+                        OpenInstaCineTheme {
+                            // Match the production root's owner; nested media screens borrow it.
+                            val delivery = rememberMonitorDeliveryCoordinator()
+                            CompositionLocalProvider(LocalMonitorDeliveryCoordinator provides delivery) {
+                                MediaLibraryScreen(model!!) { closed += 1 }
+                            }
+                        }
+                    }
                     activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
                 }
                 await("One actual browse opens") { source.opens == 1 && model!!.mediaLibrary.binding != null && model!!.mediaLibrary.state.value.records.size == 2 }
@@ -264,7 +275,8 @@ class LunaMediaPlaybackOwnerInputTest {
                     await("Native orientation and picture settle") {
                         var oriented = false
                         scenario.onActivity { oriented = (it.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) == landscape }
-                        oriented && pictureMatches(scenario, "A") && node("Next clip") != null
+                        oriented && pictureMatches(scenario, "A") && node("Next clip") != null &&
+                            inputWindowMatchesLayout(scenario, "Next clip")
                     }
                     assertPictureIdentity(scenario, viewIdentity, surfaceIdentity); borrowed()
                     capture(scenario, "A-orientation-$orientation", "A", landscape, source)
@@ -384,6 +396,30 @@ class LunaMediaPlaybackOwnerInputTest {
                 put("surface", picture.surface); put("position", progress()); put("opens", source.opens); put("closes", source.browse.closes)
             }.toString(2))
         } finally { picture.bitmap.recycle() }
+    }
+    // Resource orientation and pixels can update before the system window's rotation transform.
+    // Native input must use the committed activity coordinate frame, not its animated bounds.
+    private fun inputWindowMatchesLayout(
+        scenario: ActivityScenario<MonitorPreviewActivity>, label: String,
+    ): Boolean {
+        var layout: Rect? = null
+        scenario.onActivity { activity ->
+            val decor = activity.window.decorView
+            if (decor.isAttachedToWindow && decor.isShown && decor.width > 0 && decor.height > 0) {
+                layout = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Rect(activity.windowManager.currentWindowMetrics.bounds)
+                } else {
+                    val origin = IntArray(2); decor.getLocationOnScreen(origin)
+                    Rect(origin[0], origin[1], origin[0] + decor.width, origin[1] + decor.height)
+                }
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) instrumentation.uiAutomation.clearCache()
+        val target = node(label) ?: return false
+        val window = instrumentation.uiAutomation.windows.singleOrNull { it.id == target.windowId } ?: return false
+        if (window.root?.packageName?.toString() != instrumentation.targetContext.packageName) return false
+        val actual = Rect(); window.getBoundsInScreen(actual)
+        return !actual.isEmpty && actual == layout
     }
     private fun settle() { instrumentation.waitForIdleSync(); SystemClock.sleep(60) }
     private fun await(message: String, timeoutMs: Long = 10000, condition: () -> Boolean) {
