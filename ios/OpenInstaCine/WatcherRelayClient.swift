@@ -1,6 +1,7 @@
 import Foundation
 import OpenCineApple
 import OpenCineAppKitApple
+import OpenCineCameraControls
 import OpenInstaViewCore
 
 // The real common source owns socket, recovery, decoder admission, observation and retirement.
@@ -20,6 +21,4 @@ extension MonitorWatcherSource where Decoder == HevcDecoder {
             decoder.transferProvider = { [weak self] in self?.transfer }
         }
     }
-    var colorMode: ColorMode? { ColorMode(label: state.color) }
-    var transfer: MonitorTransfer? { colorMode.map(MonitorTransfer.init) }
 }
