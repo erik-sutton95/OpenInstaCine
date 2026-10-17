@@ -1,5 +1,6 @@
 New and changed
 
+- Playback controls show whether a clip is playing or waiting for data.
 - Exposure, shutter angle and frame-rate readouts follow values reported by the camera.
 - Storage readouts preserve reported precision and mark missing measurements as unavailable.
 - Live View and Media use the connected camera's available controls.

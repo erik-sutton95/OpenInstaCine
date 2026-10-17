@@ -1,1 +1,2 @@
 Exposure and storage readouts follow camera reports. Shutter angle rematches after a format change only when manual exposure and video timing are known. Please change resolution or frame rate, reconnect and compare settings with the camera. Missing measurements are marked unavailable.
+Fixed an Android live-view crash caused by release shrinking removing ML Kit initialization. Playback pause and buffering fixes are retained. Try face tracking, then pause and switch media clips.

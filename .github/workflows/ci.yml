@@ -41,7 +41,8 @@ jobs:
           GIT_CONFIG_KEY_0: safe.directory
           GIT_CONFIG_VALUE_0: /github/workspace
         with:
-          args: "detect --source=. --redact --no-banner"
+          # Scan this candidate and every ancestor, excluding unrelated fetched branches.
+          args: "detect --source=. --redact --no-banner --log-opts=HEAD"
 
       - name: Sentry release configuration
         # OpenCine's shared Sentry tooling, run against this app's Xcode Cloud archive hook.
@@ -253,11 +254,14 @@ jobs:
           link-to-sdk: true
       - name: Install Swift Android SDK
         run: ./scripts/ci-install-swift-android.sh
-      - name: Build, unit-test, and lint
+      # The release bundle is built on every pull request, as OpenZCine does: R8 only runs there, and
+      # :app:verifyReleaseComponentRegistrars (OpenCine's dex check) fails when it strips the ML Kit
+      # ComponentRegistrar constructors (OPENINSTACINE-ANDROID-1). Unsigned without the Play keystore.
+      - name: Build, unit-test, lint, and verify the release bundle
         working-directory: Apps/Android
         env:
           SWIFT_ANDROID_SDK_ID: swift-6.3.3-RELEASE_android
-        run: ./gradlew :app:assembleDebug :monitor:testDebugUnitTest :app:lintDebug :monitor:lintDebug
+        run: ./gradlew :app:assembleDebug :monitor:testDebugUnitTest :app:lintDebug :monitor:lintDebug :app:verifyReleaseComponentRegistrars
 
   handbook:
     name: Handbook
