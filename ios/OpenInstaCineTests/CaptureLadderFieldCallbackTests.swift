@@ -102,8 +102,8 @@ final class CaptureLadderFieldCallbackTests: XCTestCase {
             presentation: LadderSheetPresentation(title: "WB", subtitle: "Kelvin", tabs: [
                 LadderTab(label: "Kelvin", key: SettingKey.whiteBalance,
                     ladder: CaptureLadder(current: field.label, values: choices.map(\.label)), applyOnActivate: false)
-            ]), enabled: true, onWrite: { labelWrites.append($0) }, onClose: {},
-            control: control, chromeless: true,
+            ]), enabled: true, onWrite: { labelWrites.append($0) },
+            control: control,
             host: LadderSheetHost(selectedTab: 0, selection: field.label,
                 drum: .field(field, choices: choices), onSelectTab: { _ in }, onCommitted: { value in
                     callbacks.append(value)
