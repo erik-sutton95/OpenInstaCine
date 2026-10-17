@@ -17,12 +17,7 @@ enum InstaLivePicture: MonitorLivePictureApp {
     }
 }
 
-extension HevcDecoder: MonitorLiveVideoSource {
-    /// The sample bus is this decoder's whole source publication.
-    func bindSourcePublication(_ bus: LiveFrameSampleBus) {
-        sampleBus = bus
-    }
-}
+extension HevcDecoder: MonitorLiveVideoSource {}
 
 typealias VideoView = MonitorLiveVideoView<InstaLivePicture>
 typealias VideoDisplayRepresentable = MonitorLiveVideoRepresentable<InstaLivePicture>
