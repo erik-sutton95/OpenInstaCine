@@ -38,7 +38,7 @@ internal object MonitorReview {
     fun decode(intent: Intent?): ReviewLaunch? = ReviewLaunch.decode { intent?.getStringExtra(it) }
         ?.takeIf { it.source == ReviewLaunch.Source.LOCAL && !it.connected && it.screen in screens }
 
-    /** Set the existing cache address before the normal model constructs its library. */
+    /** Set the cache address and, for LIVE, the SIMULATED backend before model construction. */
     fun prepare(context: Context, review: ReviewLaunch?) {
         if (review == null) return
         context.getSharedPreferences("openpocketcine.media", Context.MODE_PRIVATE)
@@ -56,14 +56,22 @@ internal object MonitorReview {
                 .put("id", "00000000-0000-0000-0000-000000000002").put("advertisedName", "Travel camera")
                 .put("modelName", "Luna Ultra").put("lastConnectedAt", 500L))
         legacy.edit().putString("records-json", records.toString()).apply()
+        if (review.screen == ReviewLaunch.Screen.LIVE) {
+            MonitorConfiguration.replaceBackend { SimulatedLiveBackend() }
+            // Keep the staged cameras seeded above; the live session supplies its camera directly.
+        }
     }
 
     suspend fun start(context: Context, model: AppModel, review: ReviewLaunch) {
+        if (review.screen == ReviewLaunch.Screen.LIVE) {
+            model.shell.present(ConnectedCamera(ShellReview.camera, ReviewLiveSession()))
+            return
+        }
         when (review.screen) {
             ReviewLaunch.Screen.PAIR -> model.shell.beginPairing()
             // The staged monitor is the real session's control seam, idle: the live chrome renders
             // over it, and no radio, connection or command ever reaches a camera.
-            ReviewLaunch.Screen.LIVE, ReviewLaunch.Screen.CHROME_EDIT -> model.session.lunaPort?.openSession()?.let { session ->
+            ReviewLaunch.Screen.CHROME_EDIT -> model.session.lunaPort?.openSession()?.let { session ->
                 model.shell.present(ConnectedCamera(
                     SavedCamera(STAGED_CAMERA, LunaFailures.INTEGRATION,
                         advertisedName = "SIMULATED common input", model = "Luna Ultra"),
