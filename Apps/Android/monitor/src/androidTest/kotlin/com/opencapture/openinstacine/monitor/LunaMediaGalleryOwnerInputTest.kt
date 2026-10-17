@@ -72,6 +72,14 @@ class LunaMediaGalleryOwnerInputTest {
         var model: AppModel? = null
         try {
             ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
+                // The preceding native test may leave this shared host in landscape.
+                // Admit the actual portrait configuration before mounting its portrait fixture.
+                scenario.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+                await {
+                    var portrait = false
+                    scenario.onActivity { portrait = it.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT }
+                    portrait
+                }
                 val source = GallerySource()
                 var closed = 0
                 scenario.onActivity { activity ->

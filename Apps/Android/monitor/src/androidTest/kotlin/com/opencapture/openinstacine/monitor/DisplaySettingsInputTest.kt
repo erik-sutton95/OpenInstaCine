@@ -3,6 +3,7 @@ package com.opencapture.openinstacine.monitor
 import android.content.Context
 import android.graphics.Rect
 import android.os.SystemClock
+import android.os.Build
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.activity.compose.setContent
@@ -31,7 +32,7 @@ import org.junit.runner.RunWith
 class DisplaySettingsInputTest {
     @Before fun installInstaBackend() {
         // Library instrumentation runs in its own package, without the brand launcher.
-        // Use the launcher's actual backend composition; this fixture never starts discovery.
+        // Use the launcher's real backend; the test requests no camera connection.
         MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
             val wifi = com.opencapture.opencine.platform.CameraWifiCredentialStore(context, com.opencapture.openinstacine.monitor.pairing.cameraWifiStorage)
             com.opencapture.opencine.insta360.luna.LunaBackend(context,
@@ -117,6 +118,7 @@ class DisplaySettingsInputTest {
     private fun visibleNode(tag: String): AccessibilityNodeInfo {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         repeat(24) {
+            clearAccessibilityCache()
             val root = instrumentation.uiAutomation.rootInActiveWindow
             if (root == null || root.packageName?.toString() != instrumentation.targetContext.packageName) {
                 settle()
@@ -130,6 +132,7 @@ class DisplaySettingsInputTest {
                 val minimumHeight = cellHeight * instrumentation.targetContext.resources.displayMetrics.density
                 if (bounds.width() > 0 && bounds.height() >= minimumHeight - 2 && window.contains(bounds)) {
                     SystemClock.sleep(250)
+                    clearAccessibilityCache()
                     val current = instrumentation.uiAutomation.rootInActiveWindow?.let { fresh ->
                         find(fresh) { it.viewIdResourceName == tag }
                     }
@@ -164,6 +167,9 @@ class DisplaySettingsInputTest {
 
     private fun tap(node: AccessibilityNodeInfo) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
+        // The previous toggle can reflow the rows. Refresh the same actual target
+        // immediately before deriving the coordinates for its single pointer tap.
+        assertTrue(node.refresh(), "The actual Display target must still exist")
         val bounds = Rect().also(node::getBoundsInScreen)
         val down = SystemClock.uptimeMillis()
         for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
@@ -173,6 +179,13 @@ class DisplaySettingsInputTest {
             event.recycle()
         }
         settle()
+
+    }
+
+    private fun clearAccessibilityCache() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            InstrumentationRegistry.getInstrumentation().uiAutomation.clearCache()
+        }
     }
 
     private fun settle() {
