@@ -162,6 +162,9 @@ targets:
       # The shared hosted-test wait; dependency-free, so no second copy of a host module.
       - package: OpenCine
         product: OpenCineHostedTestSupport
+      # The shared manual clock (HostClock seams); depends on OpenCineCore only.
+      - package: OpenCine
+        product: OpenCineCoreTestSupport
       - target: OpenInstaCine
       # Test support only: the shared hosted accessibility walk, which depends on nothing here.
       - package: OpenCine

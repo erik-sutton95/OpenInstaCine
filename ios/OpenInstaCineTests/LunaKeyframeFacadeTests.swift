@@ -1,5 +1,6 @@
 import Insta360Apple
 import Insta360Protocol
+import OpenCineCoreTestSupport
 import OpenCineHostedTestSupport
 import XCTest
 
@@ -11,6 +12,8 @@ final class LunaKeyframeFacadeTests: XCTestCase {
     func testKeyframeRequestIsEmptyRateLimitedAndNeedsALiveLink() async throws {
         var sent: [(request: LunaRequest, timeout: Duration?)] = []
         let session = CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
+        let clock = ManualHostClock()
+        session.clock = clock.clock
         let luna = LunaCameraSession(
             send: {
                 sent.append(($0, nil))
@@ -36,15 +39,15 @@ final class LunaKeyframeFacadeTests: XCTestCase {
         XCTAssertEqual(sent.first?.request.body, Data())
         XCTAssertNil(sent.first?.timeout)
 
-        // Past the product's one-second limit (a lower bound; it reads Date() directly).
-        try await Task.sleep(for: .milliseconds(1000))
+        // Past the product's limit (strictly more than one second since the last request).
+        clock.advance(by: .milliseconds(1001))
         session.requestKeyframe(reason: "test")
         _ = await HostedCondition.wait { sent.count == 2 }
         XCTAssertEqual(sent.count, 2)
         XCTAssertEqual(sent.last?.request, sent.first?.request)
 
         luna.close(.linkLost)
-        try await Task.sleep(for: .milliseconds(1000))
+        clock.advance(by: .milliseconds(1001))
         session.requestKeyframe(reason: "test")
         // Negative window: nothing may be sent without a control link.
         try await Task.sleep(for: .milliseconds(150))

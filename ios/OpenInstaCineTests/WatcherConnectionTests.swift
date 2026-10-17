@@ -1,4 +1,5 @@
 import Network
+import OpenCineCoreTestSupport
 import OpenCineHostedTestSupport
 import OpenCineRelayApple
 import OpenInstaViewCore
@@ -110,7 +111,9 @@ final class WatcherConnectionTests: XCTestCase {
 
     @MainActor
     func testLeaveCancelsPendingReconnectAndNewHostClearsOldState() async {
-        let client = WatcherRelayClient()
+        // The relay's poll and recovery run on a manual clock: reconnects happen only on its ticks.
+        let clock = ManualHostClock()
+        let client = WatcherRelayClient(clock: clock.clock)
         var resolutions = 0
         client.resolveEndpoint = { _ in
             resolutions += 1
@@ -123,9 +126,14 @@ final class WatcherConnectionTests: XCTestCase {
             passcode: "", watcherID: "test-watcher", deviceName: "Test watcher")
         XCTAssertEqual(client.state.cameraName, "")
         XCTAssertFalse(client.token.holderIsRecipient)
+        // The poll that drives join timeouts and reconnects parks on the clock.
+        let polling = await HostedCondition.wait { clock.pendingSleeps == 1 }
+        XCTAssertTrue(polling)
         client.leave()
-        // Negative window past the first reconnect delay: a left client must not resolve again.
-        try? await Task.sleep(for: .milliseconds(1300))
+        // Leaving cancels that poll, so no tick can follow, however far time moves: well past the
+        // 15 s join timeout and every retry delay, a left client never resolves again.
+        XCTAssertEqual(clock.pendingSleeps, 0)
+        clock.advance(by: .seconds(60))
         XCTAssertEqual(client.status, .idle)
         XCTAssertEqual(resolutions, 0)
     }
