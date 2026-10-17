@@ -61,7 +61,10 @@ class RemoteShutterSettingTest {
                 try {
                     mount()
                     val row = remoteShutterRow()
-                    assertEquals("Bluetooth Remote Shutter", row.contentDescription?.toString())
+                    // Native Compose exposes the title as a child of the tagged switch.
+                    val title = find(row) { it.contentDescription != null }
+                    assertEquals("Bluetooth Remote Shutter", title?.contentDescription?.toString())
+                    assertTrue(row.isClickable, "The tagged switch owns the toggle action")
                     assertEquals("On", row.stateDescription?.toString(), "On by default, like OpenZCine")
                     assertTrue(row.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                     settle()
