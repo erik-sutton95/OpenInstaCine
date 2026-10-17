@@ -7,17 +7,12 @@ New and changed
 Fixes
 
 - Fixed ML Kit initialization in minified Android releases to prevent a crash when live video starts.
-- Pause remains available while playback waits for data; pressing it prevents an unexpected restart.
-- Playback stays paused when a late loop, seek or scrub finishes. Press Play to resume.
+- Pause remains available while playback waits for data; using it prevents unexpected restarts. Late loops, seeks and scrubs stay paused until you press Play.
 - Camera browsing includes internal storage and a present SD card.
-- A format change rematches shutter angle only when manual exposure and video timing are known.
-- Unknown exposure state no longer triggers a hidden shutter change.
+- A format change rematches shutter angle only when manual exposure and video timing are known; unknown exposure state never triggers a hidden shutter change.
 
 What to test
 
-- Connect your camera, switch manual and automatic exposure, then change resolution or frame rate and compare the shutter with the camera screen.
-- Check storage with and without a memory card, then reconnect and open Media before returning to Live View.
-- Rotate the phone and check the controls and how missing readings are shown.
-- Connect your camera, keep live view running and try face tracking. Report any crash after the first picture.
-- Try short and long clips from internal storage and an SD card, including cached playback offline. Pause while buffering, then scrub or switch clips. Playback should restart only when you press Play.
-- Check Media and playback in portrait and landscape. If a clip will not open, report its duration, storage and whether it was cached.
+- Connect your camera, keep live view running and try face tracking. Switch manual and automatic exposure, change resolution or frame rate and compare the shutter with the camera screen.
+- Check storage with and without a memory card, then reconnect. In Media, try short and long clips from internal storage and an SD card, including cached playback offline; pause while buffering, scrub and switch clips. Playback should restart only when you press Play.
+- Rotate the phone; check controls and missing readings in Live View, Media and playback, then return from Media to Live View. Report any crash after the first picture. If a clip will not open, report its duration, storage and whether it was cached.
