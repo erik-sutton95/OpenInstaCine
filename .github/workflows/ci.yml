@@ -41,7 +41,8 @@ jobs:
           GIT_CONFIG_KEY_0: safe.directory
           GIT_CONFIG_VALUE_0: /github/workspace
         with:
-          args: "detect --source=. --redact --no-banner"
+          # Scan this candidate and every ancestor, excluding unrelated fetched branches.
+          args: "detect --source=. --redact --no-banner --log-opts=HEAD"
 
       - name: Sentry release configuration
         run: bash ./tools/sentry-test.sh
@@ -189,7 +190,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       # OpenCine candidate wiring. Apps/Android/settings.gradle.kts includes ../../../OpenCine/Android
       # (monitor-ui, core, media, vulkan, the Insta360 shell contract and Luna adapter; their tests run
       # in OpenCine's CI), and the Swift Android core links OpenCineMedia from ../OpenCine: one sibling
@@ -205,11 +206,14 @@ jobs:
           link-to-sdk: true
       - name: Install Swift Android SDK
         run: ./scripts/ci-install-swift-android.sh
-      - name: Build, unit-test, and lint
+      # The release bundle is built on every pull request, as OpenZCine does: R8 only runs there, and
+      # :app:verifyReleaseComponentRegistrars (OpenCine's dex check) fails when it strips the ML Kit
+      # ComponentRegistrar constructors (OPENINSTACINE-ANDROID-1). Unsigned without the Play keystore.
+      - name: Build, unit-test, lint, and verify the release bundle
         working-directory: Apps/Android
         env:
           SWIFT_ANDROID_SDK_ID: swift-6.3.3-RELEASE_android
-        run: ./gradlew :app:assembleDebug :monitor:testDebugUnitTest :app:lintDebug :monitor:lintDebug
+        run: ./gradlew :app:assembleDebug :monitor:testDebugUnitTest :app:lintDebug :monitor:lintDebug :app:verifyReleaseComponentRegistrars
 
   handbook:
     name: Handbook
@@ -221,7 +225,7 @@ jobs:
         with:
           persist-credentials: false
       # Same pin as OpenPocketCine's handbook job. Astro needs Node 22.12 or newer.
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
