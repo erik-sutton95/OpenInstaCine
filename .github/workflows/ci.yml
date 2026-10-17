@@ -41,7 +41,8 @@ jobs:
           GIT_CONFIG_KEY_0: safe.directory
           GIT_CONFIG_VALUE_0: /github/workspace
         with:
-          args: "detect --source=. --redact --no-banner"
+          # Scan this candidate and every ancestor, excluding unrelated fetched branches.
+          args: "detect --source=. --redact --no-banner --log-opts=HEAD"
 
       - name: Sentry release configuration
         run: bash ./tools/sentry-test.sh
