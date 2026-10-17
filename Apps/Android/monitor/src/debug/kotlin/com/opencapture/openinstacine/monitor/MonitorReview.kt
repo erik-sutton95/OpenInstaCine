@@ -58,7 +58,7 @@ internal object MonitorReview {
         legacy.edit().putString("records-json", records.toString()).apply()
         if (review.screen == ReviewLaunch.Screen.LIVE) {
             MonitorConfiguration.replaceBackend { SimulatedLiveBackend() }
-            ShellReview.seed(context)
+            // Keep the staged cameras seeded above; the live session supplies its camera directly.
         }
     }
 
