@@ -169,6 +169,8 @@ targets:
       # Test support only: the shared hosted accessibility walk, which depends on nothing here.
       - package: OpenCine
         product: OpenCineHostedAccessibility
+      - package: OpenCine
+        product: OpenCineCoreTestSupport
       - package: OpenInstaViewCore
         product: OpenInstaViewCore
       - package: OpenCine

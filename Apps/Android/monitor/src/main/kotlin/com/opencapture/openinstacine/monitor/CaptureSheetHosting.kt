@@ -3,11 +3,13 @@ package com.opencapture.openinstacine.monitor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import com.opencapture.opencine.appkit.MonitorCaptureDrum
 import com.opencapture.opencine.appkit.MonitorCaptureField
 import com.opencapture.opencine.appkit.MonitorCapturePresentation
 import com.opencapture.opencine.appkit.captureField
 import com.opencapture.opencine.cameracontrols.CaptureDrumWheel
+import com.opencapture.opencine.cameracontrols.LadderSheet
+import com.opencapture.opencine.cameracontrols.LadderSheetHost
+import com.opencapture.opencine.cameracontrols.LadderSheetDrum
 import com.opencapture.opencine.cameracontrols.CaptureLists
 import com.opencapture.opencine.cameracontrols.CaptureRefresh
 import com.opencapture.opencine.cameracontrols.CaptureWheelState
@@ -82,7 +84,13 @@ internal fun AppModel.InstaCommonDrum(sheet: LiveSheet, status: CameraStatus, fi
                 else -> false
             }
         }
-        MonitorCaptureDrum(session.control, field, enabled = enabled, choices = manual)
+        LadderSheet(
+            presentation = com.opencapture.opencine.vocabulary.LadderSheetPresentation("", "", listOf(
+                com.opencapture.opencine.vocabulary.LadderTab("", sheet,
+                    com.opencapture.opencine.vocabulary.CaptureLadder(field.label, manual.map { it.label }),
+                    applyOnActivate = false))),
+            enabled = enabled, onWrite = {}, onClose = {}, control = session.control, chromeless = true,
+            host = LadderSheetHost(0, field.label, LadderSheetDrum.Field(field, manual), onSelectTab = {}))
     }
 }
 
