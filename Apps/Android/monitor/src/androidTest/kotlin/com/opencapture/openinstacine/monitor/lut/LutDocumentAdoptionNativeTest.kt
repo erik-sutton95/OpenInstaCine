@@ -202,7 +202,10 @@ class LutDocumentAdoptionNativeTest {
                     deliver(documents, redDocument)
                     await("AUTO import commits") { library.renderGeneration.value == before + 1 && model.assist.lutOn }
                     assertEquals(automatic, model.lutSelection, "Import preserves explicit AUTO policy")
-                    assertEquals(automatic, OperatorPrefs.lutSelection(context))
+                    // The stored choice is exact; the existing read API migrates legacy Auto to official Auto.
+                    assertEquals(automatic, context.getSharedPreferences("openpocketcine.operator", Context.MODE_PRIVATE)
+                        .getString("OpenPocketCine.LUTSelection", null))
+                    assertEquals("djiAuto", OperatorPrefs.lutSelection(context))
                     assertTrue(model.assist.lutOn)
                     await("AUTO keeps the actual normal-color plan") { plan.lutCube == null }
                     pixels(context, 80, 80, 80)
