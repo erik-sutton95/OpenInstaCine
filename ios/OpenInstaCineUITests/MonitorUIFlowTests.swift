@@ -755,7 +755,10 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         let gallery = awaitFacts("Actual gallery opens once") { $0["browsing"] as? Bool == true && number($0, "opens") == 1 && $0["bound"] as? Bool == true }
         XCTAssertEqual(gallery["galleryOrder"] as? [String], [first, second], "Actual displayed video order must put A before its Next B")
         let library = try XCTUnwrap(gallery["library"] as? String), lifetime = try XCTUnwrap(gallery["lifetime"] as? String)
+        let monitor = try XCTUnwrap(gallery["monitor"] as? String)
+        XCTAssertEqual(gallery["route"] as? String, "monitor")
         func assertBorrowed(_ value: [String: Any]) {
+            XCTAssertEqual(value["monitor"] as? String, monitor); XCTAssertEqual(value["route"] as? String, "monitor")
             XCTAssertEqual(value["library"] as? String, library); XCTAssertEqual(value["lifetime"] as? String, lifetime)
             XCTAssertEqual(number(value, "opens"), 1); XCTAssertEqual(number(value, "closes"), 0)
             XCTAssertEqual(value["browsing"] as? Bool, true); XCTAssertEqual(value["cover"] as? String, "media")
@@ -830,7 +833,19 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
             $0["browsing"] as? Bool == false && $0["bound"] as? Bool == false && number($0, "closes") == 1
         }
         XCTAssertEqual(number(closed, "opens"), 1); XCTAssertNil(closed["item"] as? String)
-        XCTAssertTrue(app.buttons["cameras.pair"].waitForExistence(timeout: 5))
+        let returnedToLive = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            let current = facts()
+            guard current["monitor"] as? String == monitor, current["route"] as? String == "monitor",
+                current["cover"] is NSNull else { return false }
+            let picture = self.app.descendants(matching: .any)["monitor.native.picture"].firstMatch
+            guard picture.exists else { return false }
+            let frame = picture.frame
+            return [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite } &&
+                frame.width > 0 && frame.height > 0 && !frame.intersection(self.app.frame).isEmpty &&
+                self.app.buttons["monitor.system.media"].isHittable && !self.app.buttons["cameras.pair"].exists
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [returnedToLive], timeout: 5), .completed,
+            "Connected media Back returns to the same live monitor")
     }
 
     func testActualMediaLibraryFavoritesSelectionAndPhotoCoverSurviveRotation() {
