@@ -2,76 +2,31 @@ package com.opencapture.openinstacine
 
 import android.content.Context
 import com.opencapture.opencine.insta360.shell.*
+import com.opencapture.openinstacine.monitor.ReviewLunaBackend
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.json.JSONObject
 import java.io.File
 import java.io.RandomAccessFile
 
-/** Debug-only UI/decoder verification. Private captures are never bundled with the app. */
-class LocalReplayBackend(context: Context) : CameraBackend, CameraControls {
+/**
+ * Debug-only UI/decoder verification: the review Luna backend (shared review values, every command
+ * refused) fed from a private capture. Private captures are never bundled with the app.
+ */
+class LocalReplayBackend(context: Context) : ReviewLunaBackend(
+    camera = CameraIdentity("local-replay", "LOCAL REPLAY · Luna Ultra", "Luna recording · not a live camera"),
+    initialPhase = ConnectionPhase.IDLE,
+    firmware = "LOCAL REPLAY",
+    // Same capability set as LunaBackend so the replay shows the Luna chrome; no command reaches a camera.
+    capabilities = setOf(
+        CameraCapability.LIVE_VIDEO, CameraCapability.GIMBAL, CameraCapability.ZOOM,
+        CameraCapability.FOCUS, CameraCapability.TRACKING,
+    ),
+) {
     private val directory = context.filesDir
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var job: Job? = null
     private var started = false
-    // Same capability set as LunaBackend so the replay shows the Luna chrome; no command reaches a camera.
-    override val capabilities = setOf(
-        CameraCapability.LIVE_VIDEO, CameraCapability.GIMBAL, CameraCapability.ZOOM,
-        CameraCapability.FOCUS, CameraCapability.TRACKING,
-    )
-    override val zoomRange = 1.0..15.0
-    override suspend fun setZoom(factor: Double) = false
-    override suspend fun gimbalStick(pan: Double, tilt: Double) = false
-    override suspend fun gimbalRecenter() = false
-    override suspend fun gimbalFlip() = false
-    override suspend fun tapFocus(x: Double, y: Double) = false
-    override suspend fun startTracking(x: Double, y: Double, width: Double, height: Double) = false
-    override suspend fun stopTracking() = false
-    // No camera answers a command here; the replay advertises none of these capabilities.
-    override suspend fun takePhoto() = false
-    override suspend fun setExposureBias(thirds: Int) = false
-    override suspend fun setColorProfile(profile: CameraColorProfile) = false
-    override suspend fun setRecordFormat(id: Long) = false
-    override suspend fun setShootingMode(mode: CameraShootingMode) = false
-    override suspend fun setGimbalMode(mode: CameraGimbalMode) = false
-    override suspend fun setGimbalSpeed(speed: CameraGimbalSpeed) = false
-    override suspend fun setFocusMode(mode: CameraFocusMode) = false
-    override suspend fun setFaceMetering(on: Boolean) = false
-    override fun requestSettingsRefresh() = Unit
-    override val trackFrames: Flow<CameraTrackFrame> = emptyFlow()
-    override val notices: Flow<CameraNotice> = emptyFlow()
-    override suspend fun gimbalAngle(): CameraGimbalAngle? = null
-    override suspend fun gimbalSetAngle(pitch: Double, yaw: Double) = false
-    override val gimbalHeadPitch: Double? = null
-    // A fixed Luna-shaped readout so the live chrome shows mapped values; no camera answers the setters.
-    override val readout = MutableStateFlow(
-        CameraReadout(
-            batteryPercent = 66,
-            storages = listOf(CameraStorage(location = 2, usable = true, freeBytes = 42_100_000_000, totalBytes = 50_490_900_480)),
-            shootingMode = CameraShootingMode.VIDEO,
-            videoExposure = CameraExposure(program = 3, iso = 400, shutterSeconds = 1.0 / 50),
-            exposureBiasTenths = 0,
-            whiteBalanceKelvin = 5600,
-            color = CameraColorProfile.LOG,
-            recordFormat = CameraRecordFormat(48, 3840, 2160, 25.0),
-            recordFormats = listOf(
-                CameraRecordFormat(49, 3840, 2160, 24.0), CameraRecordFormat(48, 3840, 2160, 25.0),
-                CameraRecordFormat(24, 3840, 2160, 30.0), CameraRecordFormat(52, 1920, 1080, 25.0),
-            ),
-            zoom = 1.0,
-            gimbalMode = CameraGimbalMode.ROLL_LOCK,
-            gimbalSpeed = CameraGimbalSpeed.MEDIUM,
-            focusMode = CameraFocusMode.CONTINUOUS,
-        ),
-    )
-    private val camera = CameraIdentity("local-replay", "LOCAL REPLAY — Luna Ultra", "Luna recording · not a live camera")
-    override val phase = MutableStateFlow(ConnectionPhase.IDLE)
-    override val found = MutableStateFlow(listOf(camera))
-    override val connected = MutableStateFlow<CameraIdentity?>(camera)
-    override val snapshot = MutableStateFlow(CameraSnapshot(firmware = "LOCAL REPLAY", previewFps = 25))
-    override val failure = MutableStateFlow<String?>(null)
-    override val radioOn = MutableStateFlow(true)
-    override val joinedSSID = MutableStateFlow<String?>(null)
     private val video = MutableSharedFlow<EncodedVideoFrame>(extraBufferCapacity = 2)
     override val frames = video.asSharedFlow()
     override fun startScan() { if (!started) { started = true; connect(camera.id) } else if (job?.isActive != true) phase.value = ConnectionPhase.SCANNING }
@@ -108,5 +63,4 @@ class LocalReplayBackend(context: Context) : CameraBackend, CameraControls {
     }
     override fun disconnect() { job?.cancel(); phase.value = ConnectionPhase.IDLE }
     override fun close() { disconnect(); scope.cancel() }
-    override fun sceneActive(active: Boolean) = Unit
 }

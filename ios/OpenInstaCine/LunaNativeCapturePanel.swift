@@ -32,9 +32,11 @@ struct LunaNativeCapturePanel: View {
                     model.session.setNativeRecordingFormat(choice.value)
                 }
         } else {
+            // The drum opens on the reported colour; only a native choice is ever sent.
             let choices = LunaColorMode.nativeRecordingChoices
-            MonitorValueDrum(options: choices.map(\.label), selection: Binding(
-                get: { model.session.nativeRecordingColor.flatMap { choices.contains($0) ? $0.label : nil } ?? "" },
+            let drum = LunaColorMode.recordingDrum(current: model.session.nativeRecordingColor)
+            MonitorValueDrum(options: drum.map(\.label), selection: Binding(
+                get: { model.session.nativeRecordingColor?.label ?? "" },
                 set: { label in
                     guard admitted(), let choice = choices.first(where: { $0.label == label }) else { return }
                     model.session.setNativeRecordingColor(choice)
