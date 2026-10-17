@@ -13,6 +13,6 @@ Fixes
 
 What to test
 
-- Connect your camera, keep live view running and try face tracking. Switch manual and automatic exposure, change resolution or frame rate and compare the shutter with the camera screen.
-- Check storage with and without a memory card, then reconnect. In Media, try short and long clips from internal storage and an SD card, including cached playback offline; pause while buffering, scrub and switch clips. Playback should restart only when you press Play.
-- Rotate the phone; check controls and missing readings in Live View, Media and playback, then return from Media to Live View. Report any crash after the first picture. If a clip will not open, report its duration, storage and whether it was cached.
+- Connect your camera; try live view and face tracking. Change manual/auto exposure, resolution or frame rate; compare shutter with its screen. Report crashes after the first picture.
+- Check storage with/without an SD card; try short/long clips on both stores and cached playback offline. Pause while buffering, scrub and switch clips; restart only with Play.
+- Reconnect, rotate and open Media/playback; check controls and missing readings, then return to Live View. If a clip will not open, report duration, storage and whether it was cached.
