@@ -12,7 +12,7 @@ Free and open source.
 
 [![CI](https://github.com/erik-sutton95/OpenInstaCine/actions/workflows/ci.yml/badge.svg)](https://github.com/erik-sutton95/OpenInstaCine/actions/workflows/ci.yml) [![Docs](https://img.shields.io/badge/docs-opencapture.org-blue)](https://opencapture.org/openinstacine/docs/) [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE) [![Discussions](https://img.shields.io/github/discussions/erik-sutton95/OpenInstaCine?logo=github&label=discussions)](https://github.com/erik-sutton95/OpenInstaCine/discussions)
 
-[![TestFlight coming soon](https://img.shields.io/badge/TestFlight-Coming_soon-0D96F6?style=for-the-badge&logo=apple&logoColor=white)](https://opencapture.org/openinstacine/) [![Android closed beta](https://img.shields.io/badge/Android-Closed_beta_signup-01875F?style=for-the-badge&logo=android&logoColor=white)](https://opencapture.org/openinstacine/android/)
+[![TestFlight coming soon](https://img.shields.io/badge/TestFlight-Coming_soon-0D96F6?style=for-the-badge&logo=apple&logoColor=white)](https://opencapture.org/openinstacine/) [![Android closed beta](https://img.shields.io/badge/Android-Closed_beta_signup-01875F?style=for-the-badge&logo=android&logoColor=white)](https://opencapture.org/openinstacine/android/) [![Download APK](https://img.shields.io/badge/Download_APK-No_Play_Store-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/erik-sutton95/OpenInstaCine/releases/tag/sideload-v0.1.0-1)
 
 [Website](https://opencapture.org/openinstacine/) · [Docs](https://opencapture.org/openinstacine/docs/) · [Roadmap](https://github.com/erik-sutton95/OpenInstaCine/discussions/categories/ideas) · [Report a bug](https://github.com/erik-sutton95/OpenInstaCine/issues/new?template=bug_report.yml)
 
@@ -87,6 +87,7 @@ Luna only connects over its own network).
 | --- | --- | --- |
 | **iPhone and iPad** | TestFlight coming soon | One universal app. Until then, [build from source](#build-from-source). |
 | **Android** | [Closed beta signup](https://opencapture.org/openinstacine/android/) | Android 10 or newer, arm64. |
+| **Android without Play** | [Sideload APK](https://github.com/erik-sutton95/OpenInstaCine/releases/tag/sideload-v0.1.0-1) (**0.1.0 (1)**) | Android 10 or newer, arm64. |
 
 Pairing and live view need a real camera nearby. The first connection asks you to approve the
 phone on the camera's touchscreen. See the
