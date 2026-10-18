@@ -910,17 +910,11 @@ struct AppRoot: View {
         .onChange(of: model.shell.monitor?.id) { _, _ in model.noteMonitorChanged() }
         .onChange(of: model.session.phase) { _, _ in model.noteLinkPhase() }
         .modifier(WatcherRecordConfirmation(model: model))
-        .confirmationDialog(
-            "Allow \(model.relayHost.pendingControlRequest?.name ?? "a watcher") to control the camera?",
-            isPresented: Binding(
-                get: { model.relayHost.pendingControlRequest != nil },
-                set: { if !$0 { model.relayHost.denyControl() } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Grant") { model.relayHost.grantControl() }
-            Button("Deny", role: .cancel) { model.relayHost.denyControl() }
-        }
+        .monitorRelayControlRequest(model.relayHost.pendingControlRequest.map { request in
+            .init(name: request.name, help: "",
+                decline: { model.relayHost.denyControl() },
+                grant: { model.relayHost.grantControl() })
+        })
         .onAppear { model.assist.inspectorSceneActive = scenePhase == .active }
         .monitorShellSceneActivity(model.shell)
         .monitorBrowserHandoffReturn(model.browserHandoff)
