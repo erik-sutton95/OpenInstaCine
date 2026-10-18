@@ -35,7 +35,7 @@ class LunaMediaCatalogCodecTest {
                 arrayOf(SharedPreferences::class.java)) { _, method, _ ->
                 throw AssertionError("Unexpected preferences access: ${method.name}")
             } as SharedPreferences
-            val cache = MediaCache(root, preferences)
+            val cache = MediaCache(root, preferences, MonitorMediaCacheStorage())
             val cameraID = "saved-camera"
             val unknown = 65_534
             val custom = 65_535
@@ -43,7 +43,7 @@ class LunaMediaCatalogCodecTest {
                 .associate { mode -> file().copy(path = "/saved/$mode.mp4") to mode }
             val colors = JSONObject().apply { stored.forEach { (file, mode) -> put(file.path, mode) } }
                 .toString().toByteArray()
-            val colorFile = cache.colorStoreFile(cameraID)
+            val colorFile = java.io.File(cache.cacheRoot(cameraID), "color.json")
             colorFile.parentFile!!.mkdirs(); colorFile.writeBytes(colors)
             val codec = LunaMediaCatalogCodec(null) { file -> cache.shotColor(file.path, cameraID).takeIf { it >= 0 } }
             val index = bytes(stored.keys.toList())

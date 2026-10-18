@@ -1,6 +1,8 @@
+import Insta360Protocol
 import MonitorPresentation
 import OpenCineAppKit
 import OpenCineCameraControls
+import OpenCineCameraVocabulary
 import OpenCineCore
 import OpenInstaViewCore
 import SwiftUI
@@ -41,6 +43,26 @@ extension CaptureQuickSnapshot {
 /// commit through the common fields they open, readout drums and the rest as typed calls.
 extension AppModel: CaptureSheetHost {
     typealias Palette = LiveDesign
+    typealias NativeCapturePanel = LunaNativeCapturePanel
+    func nativeCapturePanel(_ sheet: CaptureSheet, enabled: Bool) -> LunaNativeCapturePanel? {
+        guard [.resolution, .color].contains(sheet), !cameraStatus.isPhoto else { return nil }
+        return LunaNativeCapturePanel(model: self, sheet: sheet, enabled: enabled)
+    }
+
+    var nativeMeteringSource: CaptureNativeMeteringSource? {
+        guard session.supportsFaceMetering else { return nil }
+        let owner = session
+        let camera = control.snapshot?.session, epoch = control.snapshot?.epoch
+        let phase = owner.phase, face = owner.faceMetering
+        let nativeOwner = owner.lunaSession, nativeSource = nativeOwner?.commandOwner.source
+        return .init(face: face, isCurrent: { [weak self, weak owner] in
+            guard let self, let owner else { return false }
+            return self.session === owner && self.control.snapshot?.session == camera
+                && self.control.snapshot?.epoch == epoch && owner.phase == phase
+                && owner.lunaSession === nativeOwner && nativeOwner?.commandOwner.source == nativeSource
+                && owner.faceMetering == face && owner.supportsFaceMetering && owner.canSendControl
+        }, setFace: { [weak owner] in owner?.setFaceMetering($0) })
+    }
 
     var cameraStatus: CameraStatus { session.status }
     var displayStatus: CameraStatus { session.status }
@@ -52,31 +74,75 @@ extension AppModel: CaptureSheetHost {
     var labelProfile: CameraLabelProfile { session.profile }
     var audioService: CaptureAudioService? { nil }
     var colorModes: [ColorMode] { session.colorModes }
+    /// The one codec and colour popup. The Luna offers no codec choice, so it lists its native
+    /// recording colours only, the same ones its colour drum writes.
+    var recordingCodecColor: CaptureCodecColorChoices {
+        let choices = LunaColorMode.nativeRecordingChoices
+        return CaptureCodecColorChoices(
+            colors: choices.map { CaptureCodecColorChoice(id: String($0.rawValue), label: $0.label) },
+            selectedColor: session.nativeRecordingColor.map { String($0.rawValue) })
+    }
     var currentShootingMode: ShootingMode? { session.currentShootingMode }
     var sessionLocked: Bool { session.isLocked }
     var formatPinActive: Bool { session.isFormatPinActive }
     var autoExposureLocked: Bool { session.autoExposureLock != nil }
     var autoWhiteBalanceLocked: Bool { session.autoWhiteBalanceLock != nil }
     var canLockAutoWhiteBalance: Bool { session.canLockAutoWhiteBalance }
-    var captureCapabilities: CaptureSheetCapabilities {
-        CaptureSheetCapabilities(
-            focusMode: session.supportsFocusMode, aperture: session.supportsAperture,
-            nativeIsoHop: session.supportsNativeIsoHop, isoLimit: session.supportsIsoLimit,
-            commonExposureCompensation: false, commonFocusMode: false,
-            audio: audioService != nil,
-            faceMetering: session.supportsFaceMetering)
-    }
+    var captureRouting: CaptureSheetRouting { .init() }
+    /// The Luna integration's model (focus, iris, native ISO extensions, audio, face metering).
+    var controlCapabilities: ControlCapabilities { session.controlCapabilities(codecColor: recordingCodecColor) }
+    var captureCapabilities: CaptureSheetCapabilities { CaptureSheetCapabilities(controls: controlCapabilities) }
     var focusOptions: [FocusOption] { CaptureLists.focusOptions }
     var shutterUsesAngle: Bool {
         get { OperatorPrefs.shutterUsesAngle }
-        set { OperatorPrefs.shutterUsesAngle = newValue }
+        set {
+            OperatorPrefs.shutterUsesAngle = newValue
+            session.configureShutterPresentation(usesAngle: newValue)
+        }
     }
     var shutterAngleDegrees: Double { OperatorPrefs.shutterAngleDegrees }
     var coverOpen: Bool { shell.cover != nil }
     var operatorPanelOpen: Bool { shell.cover != nil }
 
+    /// Video format and colour are native quick choices; Photo keeps the shared fallback, as the
+    /// native drawer does (`nativeCapturePanel`).
     func quickSnapshot(_ sheet: CaptureSheet) -> CaptureQuickSnapshot? {
-        CaptureQuickSnapshot.primary(sheet, model: self)
+        guard [.resolution, .color].contains(sheet), !cameraStatus.isPhoto else {
+            return CaptureQuickSnapshot.primary(sheet, model: self)
+        }
+        let enabled = session.phase == .live && session.hasControlLink && !session.isLocked && control.isRecording == false
+        let source = session.lunaSession?.commandOwner.source.uuidString ?? "none"
+        if sheet == .resolution {
+            guard let current = session.nativeRecordingFormat, let currentRate = Rational.frameRate(current.framesPerSecond) else { return nil }
+            let values = nativeRateChoices(for: current)
+            let labels = values.compactMap { Rational.frameRate($0.framesPerSecond).map { MonitorCapturePresentation.frameRate($0) + "p" } }
+            return .native(sheet: .resolution, title: "Frame rate", options: labels,
+                selection: MonitorCapturePresentation.frameRate(currentRate) + "p",
+                context: values.map { String($0.rawValue) }.joined(separator: ":") + "@" + String(current.rawValue) + "/" + source, enabled: enabled)
+        }
+        // The drum opens on the reported colour; `commitNativeCaptureQuick` sends only native choices.
+        let drum = LunaColorMode.recordingDrum(current: session.nativeRecordingColor)
+        return .native(sheet: .color, title: "Color", options: drum.map(\.label),
+            selection: session.nativeRecordingColor?.label ?? "",
+            context: (session.nativeRecordingColor.map { String($0.rawValue) } ?? "unknown") + "/" + source, enabled: enabled)
+    }
+
+    private func nativeRateChoices(for current: LunaVideoResolution) -> [LunaVideoResolution] {
+        var rates = Set<Rational>()
+        return LunaShellMapping.videoFormatValues.compactMap(LunaVideoResolution.init(rawValue:)).filter {
+            guard $0.width == current.width, $0.height == current.height,
+                let rate = Rational.frameRate($0.framesPerSecond) else { return false }
+            return rates.insert(rate).inserted
+        }
+    }
+    func commitNativeCaptureQuick(_ sheet: CaptureSheet, selection: String) {
+        if sheet == .resolution, let current = session.nativeRecordingFormat,
+            let value = nativeRateChoices(for: current).first(where: {
+                Rational.frameRate($0.framesPerSecond).map { MonitorCapturePresentation.frameRate($0) + "p" } == selection
+            }) { session.setNativeRecordingFormat(value) }
+        else if sheet == .color, let value = LunaColorMode.nativeRecordingChoices.first(where: { $0.label == selection }) {
+            session.setNativeRecordingColor(value)
+        }
     }
 
     func commit(_ setting: CaptureSetting, from origin: CaptureCommitOrigin) {
@@ -143,6 +209,7 @@ extension AppModel: CaptureSheetHost {
 
     func captureDrumDidCommit(_ value: SettingValue) {
         if value.key == .whiteBalance { session.autoWhiteBalanceLock = nil }
+        if case .shutter(.angle(let degrees)) = value { OperatorPrefs.shutterAngleDegrees = degrees }
     }
     func refreshIsoLimit() async { await session.refreshIsoLimit() }
 }

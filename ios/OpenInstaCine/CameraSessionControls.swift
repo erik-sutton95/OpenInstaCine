@@ -1,3 +1,5 @@
+import OpenCineAppKit
+import OpenCineCameraVocabulary
 import CoreGraphics
 import Foundation
 import Insta360Apple
@@ -25,27 +27,51 @@ struct LunaQueuedZoomWrite {
     let admission: LunaCommandAdmission?
 }
 
+/// A constructed shutter operation. A missing operation must never acknowledge a Watch press.
+enum ShutterPress {
+    case record
+    case photo(Task<Void, Never>)
+
+    var photoTask: Task<Void, Never>? {
+        if case .photo(let task) = self { return task }
+        return nil
+    }
+}
+
 extension CameraSession {
     // MARK: - Capabilities
 
-    var hasGimbal: Bool { true }
-    var supportsZoom: Bool { true }
-    var supportsTapFocus: Bool { true }
+    /// Luna's static control facts come from the integration's capture profile
+    /// (`LunaCameraSession.captureProfile`), never app literals.
+    private var lunaProfile: CameraCaptureProfile { LunaCameraSession.captureProfile }
+    var hasGimbal: Bool { controlCapabilities().gimbal.isOffered }
+    var supportsZoom: Bool { controlCapabilities().zoom.isOffered }
+    var supportsTapFocus: Bool { controlCapabilities().tapFocus.isOffered }
     /// AF-C, AF-S and Product Showcase (option 93); see `LunaShellMapping.focusOptions`.
-    var supportsFocusMode: Bool { true }
+    var supportsFocusMode: Bool { controlCapabilities().focus.isOffered }
     /// Matrix / Face Priority metering (option 46), shown in the Exposure sheet.
-    var supportsFaceMetering: Bool { true }
-    var supportsAperture: Bool { false }
+    var supportsFaceMetering: Bool { controlCapabilities().faceMetering.isOffered }
+    var supportsAperture: Bool { controlCapabilities().iris.isOffered }
     /// Luna sends no metered EV; the EV meter reads the picture.
     var reportsMeteredEV: Bool { false }
     /// Auto ISO ceiling and native-ISO hop are Osmo camcap features; Luna has neither.
-    var supportsIsoLimit: Bool { false }
+    var supportsIsoLimit: Bool { controlCapabilities().nativeISO.ceiling == true }
     /// DJI camcap hop to the log curve's native ISO on a color change; the ISO sheet hides its toggle.
-    var supportsNativeIsoHop: Bool { false }
+    var supportsNativeIsoHop: Bool { controlCapabilities().nativeISO.hop == true }
+    /// The one control model of the camera: the live session's when connected, else the shared
+    /// pre-connection rule over Luna's static profile (the shared capture UI reads this).
+    func controlCapabilities(codecColor: CaptureCodecColorChoices? = nil) -> ControlCapabilities {
+        lunaSession?.controlCapabilities(codecColor: codecColor)
+            ?? ControlCapabilities(beforeConnection: lunaProfile, motion: LunaCameraSession.motion,
+                codecColor: codecColor)
+    }
     /// Luna media browse runs over HTTP next to the live socket.
     /// The connection's Luna session: every request goes through it, and its admission is this
     /// facade's control link (it flips with the backend's handshake). Tests set the override.
     var lunaSession: LunaCameraSession? { lunaSessionOverride ?? backend.session }
+    func configureShutterPresentation(usesAngle: Bool) {
+        lunaSession?.configureShutter(presentation: usesAngle ? .emulatedAngle : .cameraValue)
+    }
     var hasControlLink: Bool { lunaSession?.admitsControl == true }
     var bodyFamily: CameraBodyFamily { .other }
     var colorModes: [ColorMode] { LunaShellMapping.colorModes }
@@ -179,16 +205,22 @@ extension CameraSession {
     /// Rec lamp: start/stop video, or take a still in Photo. Record never lies: the
     /// lamp holds `controlBusy` until the Core session reports the outcome.
     func pressShutter() {
-        pressShutter(suppliedAdmission: nil)
+        _ = makeShutterPress(admission: nil, record: { toggleRecording(); return true })
     }
 
     @discardableResult
     func pressShutter(admission: LunaCommandAdmission) -> Task<Void, Never>? {
-        pressShutter(suppliedAdmission: admission)
+        makeShutterPress(admission: admission, record: {
+            toggleRecording(admission: admission)
+            return true
+        })?.photoTask
     }
 
-    @discardableResult
-    private func pressShutter(suppliedAdmission admission: LunaCommandAdmission?) -> Task<Void, Never>? {
+    func shutterPress(admission: LunaCommandAdmission?) -> ShutterPress? {
+        makeShutterPress(admission: admission, record: { dispatchWatchRecording(admission: admission) })
+    }
+
+    private func makeShutterPress(admission: LunaCommandAdmission?, record: () -> Bool) -> ShutterPress? {
         let target: LunaCameraSession?
         if let admission {
             guard let captured = lunaSession, admission.admits(captured.commandOwner) else { return nil }
@@ -198,14 +230,12 @@ extension CameraSession {
         let photoEpoch = target?.current.epoch
         guard canSendControl else { return nil }
         guard currentShootingMode?.isPhoto == true else {
-            if let admission { toggleRecording(admission: admission) }
-            else { toggleRecording() }
-            return nil
+            return record() ? .record : nil
         }
         controlBusy = true
         pins.photoInFlight = true
         controlNote = "Photo"
-        return sendControl(
+        guard let task = sendControl(
             "Photo", { try LunaProtocol.takePicture(mode: .normal) }, through: target,
             suppliedAdmission: admission, refresh: false,
             onFail: { [weak self] in
@@ -230,7 +260,8 @@ extension CameraSession {
                 else { return }
                 self.pins.photoInFlight = false
                 self.controlBusy = false
-            })
+            }) else { return nil }
+        return .photo(task)
     }
 
     func setShootingMode(_ mode: ShootingMode) {
@@ -381,14 +412,22 @@ extension CameraSession {
 
     /// fw 1.1.15 stores option 46 3.7 to 4.9 s after the SET.
     func setFaceMetering(_ on: Bool) {
-        guard canSendControl else { return }
-        pins.faceMetering = CameraValuePin(on, now: pinNow, settle: 6)
+        guard canSendControl, let target = lunaSession else { return }
+        let admission = LunaCommandAdmission(owner: target.commandOwner, isCurrent: { true })
+        let previous = faceMetering
+        let pin = CameraValuePin(on, now: pinNow, settle: 6)
+        pins.faceMetering = pin
         faceMetering = on
         let mode = backend.functionMode
         sendControl(
             on ? "Metering Face" : "Metering Matrix",
             { try LunaProtocol.setFaceMetering(on, functionMode: mode) },
-            onFail: { [weak self] in self?.pins.faceMetering = nil })
+            through: target, suppliedAdmission: admission,
+            onFail: { [weak self] in
+                guard let self, self.pins.faceMetering?.id == pin.id else { return }
+                self.pins.faceMetering = nil
+                self.faceMetering = previous
+            })
     }
 
     // MARK: - Aperture, audio (not exposed by Luna's phone protocol)
@@ -400,6 +439,52 @@ extension CameraSession {
     func clearGlamourIfEnabled() async {}
 
     // MARK: - Format and color
+
+    /// Real Luna identifiers are retained from the camera schema to the admitted native write.
+    func setNativeRecordingFormat(_ value: LunaVideoResolution) {
+        let previousRate = nativeRecordingFormat?.framesPerSecond
+        guard canSendControl, currentShootingMode?.offersVideoFormat == true,
+            LunaShellMapping.videoFormatValues.contains(value.rawValue), let target = lunaSession,
+            target.current.recording.value == .idle
+        else { return }
+        let admission = LunaCommandAdmission(owner: target.commandOwner, isCurrent: { true })
+        let previous = nativeRecordingFormat
+        let pin = CameraValuePin(value, now: pinNow, settle: 3)
+        nativeFormatPin = pin; nativeRecordingFormat = value
+        let functionMode = backend.functionMode
+        let label = MonitorCapturePresentation.recordingLabel(CameraRecordingFormat(
+            dimensions: .init(width: value.width, height: value.height), frameRate: Rational.frameRate(value.framesPerSecond))) ?? "Format"
+        sendControl(label, { try LunaProtocol.setRecordResolution(value.rawValue, functionMode: functionMode) },
+            through: target, suppliedAdmission: admission, onFail: { [weak self] in
+                guard let self, self.lunaSession === target, self.nativeFormatPin?.id == pin.id else { return }
+                self.nativeFormatPin = nil; self.nativeRecordingFormat = previous
+            })
+        if let previousRate, let targetRate = Rational.frameRate(value.framesPerSecond),
+            case .shutter(.duration)? = control.snapshot?.value(of: .shutter).value,
+            let rematch = ShutterAngle.formatRematch(degrees: OperatorPrefs.shutterAngleDegrees,
+                usesAngle: OperatorPrefs.shutterUsesAngle,
+                manual: control.snapshot?.exposureProgram.value == .manual, isPhoto: status.isPhoto,
+                previousFps: Int(previousRate.rounded()), nextFps: Int(targetRate.doubleValue.rounded()),
+                available: status.availableShutterDenoms),
+            rematch.denom != status.shutterDenom {
+            setShutterDenom(rematch.denom)
+        }
+    }
+
+    func setNativeRecordingColor(_ value: LunaColorMode) {
+        guard canSendControl, currentShootingMode != nil, LunaColorMode.nativeRecordingChoices.contains(value),
+            let target = lunaSession, target.current.recording.value == .idle else { return }
+        let admission = LunaCommandAdmission(owner: target.commandOwner, isCurrent: { true })
+        let previous = nativeRecordingColor
+        let pin = CameraValuePin(value, now: pinNow, settle: 3)
+        nativeColorPin = pin; nativeRecordingColor = value
+        let functionMode = backend.functionMode
+        sendControl(value.label, { try LunaProtocol.setColorMode(value, functionMode: functionMode) },
+            through: target, suppliedAdmission: admission, onFail: { [weak self] in
+                guard let self, self.lunaSession === target, self.nativeColorPin?.id == pin.id else { return }
+                self.nativeColorPin = nil; self.nativeRecordingColor = previous
+            })
+    }
 
     func setVideoFormat(
         resolution: VideoResolution, frameRate: VideoFrameRate, fromOperator: Bool = true
@@ -415,7 +500,8 @@ extension CameraSession {
             controlNote = "\(format.chipLabel) is not available in this mode."
             return
         }
-        let previous = status.videoFormat
+        let previousStatus = status
+        let previous = previousStatus.videoFormat
         pins.format = CameraValuePin(format, now: pinNow, settle: 3)
         var next = status
         next.videoFormat = format
@@ -432,12 +518,17 @@ extension CameraSession {
                 self.status.videoResolution = previous?.resolution
                 self.status.fps = previous?.frameRate.fps ?? self.status.fps
             })
-        // Angle mode is ours: keep the chosen degrees and rewrite 1/N for the new fps.
-        if OperatorPrefs.shutterUsesAngle, previous?.frameRate != frameRate, status.expoMode != .auto {
-            let denom = ShutterAngle.denom(
-                degrees: OperatorPrefs.shutterAngleDegrees, fps: frameRate.fps,
-                available: status.availableShutterDenoms)
-            if denom != status.shutterDenom { setShutterDenom(denom) }
+        // The shared rematch policy requires known manual video exposure and a reported cadence.
+        if let rematch = ShutterAngle.formatRematch(
+            degrees: OperatorPrefs.shutterAngleDegrees,
+            usesAngle: OperatorPrefs.shutterUsesAngle,
+            manual: previousStatus.expoMode == .manual,
+            isPhoto: currentShootingMode?.isPhoto != false,
+            previousFps: previousStatus.fps, nextFps: frameRate.fps,
+            available: previousStatus.availableShutterDenoms),
+            rematch.denom != previousStatus.shutterDenom
+        {
+            setShutterDenom(rematch.denom)
         }
     }
 
@@ -1408,9 +1499,8 @@ extension CameraSession {
         guard
             let timecode = frameTimecode.note(
                 frameClock: milliseconds, arrival: Date().timeIntervalSince1970,
-                timeZoneSeconds: TimeZone.current.secondsFromGMT(), fps: status.fps)
+                timeZoneSeconds: TimeZone.current.secondsFromGMT())
         else { return }
-        status.timecode = LunaShellMapping.timecodeText(timecode)
-        (coreSession as? LunaCameraSession)?.ingest(timecode: timecode)
+        lunaSession?.ingest(timecode: timecode)
     }
 }

@@ -1,72 +1,24 @@
-import AVFoundation
-import CoreImage
-import CoreVideo
 import Foundation
 import OpenCineApple
+import OpenCineCameraControls
 import OpenCineMedia
 import OpenInstaViewCore
-import VideoToolbox
-import os
 
-/// This app supplies source interpretation, operator choices and diagnostics.
-/// The retained decoder, native demand, recovery facts and presentation live in OpenCineApple.
+/// Camera interpretation and host values for the shared native decoder.
 @MainActor
-final class HevcDecoder: OpenCineApple.MonitorLiveVideoRuntime {
-    var effects = LiveImageEffects() {
-        didSet { syncDemand() }
-    }
-    var needsWatchPreview: Bool {
-        get { demand.externalPreview }
-        set {
-            guard demand.externalPreview != newValue else { return }
-            demand.externalPreview = newValue
-        }
-    }
-    var onWatchPreview: ((CIImage, CVPixelBuffer?, Bool) -> Void)? {
-        get { onPreviewFrame }
-        set { onPreviewFrame = newValue }
-    }
+final class HevcDecoder: OpenCineApple.MonitorLiveVideoDecoder {
     var incomingColorMode: ColorMode? {
         didSet {
             if let incomingColorMode { incomingTransfer = MonitorTransfer(incomingColorMode) }
         }
     }
-    var effectsProvider: (() -> LiveImageEffects)? {
-        didSet {
-            demandProvider = { [weak self] in
-                guard let self else { return .init() }
-                if let next = self.effectsProvider?(), next != self.effects { self.effects = next }
-                return self.demand
-            }
-        }
-    }
-    var backdropEffects: LiveImageEffects {
-        var result = effects
-        let native = backdropPolicy.image
-        result.clipByte = native.clipByte
-        result.mirror = presentedPictureFlip ?? pictureFlip
-        result.lutDimension = native.lutDimension
-        result.lutRGBA = native.lutRGBA
-        result.peaking = native.peaking
-        result.zebra = native.zebra
-        result.falseColor = native.falseColor
-        result.desqueezeFactor = native.desqueezeFactor
-        return result
-    }
-
-    #if targetEnvironment(simulator)
-    private let simulatorFeed = SimulatorLiveFeed()
-    #endif
 
     init(assistConfiguration: OpenCineApple.MonitorAssistConfiguration = LiveAssistEngine.configuration) {
         super.init(configuration: .init(
             assists: assistConfiguration,
             shouldRebuildSession: { CameraSoftAP.shouldRebuildVTSession(status: $0) },
-            policyChanged: { replacing in
-                AppDiagnostics.incidents.recordBreadcrumb(FeedIncidentBreadcrumb(
-                    monotonicAt: ProcessInfo.processInfo.systemUptime, kind: .assistChange,
-                    detail: replacing ? "replacement" : "identity"))
-            },
+            // Incident policy observations are sampled by the owned CameraSession. This callback
+            // has no captured source token and must not submit to a current global incident sink.
             decodeEvent: { event in
                 #if DEBUG
                 switch event {
@@ -82,209 +34,40 @@ final class HevcDecoder: OpenCineApple.MonitorLiveVideoRuntime {
                 #else
                 return false
                 #endif
-            }))
-        feedUpscaler = FeedUpscaleSwitch.rendererReadsUpscaler
+            }), simulator: SimulatorLiveFeed.configuration)
+        feedUpscaler = FeedUpscaleSwitch.shared.upscaler
         onSourceAdvanced = {
             NotificationCenter.default.post(name: .monitorBackdropSourceAdvanced, object: nil)
         }
     }
 
-    private func syncDemand() {
-        demand = .init(assists: effects.nativeAssistPolicy,
-            decodedSource: effects.faceAF || effects.inspectorSample,
-            externalPreview: demand.externalPreview)
-    }
-
-    func attach(sampleBus: LiveFrameSampleBus, effects provider: @escaping () -> LiveImageEffects,
-        transfer: @escaping () -> MonitorTransfer? = { nil }) {
-        self.sampleBus = sampleBus
-        self.effectsProvider = provider
-        transferProvider = transfer
-        effects = provider()
-        adoptIncomingTransfer(transfer())
-    }
-
-    @discardableResult
-    func decode(accessUnit: [UInt8]) -> Bool {
-        super.decode(accessUnit: accessUnit, source: sourceToken)
-    }
-
-    nonisolated func handleDecodedFrame(_ buffer: CVPixelBuffer, effects: LiveImageEffects? = nil,
-        transfer: MonitorTransfer? = nil, isNewSourceFrame: Bool = true, generation: Int? = nil,
-        timeNs: Int64 = 0, source: MonitorVideoSourceToken? = nil) {
-        super.submitDecodedFrame(buffer, policy: effects?.nativeAssistPolicy,
-            transfer: transfer, isNewSourceFrame: isNewSourceFrame, generation: generation,
-            timeNs: timeNs, source: source)
-    }
-
-    override func close() {
-        stopSimulatorSample()
-        super.close()
-        effectsProvider = nil
-    }
-
-    override func reset() {
-        stopSimulatorSample()
-        super.reset()
-        startSimulatorSampleIfNeeded()
-    }
-
-    /// Simulator footage is an app-selected source, admitted with the token captured at start.
-    func startSimulatorSampleIfNeeded() {
+    override func startSimulatorSampleIfNeeded() {
         #if targetEnvironment(simulator)
-        guard SimulatorLiveFeed.isConfigured, let source = sourceToken else { return }
-        preparePixelBufferSource(transfer: .dlog2)
-        simulatorFeed.start { [weak self] buffer in
-            self?.handleDecodedFrame(buffer, transfer: .dlog2, source: source)
-        }
+            guard SimulatorLiveFeed.isConfigured else { return }
         #endif
-    }
-
-    func stopSimulatorSample() {
-        #if targetEnvironment(simulator)
-        simulatorFeed.stop()
-        #endif
+        super.startSimulatorSampleIfNeeded()
     }
 }
 
-#if targetEnvironment(simulator)
-    /// Loops the operator's D-Log2 4K/25p clip from Downloads. Not part of the Xcode/git tree.
-    /// `AVAssetReader` — OpenZCine playback uses a player view; this feed only needs pixel buffers.
-    final class SimulatorLiveFeed: @unchecked Sendable {
-        /// `OPV_SIM_FEED_CLIP` (env) beats `OPV.SimFeedClipPath` (defaults). No machine-specific
-        /// fallback — point the simulator at local footage without editing code.
-        static var clipURL: URL? {
-            let env = ProcessInfo.processInfo.environment["OPV_SIM_FEED_CLIP"]
-            let stored = UserDefaults.standard.string(forKey: "OPV.SimFeedClipPath")
-            guard let path = [env, stored].compactMap({ $0 }).first(where: { !$0.isEmpty }) else {
-                return nil
-            }
-            return URL(fileURLWithPath: path)
+/// The app keeps its existing operator-selected footage namespace and source interpretation.
+enum SimulatorLiveFeed {
+    static var clipURL: URL? {
+        let env = ProcessInfo.processInfo.environment["OPV_SIM_FEED_CLIP"]
+        let stored = UserDefaults.standard.string(forKey: "OPV.SimFeedClipPath")
+        guard let path = [env, stored].compactMap({ $0 }).first(where: { !$0.isEmpty }) else {
+            return nil
         }
-
-        static var isConfigured: Bool {
-            clipURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
-        }
-
-        private let queue = DispatchQueue(label: "opv.sim-live", qos: .userInitiated)
-        private let log = Logger(subsystem: "com.opencapture.openinstacine", category: "sim-live")
-        private var reader: AVAssetReader?
-        private var output: AVAssetReaderTrackOutput?
-        private var timer: DispatchSourceTimer?
-        private var sink: (@Sendable (CVPixelBuffer) -> Void)?
-        private var missingLogged = false
-        private var running = false
-        private var loggedFirst = false
-
-        func start(sink: @escaping @Sendable (CVPixelBuffer) -> Void) {
-            queue.async { [self] in
-                if running {
-                    self.sink = sink
-                    return
-                }
-                begin(sink: sink)
-            }
-        }
-
-        func stop() {
-            queue.async { [self] in teardown() }
-        }
-
-        private func begin(sink: @escaping @Sendable (CVPixelBuffer) -> Void) {
-            teardown()
-            self.sink = sink
-            guard let url = Self.clipURL, FileManager.default.fileExists(atPath: url.path) else {
-                if !missingLogged {
-                    missingLogged = true
-                    log.warning(
-                        "Simulator live feed clip not configured — set OPV_SIM_FEED_CLIP or OPV.SimFeedClipPath"
-                    )
-                }
-                return
-            }
-            guard openReader() else { return }
-            running = true
-            let timer = DispatchSource.makeTimerSource(queue: queue)
-            timer.schedule(deadline: .now() + 0.04, repeating: 1.0 / 25.0)
-            timer.setEventHandler { [weak self] in self?.pull() }
-            timer.resume()
-            self.timer = timer
-            log.info("Simulator D-Log2 clip looping through handleDecodedFrame")
-        }
-
-        @discardableResult
-        private func openReader() -> Bool {
-            reader?.cancelReading()
-            reader = nil
-            output = nil
-            guard let url = Self.clipURL else { return false }
-            let asset = AVURLAsset(url: url)
-            guard let track = asset.tracks(withMediaType: .video).first else {
-                log.error("Simulator clip has no video track")
-                return false
-            }
-            do {
-                let reader = try AVAssetReader(asset: asset)
-                let settings: [String: Any] = [
-                    kCVPixelBufferPixelFormatTypeKey as String: Int(
-                        kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
-                    kCVPixelBufferMetalCompatibilityKey as String: true,
-                    kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
-                ]
-                let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
-                output.alwaysCopiesSampleData = false
-                reader.add(output)
-                guard reader.startReading() else {
-                    log.error(
-                        "AVAssetReader failed to start: \(reader.error?.localizedDescription ?? "unknown", privacy: .public)"
-                    )
-                    return false
-                }
-                self.reader = reader
-                self.output = output
-                return true
-            } catch {
-                log.error("AVAssetReader: \(error.localizedDescription, privacy: .public)")
-                return false
-            }
-        }
-
-        private func pull() {
-            guard let sink else { return }
-            if reader?.status == .completed || output == nil {
-                _ = openReader()
-            }
-            guard let output,
-                let sample = output.copyNextSampleBuffer(),
-                let buffer = CMSampleBufferGetImageBuffer(sample)
-            else { return }
-            if !loggedFirst {
-                loggedFirst = true
-                let format = CVPixelBufferGetPixelFormatType(buffer)
-                let chars = [
-                    UInt8((format >> 24) & 0xFF), UInt8((format >> 16) & 0xFF),
-                    UInt8((format >> 8) & 0xFF), UInt8(format & 0xFF),
-                ]
-                let fourCC = String(bytes: chars, encoding: .ascii) ?? String(format)
-                CVPixelBufferLockBaseAddress(buffer, .readOnly)
-                let baseNil = CVPixelBufferGetBaseAddress(buffer) == nil
-                CVPixelBufferUnlockBaseAddress(buffer, .readOnly)
-                log.info(
-                    "first sim frame \(fourCC, privacy: .public) \(CVPixelBufferGetWidth(buffer))x\(CVPixelBufferGetHeight(buffer)) planes=\(CVPixelBufferGetPlaneCount(buffer)) baseNil=\(baseNil)"
-                )
-            }
-            sink(buffer)
-        }
-
-        private func teardown() {
-            timer?.cancel()
-            timer = nil
-            reader?.cancelReading()
-            reader = nil
-            output = nil
-            sink = nil
-            running = false
-            loggedFirst = false
-        }
+        return URL(fileURLWithPath: path)
     }
-#endif
+
+    static var isConfigured: Bool {
+        clipURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+    }
+
+    static var configuration: MonitorSimulatorVideoConfiguration {
+        .init(clipURL: { Self.clipURL }, transfer: .dlog2, queueLabel: "opv.sim-live",
+            logSubsystem: "com.opencapture.openinstacine",
+            missingClipMessage: "Simulator live feed clip not configured - set OPV_SIM_FEED_CLIP or OPV.SimFeedClipPath",
+            startedMessage: "Simulator D-Log2 clip looping through handleDecodedFrame")
+    }
+}

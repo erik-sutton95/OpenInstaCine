@@ -116,7 +116,9 @@ final class LiveFeedOrientationTests: XCTestCase {
         ) {
             done.fulfill()
         }
-        wait(for: [done], timeout: 2)
+        // Ends when the bake's completion fires; the bound only stops a broken bake from hanging.
+        // GPU work on a loaded simulator took longer than the old 2 s window.
+        wait(for: [done], timeout: 30)
         guard let texture = baker.bakedTexture(for: drawable, pixelFormat: .bgra8Unorm) else {
             XCTFail("baker must publish a texture")
             return
@@ -173,7 +175,9 @@ final class LiveFeedOrientationTests: XCTestCase {
         // Unstamped effects (the compositor here) read the reference ceiling.
         let clip = ScopeExposureCeiling.referenceClipByte(transfer: .rec709)
         mapper.warm(scale: .ire, mode: .normal, rec709: false, clipByte: clip)
-        let deadline = Date().addingTimeInterval(5)
+        // Hang guard, not a budget: the cold lattices take about five seconds in an unoptimized
+        // simulator build on their own, longer under load (as in FalseColorAssistTests).
+        let deadline = Date().addingTimeInterval(30)
         while Date() < deadline {
             if mapper.overlayPaintData(
                 scale: .ire, mode: .normal, rec709: false, clipByte: clip) != nil,

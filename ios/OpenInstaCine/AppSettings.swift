@@ -6,9 +6,6 @@ import OpenInstaViewCore
 import SwiftUI
 import UIKit
 
-typealias PocketDispMode = MonitorDisplayMode
-typealias PocketDispChrome = MonitorDisplayChrome
-
 enum OpenInstaCineLinks {
     static let source = URL(string: "https://github.com/erik-sutton95/OpenInstaCine")
     static let support = URL(
@@ -22,139 +19,9 @@ enum OpenInstaCineLinks {
     static let terms = URL(string: "https://opencapture.org/openinstacine/terms")
 }
 
-/// Live chrome and home both present this. `onClose` lets the live monitor dismiss its own cover.
-struct AppSettingsView: View {
-    /// OpenZCine `OperatorSettingsPanel.safeArea` — processed landscape insets from the host.
-    var safeArea: EdgeInsets = EdgeInsets()
-    var onClose: (() -> Void)? = nil
-
-    var body: some View {
-        SettingsRootView(safeArea: safeArea, onClose: onClose)
-    }
-}
-
-// MARK: - Shared Operator Setup / Media chrome
-
-struct SettingsSwitchInlineRow: View {
-    let title: String
-    var help: String? = nil
-    var showTopDivider = true
-    var stacked = false
-    let isOn: Bool
-    var identifier: String? = nil
-    let action: () -> Void
-
-    var body: some View {
-        MonitorSettingsSwitchInlineRow(
-            title: title, help: help, showTopDivider: showTopDivider, stacked: stacked,
-            isOn: isOn, identifier: identifier,
-            feedback: { OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled) },
-            action: action)
-    }
-}
-
-struct SettingsSegmented: View {
-    let options: [String]
-    let selected: String
-    var compact: Bool = false
-    var stacked: Bool = false
-    let onSelect: (String) -> Void
-
-    var body: some View {
-        MonitorSegmentedControl(
-            options: options, selection: Binding(get: { selected }, set: onSelect),
-            compact: compact, stacked: stacked, title: { $0 },
-            onSelectionFeedback: {
-                OperatorSettingsHaptics.selection(enabled: OperatorPrefs.hapticsEnabled)
-            }
-        )
-        .buttonStyle(.monitorTapTarget)
-    }
-}
-
-struct SettingsResetButton: View {
-    @Environment(AppModel.self) private var model
-    let action: () -> Void
-    var body: some View {
-        MonitorSettingsResetButton(
-            feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) },
-            action: action)
-    }
-}
-
 typealias OperatorSettingsHaptics = OpenCineCameraControls.OperatorSettingsHaptics
 
 extension OperatorHaptics {
     /// The operator's haptics switch, read at each tap.
     static let app = OperatorHaptics { OperatorPrefs.hapticsEnabled }
-}
-
-struct SettingsRowCard<Content: View>: View {
-    @Environment(AppModel.self) private var model
-    let title: String?
-    let onReset: (() -> Void)?
-    let content: Content
-    init(title: String? = nil, onReset: (() -> Void)? = nil, @ViewBuilder content: () -> Content) {
-        self.title = title; self.onReset = onReset; self.content = content()
-    }
-    var body: some View {
-        MonitorSettingsRowCard(
-            title: title, onReset: onReset,
-            feedback: { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }
-        ) { content }
-    }
-}
-
-struct SettingsLinkHealthCard: View {
-    @Environment(AppModel.self) private var model
-    var body: some View {
-        MonitorSettingsLinkHealthCard(isLive: model.isLive, signalBars: model.session.liveSignalBars)
-    }
-}
-
-struct AppPanelChrome<Content: View>: View {
-    let title: String
-    let onClose: () -> Void
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("OPENINSTACINE")
-                        .font(MonitorTheme.font(10, weight: .semibold))
-                        .tracking(1.3)
-                        .foregroundStyle(StartupColors.muted)
-                    Text(title)
-                        .font(MonitorTheme.font(17, weight: .bold))
-                        .foregroundStyle(StartupColors.ink)
-                }
-                Spacer()
-                Button("Done", action: onClose)
-                    .font(MonitorTheme.font(16, weight: .semibold))
-                    .foregroundStyle(StartupColors.darkText)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(
-                        StartupColors.accent,
-                        in: RoundedRectangle(cornerRadius: MonitorTheme.radius)
-                    )
-                    .buttonStyle(.monitorTapTarget)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
-
-            ScrollView {
-                content
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 28)
-            }
-            .monitorScrollFade()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(StartupColors.backdrop.ignoresSafeArea())
-        .foregroundStyle(StartupColors.ink)
-        .preferredColorScheme(.dark)
-    }
 }

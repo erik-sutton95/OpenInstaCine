@@ -23,16 +23,32 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.opencapture.monitorui.MonitorMotionDismissBackdrop
+import com.opencapture.opencine.appkit.DiscoveryPermissions
 import com.opencapture.opencine.cameracontrols.GimbalFloatMove
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /** Real pointer delivery through the production backdrop and floating-window gesture. */
 @RunWith(AndroidJUnit4::class)
 class MonitorMotionInputTest {
+    private val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+    @Before fun installTheLaunchersBackend() {
+        // Library instrumentation runs without the brand launcher: install its Luna composition.
+        MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
+            val wifi = com.opencapture.opencine.platform.CameraWifiCredentialStore(context, com.opencapture.openinstacine.monitor.pairing.cameraWifiStorage)
+            com.opencapture.opencine.insta360.luna.LunaBackend(context,
+                savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
+        }
+        // A permission sheet would take the active window from the monitor.
+        val app = instrumentation.targetContext.packageName
+        DiscoveryPermissions.discovery().forEach { instrumentation.uiAutomation.grantRuntimePermission(app, it) }
+    }
+
     @Test fun editorDragStaysLocalAndOriginalStickRemainsUsableWhileExpanded() {
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
             var model: AppModel? = null

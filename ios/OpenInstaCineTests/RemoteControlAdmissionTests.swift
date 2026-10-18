@@ -3,6 +3,9 @@ import Insta360AppleTestSupport
 import Insta360Protocol
 import OpenCineAppKit
 import OpenCineCore
+import OpenCineCameraControls
+import OpenCineHostedTestSupport
+import OpenCineRelay
 import OpenInstaViewCore
 import XCTest
 
@@ -11,6 +14,245 @@ import XCTest
 /// SIMULATED actual facade and controllable first-send ports. No wall-clock wait or camera I/O.
 @MainActor
 final class RemoteControlAdmissionTests: XCTestCase {
+  func testNativeHeldReadoutsUseRecordingFactsInsteadOfTheLegacyWireProjection() throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    let model = AppModel(session: facade)
+    defer { facade.disconnect(); core.close(.requested) }
+    facade.status.videoFormat = VideoFormat(resolution: .p4K, frameRate: .fps30)
+    facade.status.colorMode = .normal
+    facade.status.availableColorModes = LunaShellMapping.colorModes
+    facade.nativeRecordingFormat = try XCTUnwrap(LunaVideoResolution(rawValue: 48))
+    facade.nativeRecordingColor = .iLog
+    XCTAssertEqual(model.quickSnapshot(.resolution)?.selection, "25p")
+    XCTAssertEqual(model.quickSnapshot(.color)?.selection, "I-Log")
+  }
+
+  /// Twin of Android `LunaNativePhotoPanelTest`: Photo keeps the shared fallback, as the drawer does.
+  func testPhotoOffersNoNativeFormatOrColorQuickChoice() throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    let model = AppModel(session: facade)
+    defer { facade.disconnect(); core.close(.requested) }
+    facade.status.shootingMode = Int(ShootingMode.photo.rawValue)
+    facade.nativeRecordingFormat = try XCTUnwrap(LunaVideoResolution(rawValue: 48))
+    facade.nativeRecordingColor = .iLog
+    XCTAssertTrue(facade.status.isPhoto)
+    XCTAssertNil(model.quickSnapshot(.resolution)?.nativeSheet)
+    XCTAssertNil(model.quickSnapshot(.color)?.nativeSheet)
+    XCTAssertNil(model.nativeCapturePanel(.resolution, enabled: true))
+    facade.status.shootingMode = Int(ShootingMode.video.rawValue)
+    XCTAssertEqual(model.quickSnapshot(.resolution)?.nativeSheet, .resolution)
+    XCTAssertEqual(model.quickSnapshot(.color)?.nativeSheet, .color)
+  }
+
+  func testUnknownRecordingFactCannotSendANativeFormatOrColorWrite() throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    defer { facade.disconnect(); core.close(.requested) }
+    facade.status.shootingMode = Int(ShootingMode.video.rawValue)
+    facade.status.isRecording = false
+    let current = try XCTUnwrap(LunaVideoResolution(rawValue: 48))
+    facade.nativeRecordingFormat = current
+    facade.nativeRecordingColor = .standard
+    wire.camera.captureState = 4
+    wire.camera.reportCapture()
+    XCTAssertNil(core.current.recording.value, "A photo capture report declares no movie recording state")
+    facade.setNativeRecordingFormat(try XCTUnwrap(LunaVideoResolution(rawValue: 49)))
+    facade.setNativeRecordingColor(.iLog)
+    XCTAssertEqual(facade.nativeRecordingFormat, current)
+    XCTAssertEqual(facade.nativeRecordingColor, .standard)
+    XCTAssertNil(facade.nativeFormatPin)
+    XCTAssertNil(facade.nativeColorPin)
+    XCTAssertTrue(wire.queued.isEmpty)
+    XCTAssertTrue(wire.writes.isEmpty)
+  }
+
+  private func meterReadout(_ model: AppModel) throws -> MonitorOperatorSupplementaryCaptureReadout<CaptureSheet, Int> {
+    let inputs = MonitorOperatorCaptureInputs<CaptureSheet, Int, MonitorOperatorLegacyCaptureIdentity>.captureSheetHost(model)
+    return try XCTUnwrap(inputs.supplementaryReadouts.first { $0.id == "native.metering" })
+  }
+  func testNativeMeteringUnknownLockAndRetiredSourceNeverQueueACommand() async throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    let model = AppModel(session: facade)
+    defer { facade.disconnect(); core.close(.requested) }
+    await drain { facade.control.snapshot?.session == core.id }
+    facade.faceMetering = nil
+    let unknown = try meterReadout(model)
+    XCTAssertEqual(unknown.accessibilityValue, "Unknown")
+    XCTAssertFalse(unknown.perform(admitted: true))
+    facade.faceMetering = false
+    let known = try meterReadout(model)
+    XCTAssertEqual(known.accessibilityValue, "Matrix")
+    XCTAssertFalse(known.perform(admitted: false), "Hidden, inactive, held or covered input is not admitted")
+    facade.isLocked = true
+    XCTAssertFalse(known.perform(admitted: true))
+    facade.isLocked = false
+    core.commandOwner.replaceSource()
+    XCTAssertFalse(known.perform(admitted: true))
+    XCTAssertEqual(facade.faceMetering, false)
+    XCTAssertTrue(wire.queued.isEmpty)
+    XCTAssertTrue(wire.writes.isEmpty)
+  }
+  func testNativeMeteringKnownFactQueuesTheActualOption46ForItsOwner() async throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let facade = host(core)
+    let model = AppModel(session: facade)
+    defer { facade.disconnect(); core.close(.requested) }
+    await drain { facade.control.snapshot?.session == core.id }
+    facade.faceMetering = false
+    let shown = try meterReadout(model)
+    XCTAssertTrue(shown.perform(admitted: true))
+    await wire.waitUntilQueued(1)
+    XCTAssertTrue(wire.enter(0))
+    XCTAssertEqual(wire.writes, [try LunaProtocol.setFaceMetering(true, functionMode: LunaFunctionMode.normalVideo.rawValue)])
+    XCTAssertEqual(facade.faceMetering, true)
+    XCTAssertFalse(shown.perform(admitted: true), "The old Matrix readout cannot replay against the new Face target")
+    wire.answer(0)
+    XCTAssertTrue(wire.direct.isEmpty)
+  }
+
+  /// SIMULATED: a live link without a recording observation supplies no actual record command.
+  func testWatchRefusesNilRecordingCommandFromActualCommonControl() async {
+    let wire = RemoteLunaWire()
+    let core = wire.connect(reportCapture: false)
+    let host = host(core)
+    let model = AppModel(session: host)
+    defer {
+      host.disconnect()
+      core.close(.requested)
+    }
+    await drain { host.control.snapshot?.session == core.id }
+    XCTAssertNil(core.current.recording.value)
+    XCTAssertNil(host.control.recordEditor())
+
+    let result = model.watchToggleRecord()
+
+    XCTAssertFalse(result.accepted, "The Watch must not accept a nil recording command")
+    await drain { !host.control.recordPending }
+    XCTAssertTrue(wire.queued.isEmpty)
+    XCTAssertTrue(wire.writes.isEmpty)
+    XCTAssertTrue(wire.direct.isEmpty)
+  }
+
+  func testWatchAcceptsActualRecordingSubmissionBeforeTheRecordingLampChanges() async throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let host = host(core)
+    let model = AppModel(session: host)
+    defer {
+      host.disconnect()
+      core.close(.requested)
+    }
+    await drain { host.control.recordEditor() != nil }
+    XCTAssertFalse(host.status.isRecording)
+    model.activateWatchRelay()
+    let (phone, receipt) = try watchReceipt()
+    defer { phone.close() }
+    let result = try XCTUnwrap(model.watchRelay.onAdmittedToggleRecord?(receipt))
+    XCTAssertTrue(result.accepted)
+    XCTAssertFalse(result.isRecording, "Submission must not invent a camera observation")
+    await wire.waitUntilQueued(1)
+    XCTAssertTrue(wire.enter(0))
+    XCTAssertEqual(wire.writes.count, 1)
+    XCTAssertTrue(wire.direct.isEmpty)
+    wire.answer(0)
+  }
+
+  func testWatchRefusesUnsupportedLockedBusyAndRetiredShownSource() async throws {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let host = host(core)
+    let model = AppModel(session: host)
+    defer {
+      host.disconnect()
+      core.close(.requested)
+    }
+    await drain { host.control.recordEditor() != nil }
+    XCTAssertFalse(model.watchCapture().accepted)
+    host.status.shootingMode = Int(ShootingMode.photo.rawValue)
+    XCTAssertFalse(model.watchToggleRecord().accepted)
+    host.status.shootingMode = Int(ShootingMode.video.rawValue)
+    host.isLocked = true
+    XCTAssertFalse(model.watchToggleRecord().accepted)
+    host.isLocked = false
+    host.controlBusy = true
+    XCTAssertFalse(model.watchToggleRecord().accepted)
+    host.controlBusy = false
+    model.activateWatchRelay()
+    let (phone, receipt) = try watchReceipt()
+    defer { phone.close() }
+    core.commandOwner.replaceSource()
+    let stale = try XCTUnwrap(model.watchRelay.onAdmittedToggleRecord?(receipt))
+    XCTAssertFalse(stale.accepted)
+    XCTAssertEqual(stale.error, WatchRelayCopy.cameraChanged)
+    phone.retireSource()
+    XCTAssertFalse(model.watchRelay.onAdmittedToggleRecord?(receipt).accepted ?? true)
+    XCTAssertTrue(wire.queued.isEmpty && wire.writes.isEmpty && wire.direct.isEmpty)
+  }
+
+  func testWatchAcceptsAnActualPhotoOperationAndKeepsUnsentAdmissionAtTheNativeBoundary()
+    async throws
+  {
+    let wire = RemoteLunaWire()
+    let core = wire.connect()
+    let host = host(core)
+    let model = AppModel(session: host)
+    defer {
+      host.disconnect()
+      core.close(.requested)
+    }
+    host.status.shootingMode = Int(ShootingMode.photo.rawValue)
+    model.activateWatchRelay()
+    let (phone, receipt) = try watchReceipt()
+    defer { phone.close() }
+    let accepted = try XCTUnwrap(model.watchRelay.onAdmittedCapture?(receipt))
+    XCTAssertTrue(accepted.accepted)
+    await wire.waitUntilQueued(1)
+    // A revoked receipt after queuing must still refuse at the actual first-send boundary.
+    phone.retireSource()
+    XCTAssertFalse(wire.enter(0))
+    XCTAssertTrue(wire.writes.isEmpty)
+    await drain { !host.controlBusy && !host.pins.photoInFlight }
+    let (nextPhone, nextReceipt) = try watchReceipt()
+    defer { nextPhone.close() }
+    let next = try XCTUnwrap(model.watchRelay.onAdmittedCapture?(nextReceipt))
+    XCTAssertTrue(next.accepted)
+    await wire.waitUntilQueued(2)
+    XCTAssertTrue(wire.enter(1))
+    XCTAssertEqual(wire.writes, [try LunaProtocol.takePicture(mode: .normal)])
+    wire.answer(1)
+  }
+
+  private func watchReceipt() throws -> (
+    RelayWatchPhoneOwner<WatchRelayCodec, Int>, RelayWatchCommandAdmission
+  ) {
+    let phone = RelayWatchPhoneOwner<WatchRelayCodec, Int>(
+      codec: WatchRelayCodec(),
+      policy: .init(
+        pacing: .init(
+          profiles: [.init(maximumWidth: 256, qualityPercent: 24)],
+          roundTripThresholds: [], initialIndex: 0), stateDelivery: .reachableMessage,
+        releasesOutstandingOnRetirement: true), now: { 0 }, send: { _, _, _ in },
+      encode: { _, _ in nil })
+    var captured: RelayWatchCommandAdmission?
+    phone.onAdmittedCommand = { _, receipt in
+      captured = receipt
+      return WatchCommandResult(accepted: true, isRecording: false, error: nil)
+    }
+    phone.acceptLink(activated: true, reachable: true)
+    _ = phone.receiveCommand(
+      try RelayWatchEnvelope.encode(WatchRelayCommand.capture, kind: .command), source: phone.source
+    )
+    return (phone, try XCTUnwrap(captured))
+  }
+
   func testRevokedOperationDoesNotCommitActualPinsBusyFocusOrCommonTargets() {
     let wire = RemoteLunaWire()
     let core = wire.connect()
@@ -46,7 +288,9 @@ final class RemoteControlAdmissionTests: XCTestCase {
     let photo: () -> Void = host.pressShutter
     let color: (ColorMode) -> Void = host.setColorMode
     let focus: (CGPoint) -> Void = host.markFocus
-    _ = (record, photo, color, focus)
+    let admittedRecord: (LunaCommandAdmission) -> Void = host.toggleRecording
+    let admittedPhoto: (LunaCommandAdmission) -> Task<Void, Never>? = host.pressShutter
+    _ = (record, photo, color, focus, admittedRecord, admittedPhoto)
   }
 
   func testActualCommonPortKeepsItsCapturedNativeSessionAndEnteredOutcome() async throws {
@@ -391,17 +635,15 @@ final class RemoteControlAdmissionTests: XCTestCase {
   }
 
   private func host(_ core: LunaCameraSession) -> OpenInstaCine.CameraSession {
-    let host = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
+    let host = OpenInstaCine.CameraSession(
+      backend: AppModel.makeBackend(), borrowing: HevcDecoder())
     host.lunaSessionOverride = core
     host.control.bind(core)
     host.phase = .live
     return host
   }
-  private func drain(_ predicate: () -> Bool) async {
-    for _ in 0..<2000 {
-      if predicate() { return }
-      await Task.yield()
-    }
+  private func drain(_ predicate: @MainActor @Sendable () -> Bool) async {
+    if await HostedCondition.wait(until: predicate) { return }
     XCTFail("Controllable source did not publish the expected state")
   }
 }
@@ -479,7 +721,7 @@ private final class RemoteLunaWire {
   var writes: [LunaRequest] = []
   var direct: [LunaRequest] = []
   private var waiting: [(Int, CheckedContinuation<Void, Never>)] = []
-  func connect() -> LunaCameraSession {
+  func connect(reportCapture: Bool = true) -> LunaCameraSession {
     let session = LunaCameraSession(
       send: { [unowned self] request in
         direct.append(request)
@@ -502,7 +744,7 @@ private final class RemoteLunaWire {
     session.configureLens(zoomDomain: 1...15)
     camera.reportDevice()
     camera.reportSettings()
-    camera.reportCapture()
+    if reportCapture { camera.reportCapture() }
     return session
   }
   func waitUntilQueued(_ count: Int) async {

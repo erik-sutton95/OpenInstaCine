@@ -1,10 +1,14 @@
 package com.opencapture.openinstacine.monitor.session
 
+import kotlin.math.roundToInt
+import com.opencapture.opencine.insta360.shell.label
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
 import com.opencapture.opencine.cameracontrols.CaptureLists
+import com.opencapture.opencine.cameracontrols.commitZoomCycle
+import com.opencapture.opencine.cameracontrols.pendingZoom
 import com.opencapture.opencine.motion.GimbalProgram
 import com.opencapture.opencine.motion.GimbalWaypoint
 import com.opencapture.opencine.motion.GimbalWaypointSlot
@@ -13,7 +17,6 @@ import com.opencapture.opencine.motion.WorldLevelSnap
 import com.opencapture.opencine.vocabulary.AutoExposureLock
 import com.opencapture.opencine.vocabulary.CamFov
 import com.opencapture.opencine.vocabulary.CameraCommands
-import com.opencapture.opencine.vocabulary.CameraCaptureProfile
 import com.opencapture.opencine.vocabulary.CameraZoomProfile
 import com.opencapture.opencine.vocabulary.CameraModel
 import com.opencapture.opencine.vocabulary.CameraStatus
@@ -36,10 +39,10 @@ import com.opencapture.opencine.vocabulary.GimbalMode
 import com.opencapture.opencine.vocabulary.GimbalRamp
 import com.opencapture.opencine.vocabulary.GimbalSpeed
 import com.opencapture.opencine.vocabulary.SceneFacePolicy
-import com.opencapture.opencine.vocabulary.SessionDropStormGuard
-import com.opencapture.opencine.vocabulary.SessionRecoveryDecision
-import com.opencapture.opencine.vocabulary.SessionRecoveryPolicy
+import com.opencapture.opencine.vocabulary.SessionRecoveryEpisode
+import com.opencapture.opencine.vocabulary.SessionRecoveryTrigger
 import com.opencapture.opencine.vocabulary.SessionRecoveryUi
+import com.opencapture.opencine.vocabulary.RecoveryPictureProof
 import com.opencapture.opencine.vocabulary.ShutterAngle
 import com.opencapture.opencine.vocabulary.TrackingBox
 import com.opencapture.opencine.vocabulary.TrackingHud
@@ -49,11 +52,12 @@ import com.opencapture.openinstacine.monitor.OperatorPrefs
 import com.opencapture.openinstacine.monitor.bridge.SwiftCore
 import com.opencapture.opencine.appkit.MonitorControlModel
 import com.opencapture.opencine.appkit.MotionProgramSession
+import com.opencapture.opencine.appkit.diagnostics.ReliabilityCameraPathLease
 import com.opencapture.opencine.core.CameraCommandIntent
-import com.opencapture.opencine.core.CapabilitySnapshot
 import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.opencine.insta360.luna.LunaCameraSession
 import com.opencapture.opencine.insta360.luna.LunaConnectPort
+import com.opencapture.opencine.insta360.luna.LUNA_RECOVERY_ATTEMPT_DEADLINE
 import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
 import com.opencapture.opencine.insta360.luna.LunaMotionService
 import com.opencapture.opencine.insta360.luna.LunaSubjectTracking
@@ -67,15 +71,17 @@ import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.opencine.media.SerialSessionGate
 import com.opencapture.opencine.decoder.HevcDecoder
 import com.opencapture.openinstacine.monitor.diagnostics.DiagnosticCenter
+import com.opencapture.openinstacine.monitor.diagnostics.AppDiagnostics
 import com.opencapture.opencine.media.FeedDecoderErrorOrigin
 import com.opencapture.opencine.media.FeedIncidentAges
 import com.opencapture.opencine.media.FeedIncidentBreadcrumb
 import com.opencapture.opencine.media.FeedIncidentBreadcrumbKind
-import com.opencapture.opencine.media.FeedIncidentDecoder
 import com.opencapture.opencine.media.FeedIncidentLifecycle
 import com.opencapture.opencine.media.FeedIncidentQueue
-import com.opencapture.opencine.media.FeedIncidentRates
-import com.opencapture.opencine.media.FeedIncidentSessionContext
+import com.opencapture.opencine.media.FeedIncidentRateSampler
+import com.opencapture.opencine.media.FeedIncidentStageCounts
+import com.opencapture.opencine.media.FeedIncidentCounterEpoch
+import com.opencapture.opencine.decoder.incidentDecoder
 import com.opencapture.opencine.media.FeedIncidentSnapshot
 import com.opencapture.opencine.media.FeedRepairPhase
 import com.opencapture.opencine.media.FeedRepairRecord
@@ -140,10 +146,29 @@ import com.opencapture.opencine.media.LivePipelineCadence
  */
 class PocketCameraSession(
     context: Context,
+    incidentSink: com.opencapture.opencine.media.FeedIncidentSink = AppDiagnostics.incidents,
+    private val nativePinNow: () -> Long = SystemClock::elapsedRealtime,
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val backend: CameraBackend = MonitorConfiguration.createBackend(appContext)
+    private val reportingOwner = Any()
+    private val incidentSessionSink = AppDiagnostics.incidentSink(reportingOwner, incidentSink)
+    private var feedIncidents: com.opencapture.opencine.media.FeedIncidentSource? = null
+    private var incidentSessionActive = false
+    private val incidentRateSampler = FeedIncidentRateSampler()
+    private var closed = false
+
+    // Reports stay held back from this session's connect attempt, through recovery and FAILED,
+    // until it returns to IDLE, disconnects or closes; a retired facade only ends its own lease.
+    private var reportingCameraPath: ReliabilityCameraPathLease? = null
+    private fun holdReportingCameraPath() {
+        if (!closed && reportingCameraPath == null) reportingCameraPath = AppDiagnostics.reporting.beginCameraPath()
+    }
+    private fun releaseReportingCameraPath() {
+        reportingCameraPath?.close()
+        reportingCameraPath = null
+    }
     private val controls: CameraControls? = backend as? CameraControls
     /** This session's names and media host (STATE-01: per session, never a launch-time global). */
     val profile: CameraProfile = LunaShellMapping.profile
@@ -200,7 +225,7 @@ class PocketCameraSession(
     init {
         control.onNote = { presentControlNote(it) }
         control.noteFor = CorePresentation::note
-        control.onChange = { _status.update(::projectControls) }
+        control.onChange = { retireChangedNativeCaptureSource(); _status.update(::projectControls) }
         control.onRecordFinished = { receipt ->
             val stopped = receipt.intent == CameraCommandIntent.StopRecording && receipt.stage == CommandStage.Confirmed
             if (stopped) _mediaCaptured.tryEmit(Unit)
@@ -214,6 +239,49 @@ class PocketCameraSession(
     }
     private var formatTable: Map<VideoFormat, Long> = emptyMap()
     private var lastReadout = CameraReadout()
+    private val _nativeFormats = MutableStateFlow<List<com.opencapture.opencine.insta360.shell.CameraRecordFormat>>(emptyList())
+    val nativeFormats = _nativeFormats.asStateFlow()
+    private val _nativeFormat = MutableStateFlow<com.opencapture.opencine.insta360.shell.CameraRecordFormat?>(null)
+    val nativeFormat = _nativeFormat.asStateFlow()
+    private val _nativeColor = MutableStateFlow<com.opencapture.opencine.insta360.shell.CameraColorProfile?>(null)
+    val nativeColor = _nativeColor.asStateFlow()
+    private data class NativeCaptureSource(
+        val session: com.opencapture.opencine.core.CameraSession,
+        val epoch: com.opencapture.opencine.core.ControlEpoch,
+        val authority: com.opencapture.opencine.core.ControlAuthority,
+        val connectionGeneration: Long?,
+        val lifetime: Long,
+    )
+    /** Each instance is the unique request token, even when an operator repeats a value. */
+    private class NativeCapturePin<T>(val source: NativeCaptureSource, val value: com.opencapture.opencine.core.CameraValuePin<T>)
+    private var nativeCaptureLifetime = 0L
+    private var nativeFormatPin: NativeCapturePin<com.opencapture.opencine.insta360.shell.CameraRecordFormat>? = null
+    private var nativeColorPin: NativeCapturePin<com.opencapture.opencine.insta360.shell.CameraColorProfile>? = null
+
+    private fun nativeCaptureSource(): NativeCaptureSource? {
+        val state = control.state.value
+        val session = state.session ?: return null
+        val snapshot = state.snapshot ?: return null
+        if (closed || phase != ConnectionPhase.LIVE || snapshot.session != session.id ||
+            snapshot.connection != com.opencapture.opencine.core.ConnectionState.Ready ||
+            (snapshot.authority != com.opencapture.opencine.core.ControlAuthority.Owner &&
+                snapshot.authority !is com.opencapture.opencine.core.ControlAuthority.Lease)) return null
+        return NativeCaptureSource(session, snapshot.epoch, snapshot.authority, backend.frameConnectionGeneration, nativeCaptureLifetime)
+    }
+    private fun retireChangedNativeCaptureSource() {
+        val source = nativeCaptureSource()
+        if (nativeFormatPin?.source != source) nativeFormatPin = null
+        if (nativeColorPin?.source != source) nativeColorPin = null
+    }
+    private fun retireNativeCaptureRequests() {
+        nativeCaptureLifetime += 1
+        nativeFormatPin = null; nativeColorPin = null; pins.faceMetering = null
+    }
+    private fun <T> nativeReadout(pin: NativeCapturePin<T>?, reported: T?, now: Long): Pair<T?, NativeCapturePin<T>?> {
+        if (reported == null || pin == null || pin.source != nativeCaptureSource()) return reported to null
+        val (held, retained) = com.opencapture.opencine.core.CameraValuePin.reconcile(pin.value, reported, now)
+        return (held ?: reported) to if (retained == null) null else pin
+    }
     private var recordStartedAt: Long? = null
     private val _focusPoint = MutableStateFlow(0.5f to 0.5f)
     val focusPoint: StateFlow<Pair<Float, Float>> = _focusPoint.asStateFlow()
@@ -244,8 +312,8 @@ class PocketCameraSession(
         .stateIn(scope, SharingStarted.Eagerly, false)
     val gimbalMoveRunning: StateFlow<Boolean> = programmedMove.state.map { it.progress.running }
         .stateIn(scope, SharingStarted.Eagerly, false)
-    val hasGimbal: Boolean get() = connectedCamera != null && can(CameraCapability.GIMBAL)
-    val supportsZoom: Boolean get() = connectedCamera != null && can(CameraCapability.ZOOM)
+    val hasGimbal: Boolean get() = connectedCamera != null && controls != null && controlCapabilities().gimbal.isOffered
+    val supportsZoom: Boolean get() = connectedCamera != null && controls != null && controlCapabilities().zoom.isOffered
     val canRunProgrammedMove: Boolean
         get() = programmedZoomUnavailableReason() == null && phase == ConnectionPhase.LIVE && hasVideoFormat &&
             _gimbalProgram.value.canRun
@@ -260,12 +328,12 @@ class PocketCameraSession(
     var connectedCamera: FoundCamera? = null
     var joinedSSID: String? = null
     /** iOS `supportsFocusMode`: AF-S, AF-C and Product Showcase (option 93). */
-    val supportsFocusMode: Boolean get() = can(CameraCapability.CAMERA_SETTINGS)
-    val supportsTapFocus: Boolean get() = can(CameraCapability.FOCUS)
+    val supportsFocusMode: Boolean get() = controls != null && controlCapabilities().focus.isOffered
+    val supportsTapFocus: Boolean get() = controls != null && controlCapabilities().tapFocus.isOffered
     /** iOS `reportsMeteredEV`: the Luna sends none, so the EV meter reads the picture. */
     val reportsMeteredEV: Boolean get() = CameraCapability.METERED_EV in capabilities
     /** DJI camcap hop to the log curve's native ISO on a color change; the Luna has none, so the ISO sheet hides the toggle. */
-    val supportsNativeIsoHop: Boolean get() = CameraCapability.NATIVE_ISO_HOP in capabilities
+    val supportsNativeIsoHop: Boolean get() = controlCapabilities().nativeISO.hop == true
     /** iOS `faceMetering`: true Face Priority, false Matrix, null until the camera reports it (METER tile hidden). */
     private val _faceMetering = MutableStateFlow<Boolean?>(null)
     val faceMetering: StateFlow<Boolean?> = _faceMetering.asStateFlow()
@@ -355,6 +423,30 @@ class PocketCameraSession(
     fun autoWhiteBalanceLock(status: CameraStatus = _status.value): Pair<Int, Int>? = null
     fun lockAutoWhiteBalance() = Unit
 
+    // Serialize source replacement/probe reset with queued frame admission.
+    private val recoveryFrameLock = Any()
+    @Volatile private var lastAccessUnitAt: Long? = null
+    @Volatile private var lastFrameGeneration: Long? = null
+    /** Current accepted encoded-frame source, read directly rather than from a coalesced UI projection. */
+    val faceReadbackStreamGeneration: com.opencapture.opencine.core.StreamGeneration?
+        get() {
+            val source = backend.frameConnectionGeneration ?: return null
+            return com.opencapture.opencine.core.StreamGeneration(source).takeIf { lastFrameGeneration == source }
+        }
+    @Volatile private var sourceProbeStartedAt: Long? = null
+    // The recovering camera and the frame source its current attempt opened.
+    private var recoveryCameraId: String? = null
+    @Volatile private var recoverySource: Long? = null
+    /** The shared recovery episode; transport, decoder and the picture gates stay here. */
+    private val recoveryEpisode =
+        SessionRecoveryEpisode(
+            scope = scope,
+            port = RecoveryPort(),
+            attemptDeadline = LUNA_RECOVERY_ATTEMPT_DEADLINE,
+            timing = SessionRecoveryEpisode.Timing(SystemClock::elapsedRealtime),
+        ) { applyRecovery(it) }
+    internal val isSessionRecoveryRunning: Boolean get() = recoveryEpisode.isRunning
+
     init {
         scope.launch {
             backend.snapshot.collect { value ->
@@ -376,10 +468,13 @@ class PocketCameraSession(
         }
         scope.launch {
             backend.phase.collect { value ->
-                if (value != ConnectionPhase.LIVE) cancelProgrammedMove()
+                if (value != ConnectionPhase.IDLE && value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED && !incidentSessionActive) beginFeedIncidentSession()
+                if (value == ConnectionPhase.IDLE) releaseReportingCameraPath()
+                else if (value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED) holdReportingCameraPath()
+                if (value != ConnectionPhase.LIVE) { cancelProgrammedMove(); retireNativeCaptureRequests() }
                 when (value) {
                     ConnectionPhase.LIVE -> {
-                        holdsMonitor = true; _recoveryState.value = SessionRecoveryUi.Idle; resetFrameClock()
+                        holdsMonitor = true; resetFrameClock()
                         startGimbalAnglePoll()
                     }
                     ConnectionPhase.FAILED -> {
@@ -387,41 +482,54 @@ class PocketCameraSession(
                         if (holdsMonitor) beginSessionRecovery()
                     }
                     ConnectionPhase.IDLE -> {
+                        endFeedIncidentSession()
                         resetFrameClock(); stopGimbalAngle()
                         faceAFArmJob?.cancel(); faceAFArmJob = null; _faceAFArmed.value = false; publishFaceDetectWanted()
-                        recoveryJob?.cancel(); recoveryJob = null
-                        holdsMonitor = false; _recoveryState.value = SessionRecoveryUi.Idle
+                        retireRecovery()
+                        holdsMonitor = false
                         pins.clear(); recordStartedAt = null; _controlBusy.value = false
                     }
                     else -> Unit
                 }
             }
         }
+        scope.launch {
+            while (isActive) {
+                delay(1_000)
+                publishFeedIncidentSnapshot()
+            }
+        }
         scope.launch(Dispatchers.Default) {
             backend.frames.collect { frame ->
-                noteFrameClock(frame.timestampMicros)
-                videoPackets += 1
-                accessUnits += 1
-                if (decoder.decode(frame.annexB)) { framesEnqueued += 1; hasVideoFormat = true }
+                synchronized(recoveryFrameLock) {
+                    val generation = backend.frameConnectionGeneration
+                    if (generation != null && frame.connectionGeneration != generation) return@synchronized
+                    lastAccessUnitAt = SystemClock.elapsedRealtime()
+                    lastFrameGeneration = frame.connectionGeneration
+                    noteFrameClock(frame.timestampMicros)
+                    videoPackets += 1
+                    accessUnits += 1
+                    if (decoder.decode(frame.annexB)) { framesEnqueued += 1; hasVideoFormat = true }
+                }
             }
         }
     }
 
-    private fun displayCamera(value: CameraIdentity) = FoundCamera(
-        value.id, value.id, value.advertisedName,
-        CameraModel(
-            name = value.modelName, datalinkPort = 0, tcpPoke = false, verified = true, pairingToken = "luna",
-            family = "generic", supportsTapFocus = CameraCapability.FOCUS in capabilities, supportsFocusMode = supportsFocusMode,
-            usesCapturedLiveEnable = false, zoomStops = lunaZoomStops(), hasGimbal = CameraCapability.GIMBAL in capabilities,
-            supportsZoom = CameraCapability.ZOOM in capabilities, sendsLiveViewPrepare = false, supportsAperture = false,
-            captureProfile = CameraCaptureProfile(labels = profile.labels,
-                supportsFocusMode = supportsFocusMode, supportsTapFocus = CameraCapability.FOCUS in capabilities,
-                supportsAperture = false, hasGimbal = CameraCapability.GIMBAL in capabilities,
-                supportsZoom = CameraCapability.ZOOM in capabilities,
-                zoom = CameraZoomProfile(stops = lunaZoomStops()), looks = LunaCameraLUTProfile.value),
-        ),
-        null,
-    )
+    private fun displayCamera(value: CameraIdentity): FoundCamera {
+        val facts = controlCapabilities()
+        return FoundCamera(
+            value.id, value.id, value.advertisedName,
+            CameraModel(
+                name = value.modelName, datalinkPort = 0, tcpPoke = false, verified = true, pairingToken = "luna",
+                family = "generic", supportsTapFocus = facts.tapFocus.isOffered, supportsFocusMode = facts.focus.isOffered,
+                usesCapturedLiveEnable = false, zoomStops = lunaZoomStops(), hasGimbal = facts.gimbal.isOffered,
+                supportsZoom = facts.zoom.isOffered, sendsLiveViewPrepare = false, supportsAperture = facts.iris.isOffered,
+                captureProfile = LunaCameraSession.CAPTURE_PROFILE.copy(labels = profile.labels,
+                    zoom = CameraZoomProfile(stops = lunaZoomStops()), looks = LunaCameraLUTProfile.value),
+            ),
+            null,
+        )
+    }
 
     private fun lunaZoomStops(): List<Double> {
         val ceiling = controls?.zoomRange?.endInclusive ?: 1.0
@@ -442,85 +550,256 @@ class PocketCameraSession(
      */
     val lunaPort: LunaConnectPort? = (backend as? LunaConnectPort)?.let { port ->
         object : LunaConnectPort by port {
+            override fun openSession(): com.opencapture.opencine.core.CameraSession = port.openSession().also {
+                (it as? LunaCameraSession)?.configureShutter(if (OperatorPrefs.shutterUsesAngle(appContext))
+                    com.opencapture.opencine.media.HostShutterPresentation.EMULATED_ANGLE
+                    else com.opencapture.opencine.media.HostShutterPresentation.CAMERA_VALUE)
+            }
             override fun connect(id: String) {
+                holdReportingCameraPath()
+                retireRecovery()
                 cancelProgrammedMove()
-                decoder.reset(); videoPackets = 0; hasVideoFormat = false
-                port.connect(id)
+                synchronized(recoveryFrameLock) {
+                    decoder.reset(); videoPackets = 0; hasVideoFormat = false
+                    port.connect(id)
+                }
             }
         }
+    }
+
+    fun configureShutterPresentation(usesAngle: Boolean) {
+        (control.state.value.session as? LunaCameraSession)?.configureShutter(if (usesAngle)
+            com.opencapture.opencine.media.HostShutterPresentation.EMULATED_ANGLE
+            else com.opencapture.opencine.media.HostShutterPresentation.CAMERA_VALUE)
     }
 
     /**
      * What the monitor lays out: the Luna session's projection (iOS `LunaCameraSession.layout`).
-     * No session: the Core projection of nothing keeps [base].
+     * No session: the pre-connection model's view over [base] (Luna's static profile).
      */
     fun layout(base: MonitorLayoutCapabilities): MonitorLayoutCapabilities =
-        (control.state.value.session as? LunaCameraSession)?.layout(base) ?: MonitorLayoutCapabilities(CapabilitySnapshot(), base)
+        com.opencapture.opencine.vocabulary.MonitorLayoutCapabilities(controlCapabilities(), base)
+
+    /**
+     * The Luna integration's one control model while a Luna session is connected, else the shared
+     * pre-connection rule over Luna's static profile (iOS `CameraSession.controlCapabilities`).
+     */
+    fun controlCapabilities(): com.opencapture.opencine.vocabulary.ControlCapabilities {
+        val state = control.state.value
+        (state.session as? LunaCameraSession)?.let { return it.controlCapabilities() }
+        if (backend.connected.value != null) return LunaCameraSession.controlCapabilities(
+            state.snapshot?.capabilities ?: com.opencapture.opencine.core.CapabilitySnapshot(), backend.capabilities)
+        return com.opencapture.opencine.vocabulary.ControlCapabilities.beforeConnection(
+            LunaCameraSession.CAPTURE_PROFILE, LunaCameraSession.MOTION)
+    }
 
     fun attachSurface(surface: Surface?) = decoder.attachSurface(surface)
     fun disconnect() {
+        retireNativeCaptureRequests()
+        endFeedIncidentSession()
+        retireRecovery()
+        releaseReportingCameraPath()
         cancelProgrammedMove()
-        backend.disconnect(); decoder.reset()
+        synchronized(recoveryFrameLock) { backend.disconnect(); decoder.reset() }
         holdsMonitor = false; hasVideoFormat = false
         tracking.clear()
     }
-    fun close() { cancelProgrammedMove(); backend.close(); decoder.reset(); scope.cancel() }
+    fun close() {
+        if (closed) return
+        retireNativeCaptureRequests()
+        endFeedIncidentSession()
+        releaseReportingCameraPath()
+        closed = true
+        retireRecovery()
+        cancelProgrammedMove()
+        synchronized(recoveryFrameLock) { backend.close(); decoder.reset() }
+        scope.cancel()
+    }
     fun noteSceneBecameInactive() {
         programSceneActive = false; cancelProgrammedMove(); backend.sceneActive(false)
+        feedIncidents?.recordBreadcrumb(FeedIncidentBreadcrumb(SystemClock.elapsedRealtime() / 1_000.0, FeedIncidentBreadcrumbKind.SCENE_ACTIVITY, "inactive"))
     }
-    fun noteSceneBecameActive() { programSceneActive = true; backend.sceneActive(true) }
-    internal fun hasRecoveryPicture(startedAt: Long): Boolean = hasVideoFormat
+    fun noteSceneBecameActive() {
+        programSceneActive = true
+        feedIncidents?.recordBreadcrumb(FeedIncidentBreadcrumb(SystemClock.elapsedRealtime() / 1_000.0, FeedIncidentBreadcrumbKind.SCENE_ACTIVITY, "active"))
+        // The bounded recovery episode already owns reconnect while the link is failed.
+        if (!recoveryEpisode.isRunning) backend.sceneActive(true)
+    }
+    internal fun hasRecoveryPicture(startedAt: Long, generation: Long? = backend.frameConnectionGeneration): Boolean {
+        val source = generation ?: return false
+        if (backend.frameConnectionGeneration != source || lastFrameGeneration != source) return false
+        val now = SystemClock.elapsedRealtime()
+        val admitted = decoder.lastDecoderAcceptedAt ?: return false
+        if (admitted < startedAt || now - admitted !in 0 until 2_000) return false
+        // C2 surface output may not emit an output callback. Its fresh codec-stamped
+        // presentation still proves a decoded picture after this source's input admission.
+        if (decoder.decoderOutputExpected) {
+            val output = decoder.lastDecoderOutputAt ?: return false
+            if (output < startedAt || now - output !in 0 until 2_000) return false
+        }
+        return RecoveryPictureProof.isFresh(startedAt, now, decoder.lastPresentedAt, lastAccessUnitAt)
+    }
     /** iOS `retrySessionRecovery`: the operator starts a fresh bounded run. */
     fun retrySessionRecovery() {
-        dropGuard.reset()
-        recoveryJob?.cancel(); recoveryJob = null
-        _recoveryState.value = SessionRecoveryUi.Idle
-        beginSessionRecovery()
+        recoveryEpisode.resetStorm()
+        retireRecovery()
+        beginSessionRecovery(SessionRecoveryTrigger.OPERATOR_RETRY)
     }
-    private val dropGuard = SessionDropStormGuard()
-    private var recoveryJob: Job? = null
+    private fun retireRecovery() = recoveryEpisode.cancel()
     /**
-     * iOS `beginSessionRecovery` + `runSessionRecoveryAttempts`: a live drop keeps the monitor on the last
-     * frame and reconnects through the backend's BLE-first path, retrying at once then 0.5 s to 8 s
+     * iOS `beginSessionRecovery`: a live drop keeps the monitor on the last frame while the shared
+     * episode reconnects through the backend's BLE-first path, retrying at once then 0.5 s to 8 s
      * jittered, at most 8 attempts within 180 s; then the Recovery card waits for the operator.
      */
-    private fun beginSessionRecovery() {
-        if (recoveryJob?.isActive == true) return
-        val state = _recoveryState.value
-        if (state is SessionRecoveryUi.WaitingForOperator || state is SessionRecoveryUi.PausedAfterDrops) return
+    private fun beginSessionRecovery(trigger: SessionRecoveryTrigger = SessionRecoveryTrigger.DATALINK_LOST) {
         val id = backend.connected.value?.id ?: return
-        if (dropGuard.noteDrop(SystemClock.elapsedRealtime())) {
-            _recoveryState.value = SessionRecoveryUi.PausedAfterDrops(dropGuard.dropsInWindow)
+        val previousTarget = recoveryCameraId
+        recoveryCameraId = id
+        if (!recoveryEpisode.begin(id, trigger, "link failed")) {
+            if (!_recoveryState.value.isRecovering) recoveryCameraId = previousTarget
             return
         }
+        if (_recoveryState.value !is SessionRecoveryUi.Retrying) return
+        if (phase == ConnectionPhase.FAILED) feedIncidents?.noteUnexpectedDisconnect(SystemClock.elapsedRealtime() / 1_000.0)
         Log.i("OpenInstaCine", "session: drop, bounded recovery")
-        recoveryJob = scope.launch {
-            val policy = SessionRecoveryPolicy.monitor
-            var failures = 0
-            val ended = kotlinx.coroutines.withTimeoutOrNull(SessionRecoveryPolicy.AUTOMATIC_RECOVERY_BUDGET_MS) {
-                while (true) {
-                    val next = policy.state(failures)
-                    _recoveryState.value = next
-                    if (next !is SessionRecoveryUi.Retrying) break
-                    backend.connect(id)
-                    kotlinx.coroutines.withTimeoutOrNull(2_000) { backend.phase.first { it != ConnectionPhase.FAILED } }
-                    val outcome = backend.phase.first { it == ConnectionPhase.LIVE || it == ConnectionPhase.FAILED || it == ConnectionPhase.IDLE }
-                    if (outcome != ConnectionPhase.FAILED) { Log.i("OpenInstaCine", "session: recovered after $failures failed attempt(s)"); break }
-                    failures += 1
-                    val decision = policy.decision(failures, Math.random())
-                    if (decision !is SessionRecoveryDecision.Retry) { _recoveryState.value = policy.state(failures); break }
-                    delay(decision.afterMs)
+    }
+    private fun applyRecovery(snapshot: SessionRecoveryEpisode.Snapshot) {
+        val previous = _recoveryState.value
+        _recoveryState.value = snapshot.state
+        if (snapshot.state is SessionRecoveryUi.WaitingForOperator && previous !is SessionRecoveryUi.WaitingForOperator) {
+            feedIncidents?.noteExhausted(SystemClock.elapsedRealtime() / 1_000.0)
+        }
+        // A recovered episode keeps its target; a local cancel clears or keeps the hold.
+        if (previous is SessionRecoveryUi.Retrying && snapshot.state == SessionRecoveryUi.Idle &&
+            snapshot.targetId != null && !snapshot.holdsPicture
+        ) {
+            Log.i("OpenInstaCine", "session: recovered picture after ${previous.attempt - 1} failed attempt(s)")
+        }
+    }
+    /** The Luna backend as the shared episode's transport. */
+    private inner class RecoveryPort : SessionRecoveryEpisode.Port {
+        override fun observe(): SessionRecoveryEpisode.Observation {
+            val target = recoveryCameraId
+            val source = recoverySource
+            val live = phase == ConnectionPhase.LIVE
+            // Only a decoded picture of this attempt's source counts (codec admission and output).
+            val pictured = live && source != null && synchronized(recoveryFrameLock) {
+                sourceProbeStartedAt?.let { hasRecoveryPicture(it, source) } == true
+            }
+            return SessionRecoveryEpisode.Observation(
+                // Idle is the operator's or the app's disconnect: the episode ends without a word.
+                ownsConnection = !closed && target != null && phase != ConnectionPhase.IDLE &&
+                    backend.connected.value?.id == target,
+                progress = when {
+                    source != null && backend.frameConnectionGeneration != source ->
+                        SessionRecoveryEpisode.Progress.SUPERSEDED
+                    phase == ConnectionPhase.FAILED -> SessionRecoveryEpisode.Progress.FAILED
+                    else -> SessionRecoveryEpisode.Progress.RUNNING
+                },
+                stage = if (live) SessionRecoveryEpisode.Stage.LIVE else SessionRecoveryEpisode.Stage.CONNECTING,
+                sourceAtMs = if (pictured) lastAccessUnitAt else null,
+                presentedAtMs = if (pictured) decoder.lastPresentedAt else null,
+            )
+        }
+
+        override fun cleanup(kind: SessionRecoveryEpisode.Cleanup, attempt: SessionRecoveryEpisode.Attempt) {
+            if (kind == SessionRecoveryEpisode.Cleanup.INITIAL_DROP) recoverySource = null
+        }
+
+        override suspend fun connect(attempt: SessionRecoveryEpisode.Attempt): Boolean {
+            val id = recoveryCameraId ?: return false
+            recoverySource = synchronized(recoveryFrameLock) {
+                backend.connect(id)
+                backend.frameConnectionGeneration
+            }
+            withContext(Dispatchers.IO) {
+                synchronized(recoveryFrameLock) {
+                    decoder.prepareAfterForeground()
+                    lastAccessUnitAt = null; lastFrameGeneration = null
+                    sourceProbeStartedAt = decoder.beginPresentationProbe()
                 }
             }
-            // Budget spent: the attempt in flight may still land (LIVE clears the card); otherwise the operator decides.
-            if (ended == null) _recoveryState.value = SessionRecoveryUi.WaitingForOperator(failures + 1)
+            attempt.checkContinuation()
+            // The backend may still report the drop's failure for a moment after the call.
+            kotlinx.coroutines.withTimeoutOrNull(2_000) { backend.phase.first { it != ConnectionPhase.FAILED } }
+            return true
         }
     }
     fun abandonRecoveryToMenu() = disconnect()
 
+    private fun beginFeedIncidentSession() {
+        incidentSessionActive = true
+        incidentRateSampler.reset()
+        feedIncidents = incidentSessionSink.beginBoundSession(
+            AppDiagnostics.incidents.sessionContext(cameraFamily = "luna"))
+    }
+
+    private fun endFeedIncidentSession() {
+        if (!incidentSessionActive) return
+        incidentSessionActive = false
+        incidentRateSampler.reset()
+        val incident = feedIncidents
+        feedIncidents = null
+        incident?.endSession(SystemClock.elapsedRealtime() / 1_000.0)
+    }
+
+    /** Diagnostic snapshot from actual AU admission, native decoder and present clocks. */
+    internal fun feedIncidentSnapshot(nowMs: Long = SystemClock.elapsedRealtime()): FeedIncidentSnapshot = synchronized(recoveryFrameLock) {
+        val now = nowMs / 1_000.0
+        val generation = backend.frameConnectionGeneration
+        val pipeline = cadence.snapshot()
+        val rates = incidentRateSampler.sample(now, FeedIncidentStageCounts(
+            accessUnit = accessUnits.toLong(), decodeAccept = decoder.framesEnqueued.get().toLong(),
+            decodedOutput = pipeline.counts.getValue(LivePipelineCadence.Stage.OUTPUT),
+            present = decoder.framesPresented.get().toLong()),
+            epoch = FeedIncidentCounterEpoch(decoder.errorLifetime.generation.toLong(), generation))
+        fun age(at: Long?): Double? = FeedIncidentRateSampler.ageMilliseconds(at, nowMs)
+        fun sourceAge(at: Long?): Double? = at?.takeIf {
+            sourceProbeStartedAt?.let { started -> it >= started } != false
+        }?.let(::age)
+        val currentSource = generation != null && lastFrameGeneration == generation
+        val error = decoder.errorLifetime.lastError?.takeIf {
+            sourceProbeStartedAt?.let { started -> it.atElapsedMs >= started } != false
+        }
+        FeedIncidentSnapshot(
+            monotonicNow = now, wallClockMs = System.currentTimeMillis(),
+            // Luna exposes AUs, not transport packet/ACK/queue counters; do not relabel them.
+            rates = rates,
+            ages = FeedIncidentAges(accessUnitAge = if (currentSource) age(lastAccessUnitAt) else null,
+                decodeAcceptAge = if (currentSource) sourceAge(decoder.lastDecoderAcceptedAt) else null,
+                decodedOutputAge = if (currentSource) sourceAge(decoder.lastDecoderOutputAt) else null,
+                presentAge = if (currentSource) sourceAge(decoder.lastPresentedAt) else null),
+            decoder = decoder.incidentDecoder(nowElapsedMs = nowMs, generation = decoder.errorLifetime.generation,
+                codec = error?.codec ?: "unknown", errorNotBefore = sourceProbeStartedAt,
+                outputAge = if (currentSource) sourceAge(decoder.lastDecoderOutputAt) else null,
+                receivedIrap = decoder.lastIrapAt != null),
+            lifecycle = FeedIncidentLifecycle(foreground = programSceneActive, playbackActive = isBrowsingMedia,
+                connected = backend.connected.value != null && phase != ConnectionPhase.IDLE,
+                liveEstablished = decoder.lastPresentedAt != null, sceneActive = programSceneActive,
+                thermalState = "unknown", assistState = "unknown",
+                outputObservable = decoder.decoderOutputExpected, presentationExpected = decoder.isPresentationReady),
+        )
+    }
+
+    private fun publishFeedIncidentSnapshot() {
+        if (!incidentSessionActive || closed) return
+        val incident = feedIncidents ?: return
+        val snapshot = feedIncidentSnapshot()
+        incident.noteDecoderGeneration(snapshot.decoder.generation)
+        incident.ingestSnapshot(snapshot)
+    }
+
     // Status mapping (Luna readout to the shared CameraStatus), iOS `applyDeviceStatus`/`applySettings`/`applyCapture`.
     private fun applyReadout(readout: CameraReadout) {
         lastReadout = readout
+        _nativeFormats.value = readout.recordFormats
+        if (nativeFormatPin?.value?.expected?.let { it !in readout.recordFormats } == true) nativeFormatPin = null
+        val nativeNow = nativePinNow()
+        val (format, formatPin) = nativeReadout(nativeFormatPin, readout.recordFormat, nativeNow)
+        val (color, colorPin) = nativeReadout(nativeColorPin, readout.color, nativeNow)
+        nativeFormatPin = formatPin; nativeColorPin = colorPin
+        _nativeFormat.value = format
+        _nativeColor.value = color
         val now = SystemClock.elapsedRealtime()
         var next = LunaShellMapping.applyDevice(readout, _status.value, pins, now)
         val (settled, table) = LunaShellMapping.applySettings(readout, next, pins, now)
@@ -541,24 +820,20 @@ class PocketCameraSession(
         if (!recording) recordStartedAt = null
         val elapsed = if (recording) maxOf(readout.captureSeconds, recordStartedAt?.let { ((now - it) / 1_000).toInt() } ?: 0) else 0
         next = next.copy(recordElapsedSec = elapsed)
-        // The frame clock owns the timecode (set from the decode thread).
-        _status.update { next.copy(timecode = it.timecode) }
+        _status.value = next
         if (_controlBusy.value && !pins.photoInFlight) _controlBusy.value = false
         publishFaceDetectWanted()
     }
 
     private fun resetFrameClock() {
         frameTimecode.reset()
-        _status.update { it.copy(timecode = null) }
     }
 
     /** [stampMicros]: the frame's camera clock (Luna: its u64 ms header stamp, in microseconds). */
     private fun noteFrameClock(stampMicros: Long) {
         // The HUD shows HH:MM:SS: published once per displayed second.
-        val timecode = frameTimecode.note(
-            stampMicros / 1_000, System.currentTimeMillis(), java.util.TimeZone.getDefault(), _status.value.fps,
-        ) ?: return
-        _status.update { it.copy(timecode = LunaShellMapping.timecodeText(timecode)) }
+        val timecode = frameTimecode.note(stampMicros / 1_000, System.currentTimeMillis(), java.util.TimeZone.getDefault())
+            ?: return
         (control.state.value.session as? LunaCameraSession)?.ingest(timecode)
     }
 
@@ -574,13 +849,17 @@ class PocketCameraSession(
         refresh: Boolean = true,
         onFail: () -> Unit = {},
         onSuccess: () -> Unit = {},
+        admission: () -> Boolean = { true },
         request: suspend CameraControls.() -> Boolean,
     ) {
         val link = controls ?: return
         scope.launch {
-            if (link.request()) {
+            if (!admission()) return@launch
+            val applied = link.request()
+            if (!admission()) return@launch
+            if (applied) {
                 onSuccess()
-                if (refresh) link.requestSettingsRefresh()
+                if (refresh && admission()) link.requestSettingsRefresh()
             } else {
                 presentControlNote("$name was not applied by the camera.")
                 onFail()
@@ -991,8 +1270,10 @@ class PocketCameraSession(
             GamepadOperatorAction.RECENTER -> performGimbalDoubleTap()
             GamepadOperatorAction.FLIP -> flipGimbal()
             GamepadOperatorAction.TRACK -> handleGamepadTrackToggle()
-            GamepadOperatorAction.ZOOM_CHIP_IN -> setZoom(CamFov.nextJump(zoomCycleFrom(), zoomStops()))
-            GamepadOperatorAction.ZOOM_CHIP_OUT -> setZoom(CamFov.previousJump(zoomCycleFrom(), zoomStops()))
+            GamepadOperatorAction.ZOOM_CHIP_IN ->
+                control.commitZoomCycle(CamFov.nextJump(control.state.value.pendingZoom ?: zoomCycleFrom(), zoomStops()))
+            GamepadOperatorAction.ZOOM_CHIP_OUT ->
+                control.commitZoomCycle(CamFov.previousJump(control.state.value.pendingZoom ?: zoomCycleFrom(), zoomStops()))
             GamepadOperatorAction.ISO_UP, GamepadOperatorAction.ISO_DOWN -> {
                 val status = _status.value
                 if (status.isoIndex < 0) return
@@ -1106,11 +1387,16 @@ class PocketCameraSession(
     fun setFaceMetering(on: Boolean) {
         if (!canSendControl()) return
         val previous = _faceMetering.value
-        pins.faceMetering = pin(on, SystemClock.elapsedRealtime(), 6_000)
+        val pin = pin(on, SystemClock.elapsedRealtime(), 6_000)
+        val source = nativeCaptureSource()
+        pins.faceMetering = pin
         _faceMetering.value = on
+        // A later choice, or a replaced session or camera, owns the value: this request's callbacks retire.
+        val current = { pins.faceMetering === pin && nativeCaptureSource() == source }
         // The usual read 0.4 s after the SET is too early for 46; read again before the pin lapses.
-        sendControl(if (on) "Metering Face" else "Metering Matrix", onFail = { pins.faceMetering = null; _faceMetering.value = previous },
-            onSuccess = { scope.launch { delay(5_200); controls?.requestSettingsRefresh() } }) {
+        sendControl(if (on) "Metering Face" else "Metering Matrix", admission = current,
+            onFail = { pins.faceMetering = null; _faceMetering.value = previous },
+            onSuccess = { scope.launch { delay(5_200); if (current()) controls?.requestSettingsRefresh() } }) {
             setFaceMetering(on)
         }
     }
@@ -1125,6 +1411,47 @@ class PocketCameraSession(
         sendControl(CameraCommands.colorLabel(mode, profile = profile.labels), onFail = { pins.color = null; _status.value = _status.value.copy(colorMode = previous) }) {
             setColorProfile(LunaShellMapping.colorProfile(mode))
         }
+    }
+
+    fun setNativeRecordingFormat(value: com.opencapture.opencine.insta360.shell.CameraRecordFormat): Boolean {
+        if (!canSendControl() || lastReadout?.shootingMode == null || _status.value.isPhoto ||
+            control.state.value.snapshot?.recording?.value != com.opencapture.opencine.core.RecordingState.IDLE || value !in _nativeFormats.value) return false
+        val source = nativeCaptureSource() ?: return false
+        val previous = _nativeFormat.value
+        val pin = NativeCapturePin(source, pin(value, nativePinNow(), 3_000))
+        nativeFormatPin = pin
+        _nativeFormat.value = value
+        val dimensions = com.opencapture.opencine.core.CameraRecordingFormat.Dimensions.measured(value.width, value.height)
+        val format = com.opencapture.opencine.core.CameraRecordingFormat.measured(dimensions, com.opencapture.opencine.core.Rational.frameRate(value.fps))
+        val label = com.opencapture.opencine.appkit.MonitorCapturePresentation.recordingLabel(format) ?: "Format"
+        sendControl(label, admission = { nativeFormatPin === pin && pin.source == nativeCaptureSource() },
+            onFail = { nativeFormatPin = null; _nativeFormat.value = previous }) { setRecordFormat(value.id) }
+        val report = control.state.value.snapshot
+        val rematch = previous?.let {
+            com.opencapture.opencine.media.ShutterAngle.formatRematch(OperatorPrefs.shutterAngleDegrees(appContext),
+                usesAngle = OperatorPrefs.shutterUsesAngle(appContext),
+                manual = report?.exposureProgram?.value == com.opencapture.opencine.core.CameraExposureProgram.MANUAL,
+                isPhoto = _status.value.isPhoto, previousFps = it.fps.roundToInt(), nextFps = value.fps.roundToInt(),
+                available = _status.value.availableShutterDenoms)
+        }
+        val heldAsDuration = (report?.value(com.opencapture.opencine.core.SettingKey.SHUTTER)?.value as?
+            com.opencapture.opencine.core.SettingValue.Shutter)?.value is com.opencapture.opencine.core.ShutterValue.Duration
+        if (rematch != null && heldAsDuration && rematch.denom != _status.value.shutterDenom) setShutterDenom(rematch.denom)
+        return true
+    }
+
+    fun setNativeRecordingColor(value: com.opencapture.opencine.insta360.shell.CameraColorProfile): Boolean {
+        if (!canSendControl() || lastReadout?.shootingMode == null ||
+            control.state.value.snapshot?.recording?.value != com.opencapture.opencine.core.RecordingState.IDLE ||
+            value !in com.opencapture.opencine.insta360.shell.nativeRecordingColorProfiles) return false
+        val source = nativeCaptureSource() ?: return false
+        val previous = _nativeColor.value
+        val pin = NativeCapturePin(source, pin(value, nativePinNow(), 3_000))
+        nativeColorPin = pin
+        _nativeColor.value = value
+        sendControl(value.label, admission = { nativeColorPin === pin && pin.source == nativeCaptureSource() },
+            onFail = { nativeColorPin = null; _nativeColor.value = previous }) { setColorProfile(value) }
+        return true
     }
 
     fun setVideoFormat(format: VideoFormat, fromOperator: Boolean = true): Boolean {
@@ -1142,16 +1469,17 @@ class PocketCameraSession(
                 _status.value = _status.value.copy(resolutionCode = previous.resolutionCode, fpsIndex = previous.fpsIndex, fps = previous.fps)
             }
         }) { setRecordFormat(raw) }
-        // Angle mode is ours: keep the chosen degrees and rewrite 1/N for the new fps.
-        CaptureLists.rematchShutterDenomAfterFps(
-            usesAngle = OperatorPrefs.shutterUsesAngle(appContext),
+        // Angle mode is ours: Core decides when the chosen degrees owe a new 1/N (only an
+        // established manual video exposure; never an unknown one).
+        ShutterAngle.formatRematch(
             degrees = OperatorPrefs.shutterAngleDegrees(appContext),
+            usesAngle = OperatorPrefs.shutterUsesAngle(appContext),
+            manual = previous.expoMode == CameraCommands.EXPO_MANUAL,
+            isPhoto = previous.isPhoto,
             previousFps = previous.fps,
             nextFps = format.frameRate.fps,
-            expoMode = previous.expoMode,
-            currentDenom = previous.shutterDenom,
             available = previous.availableShutterDenoms,
-        )?.let(::setShutterDenom)
+        )?.denom?.takeIf { it != previous.shutterDenom }?.let(::setShutterDenom)
         return true
     }
     fun setResolutionFps(res: Int, fpsIndex: Int): Boolean = VideoFormat.parse(res, fpsIndex)?.let(::setVideoFormat) ?: false

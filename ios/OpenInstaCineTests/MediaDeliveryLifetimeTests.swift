@@ -1,95 +1,97 @@
+import OpenCineAppKit
+import OpenCineAppKitApple
+import OpenCineCameraControls
+import OpenCineFrameIOApple
 import XCTest
 
 @testable import OpenInstaCine
 
+/// The shared hop owner and delivery coordinator as Insta composes them (A2-16). SIMULATED
+/// disconnected sources have no SSID, so the joiner never leaves a network here.
 @MainActor
 final class MediaDeliveryLifetimeTests: XCTestCase {
+    private typealias Token = MonitorInternetHop<InstaHopRoute>.Token
+
+    private func run(_ model: AppModel, _ destination: MonitorDeliveryDestination, lease: Token?) async
+        -> MonitorDeliveryCoordinator.Outcome
+    {
+        await model.delivery.run(
+            records: [MediaFile](), destination: destination, action: .systemShare, admission: .init { true },
+            source: .init(
+                originals: model.clipLibrary().originals, still: { _ in nil }, export: { _, _, _ in nil },
+                filename: \.filename, metadata: { _ in nil }),
+            includeMetadata: false, remote: nil,
+            internet: model.internetHop.deliveryService(route: { model.hopRoute }), lease: lease
+        ) { _ in XCTFail("An empty request must fail before presenting progress") }
+    }
+
     func testFrameioPreflightRejectionRestoresTransferredHop() async {
         let model = AppModel()
-        // Simulate the popup's already-completed handoff without leaving any
-        // Wi-Fi network. The fixture has no camera or credentials to rejoin.
-        let token = model.internetHop.begin()
-        let request = MediaDeliveryBeginRequest(
-            files: [], destination: .frameio, configuration: .init(), internetHopToken: token)
-
-        let outcome = await MediaDeliveryRunner.execute(request: request, model: model) { _ in
-            XCTFail("An empty request must fail before presenting progress")
-        }
-
-        guard case .failed = outcome else {
+        defer { model.delivery.close() }
+        let token = model.internetHop.begin(model.hopRoute)
+        XCTAssertNotNil(token)
+        guard case .failed = await run(model, .remoteUpload, lease: token) else {
             return XCTFail("An empty request must fail preflight")
         }
-        XCTAssertFalse(
-            model.internetHopActive, "Preflight failure must release the transferred hop")
+        XCTAssertFalse(model.internetHop.isActive, "Preflight failure must release the transferred hop")
     }
 
     func testNativePreflightDoesNotAdoptUnrelatedInternetHop() async {
         let model = AppModel()
-        let token = model.internetHop.begin()
-        let request = MediaDeliveryBeginRequest(
-            files: [], destination: .nativeShare, configuration: .init())
-
-        _ = await MediaDeliveryRunner.execute(request: request, model: model) { _ in }
-
-        XCTAssertTrue(model.internetHopActive, "Native export never owns an internet hop")
-        model.endInternetHop(token)
+        defer { model.delivery.close() }
+        let token = model.internetHop.begin(model.hopRoute)
+        _ = await run(model, .nativeShare, lease: nil)
+        XCTAssertTrue(model.internetHop.isActive, "Native export never owns an internet hop")
+        if let token { _ = model.internetHop.end(token) }
     }
 
     func testTransferredPopupCloseCannotReleaseAcceptedDelivery() async {
         let model = AppModel()
-        let popup = model.internetHop.begin()
-        let delivery = model.transferInternetHop(popup)
+        defer { model.delivery.close() }
+        let popup = model.internetHop.begin(model.hopRoute)!
+        let delivery = model.internetHop.transfer(popup)
         XCTAssertNotNil(delivery)
-        model.endInternetHop(popup)
-        XCTAssertTrue(model.internetHopActive)
-        let request = MediaDeliveryBeginRequest(
-            files: [], destination: .frameio, configuration: .init(),
-            internetHopToken: delivery)
-        _ = await MediaDeliveryRunner.execute(request: request, model: model) { _ in
-            XCTFail("An empty request must fail before presenting progress")
-        }
-        XCTAssertFalse(model.internetHopActive)
+        XCTAssertNil(model.internetHop.end(popup))
+        XCTAssertTrue(model.internetHop.isActive)
+        _ = await run(model, .remoteUpload, lease: delivery)
+        XCTAssertFalse(model.internetHop.isActive)
     }
 
-    func testLateCancelledDeliveryCannotReleaseNewHop() {
+    func testASecondHopIsRefusedAndAStaleTokenCannotEndTheRunningOne() {
         let model = AppModel()
-        let cancelled = model.internetHop.begin()
-        let current = model.internetHop.begin()
-        model.endInternetHop(cancelled)
-        XCTAssertTrue(model.internetHop.owns(current))
-        model.endInternetHop(current)
-        XCTAssertFalse(model.internetHopActive)
+        let current = model.internetHop.begin(model.hopRoute)!
+        XCTAssertNil(model.internetHop.begin(model.hopRoute), "A running hop is never superseded")
+        let transferred = model.internetHop.transfer(current)!
+        XCTAssertNil(model.internetHop.end(current))
+        XCTAssertTrue(model.internetHop.owns(transferred))
+        _ = model.internetHop.end(transferred)
+        XCTAssertFalse(model.internetHop.isActive)
     }
 
-    func testStaleTransferredRequestCannotAdoptNewHop() async {
+    func testStaleTransferredRequestCannotAdoptTheRunningHop() async {
         let model = AppModel()
-        let old = model.internetHop.begin()
-        let current = model.internetHop.begin()
-        let request = MediaDeliveryBeginRequest(
-            files: [], destination: .frameio, configuration: .init(), internetHopToken: old)
-        let outcome = await MediaDeliveryRunner.execute(request: request, model: model) { _ in
-            XCTFail("A stale request must stop before presenting progress")
+        defer { model.delivery.close() }
+        let old = model.internetHop.begin(model.hopRoute)!
+        let current = model.internetHop.transfer(old)!
+        guard case .failed = await run(model, .remoteUpload, lease: old) else {
+            return XCTFail("A stale request must fail")
         }
-        guard case .failed(let message) = outcome else { return XCTFail("Expected cancellation") }
-        XCTAssertEqual(message, "Cancelled.")
         XCTAssertTrue(model.internetHop.owns(current))
-        model.endInternetHop(current)
+        _ = model.internetHop.end(current)
     }
 
     func testFrameioRequestWithoutTransferCannotAdoptUnrelatedHop() async {
         let model = AppModel()
-        let unrelated = model.internetHop.begin()
-        let request = MediaDeliveryBeginRequest(
-            files: [], destination: .frameio, configuration: .init())
-        _ = await MediaDeliveryRunner.execute(request: request, model: model) { _ in
-            XCTFail("An empty request must fail before presenting progress")
-        }
+        defer { model.delivery.close() }
+        let unrelated = model.internetHop.begin(model.hopRoute)!
+        _ = await run(model, .remoteUpload, lease: nil)
         XCTAssertTrue(model.internetHop.owns(unrelated))
-        model.endInternetHop(unrelated)
+        _ = model.internetHop.end(unrelated)
     }
 }
 
 import MonitorUI
+import OpenCineCameraControls
 import OpenInstaViewCore
 import SwiftUI
 import UIKit
@@ -104,11 +106,12 @@ final class MediaDeliveryPresentationTests: XCTestCase {
             path: "DCIM/VID_SIMULATED_delivery.MP4", thumbPath: "", sizeBytes: 1_048_576)
         defer { model.session.disconnect() }
         for height: CGFloat in [520, 280] {
+            let popup = model.deliveryPopup(files: [file], preferred: .nativeShare)
             let image = await render(
                 AnyView(
-                    MediaDeliveryPopup(
-                        files: [file], preferredDestination: .nativeShare,
-                        maxCardHeight: height, onClose: {}
+                    MonitorOperatorDeliveryScreen(
+                        model: popup.model, maxCardHeight: height, onClose: {}, onBegin: popup.begin,
+                        remoteArtwork: { FrameioMark() }
                     ).environment(model)), name: "shared-delivery-footer-\(Int(height))")
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
@@ -121,15 +124,15 @@ final class MediaDeliveryPresentationTests: XCTestCase {
                 normalized.contains("savetophotos"),
                 "The fixed footer must remain visible at \(height): \(labels)")
             XCTAssertFalse(model.delivery.isActive)
-            XCTAssertFalse(model.internetHopActive)
+            XCTAssertFalse(model.internetHop.isActive)
         }
     }
     func testSwitchingNetworkKeepsKnownProgressVisibleBesideBusySpinner() async throws {
-        let state = MediaDeliveryOverlayState(
+        let state = MonitorDeliveryBatchProgress(
             destination: .nativeShare, totalClips: 1,
             clipIndex: 1, clipFraction: 0.5, isSwitchingNetworks: true)
         let image = await render(
-            AnyView(MediaDeliveryOverlay(state: state, onCancel: {})),
+            AnyView(MonitorOperatorDeliveryProgress(state: state, onCancel: {})),
             name: "shared-delivery-busy-progress")
         let cg = try XCTUnwrap(image.cgImage)
         var bytes = [UInt8](repeating: 0, count: cg.width * cg.height * 4)

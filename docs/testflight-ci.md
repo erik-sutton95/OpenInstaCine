@@ -22,19 +22,19 @@ python3 -m unittest discover -s tools -p 'test_ios_archive_privacy.py'
 | --- | --- |
 | Generate `ios/OpenInstaCine.xcodeproj` (gitignored) | [`ios/ci_scripts/ci_post_clone.sh`](../ios/ci_scripts/ci_post_clone.sh) (XcodeGen 2.46.0) |
 | Copy `ios/Package.resolved` into the workspace | same script (Cloud builds with `-disableAutomaticPackageResolution`) |
-| Sentry DSN | `SENTRY_DSN_IOS` -> [`tools/sentry-dsn-xcconfig.py`](../tools/sentry-dsn-xcconfig.py) -> ignored `ios/OpenInstaCine/Reliability.local.xcconfig` |
+| Sentry DSN | `SENTRY_DSN_IOS` -> OpenCine's `scripts/sentry/sentry-dsn-xcconfig.py` -> ignored `ios/OpenInstaCine/Reliability.local.xcconfig` |
 | Check notes, verify the packaged DSN, upload dSYMs | [`ios/ci_scripts/ci_post_xcodebuild.sh`](../ios/ci_scripts/ci_post_xcodebuild.sh) |
 | Marketing version | [`ios/Config/Version.xcconfig`](../ios/Config/Version.xcconfig) `MARKETING_VERSION` |
 | Build number | Xcode Cloud counter |
 | Tester notes | [`ios/TestFlight/WhatToTest.en-US.txt`](../ios/TestFlight/WhatToTest.en-US.txt) |
 
-Every successful archive runs `tools/sentry-verify-ios-dsn.py --require`: an
+Every successful archive runs OpenCine's `scripts/sentry/sentry-verify-ios-dsn.py --require`: an
 archive without a real `https` DSN fails, even with symbol uploads off. See
 [`sentry-deployment.md`](sentry-deployment.md).
 
-The `ci_scripts/` hooks and the helpers they call (`tools/sentry-*`,
-`scripts/ios-release-notes*.sh`) are maintained in this app and target its
-`openinstacine-*` Sentry projects. `ios/TestFlight/` and
+The `ci_scripts/` hooks and `scripts/ios-release-notes*.sh` are maintained in this app; the
+Sentry helpers they call are OpenCine's `scripts/sentry/`, given this app's
+`openinstacine-*` Sentry project. `ios/TestFlight/` and
 `ios/Config/Version.xcconfig` are OpenInstaCine owned too.
 
 Local dry run (a throwaway clone, so nothing local is overwritten):

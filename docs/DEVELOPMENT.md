@@ -143,3 +143,28 @@ It connects to the real camera and may change the Mac's Wi-Fi. Details:
 Raw captures, HCI logs, camera footage, identities and Wi-Fi credentials stay
 in gitignored `captures/` and `.local/`. The app keeps its approval identity and
 camera Wi-Fi password in the Keychain.
+
+## Session recovery
+
+The iOS session and Android monitor facade adapt their Luna transport to OpenCine's
+`SessionRecoveryEpisode`. One shared owner supplies admission, drop-storm damping,
+operator retry, card grace, bounded attempts and the 180-second total budget. Luna
+declares a 90-second attempt ceiling and a 10-second live-picture ceiling on both
+platforms. Recovery requires a current source frame and a presented picture after
+the attempt starts; a returned control connection or a held-frame repaint cannot
+complete it. Borrowed backend ownership refuses automatic recovery.
+
+Manual-clock iOS owner scenarios and Android codec/source-generation scenarios are
+SIMULATED checks. Physical camera recovery remains untested until the program's
+operator qualification. The public OpenCine pin remains unchanged during local
+parity development; these adapters require the matching reviewed Core adoption.
+
+## All-camera Storage cache scope
+
+Settings on iOS and Android count and clear every camera bucket through the shared
+cache owners. Valid interrupted Clear roots remain counted and prepared deletions
+can be retried. Live child symlinks do not redirect cache ownership. Clear removes
+cached clips, thumbnails and camera indexes; the current gallery retains its
+operation fencing and cache revision, and reloads from the camera when connected.
+Favorites, preference keys and existing on-disk namespace spellings stay unchanged.
+Physical verification of this adoption remains untested.

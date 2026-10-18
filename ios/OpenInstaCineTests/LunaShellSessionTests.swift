@@ -2,6 +2,7 @@ import Insta360Apple
 import Insta360AppleTestSupport
 import Insta360Protocol
 import OpenCineCore
+import OpenCineHostedTestSupport
 import OpenCineMedia
 import OpenInstaViewCore
 import XCTest
@@ -13,9 +14,9 @@ import XCTest
 
 @MainActor
 final class CoreRecordControlTests: XCTestCase {
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<300 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
-        XCTAssertTrue(condition(), "timed out")
+    private func waitUntil(_ condition: @MainActor @Sendable () -> Bool) async throws {
+        let held = await HostedCondition.wait(until: condition)
+        XCTAssertTrue(held, "timed out")
     }
 
     func testRecordLampNeverTogglesBlind() async throws {
@@ -71,9 +72,9 @@ final class SessionIsolationTests: XCTestCase {
         catch let error as MediaServiceError { XCTAssertEqual(error, .unavailable) }
         next.close(.requested)
     }
-    private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<300 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
-        XCTAssertTrue(condition(), "timed out")
+    private func waitUntil(_ condition: @MainActor @Sendable () -> Bool) async throws {
+        let held = await HostedCondition.wait(until: condition)
+        XCTAssertTrue(held, "timed out")
     }
 
     private static let otherProfile = CameraLabelProfile(
@@ -210,24 +211,92 @@ final class SessionIsolationTests: XCTestCase {
 @MainActor
 final class LunaLayoutTests: XCTestCase {
     /// SHELL-01: the live monitor lays out what the Luna integration declares over the app base
-    /// (clip delete, clip star, internet hop); with no camera, Settings keeps main's rows (gimbal,
-    /// joystick, head tracking, zoom chip, timecode).
+    /// (clip delete, clip star, internet hop). Settings keeps its routing rows before connection;
+    /// the counter capability stays unknown until the common session declares it.
     func testMonitorLaysOutTheLunaProjection() {
         let shell = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
         var base = MonitorLayoutCapabilities()
         (base.clipDelete, base.clipStar, base.requiresInternetHop) = (true, true, true)
         var unconnected = base
         (unconnected.gimbal, unconnected.zoom, unconnected.focus, unconnected.headTracking, unconnected.timecode) =
-            (true, true, true, true, true)
+            (true, true, true, true, false)
         XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), unconnected)
         let camera = FakeLuna()
         let core = camera.connectedSession()
         shell.control.bind(core)
         var luna = base
-        (luna.gimbal, luna.headTracking, luna.focus, luna.timecode) = (true, true, true, true)
-        XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), luna, "unconfigured lens range stays unknown")
+        // Luna lays out its one control model: zoom from its declared stops before the live range.
+        (luna.gimbal, luna.zoom, luna.headTracking, luna.focus, luna.timecode) = (true, true, true, true, true)
+        XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), luna, "declared zoom before the live range")
         core.configureLens(zoomDomain: 1...4)
         luna.zoom = true
         XCTAssertEqual(OsmoMonitorPresentation.capabilities(shell), luna, "no audio levels, no iris")
+    }
+}
+
+/// A5-07: the host-emulated shutter angle follows a format change only for an established manual
+/// video exposure (Core `ShutterAngle`); an unknown exposure never gets a hidden shutter SET.
+@MainActor
+final class ShutterAngleFormatRematchTests: XCTestCase {
+    private func waitUntil(_ condition: @MainActor @Sendable () -> Bool) async throws {
+        let held = await HostedCondition.wait(until: condition)
+        XCTAssertTrue(held, "timed out")
+    }
+
+    private static func isShutterWrite(_ request: LunaRequest) -> Bool {
+        request.command == .setPhotographyOptions
+            && (try? LunaPhotographySettings(response: request.body))?.types.contains(21) == true
+    }
+
+    func testAnglePreferenceDescribesEmulationAndUsesReportedCadence() throws {
+        let previous = OperatorPrefs.shutterUsesAngle
+        defer { OperatorPrefs.shutterUsesAngle = previous }
+        OperatorPrefs.shutterUsesAngle = false
+        let camera = FakeLuna()
+        camera.program = LunaExposureProgram.manual.rawValue
+        camera.iso = 400
+        camera.shutterSeconds = 1.0 / 50
+        let luna = camera.connectedSession()
+        let raw = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 25))
+        let body = try ProtoMessage.blob(field: 1, value: ProtoMessage.varint(31))
+            + ProtoMessage.blob(field: 2, value: ProtoMessage.integer(field: 31, value: raw))
+            + ProtoMessage.integer(field: 3, value: UInt64(LunaFunctionMode.normalVideo.rawValue))
+        luna.ingest(settings: try LunaPhotographySettings(response: body))
+        let facade = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
+        facade.lunaSessionOverride = luna
+        let model = AppModel(session: facade)
+        model.shutterUsesAngle = true
+        XCTAssertEqual(luna.current.capabilities.descriptors[.shutter]?.semantics.implementation, .emulated)
+        XCTAssertEqual(luna.current.value(of: .shutter).value, .shutter(.angle(180)))
+        XCTAssertEqual(luna.current.value(of: .shutter).origin, .protocolDerived)
+        model.shutterUsesAngle = false
+        XCTAssertEqual(luna.current.capabilities.descriptors[.shutter]?.semantics.implementation, .native)
+        XCTAssertEqual(luna.current.value(of: .shutter).value, .shutter(.duration(Rational(1, 50))))
+    }
+
+    func testFormatChangeWithUnknownExposureSendsNoShutter() async throws {
+        let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
+        defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
+        (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (true, 180)
+        let camera = FakeLuna()
+        let luna = camera.connectedSession()
+        let shell = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
+        shell.lunaSessionOverride = luna
+        shell.phase = .live
+        shell.control.bind(luna)
+        try await waitUntil { shell.control.snapshot != nil }
+        let from = VideoFormat(resolution: .p4K, frameRate: .fps25)
+        shell.formatTable = [from: 1, VideoFormat(resolution: .p4K, frameRate: .fps30): 2]
+        var status = shell.status
+        (status.videoFormat, status.videoResolution, status.fps) = (from, .p4K, 25)
+        (status.expoMode, status.shutterDenom, status.availableShutterDenoms) = (nil, 50, [50, 60])
+        shell.status = status
+
+        shell.setVideoFormat(resolution: .p4K, frameRate: .fps30)
+        try await waitUntil { camera.sent.contains { $0.command == .setPhotographyOptions } }
+        // Negative window: no hidden shutter SET may follow within it.
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(camera.sent.contains(where: Self.isShutterWrite), "no hidden shutter SET while exposure is unknown")
+        shell.control.unbind()
     }
 }

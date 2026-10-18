@@ -1,10 +1,10 @@
+import OpenCineAppUITesting
 import XCTest
 
 /// Opt-in Simulator walkthrough against a real Luna reached over the Mac's Wi-Fi.
 /// Needs `OIC_WALKTHROUGH_DIR` (host folder for screenshots) and `LUNA_IDENTITY`
 /// passed as TEST_RUNNER_ env. Drives the app's DEBUG remote on 127.0.0.1:18780.
-final class LunaLiveWalkthroughTests: XCTestCase {
-    private var app: XCUIApplication!
+final class LunaLiveWalkthroughTests: SharedAppUITestCase {
     private var outDir: String { ProcessInfo.processInfo.environment["OIC_WALKTHROUGH_DIR"] ?? "" }
 
     override func setUpWithError() throws {

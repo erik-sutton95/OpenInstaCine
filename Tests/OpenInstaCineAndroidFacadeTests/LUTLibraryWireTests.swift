@@ -50,6 +50,17 @@ struct LUTLibraryWireTests {
         #expect(pulled != identity)
     }
 
+    /// A4-27: an import the shared gate (`CubeLUT.validatedImport`) refuses never packs, so the
+    /// Android library stores nothing for it.
+    @Test(arguments: [
+        "not a cube",
+        "LUT_3D_SIZE 2\nLUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n",
+        "LUT_3D_SIZE 2\n1.2 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n",
+    ])
+    func refusesWhatTheImportGateRefuses(text: String) {
+        #expect(LUTLibraryWire.packedImportedLUT(utf8: Array(text.utf8)) == nil)
+    }
+
     @Test
     func creativeMonoPacksAGreyscaleCube() throws {
         let packed = try #require(LUTLibraryWire.packedCreativeLook("Mono"))

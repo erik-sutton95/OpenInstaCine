@@ -9,8 +9,11 @@ import com.opencapture.opencine.appkit.diagnostics.ReliabilityReportingConsent
 import com.opencapture.opencine.appkit.diagnostics.ReliabilityReportingDSN
 import com.opencapture.opencine.appkit.diagnostics.ReliabilityReportingGate
 import com.opencapture.opencine.appkit.diagnostics.ReliabilityReportingHostPolicy
+import com.opencapture.opencine.appkit.sentry.OkHttpManualReportUpload
+import com.opencapture.opencine.appkit.sentry.SentryReliabilitySink
 import com.opencapture.opencine.vocabulary.PrivacyRedactor
 import com.opencapture.openinstacine.monitor.BuildConfig
+import com.opencapture.opencine.media.FeedIncidentSink
 
 /** The app's diagnostics: OpenCine's runtime with this app's names, destination, Sentry and OkHttp. */
 internal object AppDiagnostics {
@@ -20,7 +23,7 @@ internal object AppDiagnostics {
             releasePackage = "com.opencapture.openinstacine",
             versionName = BuildConfig.VERSION_NAME,
             versionCode = BuildConfig.VERSION_CODE,
-            debug = BuildConfig.DEBUG,
+            environment = BuildConfig.REPORTING_ENVIRONMENT,
             sourceRevision = BuildConfig.SOURCE_REVISION,
             reportingDsn = BuildConfig.SENTRY_DSN_ANDROID,
             reportingClient = "openinstacine-android",
@@ -30,7 +33,7 @@ internal object AppDiagnostics {
         )
     val dsn = ReliabilityReportingDSN()
     val consent = ReliabilityReportingConsent(dsn)
-    val gate = ReliabilityReportingGate(consent, ReliabilityReportingHostPolicy(), cameraIPv4Prefix = "192.168.2.")
+    val gate = ReliabilityReportingGate(consent, ReliabilityReportingHostPolicy(), cameraIPv4Prefix = "192.168.42.")
     val origin = FeedIncidentOrigin({ BuildConfig.BUILD_IDENTITY }, host.redact)
     val reporting =
         ReliabilityReporting(host, consent, dsn, gate, origin, ::SentryReliabilitySink) {
@@ -38,4 +41,10 @@ internal object AppDiagnostics {
         }
     val incidents = FeedIncidentRuntime(reporting)
     val manualReport = ManualProblemReport(host, dsn, gate, OkHttpManualReportUpload)
+
+    private val incidentBindings = com.opencapture.opencine.appkit.diagnostics.FeedIncidentBindings()
+
+    /** Injected legacy sinks use the same shared ownership contract as the production runtime. */
+    fun incidentSink(owner: Any, sink: FeedIncidentSink = incidents): FeedIncidentSink =
+        incidentBindings.sink(owner, sink)
 }

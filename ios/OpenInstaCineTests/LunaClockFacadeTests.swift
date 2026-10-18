@@ -1,5 +1,7 @@
 import Insta360Apple
 import Insta360Protocol
+import OpenCineCore
+import OpenCineHostedTestSupport
 import OpenInstaViewCore
 import XCTest
 
@@ -19,8 +21,8 @@ final class LunaClockFacadeTests: XCTestCase {
         }
     }
 
-    private func liveSession(_ wire: Wire) -> CameraSession {
-        let session = CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
+    private func liveSession(_ wire: Wire) -> OpenInstaCine.CameraSession {
+        let session = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
         let luna = LunaCameraSession(
             send: { try wire.reply($0, nil) }, sendWithin: { try wire.reply($0, $1) },
             functionMode: { LunaFunctionMode.normalVideo.rawValue },
@@ -31,13 +33,8 @@ final class LunaClockFacadeTests: XCTestCase {
         return session
     }
 
-    private func waitUntil(_ predicate: () -> Bool, timeout: Double = 5) async -> Bool {
-        let end = ProcessInfo.processInfo.systemUptime + timeout
-        while ProcessInfo.processInfo.systemUptime < end {
-            if predicate() { return true }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return predicate()
+    private func waitUntil(_ predicate: @MainActor @Sendable () -> Bool) async -> Bool {
+        await HostedCondition.wait(until: predicate)
     }
 
     func testClockSyncSetsTheClockThenSyncsToTheMillisecondTwice() async throws {
@@ -67,6 +64,7 @@ final class LunaClockFacadeTests: XCTestCase {
                 }, "cmd 214 count \(count), stamped at send")
         }
         XCTAssertEqual(wire.sent.map(\.timeout), [.seconds(2), .seconds(2), .seconds(2)])
+        // Negative window: no fourth request may follow within it.
         try await Task.sleep(for: .milliseconds(100))
         XCTAssertEqual(wire.sent.count, 3)
     }
@@ -78,6 +76,7 @@ final class LunaClockFacadeTests: XCTestCase {
         session.syncCameraClock()
         let tried = await waitUntil { wire.sent.count == 1 }
         XCTAssertTrue(tried)
+        // Negative window: no millisecond sync may follow a refused clock within it.
         try await Task.sleep(for: .milliseconds(150))
         XCTAssertEqual(wire.sent.count, 1)
         XCTAssertNotEqual(wire.sent.first?.request.wireCode, LunaProtocol.syncTimeAccurateCode)
@@ -86,11 +85,12 @@ final class LunaClockFacadeTests: XCTestCase {
     func testFrameTimecodePinsTheEarliestArrivalAndChangesOncePerSecond() throws {
         let session = liveSession(Wire())
         let zoneSeconds = TimeZone.current.secondsFromGMT()
-        func expected(_ milliseconds: UInt64, _ offset: Double) -> String {
-            LunaShellMapping.timecode(
-                unixSeconds: Double(milliseconds) / 1000 + offset, timeZoneSeconds: zoneSeconds,
-                fps: session.status.fps)
+        func expected(_ milliseconds: UInt64, _ offset: Double) -> CameraTimecodeReading {
+            LunaFrameTimecode.timecode(
+                unixSeconds: Double(milliseconds) / 1000 + offset, timeZoneSeconds: zoneSeconds)
         }
+        // The clock reaches the common session (seconds precision); the vocabulary keeps no text.
+        func clock() -> CameraTimecodeReading? { session.lunaSession?.current.timecodeReading.value }
         let first: UInt64 = 100_000
         let before = Date().timeIntervalSince1970
         session.noteFrameClock(first)
@@ -99,7 +99,7 @@ final class LunaClockFacadeTests: XCTestCase {
         // Pinned to the phone clock at arrival, less 90 ms of capture latency.
         XCTAssertGreaterThanOrEqual(offset, before - 100.09 - 1e-6)
         XCTAssertLessThanOrEqual(offset, after - 100.09 + 1e-6)
-        XCTAssertEqual(session.status.timecode, expected(first, offset))
+        XCTAssertEqual(clock(), expected(first, offset))
 
         // Older stamps arrive later than the pinned one: the offset holds, and the timecode
         // changes only when its second does.
@@ -111,15 +111,15 @@ final class LunaClockFacadeTests: XCTestCase {
         } else {
             let previous = first - fraction - 500
             session.noteFrameClock(previous)
-            XCTAssertEqual(session.status.timecode, expected(previous, offset))
+            XCTAssertEqual(clock(), expected(previous, offset))
             sameSecond = (previous, previous - 250)
         }
         session.noteFrameClock(sameSecond.1)
-        XCTAssertEqual(session.status.timecode, expected(sameSecond.0, offset), "once a second")
+        XCTAssertEqual(clock(), expected(sameSecond.0, offset), "once a second")
         if fraction >= 300 {
             let previous = first - fraction - 300
             session.noteFrameClock(previous)
-            XCTAssertEqual(session.status.timecode, expected(previous, offset))
+            XCTAssertEqual(clock(), expected(previous, offset))
         }
         XCTAssertEqual(session.frameClockOffset, offset)
 

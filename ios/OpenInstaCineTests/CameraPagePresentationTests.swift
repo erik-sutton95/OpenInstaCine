@@ -11,7 +11,7 @@ import XCTest
 final class CameraPagePresentationTests: XCTestCase {
     func testThePairWizardKeepsTheLunaPagesAndPreCheck() {
         let model = AppModel()
-        let page = CamerasMapping.wizard(model.cameras, model.pairingWizard(stillLooking: false))
+        let page = CamerasMapping.wizard(model.cameras, model.pairingWizard())
         XCTAssertEqual(
             page.steps.map(\.title),
             ["Find your camera", "Approve on the camera", "Join camera Wi-Fi", "Open video link"])
@@ -19,7 +19,8 @@ final class CameraPagePresentationTests: XCTestCase {
             page.body,
             "Turn the Luna on and keep this iPhone nearby. It shows up by the last characters of its serial number.")
         XCTAssertEqual(page.instructions.first?.lines, ["Before pairing, force quit the Insta360 app."])
-        let looking = model.pairingWizard(stillLooking: true)
+        model.cameras.scanLooksEmpty = true
+        let looking = model.pairingWizard()
         XCTAssertEqual(
             looking.choosing?.lines,
             [
@@ -38,12 +39,12 @@ final class CameraPagePresentationTests: XCTestCase {
             reason: .radioOff(.bluetooth), title: "Couldn’t connect over Camera Wi-Fi",
             message: "Bluetooth is off. Turn it on in Control Center or Settings, then try again.", actions: [.retry],
             code: "test.bluetooth.off")
-        var page = CamerasMapping.wizard(model.cameras, model.pairingWizard(stillLooking: false))
+        var page = CamerasMapping.wizard(model.cameras, model.pairingWizard())
         XCTAssertEqual(page.error, "Bluetooth is off. Turn it on in Control Center or Settings, then try again.")
         XCTAssertEqual(page.primaryAction, "Try again")
         XCTAssertTrue(page.instructions.isEmpty)
         model.discoveryFailure?.actions = [.openSettings, .retry]
-        page = CamerasMapping.wizard(model.cameras, model.pairingWizard(stillLooking: false))
+        page = CamerasMapping.wizard(model.cameras, model.pairingWizard())
         XCTAssertEqual(page.primaryAction, "Open Settings")
     }
 

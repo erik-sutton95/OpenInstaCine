@@ -15,6 +15,7 @@ import com.opencapture.opencine.vocabulary.MediaHTTP
 import com.opencapture.opencine.vocabulary.MediaFile
 import com.opencapture.opencine.vocabulary.MediaCacheGrade
 import com.opencapture.opencine.cameracontrols.MediaOperatorCopy
+import com.opencapture.opencine.cameracontrols.MonitorMediaThumbnailSource
 
 /** Source look/OS playback adapters only; the gallery consumes the common library directly. */
 data class LunaPlaybackLook(val colorMode: Int?, val file: MediaFile)
@@ -25,7 +26,7 @@ class LunaMediaPlaybackAdapter(
     val library: MonitorMediaLibraryModel<LunaMediaLibraryPayload>,
     val cameraId: String,
     private val cache: MediaCache,
-) {
+) : MonitorMediaThumbnailSource {
     private val appContext = context.applicationContext
     val isLive: Boolean get() = library.canRefresh && session.phaseFlow.value ==
         com.opencapture.opencine.insta360.shell.ConnectionPhase.LIVE
@@ -37,13 +38,13 @@ class LunaMediaPlaybackAdapter(
         val content = file.copy(isStarred = false)
         return library.state.value.records.firstOrNull { it.payload.file.copy(isStarred = false) == content }
     }
-    fun isDownloaded(file: MediaFile): Boolean = record(file)?.let { library.state.value.entries[it.asset.id]?.original != null }
+    override fun isDownloaded(file: MediaFile): Boolean = record(file)?.let { library.state.value.entries[it.asset.id]?.original != null }
         ?: cache.isDownloaded(file, cameraId)
     fun isAvailableOffline(file: MediaFile): Boolean = record(file)?.let { library.state.value.entries[it.asset.id]?.isPlayableOffline == true }
         ?: cache.isAvailableOffline(file, cameraId)
-    fun localFile(file: MediaFile): File? = cache.existingFile(cache.fileCache(cameraId, file))
+    override fun localFile(file: MediaFile): File? = cache.existingFile(cache.fileCache(cameraId, file))
     fun localPlaybackFile(file: MediaFile): File? = cache.localPlaybackFile(file, cameraId)
-    fun thumbnailFile(file: MediaFile): File? = cache.existingFile(cache.thumbnailFile(cameraId, file))
+    override fun thumbnailFile(file: MediaFile): File? = cache.existingFile(cache.thumbnailFile(cameraId, file))
     fun cacheGrade(file: MediaFile): MediaCacheGrade {
         val record = record(file) ?: return cache.cacheGrade(file, cameraId)
         val entry = library.state.value.entries[record.asset.id]
@@ -67,6 +68,16 @@ class LunaMediaPlaybackAdapter(
         if (mode >= 0) cache.rememberShotColor(file.path, mode, cameraId)
         return mode
     }
+    /** Captured at item admission: the same browsing source, directory generation and record. */
+    fun playbackAdmission(record: MonitorMediaRecord<LunaMediaLibraryPayload>): MonitorPlaybackAdmission {
+        val source = library.actionToken
+        val directory = library.cache.directory
+        val generation = directory.generation
+        return MonitorPlaybackAdmission {
+            library.isCurrent(source) && library.state.value.browsing &&
+                directory.generation == generation && library.record(record.asset.id) != null
+        }
+    }
     fun isFavorite(file: MediaFile): Boolean = record(file)?.favorite ?: file.isStarred
     fun toggleFavorite(file: MediaFile) { record(file)?.let { library.toggleFavorite(it.asset.id) } }
     fun canCache(file: MediaFile): Boolean = isLive && library.canTransfer && record(file)?.asset?.representations?.any { it.role == MediaRepresentationRole.ORIGINAL } == true
@@ -76,7 +87,7 @@ class LunaMediaPlaybackAdapter(
         catch (error: kotlinx.coroutines.CancellationException) { throw error }
         catch (_: Exception) { session.presentControlNote(MediaOperatorCopy.DELETE_FAILED) }
     }
-    suspend fun ensureThumbnail(file: MediaFile) = withContext(Dispatchers.Main.immediate) {
+    override suspend fun ensureThumbnail(file: MediaFile): Unit = withContext(Dispatchers.Main.immediate) {
         record(file)?.let { library.ensureThumbnailAndWait(it.asset.id) }
     }
     suspend fun download(file: MediaFile) {

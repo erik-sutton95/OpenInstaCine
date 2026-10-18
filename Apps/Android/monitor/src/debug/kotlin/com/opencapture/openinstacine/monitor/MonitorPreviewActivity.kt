@@ -1,6 +1,7 @@
 package com.opencapture.openinstacine.monitor
 
 import com.opencapture.opencine.cameracontrols.*
+import com.opencapture.opencine.core.CameraTimecodeReading
 import com.opencapture.monitorui.portraitZones
 import com.opencapture.monitorui.portraitOnFeedControls
 import android.graphics.Bitmap
@@ -43,7 +44,6 @@ import com.opencapture.opencine.cameracontrols.LiveSheet
 import com.opencapture.opencine.core.MonitorLayoutCapabilities
 import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.CameraStatus
-import com.opencapture.openinstacine.monitor.assists.MonitorAssistInspector
 import com.opencapture.opencine.cameracontrols.PortraitFeedAspect
 
 /**
@@ -59,7 +59,7 @@ class MonitorPreviewActivity : ComponentActivity() {
         if (intent.getStringExtra("surface") == "reporting-consent") {
             // Preview the real layout without reading or changing reporting consent.
             setContent {
-                OpenPocketCineTheme {
+                OpenInstaCineTheme {
                     com.opencapture.opencine.appkit.diagnostics.AutomaticReportsPrompt(
                         product = com.opencapture.openinstacine.monitor.diagnostics.AppDiagnostics.host.product,
                         onPrivacy = {}, onEnable = {}, onNotNow = {},
@@ -82,7 +82,7 @@ class MonitorPreviewActivity : ComponentActivity() {
         )
         val sourceAspect = intent.getFloatExtra("aspect", 16f / 9f).takeIf { it > 0f } ?: 16f / 9f
         setContent {
-            OpenPocketCineTheme {
+            OpenInstaCineTheme {
                 CompositionLocalProvider(LocalMonitorGlass provides remember { MonitorGlass(GlassTier.FLAT) }) {
                     if (intent.getStringExtra("surface") == "catalog") {
                         ReviewClipCapabilities(intent.getBooleanExtra("clipStar", false))
@@ -108,11 +108,10 @@ private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabiliti
     safeTop: Float, safeBottom: Float, patterned: Boolean = false) {
     val status = remember(capabilities) {
         CameraStatus(batteryPercent = 80, storageTotalMb = 131072, storageFreeMb = 109568,
-            timecode = if (capabilities.timecode) "15:39:50:00" else null,
             shootingMode = 1, iso = 1600, isoIndex = 7, shutterDenom = 50,
             expoMode = CameraCommands.EXPO_MANUAL, colorMode = CameraCommands.COLOR_DLOG2,
             resolutionCode = CameraCommands.RES_4K, fps = 25, fpsIndex = 2,
-            wbMode = 6, wbKelvin = 5600, focusMode = 2, focusTrack = 0, audioChannel = 2, audioMetersLeft = -21.0, audioMetersRight = -14.0)
+            wbMode = 6, wbKelvin = 5600, focusMode = 2, focusTrack = 0, audioChannel = 2, audioMetersLeft = -21.0, audioMetersRight = -14.0).withTimecodeReading(if (capabilities.timecode) CameraTimecodeReading(15, 39, 50) else null)
     }
     val cover = model.liveCover()
     LaunchedEffect(cover) {
@@ -136,14 +135,16 @@ private fun ReviewMonitor(model: AppModel, capabilities: MonitorLayoutCapabiliti
                 MonitorOperatorViewport(maxWidth.value, maxHeight.value, 0f, 0f, safeTop, safeBottom, 1f, safeTop > 0f),
                 model.assist, model::chromeSectionMounts, model.portraitFeedAspect, sourceAspect, sourceAspect < 1f,
                 model.virtualJoystickSize, false)
-            MonitorOperatorLiveSurface(rememberOperatorChromeSource(model, status), geometry, liveState,
-                MonitorOperatorLivePresentation(status, capabilities, "25", 4,
-                    model.phoneBatteryPercent.takeIf { it >= 0 }, true, sourceAspect < 1f, false, false, false, false, null),
-                model.assist, rememberOperatorAssistSource(model, status),
+            val chrome = rememberOperatorChromeSource(model, status, capabilities)
+            MonitorOperatorLiveSurface(chrome, geometry, liveState,
+                cameraStatusLiveSource(chrome, geometry, liveState, "25", 4, hasPicture = true,
+                    verticalPicture = sourceAspect < 1f, mirrored = false, recovering = false, busy = false, note = null,
+                    clearNote = {}, readExposure = { -1 }, exposureAvailable = false, level = null, levelViewFlip = false,
+                    vpnActive = { false }),
+                rememberOperatorAssistSource(model, status),
                 MonitorOperatorFocusObservation(null, com.opencapture.opencine.vocabulary.TrackingHud(), false, false, false, false),
                 MonitorOperatorFocusActions({ _, _ -> }, {}, { false }, { false }, {}, { false }, {}, {}, {}),
-                level = null, levelViewFlip = false, readExposure = { -1 }, exposureAvailable = false,
-                vpnActive = { false }, clearNote = {}, lockedChanged = {}, nativeInputBlocked = {},
+                nativeInputBlocked = {},
                 picture = {
                     if (image != null) Image(image.asImageBitmap(), null,
                         Modifier.liveModuleFrame(geometry.pictureContent).monitorBackdropSource(backdrop),

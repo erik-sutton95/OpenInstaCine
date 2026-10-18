@@ -1,16 +1,16 @@
 New and changed
 
-- Playback controls show whether a clip is playing or waiting for data.
-- For Luna Ultra on firmware 1.1.15. Live audio controls and meters remain unavailable.
+- Exposure, shutter angle and frame-rate readouts follow values reported by the camera.
+- Storage readouts preserve reported precision and mark missing measurements as unavailable.
+- Live View and Media use the connected camera's available controls; playback controls show whether a clip is playing or waiting for data.
 
 Fixes
 
-- Media clip taps stay usable after a camera source changes or reconnects.
-- Pause remains available while playback waits for data; pressing it prevents an unexpected restart.
-- Camera browsing includes internal storage and a present SD card.
+- A format change rematches shutter angle only when manual exposure and video timing are known.
+- Unknown exposure state no longer triggers a hidden shutter change.
 
 What to test
 
-- Reconnect your camera, open Media and try short and long clips from internal storage and an SD card. Check cached playback offline.
-- Pause while a clip is buffering, then scrub or switch clips. Playback should restart only when you press Play.
-- Check Media and playback in portrait and landscape. If a clip will not open, report its duration, storage and whether it was cached.
+- Connect your camera, switch manual and automatic exposure, then change resolution or frame rate and compare the shutter with the camera screen.
+- Check storage with and without a memory card, then reconnect and open Media before returning to Live View.
+- Rotate the phone and check the controls and how missing readings are shown.

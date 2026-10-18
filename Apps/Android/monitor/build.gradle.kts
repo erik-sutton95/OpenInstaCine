@@ -1,7 +1,7 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.library)
+    // BuildConfig.SENTRY_DSN_ANDROID: the CI secret, else the ignored .local/reliability.properties.
+    id("com.opencapture.opencine.reporting")
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -9,6 +9,17 @@ val supportedAndroidAbi = "arm64-v8a"
 val swiftCoreJniLibsRoot = layout.buildDirectory.dir("generated/swiftCore/jniLibs")
 val swiftCoreArm64Directory = swiftCoreJniLibsRoot.map { it.dir(supportedAndroidAbi) }
 val repositoryRoot = rootProject.projectDir.parentFile.parentFile
+// The repository's LICENSE, THIRD-PARTY-NOTICES.md and NOTICE, staged as Java resources so the
+// in-app Licenses and NOTICE pages are those files, never a hand-written summary. Concrete path so
+// the SourceSet API accepts it.
+val stagedLegalResourcesDirectory = layout.buildDirectory.get().asFile.resolve("generated/legalResources")
+val stageLegalResources = tasks.register<Copy>("stageLegalResources") {
+    group = "build"
+    description = "Stage the repository legal files into the app resources."
+    from(repositoryRoot.resolve("LICENSE"), repositoryRoot.resolve("THIRD-PARTY-NOTICES.md"),
+        repositoryRoot.resolve("NOTICE"))
+    into(stagedLegalResourcesDirectory.resolve("openinstacine/legal"))
+}
 val stageSwiftCoreScript = repositoryRoot.resolve("scripts/android-stage-swift-core.sh")
 
 val resolvedVersionCode: Int =
@@ -25,9 +36,11 @@ android {
         buildConfigField("String", "VERSION_NAME", "\"$resolvedVersionName\"")
         buildConfigField("int", "VERSION_CODE", "$resolvedVersionCode")
         buildConfigField("String", "SOURCE_REVISION", "\"unknown\"")
-        buildConfigField("String", "SENTRY_DSN_ANDROID", "\"\"")
         buildConfigField("String", "BUILD_IDENTITY", "\"unknown\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The reporting adapter's manifest binds io.sentry.proguard-uuid to this placeholder. The app
+        // fills it for release; this module's instrumented test APK merges it too and needs a value.
+        manifestPlaceholders["sentryProguardUuid"] = ""
 
         ndk {
             abiFilters += supportedAndroidAbi
@@ -64,6 +77,9 @@ android {
     }
 
     sourceSets {
+        getByName("main").resources.srcDir(stagedLegalResourcesDirectory)
+        getByName("androidTest").kotlin.srcDir(
+            gradle.includedBuild("opencine").projectDir.resolve("appkit-native/src/cacheOwnerProof/kotlin"))
         getByName("main").jniLibs.directories.apply {
             clear()
             add(swiftCoreJniLibsRoot.get().asFile.absolutePath)
@@ -99,26 +115,6 @@ val sourceRevisionField =
             com.android.build.api.variant.BuildConfigField("String", "\"$value\"", "git source revision")
         }
 
-// Non-empty SENTRY_DSN_ANDROID wins; otherwise the ignored repo-root .local/reliability.properties.
-val sentryDsnAndroidField =
-    providers.environmentVariable("SENTRY_DSN_ANDROID")
-        .orElse("")
-        .zip(
-            providers.of(LocalReliabilityDsnValueSource::class.java) {
-                parameters.propertiesFile.set(
-                    repositoryRoot.resolve(".local/reliability.properties"),
-                )
-            },
-        ) { env, file ->
-            val raw = env.trim().ifEmpty { file.trim() }
-            val escaped = raw.replace("\\", "\\\\").replace("\"", "\\\"")
-            com.android.build.api.variant.BuildConfigField(
-                "String",
-                "\"$escaped\"",
-                "optional Sentry Android DSN",
-            )
-        }
-
 // Windows CPython installs put `python` on PATH and no `python3`. `PYTHON` overrides both.
 val pythonExecutable: Provider<String> =
     providers.environmentVariable("PYTHON").orElse(
@@ -130,12 +126,12 @@ val pythonExecutable: Provider<String> =
 androidComponents {
     onVariants { variant ->
         variant.buildConfigFields?.put("SOURCE_REVISION", sourceRevisionField)
-        variant.buildConfigFields?.put("SENTRY_DSN_ANDROID", sentryDsnAndroidField)
         val identity = providers.exec {
             workingDir = repositoryRoot
             commandLine(
-                pythonExecutable.get(), repositoryRoot.resolve("tools/build-identity.py").absolutePath,
-                "--platform", "android", "--configuration",
+                pythonExecutable.get(),
+                repositoryRoot.resolve("../OpenCine/scripts/sentry/build-identity.py").absolutePath,
+                "--root", repositoryRoot.absolutePath, "--platform", "android", "--configuration",
                 "${variant.name}-$resolvedVersionName-$resolvedVersionCode-${gradle.gradleVersion}",
             )
         }.standardOutput.asText.map { value ->
@@ -189,6 +185,7 @@ val stageSwiftCore =
     }
 
 tasks.named("preBuild").configure {
+    dependsOn(stageLegalResources)
     dependsOn(stageSwiftCore)
 }
 
@@ -209,10 +206,13 @@ dependencies {
     implementation(libs.opencine.appkit)
     // Capture sheets, live chrome and gimbal views over the camera vocabulary (camera-controls).
     implementation("com.opencapture.opencine:camera-controls:0.1.0-SNAPSHOT")
+    implementation("com.opencapture.opencine:appkit-native:0.1.0-SNAPSHOT")
     api(libs.opencine.monitor.ui)
     implementation("com.opencapture.opencine:media:0.1.0-SNAPSHOT")
     implementation("com.opencapture.opencine:camera-vocabulary:0.1.0-SNAPSHOT")
     implementation("com.opencapture.opencine:native-runtime:0.1.0-SNAPSHOT")
+    // Shared Media3 player recipe, port, audio meter tap and playback owner.
+    implementation("com.opencapture.opencine:media3:0.1.0-SNAPSHOT")
     implementation("com.opencapture.opencine:platform:0.1.0-SNAPSHOT")
     // Live-view MediaCodec decoder (HevcDecoder), shared with OpenPocketCine.
     implementation("com.opencapture.opencine:decoder:0.1.0-SNAPSHOT")
@@ -234,11 +234,15 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.okhttp)
     implementation(libs.mlkit.face.detection)
-    implementation(libs.sentry.android)
+    // The shared reporting adapter: appkit's reporting sink, transport and problem report upload on
+    // the Sentry SDK (sentry-android comes with it, at the version OpenCine pins).
+    implementation("com.opencapture.opencine:appkit-sentry:0.1.0-SNAPSHOT")
 
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:core:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
+    // Its manifest registers the run listener that keeps Android's full screen tutorial off.
+    androidTestImplementation("com.opencapture.opencine:system-hints-testing:0.1.0-SNAPSHOT")
     androidTestImplementation(libs.kotlin.test.junit)
     androidTestImplementation(testFixtures("com.opencapture.opencine:core:0.1.0-SNAPSHOT"))
 
@@ -247,7 +251,6 @@ dependencies {
     testImplementation("com.opencapture.opencine:dji:0.1.0-SNAPSHOT")
     testImplementation(libs.json)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.okhttp.mockwebserver)
 }
 
 // Existing dependency catalog asks for SDK 37, which is not in the installed SDK
@@ -263,20 +266,7 @@ listOf("Debug", "Release").forEach { variant ->
         .configureEach { dependsOn(prepare) }
 }
 
-abstract class LocalReliabilityDsnValueSource :
-    ValueSource<String, LocalReliabilityDsnValueSource.Params> {
-    interface Params : ValueSourceParameters {
-        @get:org.gradle.api.tasks.Optional
-        @get:InputFile
-        @get:PathSensitive(PathSensitivity.NONE)
-        val propertiesFile: RegularFileProperty
-    }
-
-    override fun obtain(): String {
-        val file = parameters.propertiesFile.orNull?.asFile ?: return ""
-        if (!file.isFile) return ""
-        val props = Properties()
-        file.inputStream().use { props.load(it) }
-        return props.getProperty("SENTRY_DSN_ANDROID")?.trim().orEmpty()
-    }
+// Legal tests compare the staged pages with the repository files themselves.
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    systemProperty("openinstacine.repositoryRoot", repositoryRoot.absolutePath)
 }

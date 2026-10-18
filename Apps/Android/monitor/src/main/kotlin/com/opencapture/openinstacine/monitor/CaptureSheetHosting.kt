@@ -3,11 +3,13 @@ package com.opencapture.openinstacine.monitor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import com.opencapture.opencine.appkit.MonitorCaptureDrum
 import com.opencapture.opencine.appkit.MonitorCaptureField
 import com.opencapture.opencine.appkit.MonitorCapturePresentation
 import com.opencapture.opencine.appkit.captureField
 import com.opencapture.opencine.cameracontrols.CaptureDrumWheel
+import com.opencapture.opencine.cameracontrols.LadderSheet
+import com.opencapture.opencine.cameracontrols.LadderSheetHost
+import com.opencapture.opencine.cameracontrols.LadderSheetDrum
 import com.opencapture.opencine.cameracontrols.CaptureLists
 import com.opencapture.opencine.cameracontrols.CaptureRefresh
 import com.opencapture.opencine.cameracontrols.CaptureWheelState
@@ -22,6 +24,7 @@ import com.opencapture.opencine.vocabulary.CameraCommands
 import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.opencine.vocabulary.CaptureSessionState
 import com.opencapture.opencine.vocabulary.CaptureSetting
+import com.opencapture.opencine.vocabulary.ControlCapabilities
 
 /** ISO, shutter and white balance open through Core; EV and focus stay typed. */
 internal fun captureSettingKey(sheet: LiveSheet): SettingKey? = when (sheet) {
@@ -32,35 +35,33 @@ internal fun captureSettingKey(sheet: LiveSheet): SettingKey? = when (sheet) {
 }
 
 /**
- * The capture session state from the session's locks and format pin, the body's focus mode support
- * and the session's native ISO hop capability. The aperture rows draw whenever the APERTURE sheet is
- * open (the live view closes that sheet for a body without aperture). Read when the sheet reads them.
+ * Locks and the expiring format pin stay session facts. Every camera support projection reads
+ * [controls], including before connection; the integration owns its known-model declaration.
  */
 internal fun instaCaptureSessionState(
     aeLock: () -> Any?,
     awbLockKelvin: () -> Int?,
     awbLockOffered: () -> Boolean,
     formatPinned: () -> Boolean,
-    focusModeSupported: () -> Boolean,
-    nativeIsoHopSupported: () -> Boolean,
-    irisSupported: () -> Boolean = { false },
+    controls: () -> ControlCapabilities,
 ): CaptureSessionState = object : CaptureSessionState {
     override val aeLocked get() = aeLock() != null
     override val awbLockKelvin get() = awbLockKelvin()
     override val awbLockOffered get() = awbLockOffered()
     override val formatPinned get() = formatPinned()
-    override val focusModeSupported get() = focusModeSupported()
-    override val irisSupported get() = irisSupported()
-    override val nativeIsoHopSupported get() = nativeIsoHopSupported()
+    override val controlCapabilities get() = controls()
 }
 
 @Composable
 internal fun AppModel.observedCaptureSessionState(status: CameraStatus): CaptureSessionState {
     val aeLock by session.aeLock.collectAsState()
     val awbLock by session.awbLockKelvin.collectAsState()
+    // `nativeCaptureQuick` builds the format and colour quick choices from these reports. The strip,
+    // drawer and sheets that ask for them read this state, so observing the reports here recomposes
+    // each of them when the camera or an operator choice changes a native value.
+    listOf(session.nativeFormat, session.nativeFormats, session.nativeColor).forEach { it.collectAsState().value }
     return instaCaptureSessionState({ aeLock }, { awbLock }, { session.autoWhiteBalanceLock(status) != null },
-        { session.isFormatPinActive }, { CaptureLists.supportsFocusModeOrDefault(session.connectedCamera?.model) },
-        { session.supportsNativeIsoHop }, { camera?.captureProfile?.supportsAperture == true })
+        { session.isFormatPinActive }, controls = session::controlCapabilities)
 }
 
 /** The Core drum for ISO, shutter and white balance Kelvin; EV is its own wheel on the typed path. */
@@ -83,7 +84,13 @@ internal fun AppModel.InstaCommonDrum(sheet: LiveSheet, status: CameraStatus, fi
                 else -> false
             }
         }
-        MonitorCaptureDrum(session.control, field, enabled = enabled, choices = manual)
+        LadderSheet(
+            presentation = com.opencapture.opencine.vocabulary.LadderSheetPresentation("", "", listOf(
+                com.opencapture.opencine.vocabulary.LadderTab("", sheet,
+                    com.opencapture.opencine.vocabulary.CaptureLadder(field.label, manual.map { it.label }),
+                    applyOnActivate = false))),
+            enabled = enabled, onWrite = {}, onClose = {}, control = session.control, chromeless = true,
+            host = LadderSheetHost(0, field.label, LadderSheetDrum.Field(field, manual), onSelectTab = {}))
     }
 }
 

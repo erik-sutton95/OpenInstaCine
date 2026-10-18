@@ -15,7 +15,8 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.opencapture.openinstacine.monitor.assists.AssistOptionsPopup
+import com.opencapture.opencine.cameracontrols.AssistOptionsPanel
+import com.opencapture.openinstacine.monitor.assists.AppAssistHost
 import com.opencapture.opencine.media.MonitorCrushClipCompensation
 import com.opencapture.openinstacine.monitor.assists.LiveAssistState
 import com.opencapture.monitorui.MonitorAssistTool
@@ -23,6 +24,7 @@ import com.opencapture.opencine.media.MonitorPeakingColor
 import com.opencapture.monitorui.MonitorWaveformMode
 import com.opencapture.monitorui.MonitorZebraUnit
 import com.opencapture.monitorui.MonitorAudioOrientation
+import java.io.File
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -32,6 +34,9 @@ import org.junit.runner.RunWith
 /** SIMULATED values with native input into the app's actual shared tuning menus. */
 @RunWith(AndroidJUnit4::class)
 class ScopeTuningInputTest {
+    /** Diagnosis only: the identities this test mounted, in order, for a timeout capture. */
+    private val mounts = mutableListOf<String>()
+
     @Test fun waveformSelectionBrightnessAndGuideInputReachTheirCurrentBindings() {
         val state = LiveAssistState()
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
@@ -128,10 +133,11 @@ class ScopeTuningInputTest {
     private fun mount(scenario: ActivityScenario<BackdropRenderActivity>, tool: MonitorAssistTool,
         state: LiveAssistState): String {
         val identity = "scope-tuning-${UUID.randomUUID()}"
+        mounts += "$identity:${tool.name}"
         scenario.onActivity { activity ->
             activity.setContent {
                 Box(Modifier.fillMaxSize().testTag(identity).semantics { testTagsAsResourceId = true }) {
-                    AssistOptionsPopup(tool, state, {}, embedded = true)
+                    AssistOptionsPanel(tool, state, {}, AppAssistHost, embedded = true)
                 }
             }
         }
@@ -154,7 +160,54 @@ class ScopeTuningInputTest {
             fixture?.let { find(it, matches)?.let { found -> return found } }
             SystemClock.sleep(60)
         }
+        captureFailure(identity)
         error("No current tuning node in $identity")
+    }
+
+    /**
+     * Diagnosis only: retains the tree the unchanged route observed when it times out. It runs after
+     * the original deadline, changes no wait or assertion, and can never replace the original failure.
+     */
+    private fun captureFailure(identity: String) {
+        runCatching {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            val root = instrumentation.uiAutomation.rootInActiveWindow
+            fun collect(node: AccessibilityNodeInfo, found: MutableList<String>) {
+                node.viewIdResourceName?.let(found::add)
+                for (index in 0 until node.childCount) node.getChild(index)?.let { collect(it, found) }
+            }
+            fun dump(node: AccessibilityNodeInfo, depth: Int, out: StringBuilder) {
+                val bounds = Rect().also(node::getBoundsInScreen)
+                out.appendLine("  ".repeat(depth) + listOf(
+                    node.className?.toString().orEmpty(),
+                    "id=" + node.viewIdResourceName,
+                    "desc=" + node.contentDescription,
+                    "text=" + node.text,
+                    "bounds=$bounds",
+                    "visible=${node.isVisibleToUser}",
+                    "enabled=${node.isEnabled}",
+                    "selected=${node.isSelected}",
+                    "clickable=${node.isClickable}",
+                ).joinToString(" "))
+                for (index in 0 until node.childCount) node.getChild(index)?.let { dump(it, depth + 1, out) }
+            }
+            val resourceIds = mutableListOf<String>()
+            root?.let { collect(it, resourceIds) }
+            val text = buildString {
+                appendLine("scope-tuning-failure")
+                appendLine("requested=$identity")
+                appendLine("mounts=$mounts")
+                appendLine("resourceIds=$resourceIds")
+                appendLine("windows=" + instrumentation.uiAutomation.windows.joinToString { window ->
+                    "${window.type}:active=${window.isActive}:focused=${window.isFocused}:" +
+                        "${window.root?.packageName}/${window.root?.className}"
+                })
+                appendLine("root=${root?.packageName}/${root?.className}")
+                root?.let { dump(it, 0, this) }
+            }
+            android.util.Log.e("ScopeTuningInput", text)
+            File(instrumentation.targetContext.filesDir, "scope-tuning-failure.txt").writeText(text)
+        }.onFailure { android.util.Log.e("ScopeTuningInput", "capture failed", it) }
     }
 
     private fun tap(node: AccessibilityNodeInfo) {

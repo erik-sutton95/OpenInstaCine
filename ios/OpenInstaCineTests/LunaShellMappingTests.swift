@@ -1,3 +1,4 @@
+import Insta360Apple
 import Insta360Protocol
 import OpenCineCameraControls
 import OpenCineCore
@@ -18,6 +19,19 @@ final class LunaShellMappingTests: XCTestCase {
         // Round trip: the SET value for a shown format is the value the camera reported.
         let fourK25 = try XCTUnwrap(table.first { $0.key.chipLabel == "4K · 25p" })
         XCTAssertEqual(fourK25.value, 48)
+    }
+
+    /// A5-11: CameraStatus storage fields are MiB (the DJI wire unit); 60e9 free of 128e9 bytes.
+    func testStorageIsPublishedInTheUnitTheStatusFieldMeans() throws {
+        let volume = try ProtoMessage.integer(field: 2, value: 60_000_000_000)
+            + ProtoMessage.integer(field: 3, value: 128_000_000_000)
+            + ProtoMessage.integer(field: 4, value: 2)
+        let device = try LunaDeviceStatus(
+            response: ProtoMessage.blob(field: 2, value: ProtoMessage.blob(field: 176, value: volume)))
+        var status = CameraStatus()
+        LunaShellMapping.apply(device: device, to: &status)
+        XCTAssertEqual(status.storageFreeMb, 57_220)
+        XCTAssertEqual(status.storageTotalMb, 122_070)
     }
 
     /// ISO steps exactly as on Insta main, which always sorted the list by value. The shared
@@ -139,16 +153,19 @@ final class LunaShellMappingTests: XCTestCase {
         XCTAssertNil(CaptureLists.focusOption(from: status))
     }
 
-    func testTimeOfDayTimecode() {
+    func testTimeOfDayTimecodeHasSecondsPrecisionWithoutAFabricatedFrame() {
         // 2026-09-30 08:51:10.54 UTC, Stockholm (UTC+2).
         let t = 1_790_758_270.54
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 25), "10:51:10:13")
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 30), "10:51:10:16")
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 50), "10:51:10:13")
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: t, timeZoneSeconds: 7200, fps: 120), "10:51:10:16")
+        XCTAssertEqual(
+            LunaFrameTimecode.timecode(unixSeconds: t, timeZoneSeconds: 7200),
+            CameraTimecodeReading(hours: 10, minutes: 51, seconds: 10))
         // Wraps at midnight, west of GMT too.
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: 86_399.99, timeZoneSeconds: 0, fps: 24), "23:59:59:23")
-        XCTAssertEqual(LunaShellMapping.timecode(unixSeconds: 3600, timeZoneSeconds: -7200, fps: 24), "23:00:00:00")
+        XCTAssertEqual(
+            LunaFrameTimecode.timecode(unixSeconds: 86_399.99, timeZoneSeconds: 0),
+            CameraTimecodeReading(hours: 23, minutes: 59, seconds: 59))
+        XCTAssertEqual(
+            LunaFrameTimecode.timecode(unixSeconds: 3600, timeZoneSeconds: -7200),
+            CameraTimecodeReading(hours: 23, minutes: 0, seconds: 0))
     }
 
     func testInsta360FilenameDates() {

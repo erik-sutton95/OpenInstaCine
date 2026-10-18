@@ -50,6 +50,26 @@ final class WatcherTapAuthorityTests: XCTestCase {
   }
 
   @MainActor
+    func testNativeControlsPreserveWireCommandsAndControlAdmission() throws {
+        let log = WatcherTapWireLog()
+        let client = makeClient(log)
+        func controls() {
+            client.toggleRecording()
+            client.setISO(4)
+            client.setShutterDenominator(120)
+            client.setZoom(250)
+        }
+        controls()
+        XCTAssertEqual(try log.packets.map(command), [
+            .toggleRecording, .setISO(4), .setShutterDenom(120), .setZoom(250),
+        ])
+        log.packets.removeAll()
+        client.token = .init(holderName: "Host", holderIsRecipient: false)
+        controls()
+        XCTAssertTrue(log.packets.isEmpty)
+    }
+
+    @MainActor
   func testCurrentTapPreservesMirroredFlippedCoordinatesAndExactWireFrame() throws {
     let log = WatcherTapWireLog()
     let client = makeClient(log)

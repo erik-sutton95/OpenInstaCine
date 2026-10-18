@@ -1,6 +1,9 @@
 import Foundation
+import Insta360Apple
+import Insta360Protocol
 import OpenCineCore
 import OpenCineAppKit
+import OpenCineHostedTestSupport
 import OpenCineMedia
 import OpenInstaViewCore
 import XCTest
@@ -34,6 +37,24 @@ import XCTest
     func openBrowse() async -> any CameraMediaBrowse { opens += 1; return browse }
 }
 
+/// SIMULATED: immutable metadata captured at the real catalog codec boundary.
+@MainActor private final class GammaCatalogRecordSource: LunaMediaCatalogRecordSource {
+    let binding = MediaBrowseBinding(session: .init(), epoch: .init(1))
+    let record: LunaMediaCatalogRecord
+
+    init(label: String?) throws {
+        var bytes = try ProtoMessage.integer(field: 9, value: 4)
+        if let label { bytes += try ProtoMessage.blob(field: 22, value: Data(label.utf8)) }
+        record = .init(
+            asset: .init("SIMULATED-gamma"),
+            file: .init(uri: "/DCIM/SIMULATED-gamma.MP4", metadata: try LunaFileMetadata(bytes)))
+    }
+
+    func mediaCatalogRecord(_ asset: MediaAssetID, binding: MediaBrowseBinding) -> LunaMediaCatalogRecord? {
+        self.binding == binding && record.asset == asset ? record : nil
+    }
+}
+
 @MainActor private final class GalleryPlaybackPort: MonitorPlaybackPort {
     var onEvent: (@MainActor @Sendable (MonitorPlaybackItemToken, MonitorPlaybackEvent) -> Void)?
     var prepared: [MonitorPlaybackItem] = []
@@ -61,9 +82,9 @@ import XCTest
         OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder(),
             cameraMedia: CameraMedia(storage: storage, cacheRoot: root), controlsOnly: true)
     }
-    private func settle(_ condition: () -> Bool) async {
-        for _ in 0..<500 where !condition() { await Task.yield() }
-        XCTAssertTrue(condition(), "The owned operation did not settle")
+    private func settle(_ condition: @MainActor @Sendable () -> Bool) async {
+        let held = await HostedCondition.wait(until: condition)
+        XCTAssertTrue(held, "The owned operation did not settle")
     }
     private func seedPlayback(_ session: OpenInstaCine.CameraSession) throws -> MediaFile {
         let file = MediaFile(path: "/DCIM/VID_fixture.MP4", thumbPath: "", sizeBytes: 4, durationSeconds: 2,
@@ -75,6 +96,81 @@ import XCTest
         for address in record.address.representations.values { try directory.write(Data([1, 2, 3, 4]), at: address) }
         session.resetMediaSession()
         return file
+    }
+
+    /// SIMULATED: both real consumers preserve the original aliases, priority and unknowns.
+    func testActualCatalogAndPlaybackAgreeOnCapturedGammaMetadata() async throws {
+        let cases: [(String?, ColorMode?)] = [
+            ("I-Log", .iLog), ("ilog", .iLog), ("LOG HDR", .iLog),
+            ("Dolby Vision", .dolbyVision), ("HDR", .dolbyVision),
+            ("Standard", .normal), ("VIVID", .normal), ("standard vivid", .normal),
+            (nil, nil), ("", nil), ("flat", nil), ("unknown", nil),
+        ]
+        for (label, expected) in cases {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let current = session(root: root, storage: MonitorMediaCacheStorage())
+            defer {
+                current.endMediaBrowse()
+                current.decoder.close()
+                try? FileManager.default.removeItem(at: root)
+            }
+            let source = try GammaCatalogRecordSource(label: label)
+            let codec = LunaMediaCatalogCodec(source: source, shotColor: { _ in nil })
+            let asset = MediaAsset(
+                id: source.record.asset, filename: "SIMULATED-gamma.MP4", durationSeconds: 2,
+                representations: [.init(id: .init("original"), role: .original, byteCount: 4)])
+            let record = try codec.capture(asset, binding: source.binding)
+            XCTAssertEqual(record.facts.color, expected.map { String($0.rawValue) }, "Catalog: \(label ?? "nil")")
+
+            let library = try XCTUnwrap(current.mediaLibrary)
+            try library.applyLocalRecords(.init(resetLibrary: true, upserts: [record]), token: library.actionToken)
+            for address in record.address.representations.values {
+                try library.cache.directory.write(Data([1, 2, 3, 4]), at: address)
+            }
+            current.beginMediaBrowse()
+            let native = GalleryPlaybackPort()
+            let playback = current.makeMediaPlayback(native: native, previousColor: { .normal })
+            defer { playback.close() }
+            playback.load(record, playlist: [record])
+            await settle { playback.ready && playback.look != nil }
+            XCTAssertEqual(playback.look?.source.shotColor, expected, "Playback: \(label ?? "nil")")
+            XCTAssertEqual(native.prepared.count, 1)
+            XCTAssertEqual(playback.look?.source.file, record.payload.file)
+            XCTAssertEqual(record.payload.source?.metadata?.gammaMode, label)
+        }
+    }
+
+    /// SIMULATED: an observed shot color still takes precedence over fallback metadata.
+    func testActualConsumersKeepShotColorAheadOfGammaMetadata() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let current = session(root: root, storage: MonitorMediaCacheStorage())
+        defer {
+            current.endMediaBrowse()
+            current.decoder.close()
+            try? FileManager.default.removeItem(at: root)
+        }
+        let source = try GammaCatalogRecordSource(label: "standard")
+        let codec = LunaMediaCatalogCodec(source: source, shotColor: { _ in .iLog })
+        let asset = MediaAsset(
+            id: source.record.asset, filename: "SIMULATED-gamma.MP4", durationSeconds: 2,
+            representations: [.init(id: .init("original"), role: .original, byteCount: 4)])
+        let record = try codec.capture(asset, binding: source.binding)
+        XCTAssertEqual(record.facts.color, String(ColorMode.iLog.rawValue))
+        current.cameraMedia.rememberShotColor(
+            .iLog, path: record.payload.file.path, cameraID: current.mediaCameraID)
+        let library = try XCTUnwrap(current.mediaLibrary)
+        try library.applyLocalRecords(.init(resetLibrary: true, upserts: [record]), token: library.actionToken)
+        for address in record.address.representations.values {
+            try library.cache.directory.write(Data([1, 2, 3, 4]), at: address)
+        }
+        current.beginMediaBrowse()
+        let native = GalleryPlaybackPort()
+        let playback = current.makeMediaPlayback(native: native, previousColor: { .normal })
+        defer { playback.close() }
+        playback.load(record, playlist: [record])
+        await settle { playback.ready && playback.look != nil }
+        XCTAssertEqual(playback.look?.source.shotColor, .iLog)
+        XCTAssertEqual(playback.look?.source.color, .iLog)
     }
     func testActualPlaybackFactoryPrefersCachedProxyAndBorrowsTheGallery() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

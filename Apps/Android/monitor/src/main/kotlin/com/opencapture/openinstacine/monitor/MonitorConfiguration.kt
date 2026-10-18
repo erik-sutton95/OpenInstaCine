@@ -19,5 +19,9 @@ object MonitorConfiguration {
         LutCatalog.configureCameraLooks(cameraLooks)
         factory = backend
     }
+    /** Debug review only: replaces the installed backend, keeping the brand and camera looks. */
+    internal fun replaceBackend(backend: (Context) -> CameraBackend) {
+        factory = backend
+    }
     fun createBackend(context: Context): CameraBackend = checkNotNull(factory) { "Brand launcher must install a camera backend" }(context)
 }

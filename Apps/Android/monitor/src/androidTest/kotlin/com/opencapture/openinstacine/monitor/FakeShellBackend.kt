@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
  * A live Luna-shaped shell backend for session facade tests: records every control call with its
  * time and answers [accepts]; frames, track frames and notices are emitted by the test.
  */
-internal class FakeShellBackend(
+internal open class FakeShellBackend(
     override val capabilities: Set<CameraCapability> = setOf(
         CameraCapability.LIVE_VIDEO, CameraCapability.CAMERA_SETTINGS, CameraCapability.GIMBAL,
         CameraCapability.FOCUS, CameraCapability.TRACKING,
@@ -55,8 +55,12 @@ internal class FakeShellBackend(
     override val joinedSSID = MutableStateFlow<String?>(null)
     val frameFlow = MutableSharedFlow<EncodedVideoFrame>(extraBufferCapacity = 64)
     override val frames = frameFlow
+    @Volatile var frameGeneration: Long? = null
+    override val frameConnectionGeneration: Long? get() = frameGeneration
+    val connectCalls = CopyOnWriteArrayList<String>()
+    var onConnect: ((String) -> Unit)? = null
     override fun startScan() {}
-    override fun connect(id: String) {}
+    override fun connect(id: String) { connectCalls += id; onConnect?.invoke(id) }
     override fun disconnect() {}
     override fun close() {}
     override fun sceneActive(active: Boolean) {}
@@ -116,13 +120,16 @@ internal fun waitUntil(timeoutMs: Long = 5_000, predicate: () -> Boolean): Boole
  * A facade over [backend], as the brand launcher would build it. The process keeps the brand's own
  * Luna composition installed afterwards, as the other instrumented tests leave it.
  */
-internal fun liveSession(backend: FakeShellBackend): PocketCameraSession {
+internal fun liveSession(
+    backend: FakeShellBackend,
+    incidents: com.opencapture.opencine.media.FeedIncidentSink = RecordingFeedIncidentSink(),
+): PocketCameraSession {
     MonitorConfiguration.install(MonitorConfiguration.identity) { backend }
     try {
-        return onMain { PocketCameraSession(InstrumentationRegistry.getInstrumentation().targetContext) }
+        return onMain { PocketCameraSession(InstrumentationRegistry.getInstrumentation().targetContext, incidents) }
     } finally {
         MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
-            val wifi = com.opencapture.openinstacine.monitor.pairing.CameraWifiCredentialStore(context)
+            val wifi = com.opencapture.opencine.platform.CameraWifiCredentialStore(context, com.opencapture.openinstacine.monitor.pairing.cameraWifiStorage)
             com.opencapture.opencine.insta360.luna.LunaBackend(context,
                 savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
         }

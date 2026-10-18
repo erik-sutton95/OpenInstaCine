@@ -1,6 +1,9 @@
 package com.opencapture.openinstacine.monitor
 
 import android.os.SystemClock
+import android.os.Build
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import android.os.Bundle
 import android.graphics.Rect
 import android.view.MotionEvent
@@ -36,12 +39,24 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.math.min
+import com.opencapture.monitorui.LiveMonitorLayout
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /** Production editor lifecycle and accessibility actions, without sending camera commands. */
 @RunWith(AndroidJUnit4::class)
 class MotionProgramSessionTest {
+    @Before fun installInstaBackend() {
+        // Library instrumentation runs in its own package, without the brand launcher.
+        // Use the launcher's real backend; the test requests no camera connection.
+        MonitorConfiguration.install(MonitorConfiguration.identity) { context ->
+            val wifi = com.opencapture.opencine.platform.CameraWifiCredentialStore(context, com.opencapture.openinstacine.monitor.pairing.cameraWifiStorage)
+            com.opencapture.opencine.insta360.luna.LunaBackend(context,
+                savedWifi = wifi::load, saveWifi = wifi::save, forgetWifi = wifi::remove)
+        }
+    }
+
     private val program = GimbalProgram(
         a = GimbalWaypoint(0.0, 0.0, 1.0, 175.0),
         b = GimbalWaypoint(30.0, 0.0, 1.0, 175.0),
@@ -54,7 +69,7 @@ class MotionProgramSessionTest {
         ActivityScenario.launch(BackdropRenderActivity::class.java).use { scenario ->
             var model: AppModel? = null
             try {
-                scenario.onActivity { activity ->
+                scenario.onReadyActivity { activity ->
                     val app = AppModel(activity)
                     model = app
                     seed(app.session, "_gimbalProgram", program)
@@ -70,7 +85,7 @@ class MotionProgramSessionTest {
                 scrollToEnd()
                 assertTrue(node("motion.loop").isChecked)
                 click("motion.close")
-                scenario.onActivity {
+                scenario.onReadyActivity {
                     assertEquals(LiveGimbalPanel.NONE, model!!.liveGimbalPanel)
                     assertEquals(program, model!!.session.gimbalProgram.value)
                     model!!.liveGimbalPanel = LiveGimbalPanel.EDITOR
@@ -78,11 +93,11 @@ class MotionProgramSessionTest {
                 scrollToEnd()
                 assertTrue(node("motion.loop").isChecked)
                 click("motion.loop")
-                scenario.onActivity { assertEquals(program.copy(loop = false), model!!.session.gimbalProgram.value) }
+                scenario.onReadyActivity { assertEquals(program.copy(loop = false), model!!.session.gimbalProgram.value) }
                 click("motion.loop")
 
                 for (state in listOf("countdown", "running", "paused")) {
-                    scenario.onActivity {
+                    scenario.onReadyActivity {
                         seedMove(model!!.session, countdown = if (state == "countdown") 2 else null, paused = state == "paused")
                         if (state != "paused") {
                             model!!.session.restartProgrammedMove()
@@ -93,7 +108,7 @@ class MotionProgramSessionTest {
                     }
                     assertFalse(node("motion.loop") { !it.isEnabled }.isEnabled, "Loop is fixed during $state")
                     click("motion.close")
-                    scenario.onActivity {
+                    scenario.onReadyActivity {
                         assertEquals(LiveGimbalPanel.RUN_PILL, model!!.liveGimbalPanel)
                         assertEquals(program, model!!.session.gimbalProgram.value)
                     }
@@ -105,9 +120,9 @@ class MotionProgramSessionTest {
 
                 // The production shared owner's operation replaces the donor's missing moveToken field.
                 val token = { moveOwner(model!!.session).state.value.operation }
-                scenario.onActivity { assertTrue(token() != null) }
+                scenario.onReadyActivity { assertTrue(token() != null) }
                 click("motion.restart")
-                scenario.onActivity {
+                scenario.onReadyActivity {
                     // No connected camera: the existing Start guards prevent a new countdown,
                     // after Restart has retired the paused continuation without clearing its program.
                     assertFalse(model!!.session.gimbalMoveRunning.value)
@@ -119,13 +134,13 @@ class MotionProgramSessionTest {
                     assertFalse(model!!.session.gimbalMoveRunning.value, "Restart is ignored while idle")
                 }
                 click("motion.clear")
-                scenario.onActivity {
+                scenario.onReadyActivity {
                     assertEquals(GimbalProgram(durationAB = 3.5, durationBC = 6.5),
                         model!!.session.gimbalProgram.value)
                 }
                 assertFalse(node("motion.loop") { !it.isChecked }.isChecked)
             } finally {
-                scenario.onActivity { model?.close() }
+                scenario.onReadyActivity { it.setContent { }; model?.close() }
             }
         }
     }
@@ -137,7 +152,7 @@ class MotionProgramSessionTest {
             var heightLimit by mutableFloatStateOf(420f)
             var maximumHeightPx = 0f
             try {
-                scenario.onActivity { activity ->
+                scenario.onReadyActivity { activity ->
                     val app = AppModel(activity)
                     model = app
                     seed(app.session, "_gimbalProgram", program)
@@ -155,7 +170,7 @@ class MotionProgramSessionTest {
                     }
                 }
                 for (height in listOf(420f, 280f)) {
-                    scenario.onActivity {
+                    scenario.onReadyActivity {
                         heightLimit = height
                         seedMove(model!!.session, paused = true)
                     }
@@ -178,15 +193,15 @@ class MotionProgramSessionTest {
                     assertEquals(resume, bounds(node("motion.pauseResume")))
                     assertEquals(restart, bounds(node("motion.restart")))
                     assertTrue(node("motion.loop").isVisibleToUser)
-                    scenario.onActivity {
+                    scenario.onReadyActivity {
                         assertEquals(null, model!!.gimbalFloatCenter, "Settings scroll must not drag the window")
                         assertEquals(program, model!!.session.gimbalProgram.value)
                     }
                     click("motion.startStop")
-                    scenario.onActivity { assertFalse(model!!.session.gimbalMoveRunning.value) }
+                    scenario.onReadyActivity { assertFalse(model!!.session.gimbalMoveRunning.value) }
                 }
             } finally {
-                scenario.onActivity { model?.close() }
+                scenario.onReadyActivity { it.setContent { }; model?.close() }
             }
         }
     }
@@ -201,7 +216,7 @@ class MotionProgramSessionTest {
             var portrait = true
             val dialValues = mutableListOf<Double>()
             try {
-                scenario.onActivity { activity ->
+                scenario.onReadyActivity { activity ->
                     val app = AppModel(activity)
                     model = app
                     seed(app.session, "_gimbalProgram", program)
@@ -228,10 +243,10 @@ class MotionProgramSessionTest {
                 val chip = bounds(node("live.zoom"))
                 assertFalse(Rect.intersects(bounds(node("motion.editor")), chip),
                     "The default editor must expose the production zoom chip without a manual move")
-                scenario.onActivity { assertEquals(null, model!!.gimbalFloatCenter) }
+                scenario.onReadyActivity { assertEquals(null, model!!.gimbalFloatCenter) }
                 pointerPress(chip, 40)
                 SystemClock.sleep(400)
-                scenario.onActivity {
+                scenario.onReadyActivity {
                     assertEquals(1, taps)
                     assertEquals(LiveGimbalPanel.EDITOR, model!!.liveGimbalPanel)
                 }
@@ -239,22 +254,22 @@ class MotionProgramSessionTest {
                 SystemClock.sleep(70)
                 pointerPress(chip, 30)
                 SystemClock.sleep(400)
-                scenario.onActivity {
+                scenario.onReadyActivity {
                     assertEquals(1, doubleTaps)
                     assertEquals(1, taps, "Double tap must keep its separate zoom action")
                     assertEquals(LiveGimbalPanel.EDITOR, model!!.liveGimbalPanel)
                 }
                 pointerPress(chip, 650)
                 val disc = zoomDiscNode()
-                scenario.onActivity { assertEquals(LiveGimbalPanel.EDITOR, model!!.liveGimbalPanel) }
+                scenario.onReadyActivity { assertEquals(LiveGimbalPanel.EDITOR, model!!.liveGimbalPanel) }
                 assertTrue(disc.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id,
                     Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, .42f) }))
-                InstrumentationRegistry.getInstrumentation().waitForIdleSync()
-                scenario.onActivity { assertTrue(dialValues.isNotEmpty(), "The disc must own input above the full editor") }
+                InstrumentationRegistry.getInstrumentation().runOnMainSync { }
+                scenario.onReadyActivity { assertTrue(dialValues.isNotEmpty(), "The disc must own input above the full editor") }
                 val close = disc.actionList.first { it.label?.toString() == "Close zoom" }
                 assertTrue(disc.performAction(close.id))
                 assertTrue(node("motion.close").isVisibleToUser)
-                scenario.onActivity {
+                scenario.onReadyActivity {
                     assertEquals(1, dialEnds)
                     assertEquals(LiveGimbalPanel.EDITOR, model!!.liveGimbalPanel)
                     assertEquals(program, model!!.session.gimbalProgram.value)
@@ -269,14 +284,14 @@ class MotionProgramSessionTest {
                 val duringDrag = bounds(node("motion.editor") { bounds(it) != beforeDrag })
                 if (portrait) assertTrue(duringDrag.bottom > chip.top,
                     "The first drag may cross the default zoom boundary before release")
-                scenario.onActivity { assertEquals(null, model!!.gimbalFloatCenter) }
+                scenario.onReadyActivity { assertEquals(null, model!!.gimbalFloatCenter) }
                 pointerEvent(MotionEvent.ACTION_UP, targetX, targetY, down)
                 val afterDrag = bounds(node("motion.editor"))
                 assertEquals(beforeDrag.height(), duringDrag.height())
                 assertEquals(beforeDrag.height(), afterDrag.height(), "First release must not grow the editor")
-                scenario.onActivity { assertTrue(model!!.gimbalFloatCenter != null) }
+                scenario.onReadyActivity { assertTrue(model!!.gimbalFloatCenter != null) }
             } finally {
-                scenario.onActivity { model?.close() }
+                scenario.onReadyActivity { it.setContent { }; model?.close() }
             }
         }
     }
@@ -289,7 +304,7 @@ class MotionProgramSessionTest {
             pointerEvent(action, rect.exactCenterX(), rect.exactCenterY(), down)
             if (action == MotionEvent.ACTION_DOWN) SystemClock.sleep(durationMs)
         }
-        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync { }
     }
 
     private fun pointerEvent(action: Int, x: Float, y: Float, down: Long) {
@@ -311,7 +326,7 @@ class MotionProgramSessionTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val deadline = SystemClock.uptimeMillis() + 5_000
         while (SystemClock.uptimeMillis() < deadline) {
-            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync { }
             instrumentation.uiAutomation.rootInActiveWindow?.let(::findDisc)?.let { return it }
             SystemClock.sleep(80)
         }
@@ -323,7 +338,7 @@ class MotionProgramSessionTest {
             val settings = node("motion.settings")
             if (state(settings) != "More settings below") return
             assertTrue(settings.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD))
-            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+            InstrumentationRegistry.getInstrumentation().runOnMainSync { }
             SystemClock.sleep(80)
         }
         error("Motion settings did not reach the end")
@@ -345,7 +360,7 @@ class MotionProgramSessionTest {
                 else -> MotionEvent.ACTION_MOVE
             }
             val y = startY + (endY - startY) * step / 9
-            scenario.onActivity { activity ->
+            scenario.onReadyActivity { activity ->
                 val decor = activity.window.decorView
                 val location = IntArray(2)
                 decor.getLocationOnScreen(location)
@@ -356,7 +371,7 @@ class MotionProgramSessionTest {
             }
             SystemClock.sleep(16)
         }
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { }
         SystemClock.sleep(80)
     }
 
@@ -380,18 +395,37 @@ class MotionProgramSessionTest {
             GimbalProgramPlayback.State(running = true, countdown = countdown, paused = paused), OperationID())
     }
 
+    // Off-main ActivityScenario.onActivity waits for global idle first. The live editor
+    // has a 25 Hz marker prediction loop, so use its supported main-thread path and await
+    // this actual activity's committed frame instead of waiting for all rendering to stop.
+    private fun ActivityScenario<BackdropRenderActivity>.onReadyActivity(action: (BackdropRenderActivity) -> Unit) {
+        val committed = CountDownLatch(1)
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            onActivity { activity ->
+                action(activity)
+                val decor = activity.window.decorView
+                assertTrue(decor.isAttachedToWindow && decor.isShown && decor.isHardwareAccelerated)
+                decor.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
+                decor.invalidate()
+            }
+        }
+        assertTrue(committed.await(5, TimeUnit.SECONDS), "The actual motion fixture frame must commit")
+    }
+
     private fun click(id: String) {
         assertTrue(node(id).performAction(AccessibilityNodeInfo.ACTION_CLICK), "$id must be actionable")
-        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync { }
     }
 
     private fun node(id: String, ready: (AccessibilityNodeInfo) -> Boolean = { true }): AccessibilityNodeInfo {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val deadline = SystemClock.uptimeMillis() + 5_000
         while (SystemClock.uptimeMillis() < deadline) {
-            instrumentation.waitForIdleSync()
-            instrumentation.uiAutomation.rootInActiveWindow?.let { find(it, id) }?.let {
-                if (ready(it)) return it
+            instrumentation.runOnMainSync { }
+            val automation = instrumentation.uiAutomation
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) automation.clearCache()
+            automation.rootInActiveWindow?.let { find(it, id) }?.let {
+                if (it.refresh() && ready(it)) return it
             }
             SystemClock.sleep(80)
         }

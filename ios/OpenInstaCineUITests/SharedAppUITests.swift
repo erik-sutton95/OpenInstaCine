@@ -21,3 +21,9 @@ final class ShareUIFlowTests: OpenCineAppUITesting.ShareUIFlowTests {}
 
 /// Opted-in current-build camera qualification through the common physical driver.
 final class PhysicalMigrationQualificationTests: OpenCineAppUITesting.PhysicalMigrationQualificationTests {}
+
+/// SIMULATED graphical conformance uses the same shared assertions as every app.
+final class MonitorScreenshotLayoutTests: OpenCineAppUITesting.MonitorScreenshotLayoutTests {}
+
+/// SIMULATED: the colour readout opens the one codec and colour popup in both orientations.
+final class CodecColorPopupUITests: OpenCineAppUITesting.CodecColorPopupUITests {}

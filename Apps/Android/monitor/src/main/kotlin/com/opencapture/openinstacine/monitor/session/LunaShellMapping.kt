@@ -1,8 +1,7 @@
 package com.opencapture.openinstacine.monitor.session
 
+import com.opencapture.opencine.appkit.label
 import com.opencapture.opencine.core.CameraValuePin
-import com.opencapture.opencine.core.CameraTimecode
-import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
 import com.opencapture.opencine.insta360.luna.LunaSubjectTracking
 import com.opencapture.opencine.insta360.shell.CameraColorProfile
 import com.opencapture.opencine.insta360.shell.CameraFocusMode
@@ -24,7 +23,6 @@ import com.opencapture.opencine.vocabulary.TrackingBox
 import com.opencapture.opencine.vocabulary.VideoFormat
 import com.opencapture.opencine.vocabulary.VideoFrameRate
 import com.opencapture.opencine.vocabulary.VideoResolution
-import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.reflect.KMutableProperty0
 
@@ -238,35 +236,27 @@ internal object LunaShellMapping {
         return table
     }
 
-    /** Time-of-day timecode text (`LunaFrameTimecode.timecode`). */
-    fun timecode(unixSeconds: Double, timeZoneSeconds: Int, fps: Int): String =
-        timecodeText(LunaFrameTimecode.timecode(unixSeconds, timeZoneSeconds, fps))
-
     /** Deep Track boxes between the shared owner and the shell's overlays (same top-left frame). */
     fun trackingBox(box: LunaSubjectTracking.Box) = TrackingBox(box.x, box.y, box.width, box.height)
     fun lunaBox(box: TrackingBox) = LunaSubjectTracking.Box(box.x, box.y, box.width, box.height)
-
-    /** `HH:MM:SS:FF`, the status text the HUD reads. */
-    fun timecodeText(timecode: CameraTimecode): String = with(timecode) {
-        String.format(Locale.US, "%02d:%02d:%02d:%02d", hours, minutes, seconds, frames)
-    }
 
     /** Battery, storage and shooting mode (iOS `apply(device:)` + `applyDeviceStatus`). */
     fun applyDevice(readout: CameraReadout, status: CameraStatus, pins: LunaControlPins, now: Long): CameraStatus {
         var next = status
         readout.batteryPercent?.let { next = next.copy(batteryPercent = it, charging = readout.charging == true) }
+        // CameraStatus storage fields are MiB, the unit the DJI wire reports and Core reads.
         val storages = readout.storages
         (storages.firstOrNull { it.location == 2 } ?: storages.firstOrNull())?.let {
-            next = next.copy(internalTotalMb = (it.totalBytes / 1_000_000).toInt(), internalFreeMb = (it.freeBytes / 1_000_000).toInt())
+            next = next.copy(internalTotalMb = (it.totalBytes / MIB).toInt(), internalFreeMb = (it.freeBytes / MIB).toInt())
         }
         storages.firstOrNull { it.location == 3 && it.usable }?.let {
-            next = next.copy(sdTotalMb = (it.totalBytes / 1_000_000).toInt(), sdFreeMb = (it.freeBytes / 1_000_000).toInt())
+            next = next.copy(sdTotalMb = (it.totalBytes / MIB).toInt(), sdFreeMb = (it.freeBytes / MIB).toInt())
         }
         if (storages.isNotEmpty()) {
             val usable = storages.filter { it.usable }
             next = next.copy(
-                storageTotalMb = (usable.sumOf { it.totalBytes } / 1_000_000).toInt(),
-                storageFreeMb = (usable.sumOf { it.freeBytes } / 1_000_000).toInt(),
+                storageTotalMb = (usable.sumOf { it.totalBytes } / MIB).toInt(),
+                storageFreeMb = (usable.sumOf { it.freeBytes } / MIB).toInt(),
             )
         }
         readout.shootingMode?.let { mode ->
@@ -323,3 +313,5 @@ internal object LunaShellMapping {
         return next to table
     }
 }
+
+private const val MIB = 1_048_576L
