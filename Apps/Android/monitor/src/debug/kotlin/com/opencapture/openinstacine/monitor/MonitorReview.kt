@@ -12,6 +12,7 @@ import com.opencapture.opencine.core.ConnectedCamera
 import com.opencapture.opencine.core.SavedCamera
 import com.opencapture.opencine.insta360.luna.LunaFailures
 import com.opencapture.opencine.platform.ReviewMediaSeed
+import com.opencapture.opencine.platform.ReviewLiveVideoSeed
 import com.opencapture.opencine.vocabulary.MediaFile
 import com.opencapture.openinstacine.monitor.media.MediaCache
 import com.opencapture.openinstacine.monitor.media.toJson
@@ -57,7 +58,7 @@ internal object MonitorReview {
                 .put("modelName", "Luna Ultra").put("lastConnectedAt", 500L))
         legacy.edit().putString("records-json", records.toString()).apply()
         if (review.screen == ReviewLaunch.Screen.LIVE) {
-            MonitorConfiguration.replaceBackend { SimulatedLiveBackend() }
+            MonitorConfiguration.replaceBackend { SimulatedLiveBackend(input = ReviewLiveVideoSeed.frames(it.applicationContext)) }
             // Keep the staged cameras seeded above; the live session supplies its camera directly.
         }
     }

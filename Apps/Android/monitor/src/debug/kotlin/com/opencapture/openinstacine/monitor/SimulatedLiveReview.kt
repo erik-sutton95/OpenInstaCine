@@ -1,6 +1,12 @@
 package com.opencapture.openinstacine.monitor
 
 import com.opencapture.monitorui.ReviewLiveValues
+import com.opencapture.opencine.insta360.shell.EncodedVideoFrame
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.takeWhile
+import java.util.concurrent.atomic.AtomicLong
 import com.opencapture.opencine.core.CameraCommand
 import com.opencapture.opencine.core.CameraRecordingFormat
 import com.opencapture.opencine.core.CameraRecordingObservations
@@ -36,15 +42,29 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Debug only, SIMULATED (`ReviewLaunch` LIVE): the review Luna backend, live from the start with the
- * shared review values. No radio, network, decoder or frames; every setter is refused.
+ * shared review values and procedural encoded frames. No radio, network or decoder owner;
+ * every setter is refused. The existing session owns actual decode and presentation.
  */
-internal class SimulatedLiveBackend(values: ReviewLiveValues = ReviewLiveValues.SIMULATED) : ReviewLunaBackend(
+internal class SimulatedLiveBackend(
+    values: ReviewLiveValues = ReviewLiveValues.SIMULATED,
+    input: Flow<ByteArray> = emptyFlow(),
+) : ReviewLunaBackend(
     camera = CameraIdentity("review-simulated-1", "SIMULATED Luna Ultra", "Luna Ultra"),
     initialPhase = ConnectionPhase.LIVE,
     firmware = "SIMULATED",
     capabilities = setOf(CameraCapability.LIVE_VIDEO, CameraCapability.ZOOM, CameraCapability.FOCUS),
     values = values,
-)
+) {
+    private val generation = AtomicLong(1)
+    override val frameConnectionGeneration: Long get() = generation.get()
+    override val frames: Flow<EncodedVideoFrame> = input.takeWhile { generation.get() == 1L }.map {
+        // Asset repeats never reset the actual producer clock. A retired backend rejects every
+        // previously emitted unit through the production session's existing generation check.
+        EncodedVideoFrame(it, System.nanoTime() / 1_000, connectionGeneration = 1)
+    }
+    override fun disconnect() { generation.incrementAndGet() }
+    override fun close() = disconnect()
+}
 
 /**
  * Debug only, SIMULATED: the common session the LIVE review presents, reporting the shared review
