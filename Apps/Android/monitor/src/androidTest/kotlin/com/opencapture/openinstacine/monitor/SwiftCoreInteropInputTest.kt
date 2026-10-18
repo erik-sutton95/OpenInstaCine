@@ -43,9 +43,10 @@ class SwiftCoreInteropInputTest {
         fun highlight(iso: Int): Float = assertNotNull(
             SwiftCore.feedAssistScalars(code, iso, 100f, 55f))[0]
         val reference = highlight(1600)
-        assertTrue(highlight(800) < reference)
+        assertEquals(248f / 255f, reference)
+        assertEquals(reference, highlight(800), "Luna declares no measured D-Log2 clip calibration")
         assertEquals(reference, highlight(1600))
-        assertEquals(reference, highlight(0), "Unknown ISO keeps the existing reference calibration")
+        assertEquals(reference, highlight(0), "Unknown ISO preserves the uncalibrated source ceiling")
         val normal = assertNotNull(SwiftCore.feedAssistScalars(CameraCommands.COLOR_NORMAL, 100, 100f, 55f))
         assertEquals(4, normal.size)
         assertEquals(1.57f * 1.57f, normal[3], 0.00001f)

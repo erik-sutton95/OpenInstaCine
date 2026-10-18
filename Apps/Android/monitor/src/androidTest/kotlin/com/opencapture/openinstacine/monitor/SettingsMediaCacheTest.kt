@@ -21,7 +21,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 /**
  * Settings > Storage reads and clears the cache the gallery writes (A4-05: it counted and cleared
@@ -88,7 +87,7 @@ class SettingsMediaCacheTest {
                     settings.retire()
                 }
                 assertFalse(original.exists(), "Clear cache must remove the gallery's originals")
-                assertTrue(catalog.isFile, "Clear cache keeps the clip list")
+                assertFalse(catalog.exists(), "The all-camera Settings clear removes the camera index")
             }
         } finally {
             instrumentation.runOnMainSync { model?.close() }
