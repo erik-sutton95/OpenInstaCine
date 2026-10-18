@@ -23,6 +23,7 @@ jobs:
   meta:
     name: Meta checks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -105,6 +106,7 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       code: ${{ steps.filter.outputs.code }}
       android: ${{ steps.filter.outputs.android }}
@@ -156,6 +158,7 @@ jobs:
     # self-hosted runner: it runs pull-request code.
     if: ${{ needs.changes.outputs.code == 'true' && !github.event.repository.private }}
     runs-on: macos-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -213,6 +216,7 @@ jobs:
     # the pull request.
     if: ${{ needs.changes.outputs.code == 'true' && !github.event.repository.private }}
     runs-on: macos-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -255,6 +259,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.android == 'true' && !github.event.repository.private }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -293,6 +298,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.handbook == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -318,6 +324,7 @@ jobs:
     if: always()
     needs: [meta, changes, native, conformance, android, handbook]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Require every job to have passed or been deliberately skipped
         env:
