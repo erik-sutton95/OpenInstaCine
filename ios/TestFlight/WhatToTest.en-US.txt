@@ -14,5 +14,4 @@ What to test
 
 - Connect your camera, switch manual and automatic exposure, then change resolution or frame rate and compare the shutter with the camera screen.
 - Check storage with and without a memory card, then reconnect and open Media before returning to Live View.
-- Rotate the phone and check the controls and how missing readings are shown.
-- Rotate to portrait and check that every status readout is visible in the grid.
+- Rotate the phone and check the controls and how missing readings are shown. In portrait, check that every status readout is visible.
