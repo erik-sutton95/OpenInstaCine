@@ -1,5 +1,6 @@
 import Insta360Apple
 import Insta360AppleTestSupport
+import OpenCineAppKit
 import OpenCineCameraControls
 import OpenCineCameraVocabulary
 import OpenCineCore
@@ -30,6 +31,19 @@ final class ControlCapabilityAdoptionTests: XCTestCase {
         let session = model.session
         XCTAssertTrue(session.hasGimbal && session.supportsZoom && session.supportsTapFocus)
         XCTAssertFalse(session.reportsMeteredEV)
+    }
+
+    /// Behavior audit II-297: the Luna reports no codec, so DISP offers no Codec switch; a camera
+    /// with codec choices keeps it.
+    func testDisplayOffersNoCodecSwitchWithoutACodec() {
+        let model = AppModel(session: OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder()))
+        let capabilities = OsmoMonitorPresentation.capabilities(model.session)
+        let luna = SettingsRootView.availableDisplay(capabilities: capabilities, codecColor: model.recordingCodecColor)
+        XCTAssertFalse(luna.contains(.codec))
+        XCTAssertTrue(luna.contains(.color) && luna.contains(.format))
+        let withCodec = SettingsRootView.availableDisplay(capabilities: capabilities,
+            codecColor: CaptureCodecColorChoices(codecs: [CaptureCodecColorChoice(id: "h265", label: "H.265")]))
+        XCTAssertTrue(withCodec.contains(.codec))
     }
 
     func testTheConnectedSessionProvidesTheModel() {

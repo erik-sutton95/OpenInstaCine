@@ -1,5 +1,6 @@
 package com.opencapture.openinstacine.monitor.session
 
+import com.opencapture.opencine.core.CameraExposureProgram
 import com.opencapture.opencine.core.CameraSessionID
 import com.opencapture.opencine.core.CameraSnapshot
 import com.opencapture.opencine.appkit.MonitorControlModel
@@ -83,6 +84,31 @@ class CorePresentationTest {
                 emptyMap(), CameraStatus(),
             ).isRecording,
         )
+    }
+
+    /** IA-116: with Angle on, Auto ISO and a fixed shutter (shutter priority) still read manual. */
+    @Test fun anAngleShutterIsAManualShutter() {
+        val angle = snapshot.copy(settings = snapshot.settings + mapOf(
+            SettingKey.ISO to reported(SettingValue.Iso(ISOValue.Auto)),
+            SettingKey.SHUTTER to ObservedValue(SettingValue.Shutter(ShutterValue.Angle(180.0)),
+                ObservationOrigin.PROTOCOL_DERIVED, MonotonicInstant.ZERO),
+        ))
+        assertEquals(CameraCommands.EXPO_MANUAL, CorePresentation.apply(angle, emptyMap(), CameraStatus()).expoMode)
+    }
+
+    /** II-062 / IA-118: a native format change keeps the angle for manual and shutter-priority exposure. */
+    @Test fun aFormatChangeKeepsTheAngleWhenTheShutterIsFixed() {
+        fun held(program: CameraExposureProgram, shutter: ShutterValue) = snapshot.copy(
+            settings = snapshot.settings + (SettingKey.SHUTTER to ObservedValue(SettingValue.Shutter(shutter),
+                ObservationOrigin.PROTOCOL_DERIVED, MonotonicInstant.ZERO)),
+            exposureProgram = ObservedValue(program, ObservationOrigin.CAMERA_REPORTED, MonotonicInstant.ZERO),
+        )
+        fun rematch(report: CameraSnapshot) = CorePresentation.angleRematchDenom(report, 180.0, usesAngle = true,
+            isPhoto = false, previousFps = 25, nextFps = 50, available = listOf(50, 60, 100, 125), currentDenom = 50)
+        assertEquals(100, rematch(held(CameraExposureProgram.MANUAL, ShutterValue.Angle(180.0))), "emulated angle")
+        assertEquals(100, rematch(held(CameraExposureProgram.SHUTTER_PRIORITY, ShutterValue.Duration(Rational(1, 50)))), "shutter priority")
+        assertNull(rematch(held(CameraExposureProgram.AUTOMATIC, ShutterValue.Auto)), "Auto keeps its own shutter")
+        assertNull(rematch(held(CameraExposureProgram.ISO_PRIORITY, ShutterValue.Auto)), "an automatic shutter")
     }
 
     /** The shared default copy; this app keeps main's instead (below). */

@@ -1426,19 +1426,17 @@ class PocketCameraSession(
         val dimensions = com.opencapture.opencine.core.CameraRecordingFormat.Dimensions.measured(value.width, value.height)
         val format = com.opencapture.opencine.core.CameraRecordingFormat.measured(dimensions, com.opencapture.opencine.core.Rational.frameRate(value.fps))
         val label = com.opencapture.opencine.appkit.MonitorCapturePresentation.recordingLabel(format) ?: "Format"
-        sendControl(label, admission = { nativeFormatPin === pin && pin.source == nativeCaptureSource() },
-            onFail = { nativeFormatPin = null; _nativeFormat.value = previous }) { setRecordFormat(value.id) }
-        val report = control.state.value.snapshot
+        // Decided from the state before the write; sent only after the camera takes the format, so a
+        // refused format keeps the angle.
         val rematch = previous?.let {
-            com.opencapture.opencine.media.ShutterAngle.formatRematch(OperatorPrefs.shutterAngleDegrees(appContext),
-                usesAngle = OperatorPrefs.shutterUsesAngle(appContext),
-                manual = report?.exposureProgram?.value == com.opencapture.opencine.core.CameraExposureProgram.MANUAL,
-                isPhoto = _status.value.isPhoto, previousFps = it.fps.roundToInt(), nextFps = value.fps.roundToInt(),
-                available = _status.value.availableShutterDenoms)
+            CorePresentation.angleRematchDenom(control.state.value.snapshot, OperatorPrefs.shutterAngleDegrees(appContext),
+                usesAngle = OperatorPrefs.shutterUsesAngle(appContext), isPhoto = _status.value.isPhoto,
+                previousFps = it.fps.roundToInt(), nextFps = value.fps.roundToInt(),
+                available = _status.value.availableShutterDenoms, currentDenom = _status.value.shutterDenom)
         }
-        val heldAsDuration = (report?.value(com.opencapture.opencine.core.SettingKey.SHUTTER)?.value as?
-            com.opencapture.opencine.core.SettingValue.Shutter)?.value is com.opencapture.opencine.core.ShutterValue.Duration
-        if (rematch != null && heldAsDuration && rematch.denom != _status.value.shutterDenom) setShutterDenom(rematch.denom)
+        sendControl(label, admission = { nativeFormatPin === pin && pin.source == nativeCaptureSource() },
+            onFail = { nativeFormatPin = null; _nativeFormat.value = previous },
+            onSuccess = { rematch?.let(::setShutterDenom) }) { setRecordFormat(value.id) }
         return true
     }
 

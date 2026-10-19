@@ -274,6 +274,104 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         XCTAssertEqual(luna.current.value(of: .shutter).value, .shutter(.duration(Rational(1, 50))))
     }
 
+    private static func exposures(_ camera: FakeLuna) -> [LunaExposure] {
+        camera.sent.filter(isShutterWrite).compactMap { try? LunaPhotographySettings(response: $0.body).videoExposure }
+    }
+
+    /// A live Luna shell at 4K25 with Angle on (emulated in Core), bound to `luna`.
+    private func angleShell(program: LunaExposureProgram, iso: UInt64) async throws
+        -> (FakeLuna, OpenInstaCine.CameraSession, AppModel)
+    {
+        let camera = FakeLuna()
+        camera.program = program.rawValue
+        camera.iso = iso
+        camera.shutterSeconds = 1.0 / 50
+        let luna = camera.connectedSession()
+        let raw = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 25))
+        let body = try ProtoMessage.blob(field: 1, value: ProtoMessage.varint(31))
+            + ProtoMessage.blob(field: 2, value: ProtoMessage.integer(field: 31, value: raw))
+            + ProtoMessage.integer(field: 3, value: UInt64(LunaFunctionMode.normalVideo.rawValue))
+        luna.ingest(settings: try LunaPhotographySettings(response: body))
+        let shell = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
+        shell.lunaSessionOverride = luna
+        shell.phase = .live
+        shell.control.bind(luna)
+        let model = AppModel(session: shell)
+        model.shutterUsesAngle = true
+        try await waitUntil { shell.control.snapshot?.capabilities[.shutter]?.semantics.implementation == .emulated }
+        var status = shell.status
+        (status.shootingMode, status.fps, status.shutterDenom) = (Int(ShootingMode.video.rawValue), 25, 50)
+        status.availableShutterDenoms = [8000, 1000, 500, 250, 125, 100, 60, 50, 25]
+        shell.status = status
+        shell.nativeRecordingFormat = LunaVideoResolution(rawValue: raw)
+        return (camera, shell, model)
+    }
+
+    /// II-061: an Angle tab pick reaches the camera as its 1/N, with no "not applied" note.
+    func testAnglePickSetsTheShutter() async throws {
+        let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
+        defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
+        let (camera, shell, model) = try await angleShell(program: .manual, iso: 400)
+        model.commit(.shutterAngle(90), from: .sheet(nil))
+        try await waitUntil { Self.exposures(camera).contains { abs($0.shutterSeconds - 1.0 / 100) < 1e-9 } }
+        try await waitUntil { shell.control.pending[.shutter] == nil }
+        XCTAssertNil(shell.controlNote)
+        shell.control.unbind()
+    }
+
+    /// II-069 / II-070: Manual from Auto with Angle remembered sends a manual shutter.
+    func testManualFromAutoInAngleModeSendsAShutter() async throws {
+        let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
+        defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
+        let (camera, shell, _) = try await angleShell(program: .automatic, iso: 400)
+        shell.setExpoMode(.manual)
+        try await waitUntil { Self.exposures(camera).contains { $0.shutterSeconds > 0 } }
+        try await waitUntil { shell.control.pending[.shutter] == nil }
+        XCTAssertNil(shell.controlNote)
+        shell.control.unbind()
+    }
+
+    /// IA-116 twin: Auto ISO with a fixed shutter (shutter priority) reads Manual, not Auto.
+    func testShutterPriorityReadsManualInAngleMode() async throws {
+        let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
+        defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
+        let (_, shell, _) = try await angleShell(program: .shutterPriority, iso: 0)
+        try await waitUntil { shell.status.expoMode != nil }
+        XCTAssertEqual(shell.status.expoMode, .manual)
+        shell.control.unbind()
+    }
+
+    /// II-062: a native format change keeps 180 degrees for a fixed shutter (Manual and shutter priority).
+    func testNativeFormatChangeKeepsTheAngle() async throws {
+        let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
+        defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
+        OperatorPrefs.shutterAngleDegrees = 180
+        for (program, iso) in [(LunaExposureProgram.manual, UInt64(400)), (.shutterPriority, 0)] {
+            let (camera, shell, _) = try await angleShell(program: program, iso: iso)
+            let next = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 50)
+                .flatMap(LunaVideoResolution.init(rawValue:)))
+            shell.setNativeRecordingFormat(next)
+            try await waitUntil { Self.exposures(camera).contains { abs($0.shutterSeconds - 1.0 / 100) < 1e-9 } }
+            shell.control.unbind()
+        }
+    }
+
+    /// CodeRabbit #46: a format the camera refuses keeps the angle; no new 1/N is sent.
+    func testRefusedNativeFormatSendsNoRematch() async throws {
+        let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
+        defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
+        OperatorPrefs.shutterAngleDegrees = 180
+        let (camera, shell, _) = try await angleShell(program: .manual, iso: 400)
+        camera.refuses = true
+        let next = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 50)
+            .flatMap(LunaVideoResolution.init(rawValue:)))
+        shell.setNativeRecordingFormat(next)
+        try await waitUntil { shell.controlNote != nil }
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(camera.sent.contains(where: Self.isShutterWrite), "a refused format sends no shutter")
+        shell.control.unbind()
+    }
+
     func testFormatChangeWithUnknownExposureSendsNoShutter() async throws {
         let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
         defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }

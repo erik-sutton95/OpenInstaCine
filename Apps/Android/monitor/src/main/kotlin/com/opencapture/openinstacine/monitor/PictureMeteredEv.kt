@@ -7,6 +7,11 @@ import com.opencapture.opencine.vocabulary.EvComp
 import com.opencapture.openinstacine.monitor.assists.LiveAssistState
 import com.opencapture.openinstacine.monitor.session.PocketCameraSession
 
+/** iOS `syncLiveMonitorColor`: a camera that meters no EV (the Luna) reads it from the picture. */
+internal fun LiveAssistState.followMeteredEvSource(reportsMeteredEV: Boolean) {
+    evMeterFromPicture = !reportsMeteredEV
+}
+
 /** iOS `CameraEVMeterOverlay.pictureEV`: metered EV from the live picture for a camera that reports none (raw, or -1). */
 internal fun pictureMeteredEv(session: PocketCameraSession, assist: LiveAssistState, status: CameraStatus): Int {
     if (!assist.evMeterFromPicture) return -1

@@ -4,12 +4,13 @@ New and changed
 
 Fixes
 
+- With Shutter Angle on, picking an angle, Auto to Manual and AE lock set the shutter again, Auto ISO with a fixed shutter reads M, and a frame-rate change keeps the angle.
+- The EV meter reads the live picture again instead of always showing a dash.
 - Sharing two or more cached clips no longer fails with "Couldn't share these clips."
-- The live top bar readouts (storage, format, mode, REC and timecode) keep their dark glow, so they stay readable over bright pictures.
-- With two or more frame guides and Mask outside frame on, the space between the crossing frames stays clear again; only the area outside their combined bounding rectangle is darkened.
+- Top bar readouts stay readable over bright pictures, and the space between crossing frame guides with Mask outside frame stays clear again.
 
 What to test
 
-- Cache two or more clips, select them in Media and share. Check that all of them reach the app you pick.
-- Turn on Guides, select 2.39:1 and 9:16, switch on Mask outside frame and check the corners between the two frames stay bright.
-- Point the camera at a bright or white scene and check every top bar readout stays readable in portrait and landscape.
+- Turn on Shutter Angle, pick 180 degrees at 25p, switch EXPOSURE Auto and back to Manual, then change 4K25 to 4K50; the shutter should follow (1/50, then 1/100).
+- Turn on the EV tool and point the camera at bright and dark scenes; the meter needle should move.
+- Share two or more cached clips from Media, and check Guides 2.39:1 plus 9:16 with Mask outside frame over a bright scene.
