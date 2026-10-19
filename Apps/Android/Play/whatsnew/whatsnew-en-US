@@ -1,2 +1,2 @@
 Camera controls and Media use the shared OpenCine screens. Readouts follow camera reports; shutter angle rematches after a format change only when exposure and timing are known. Change resolution or frame rate, reconnect and compare.
-Fixed an Android live-view crash caused by release shrinking removing ML Kit initialization. Playback pause and buffering fixes are retained. Try face tracking, then pause and switch media clips.
+Media scrolls to the newest clip, and portrait status readouts use a three-column grid. Record a clip, open Media, then rotate to portrait and check every readout.
