@@ -6,6 +6,7 @@ Fixes
 
 - After the landscape assist palette collapses, its hidden buttons are no longer reachable with VoiceOver.
 - Using a volume button as the remote shutter is protected against a rare unexpected quit.
+- If the live picture's decoder fails, the picture recovers at the next keyframe instead of staying frozen.
 
 What to test
 
