@@ -68,13 +68,16 @@ A local `just ios-run <device>` with automatic signing registers both.
 `scripts/ios-release-notes-check.sh` enforces the format: either `New features`
 with 1 to 4 bullets, or `New and changed` / `Fixes` / `What to test`; no free
 text, no commit titles, no implementation jargon, 2000 characters, 200 per
-bullet (caps in `../OpenCine/scripts/tester-notes-limits.sh`). Each pull request that changes
-the iOS app replaces the file with that build's window (CI enforces it):
+bullet (caps in `../OpenCine/scripts/tester-notes-limits.sh`).
 
-A pin-only bot pull request (`bot/pin-core`, changed files exactly
-`opencine-pins.txt`) is exempt from the TestFlight and Play notes gates: tester
-notes are written once per release at the release gate (owner decision
-2026-10-19).
+Notes are written once per release, not in every pull request (owner decision
+2026-10-19): before a release, a notes pull request replaces the file with the
+window since the previous release. Every archive is a TestFlight release, so
+[`ci_pre_xcodebuild.sh`](../ios/ci_scripts/ci_pre_xcodebuild.sh) runs the format
+check and OpenCine's `scripts/tester-notes-release-check.py` before building: the
+archive fails while an earlier successful TestFlight build (its Xcode Cloud commit
+status) already carried the current notes. The Play workflow applies the same check
+to both Play files ([`ci.md`](ci.md#release-time)).
 
 ```bash
 just tester-notes-window   # recent feat/fix commits to pick from
