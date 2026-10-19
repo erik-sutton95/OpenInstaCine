@@ -10,3 +10,4 @@ What to test
 
 - Turn on Guides, select 2.39:1 and 9:16, switch on Mask outside frame and check the corners between the two frames stay bright.
 - Point the camera at a bright scene and check every top bar readout stays readable in portrait and landscape.
+- Record a short clip, open Media and return to Live View; report crashes or controls that stop responding.
