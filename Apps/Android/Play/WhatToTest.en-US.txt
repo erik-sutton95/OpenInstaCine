@@ -1,18 +1,12 @@
 New and changed
 
-- Camera controls and Media now use the shared OpenCine screens, so they look and behave as in the other OpenCine camera apps.
-- Exposure, shutter angle, frame-rate and storage readouts follow the camera's reports; missing measurements are marked unavailable.
-- Live View and Media use the connected camera's available controls.
+- The live top bar readouts (storage, format, mode, REC and timecode) get their dark glow back, so they stay readable over bright pictures.
 
 Fixes
 
-- Media scrolls to the newest clip; in portrait, status readouts use a three-column grid that grows with the rows.
-- Pause remains available while playback waits for data; using it prevents unexpected restarts. Late loops, seeks and scrubs stay paused until you press Play.
-- Camera browsing includes internal storage and a present SD card.
-- A format change rematches shutter angle only when manual exposure and video timing are known; unknown exposure state never triggers a hidden shutter change.
+- No other Android-visible changes in this build; the earlier Media playback, storage and portrait readout fixes stay in place.
 
 What to test
 
-- Connect your camera; try live view and face tracking. Change manual/auto exposure, resolution or frame rate; compare shutter with its screen. Report crashes after the first picture.
-- Check storage with/without an SD card; try short/long clips on both stores and cached playback offline. Pause while buffering, scrub and switch clips; restart only with Play.
-- Reconnect, rotate and open Media/playback; check controls and every portrait readout, then return to Live View. If a clip will not open, report duration, storage and whether it was cached.
+- Point the camera at a bright or white scene and check that every top bar readout stays readable in portrait and landscape.
+- Connect your camera, record a short clip, open Media and return to Live View; report crashes or controls that stop responding.

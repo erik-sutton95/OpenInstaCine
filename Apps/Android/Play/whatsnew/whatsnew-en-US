@@ -1,2 +1,1 @@
-Camera controls and Media use the shared OpenCine screens. Readouts follow camera reports; shutter angle rematches after a format change only when exposure and timing are known. Change resolution or frame rate, reconnect and compare.
-Media scrolls to the newest clip, and portrait status readouts use a three-column grid. Record a clip, open Media, then rotate to portrait and check every readout.
+The live top bar readouts get their dark glow back, so they stay readable over bright pictures. Point the camera at a bright scene and check every top bar readout in portrait and landscape, then record a short clip, open Media and return to Live View.
