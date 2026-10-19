@@ -1,2 +1,1 @@
-Camera controls and Media use the shared OpenCine screens. Readouts follow camera reports; shutter angle rematches after a format change only when exposure and timing are known. Change resolution or frame rate, reconnect and compare.
-Media scrolls to the newest clip, and portrait status readouts use a three-column grid. Record a clip, open Media, then rotate to portrait and check every readout.
+This build picks up the latest shared OpenCine update; Android screens and camera behaviour match the previous build. Connect your camera, record a short clip, open Media, return to Live View, then rotate to portrait and check every readout.
