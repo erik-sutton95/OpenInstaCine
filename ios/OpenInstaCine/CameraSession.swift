@@ -170,6 +170,7 @@ final class CameraSession {
     var sessionRecoveryCardGraceElapsed = false
     var recoveryDeviceName = ""
     private(set) var feedRecovering = false
+    private var feedStall = LunaFeedStall()
     private(set) var isFeedWarming = true
     /// In-flight photo. A record start or stop in flight is the shared controls' `recordPending`.
     var photoBusy = false
@@ -854,20 +855,31 @@ final class CameraSession {
         }
     }
 
-    /// Luna video is TCP: no loss, but the socket can stall. Two silent seconds ask
-    /// for an I-frame; six restart the stream; the transport drop owns recovery.
+    /// Luna video is TCP: no loss, but the encoder can pause. The shared `LunaFeedStall` ladder
+    /// asks for keyframes, restarts live a bounded number of times, then hands the stall to
+    /// bounded session recovery so Reconnecting always ends.
     private func watchFeed() {
-        guard case .live = phase, !isBrowsingMedia, !sessionRecovery.isRecovering else { return }
+        guard case .live = phase, !isBrowsingMedia, !sessionRecovery.isRecovering else {
+            feedStall = LunaFeedStall()
+            return
+        }
         guard let silence = backend.secondsSinceVideo else { return }
-        if silence > 6 {
+        switch feedStall.tick(silence: silence, now: ProcessInfo.processInfo.systemUptime) {
+        case .none: break
+        case .requestKeyframe: requestKeyframe(reason: "stall")
+        case .restartLive:
             feedRecovering = true
-            ControlLiveLog.line("feed: \(Int(silence))s without video, restarting live")
-            Task {
-                try? await backend.restartLive()
-                feedRecovering = false
+            ControlLiveLog.line(
+                "feed: \(Int(silence))s without video, restarting live \(feedStall.restarts) of \(LunaFeedStall.maximumRestarts)")
+            Task { [weak self] in
+                try? await self?.backend.restartLive()
+                self?.feedStall.restartFinished()
+                self?.feedRecovering = false
             }
-        } else if silence > 2 {
-            requestKeyframe(reason: "stall")
+        case .escalate:
+            ControlLiveLog.line("feed: \(Int(silence))s without video after \(feedStall.restarts) restarts, session recovery")
+            feedRecovering = false
+            beginSessionRecovery(reason: "no live video", trigger: .datalinkLost)
         }
     }
 
