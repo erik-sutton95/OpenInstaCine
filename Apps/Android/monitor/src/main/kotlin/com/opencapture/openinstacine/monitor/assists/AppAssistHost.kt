@@ -1,14 +1,19 @@
 package com.opencapture.openinstacine.monitor.assists
 
+import com.opencapture.monitorui.MonitorGuideMaskPolicy
 import com.opencapture.opencine.cameracontrols.AssistHost
 import com.opencapture.openinstacine.monitor.settings.SettingsPalette
 
-/** This app's assist values: its settings palettes and ND copy; the live ceiling and the union guide mask. */
+/**
+ * This app's assist values: its settings palettes and ND copy, and the envelope guide mask its
+ * baseline and Pocket keep (IA-251: the space between crossing frames stays clear).
+ */
 internal val AppAssistHost = AssistHost(
     peakingColors = SettingsPalette.peaking,
     highlightColors = SettingsPalette.highlight,
     midtoneColors = SettingsPalette.midtone,
     ndHelp = ND_HELP,
+    guideMaskPolicy = MonitorGuideMaskPolicy.ENVELOPE,
     rec709LookCurve = { com.opencapture.openinstacine.monitor.feed.LunaMonitorColorProfile.value.rec709LookCurves[it] },
 )
 

@@ -6,8 +6,10 @@ Fixes
 
 - Sharing two or more cached clips no longer fails with "Couldn't share these clips."
 - The live top bar readouts (storage, format, mode, REC and timecode) keep their dark glow, so they stay readable over bright pictures.
+- With two or more frame guides and Mask outside frame on, the space between the crossing frames stays clear again; only the area outside their combined bounding rectangle is darkened.
 
 What to test
 
 - Cache two or more clips, select them in Media and share. Check that all of them reach the app you pick.
-- Point the camera at a bright or white scene and check that every top bar readout stays readable in portrait and landscape.
+- Turn on Guides, select 2.39:1 and 9:16, switch on Mask outside frame and check the corners between the two frames stay bright.
+- Point the camera at a bright or white scene and check every top bar readout stays readable in portrait and landscape.
