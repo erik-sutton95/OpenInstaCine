@@ -1424,14 +1424,17 @@ class PocketCameraSession(
         val dimensions = com.opencapture.opencine.core.CameraRecordingFormat.Dimensions.measured(value.width, value.height)
         val format = com.opencapture.opencine.core.CameraRecordingFormat.measured(dimensions, com.opencapture.opencine.core.Rational.frameRate(value.fps))
         val label = com.opencapture.opencine.appkit.MonitorCapturePresentation.recordingLabel(format) ?: "Format"
-        sendControl(label, admission = { nativeFormatPin === pin && pin.source == nativeCaptureSource() },
-            onFail = { nativeFormatPin = null; _nativeFormat.value = previous }) { setRecordFormat(value.id) }
-        previous?.let {
+        // Decided from the state before the write; sent only after the camera takes the format, so a
+        // refused format keeps the angle.
+        val rematch = previous?.let {
             CorePresentation.angleRematchDenom(control.state.value.snapshot, OperatorPrefs.shutterAngleDegrees(appContext),
                 usesAngle = OperatorPrefs.shutterUsesAngle(appContext), isPhoto = _status.value.isPhoto,
                 previousFps = it.fps.roundToInt(), nextFps = value.fps.roundToInt(),
                 available = _status.value.availableShutterDenoms, currentDenom = _status.value.shutterDenom)
-        }?.let(::setShutterDenom)
+        }
+        sendControl(label, admission = { nativeFormatPin === pin && pin.source == nativeCaptureSource() },
+            onFail = { nativeFormatPin = null; _nativeFormat.value = previous },
+            onSuccess = { rematch?.let(::setShutterDenom) }) { setRecordFormat(value.id) }
         return true
     }
 

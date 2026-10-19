@@ -454,19 +454,15 @@ extension CameraSession {
         let functionMode = backend.functionMode
         let label = MonitorCapturePresentation.recordingLabel(CameraRecordingFormat(
             dimensions: .init(width: value.width, height: value.height), frameRate: Rational.frameRate(value.framesPerSecond))) ?? "Format"
-        sendControl(label, { try LunaProtocol.setRecordResolution(value.rawValue, functionMode: functionMode) },
-            through: target, suppliedAdmission: admission, onFail: { [weak self] in
-                guard let self, self.lunaSession === target, self.nativeFormatPin?.id == pin.id else { return }
-                self.nativeFormatPin = nil; self.nativeRecordingFormat = previous
-            })
         // A fixed shutter (Manual or shutter priority, a duration or the emulated angle) follows the
-        // cadence, as on main.
+        // cadence, as on main, decided from the state before the write.
         let program = control.snapshot?.exposureProgram.value
         let fixedShutter: Bool
         switch control.snapshot?.value(of: .shutter).value {
         case .shutter(.duration)?, .shutter(.angle)?: fixedShutter = true
         default: fixedShutter = false
         }
+        var rematchDenom: Int?
         if let previousRate, let targetRate = Rational.frameRate(value.framesPerSecond), fixedShutter,
             let rematch = ShutterAngle.formatRematch(degrees: OperatorPrefs.shutterAngleDegrees,
                 usesAngle: OperatorPrefs.shutterUsesAngle,
@@ -474,8 +470,17 @@ extension CameraSession {
                 previousFps: Int(previousRate.rounded()), nextFps: Int(targetRate.doubleValue.rounded()),
                 available: status.availableShutterDenoms),
             rematch.denom != status.shutterDenom {
-            setShutterDenom(rematch.denom)
+            rematchDenom = rematch.denom
         }
+        // The new 1/N follows only a format the camera took: a refused format keeps the angle.
+        sendControl(label, { try LunaProtocol.setRecordResolution(value.rawValue, functionMode: functionMode) },
+            through: target, suppliedAdmission: admission, onFail: { [weak self] in
+                guard let self, self.lunaSession === target, self.nativeFormatPin?.id == pin.id else { return }
+                self.nativeFormatPin = nil; self.nativeRecordingFormat = previous
+            }, onSuccess: { [weak self] _ in
+                guard let self, let rematchDenom, self.lunaSession === target else { return }
+                self.setShutterDenom(rematchDenom)
+            })
     }
 
     func setNativeRecordingColor(_ value: LunaColorMode) {

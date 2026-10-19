@@ -356,6 +356,22 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         }
     }
 
+    /// CodeRabbit #46: a format the camera refuses keeps the angle; no new 1/N is sent.
+    func testRefusedNativeFormatSendsNoRematch() async throws {
+        let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
+        defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
+        OperatorPrefs.shutterAngleDegrees = 180
+        let (camera, shell, _) = try await angleShell(program: .manual, iso: 400)
+        camera.refuses = true
+        let next = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 50)
+            .flatMap(LunaVideoResolution.init(rawValue:)))
+        shell.setNativeRecordingFormat(next)
+        try await waitUntil { shell.controlNote != nil }
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(camera.sent.contains(where: Self.isShutterWrite), "a refused format sends no shutter")
+        shell.control.unbind()
+    }
+
     func testFormatChangeWithUnknownExposureSendsNoShutter() async throws {
         let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
         defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
