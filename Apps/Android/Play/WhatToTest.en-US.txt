@@ -4,7 +4,7 @@ New and changed
 
 Fixes
 
-- With two or more frame guides and Mask outside frame on, the space between the crossing frames stays clear again; only the area outside all of them is darkened.
+- With two or more frame guides and Mask outside frame on, the space between the crossing frames stays clear again; only the area outside their combined bounding rectangle is darkened.
 
 What to test
 
