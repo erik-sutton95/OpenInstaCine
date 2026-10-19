@@ -10,8 +10,20 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import com.opencapture.opencine.cameracontrols.CleanPinTool
+import com.opencapture.opencine.appkit.renderPlan
 
 class CameraExposureMeterTest {
+    /** IA-153 / IA-246: the Luna meters no EV, so the live screen reads it from the picture (main, iOS). */
+    @Test fun aCameraWithoutMeteredEvReadsThePicture() {
+        val assist = LiveAssistState()
+        if (!assist.isOn(MonitorAssistTool.EV)) assist.toggle(MonitorAssistTool.EV)
+        assist.followMeteredEvSource(reportsMeteredEV = false)
+        assertTrue(assist.evMeterFromPicture)
+        assertTrue(assist.renderPlan(com.opencapture.opencine.media.MonitorTransfer.REC709).scopeTap.evMeter, "the picture tap feeds the meter")
+        assist.followMeteredEvSource(reportsMeteredEV = true)
+        assertFalse(assist.evMeterFromPicture, "a camera that meters keeps its own value")
+    }
+
     @Test fun reportedMeterLabelsStayIndependentOfConfiguredCompensation() {
         assertEquals("−0.7", MonitorOperatorExposureReading(0x0E).label)
         assertEquals("−0.7", MonitorOperatorExposureReading(CameraStatus(evComp = 0x19, meteredEv = 0x0E).meteredEv).label)

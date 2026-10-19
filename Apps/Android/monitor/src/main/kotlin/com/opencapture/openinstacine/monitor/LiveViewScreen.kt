@@ -21,6 +21,7 @@ import android.view.Surface
 import com.opencapture.opencine.appkit.FollowCameraGallery
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -82,6 +83,7 @@ fun LiveViewScreen(model: AppModel) {
     val liveState = remember(model) { MonitorOperatorLiveState() }
     val context = LocalContext.current
     val assist = model.assist
+    SideEffect { assist.followMeteredEvSource(model.session.reportsMeteredEV) }
     LaunchedEffect(gimbalLimitPulse) {
         if (gimbalLimitPulse == 0) return@LaunchedEffect
         model.gimbalGamepad.pulseLimit(model, operatorHaptics)

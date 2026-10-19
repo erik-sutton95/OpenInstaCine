@@ -4,12 +4,12 @@ New and changed
 
 Fixes
 
-- After the landscape assist palette collapses, its hidden buttons are no longer reachable with VoiceOver.
-- Using a volume button as the remote shutter is protected against a rare unexpected quit.
+- With Shutter Angle on, picking an angle, switching Auto to Manual and AE lock set the shutter again, and Auto ISO with a fixed shutter reads M.
+- With Shutter Angle on, changing the frame rate keeps the chosen angle.
 - If the live picture's decoder fails, the picture recovers at the next keyframe instead of staying frozen.
 
 What to test
 
-- Rotate to portrait and check that the format readout and the clock share the same top edge, and that every status readout is visible.
-- In landscape, open and collapse the assist palette. With VoiceOver on, check that only the visible buttons are announced.
-- Use a volume button as the remote shutter to start and stop a recording; report any unexpected quit.
+- Turn on Shutter Angle, pick 180 degrees at 25p, then switch EXPOSURE Auto and back to Manual; check the camera follows with no "not applied" note.
+- With Angle at 180 degrees, change 4K25 to 4K50 and check the shutter becomes 1/100.
+- Rotate to portrait and check that the format readout and the clock share the same top edge.
