@@ -4,9 +4,11 @@ New and changed
 
 Fixes
 
-- No Android-visible fixes beyond the restored glow; the earlier Media playback, storage and portrait readout fixes stay in place.
+- The EV meter reads the live picture again instead of always showing a dash.
+- With Shutter Angle on, picking an angle, switching Auto to Manual and AE lock set the shutter again, and Auto ISO with a fixed shutter reads M.
+- With Shutter Angle on, changing the frame rate keeps the chosen angle.
 
 What to test
 
-- Point the camera at a bright or white scene and check that every top bar readout stays readable in portrait and landscape.
-- Connect your camera, record a short clip, open Media and return to Live View; report crashes or controls that stop responding.
+- Turn on the EV tool and point the camera at bright and dark scenes; the meter needle should move.
+- Turn on Shutter Angle, pick 180 degrees at 25p, switch EXPOSURE Auto and back to Manual, then change 4K25 to 4K50; the shutter should follow (1/50, then 1/100).
