@@ -133,6 +133,11 @@
                 "format": st.videoFormat?.chipLabel ?? "?",
                 "formats": st.availableVideoFormats.map(\.chipLabel),
                 "zoom": s.zoomReadout,
+                "shutterUsesAngle": model.shutterUsesAngle,
+                "angleDegrees": model.shutterAngleDegrees,
+                "coreShutter": s.control.shown(.shutter).map { "\($0)" } ?? "?",
+                "coreProgram": s.control.snapshot?.exposureProgram.value.map { "\($0)" } ?? "?",
+                "nativeFormat": s.nativeRecordingFormat.map { Int($0.rawValue) } ?? -1,
                 "zoomStops": s.zoomStops,
                 "gimbalMode": s.gimbalMode.label(in: s.profile),
                 "pose": s.freshGimbalWaypoint.map { ["yaw": ($0.yawDeg * 10).rounded() / 10, "pitch": ($0.pitchDeg * 10).rounded() / 10] } ?? [:],
@@ -204,6 +209,15 @@
                     return ["ok": false, "error": "format not offered", "formats": s.status.availableVideoFormats.map(\.chipLabel)]
                 }
             case "zoom": if let v = num("value") { s.setZoom(v) }
+            // The operator's own paths: the SHUTTER tab preference, an angle pick from the sheet
+            // and the native format drawer (raw Luna RecordResolution value).
+            case "angleMode": model.shutterUsesAngle = cmd["value"] as? Bool ?? !model.shutterUsesAngle
+            case "angle": if let v = num("value") { model.commit(.shutterAngle(v), from: .sheet(nil)) }
+            case "nativeFormat":
+                guard let v = num("value"), let format = LunaVideoResolution(rawValue: UInt64(v)) else {
+                    return ["ok": false, "error": "unknown raw format", "formats": LunaShellMapping.videoFormatValues.sorted()]
+                }
+                s.setNativeRecordingFormat(format)
             case "pinch":
                 let steps = Int(num("steps") ?? 10)
                 let to = num("value") ?? 2
