@@ -57,6 +57,10 @@ extension CameraSession {
             // first" or a stale camera state.
             if note.hasSuffix(CameraSession.notApplied) { self?.noteCommandFailure() }
         }
+        // Every common write's outcome, including one refused before it was sent, for the field log.
+        control.onWriteFinished = { label, receipt in
+            ControlLiveLog.line("control: \(label) \(receipt.stage)")
+        }
         control.onRecordFinished = { [weak self] receipt in
             guard receipt.intent == .stopRecording, receipt.stage == .confirmed else { return }
             Task { await self?.refreshMediaAfterCapture() }
