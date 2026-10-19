@@ -22,6 +22,26 @@ import kotlin.math.roundToInt
  * stay with the readout mapping. Goes once the HUD and capture views read the shared model (I-2).
  */
 internal object CorePresentation {
+    /**
+     * The 1/N a native format change owes the operator's angle (iOS `setNativeRecordingFormat`),
+     * or null when nothing is sent.
+     */
+    fun angleRematchDenom(
+        snapshot: CameraSnapshot?, degrees: Double, usesAngle: Boolean, isPhoto: Boolean,
+        previousFps: Int, nextFps: Int, available: List<Int>, currentDenom: Int,
+    ): Int? {
+        // A fixed shutter (Manual or shutter priority) follows the cadence, as on main; the emulated
+        // angle projection is a fixed shutter too.
+        val program = snapshot?.exposureProgram?.value
+        val rematch = com.opencapture.opencine.media.ShutterAngle.formatRematch(degrees, usesAngle = usesAngle,
+            manual = program == com.opencapture.opencine.core.CameraExposureProgram.MANUAL ||
+                program == com.opencapture.opencine.core.CameraExposureProgram.SHUTTER_PRIORITY,
+            isPhoto = isPhoto, previousFps = previousFps, nextFps = nextFps, available = available) ?: return null
+        val held = (snapshot?.value(SettingKey.SHUTTER)?.value as? SettingValue.Shutter)?.value
+        val fixed = held is ShutterValue.Duration || held is ShutterValue.Angle
+        return rematch.denom.takeIf { fixed && it != currentDenom }
+    }
+
     fun apply(snapshot: CameraSnapshot, pending: Map<SettingKey, SettingValue>, status: CameraStatus): CameraStatus {
         fun shown(key: SettingKey) = pending[key] ?: snapshot.value(key).value
         var next = status
@@ -44,6 +64,8 @@ internal object CorePresentation {
                 if (SettingKey.SHUTTER in pending) next = next.copy(shutterDenom = (1 / shutter.seconds.doubleValue).roundToInt())
                 shutterAuto = false
             }
+            // The emulated angle is a fixed shutter (Angle preference); only Auto is automatic.
+            is ShutterValue.Angle -> shutterAuto = false
             null -> Unit
             else -> shutterAuto = true
         }
