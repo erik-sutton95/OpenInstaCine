@@ -25,8 +25,9 @@ rig and lab tooling. Real pairing requires a physical phone and Luna Ultra.
 Open a pull request into `main` and fill in the PR template. Use Conventional
 Commits. The required hosted status check is **CI gate**; it includes the
 app's metadata, native, Android and handbook jobs, with deliberate path-based
-skips. Repository settings are documented in
-[`docs/repository-settings.md`](docs/repository-settings.md).
+skips; the full suite runs nightly ([`docs/ci.md`](docs/ci.md)). Repository
+settings are documented in [`docs/repository-settings.md`](docs/repository-settings.md).
+CodeRabbit reviews are advisory: address every finding, but it never blocks a merge.
 
 `just check` runs the existing research/tooling and metadata checks. For
 native changes, also run the relevant existing recipes: `just core-test`,
@@ -39,8 +40,9 @@ protocol and common monitor behavior belong in their owning OpenCine
 packages; this app composes the Luna integration and app services. Preserve
 existing native fixtures and golden assertions.
 
-Changes that trigger TestFlight or Play builds must update the corresponding
-this-build notes. Use `just tester-notes-window`; follow
+Tester notes are replaced once per release, not in feature pull requests;
+TestFlight and Play releases fail while they are stale. Use
+`just tester-notes-window`; follow
 [`docs/testflight-ci.md`](docs/testflight-ci.md),
 [`docs/android-play-ci.md`](docs/android-play-ci.md) and
 [`docs/RELEASE.md`](docs/RELEASE.md).

@@ -4,12 +4,22 @@ name: CI
 # pull request; post-merge coverage is `push` to main. Required check on `main`
 # is **CI gate**: native / android / handbook skip when their paths did not
 # change, and a skip is success. Do not add those job names to branch protection.
+#
+# Two tiers (docs/ci.md): this is the fast PR tier. nightly.yml calls it with
+# `full: true`, which runs every job regardless of paths and adds the simulator
+# conformance suite and the iPad storage oracle.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      full:
+        description: Run every job regardless of paths, plus the nightly-only suites
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,6 +39,22 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Warn when the OpenCine pin is behind
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pin="$(awk '$1 == "OpenCine" { print $2; exit }' opencine-pins.txt)"
+          core_sha="$(git ls-remote https://github.com/erik-sutton95/OpenCine.git refs/heads/main | cut -f1 || true)"
+          if [ -z "$pin" ] || [ -z "$core_sha" ] || [ "$pin" = "$core_sha" ]; then
+            exit 0
+          fi
+          ahead="$(gh api "repos/erik-sutton95/OpenCine/compare/${pin}...${core_sha}" --jq '.ahead_by' 2>/dev/null || true)"
+          if [ -n "$ahead" ] && [ "$ahead" != "0" ]; then
+            echo "::warning::OpenCine pin ${pin:0:7} is ${ahead} commits behind Core main ${core_sha:0:7}"
+          fi
 
       # The app's release-note scripts delegate to the pinned shared validators.
       - name: Check out pinned OpenCine for shared metadata checks
@@ -65,38 +91,6 @@ jobs:
           ./scripts/android-release-notes-check.sh
           ./scripts/android-release-notes-test.sh
 
-      - name: Require reviewed notes for TestFlight-triggering pull requests
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]' }}
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          changed_files="$(git log --diff-merges=combined --format= --name-only "$BASE_SHA..HEAD" | sort -u)"
-          production_files="$(grep -E '^(Sources/|ios/|Package\.swift$|opencine-pins\.txt$|scripts/ios-)' <<< "$changed_files" | grep -vE '^(scripts/ios-release-notes|ios/OpenInstaCine(UI)?Tests/|ios/LunaOfficialUITests/|ios/ci_scripts/)' || true)"
-          if [[ -n "$production_files" ]]; then
-            if ! grep -Fxq 'ios/TestFlight/WhatToTest.en-US.txt' <<< "$changed_files"; then
-              echo "Update ios/TestFlight/WhatToTest.en-US.txt with the this-build window." >&2
-              exit 1
-            fi
-          fi
-
-      - name: Require reviewed notes for Play-triggering pull requests
-        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]' }}
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          changed_files="$(git log --diff-merges=combined --format= --name-only "$BASE_SHA..HEAD" | sort -u)"
-          production_files="$(grep -E '^(Apps/Android/|Sources/OpenInstaViewCore/|Sources/OpenInstaCineAndroidFacade/|Package\.swift$|opencine-pins\.txt$|scripts/android-|scripts/ci-install-swift-android\.sh$)' <<< "$changed_files" | grep -vE '^(scripts/android-release-notes|Apps/Android/[^/]+/src/(test|androidTest|debug)/)' || true)"
-          if [[ -n "$production_files" ]]; then
-            if ! grep -Fxq 'Apps/Android/Play/WhatToTest.en-US.txt' <<< "$changed_files"; then
-              echo "Update Apps/Android/Play/WhatToTest.en-US.txt with the this-build window." >&2
-              exit 1
-            fi
-            if ! grep -Fxq 'Apps/Android/Play/whatsnew/whatsnew-en-US' <<< "$changed_files"; then
-              echo "Update Apps/Android/Play/whatsnew/whatsnew-en-US (Play allows 500 characters)." >&2
-              exit 1
-            fi
-          fi
-
       - name: Actionlint
         # Digest-pinned for reproducibility. Update the version manually when needed. v1.7.12
         uses: docker://rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
@@ -108,9 +102,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
-      code: ${{ steps.filter.outputs.code }}
-      android: ${{ steps.filter.outputs.android }}
-      handbook: ${{ steps.filter.outputs.handbook }}
+      # The pin bot dispatches CI on bot/pin-core after a GITHUB_TOKEN push, which
+      # does not trigger pull_request. Run the shared-core jobs as if the pin changed.
+      # The nightly full suite runs every job.
+      code: ${{ steps.filter.outputs.code == 'true' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'bot/pin-core') || inputs.full }}
+      android: ${{ steps.filter.outputs.android == 'true' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'bot/pin-core') || inputs.full }}
+      handbook: ${{ steps.filter.outputs.handbook == 'true' || inputs.full }}
     steps:
       # paths-filter fetches the base ref on push / dispatch, so this job keeps the
       # checkout credentials. It runs no repository code.
@@ -177,7 +174,9 @@ jobs:
         run: scripts/checkout-opencine.sh
       - name: Swift packages
         run: just core-test
+      # Nightly tier: a second private simulator boot (docs/ci.md).
       - name: Original storage oracle on a private native 2x iPad
+        if: ${{ inputs.full }}
         env:
           TEST_RUNNER_CI: "true"
         run: |
@@ -195,7 +194,7 @@ jobs:
             -resultBundlePath "$evidence/storage-oracle.xcresult" \
             -only-testing:OpenInstaCineTests/MonitorPortraitHeaderClearanceTests/testCompactDeclaredGaugeRetainsClearanceWhenSafeTopChanges test
       - name: Retain original storage oracle evidence
-        if: always()
+        if: ${{ always() && inputs.full }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-storage-oracle-evidence
@@ -212,9 +211,9 @@ jobs:
   conformance:
     name: Shared conformance scenarios, iOS
     needs: changes
-    # Hosted macOS, public repositories only, for the same reasons as `native`: it runs code from
-    # the pull request.
-    if: ${{ needs.changes.outputs.code == 'true' && !github.event.repository.private }}
+    # Nightly tier, QUARANTINE (docs/ci.md). Hosted macOS, public repositories only, for the same
+    # reasons as `native`: it runs code from the pull request.
+    if: ${{ inputs.full && needs.changes.outputs.code == 'true' && !github.event.repository.private }}
     runs-on: macos-latest
     timeout-minutes: 60
     steps:

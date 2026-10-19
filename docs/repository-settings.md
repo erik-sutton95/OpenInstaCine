@@ -9,7 +9,9 @@ Require a pull request, one approving review, dismissal of stale reviews,
 conversation resolution and linear history. Require only **CI gate**, with
 checks up to date with `main`. Do not require individual native, Android or
 handbook job names: those jobs deliberately skip when their paths do not
-change.
+change. The simulator conformance suite and the iPad storage oracle run only in
+the nightly full suite, which tracks failures on `main` in one issue
+([`ci.md`](ci.md)).
 
 Use squash merges only and delete the merged head branch. Disable force
 pushes and branch deletion on `main`. Admin enforcement follows Pocket and
