@@ -459,11 +459,18 @@ extension CameraSession {
                 guard let self, self.lunaSession === target, self.nativeFormatPin?.id == pin.id else { return }
                 self.nativeFormatPin = nil; self.nativeRecordingFormat = previous
             })
-        if let previousRate, let targetRate = Rational.frameRate(value.framesPerSecond),
-            case .shutter(.duration)? = control.snapshot?.value(of: .shutter).value,
+        // A fixed shutter (Manual or shutter priority, a duration or the emulated angle) follows the
+        // cadence, as on main.
+        let program = control.snapshot?.exposureProgram.value
+        let fixedShutter: Bool
+        switch control.snapshot?.value(of: .shutter).value {
+        case .shutter(.duration)?, .shutter(.angle)?: fixedShutter = true
+        default: fixedShutter = false
+        }
+        if let previousRate, let targetRate = Rational.frameRate(value.framesPerSecond), fixedShutter,
             let rematch = ShutterAngle.formatRematch(degrees: OperatorPrefs.shutterAngleDegrees,
                 usesAngle: OperatorPrefs.shutterUsesAngle,
-                manual: control.snapshot?.exposureProgram.value == .manual, isPhoto: status.isPhoto,
+                manual: program == .manual || program == .shutterPriority, isPhoto: status.isPhoto,
                 previousFps: Int(previousRate.rounded()), nextFps: Int(targetRate.doubleValue.rounded()),
                 available: status.availableShutterDenoms),
             rematch.denom != status.shutterDenom {

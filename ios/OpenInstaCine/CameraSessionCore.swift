@@ -94,6 +94,9 @@ extension CameraSession {
                     status.shutterDenom = Int((1 / seconds.doubleValue).rounded())
                 }
                 shutterAuto = false
+            } else if case .angle = shutter {
+                // The emulated angle is a fixed shutter (Angle preference); only Auto is automatic.
+                shutterAuto = false
             } else {
                 shutterAuto = true
             }
