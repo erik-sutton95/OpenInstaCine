@@ -1,12 +1,13 @@
 New and changed
 
-- The live top bar readouts (storage, format, mode, REC and timecode) get their dark glow back, so they stay readable over bright pictures.
+- Share several cached clips at once from Media; they reach the share sheet together.
 
 Fixes
 
-- No Android-visible fixes beyond the restored glow; the earlier Media playback, storage and portrait readout fixes stay in place.
+- Sharing two or more cached clips no longer fails with "Couldn't share these clips."
+- The live top bar readouts (storage, format, mode, REC and timecode) keep their dark glow, so they stay readable over bright pictures.
 
 What to test
 
+- Cache two or more clips, select them in Media and share. Check that all of them reach the app you pick.
 - Point the camera at a bright or white scene and check that every top bar readout stays readable in portrait and landscape.
-- Connect your camera, record a short clip, open Media and return to Live View; report crashes or controls that stop responding.
