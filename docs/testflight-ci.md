@@ -71,6 +71,11 @@ text, no commit titles, no implementation jargon, 2000 characters, 200 per
 bullet (caps in `../OpenCine/scripts/tester-notes-limits.sh`). Each pull request that changes
 the iOS app replaces the file with that build's window (CI enforces it):
 
+A pin-only bot pull request (`bot/pin-core`, changed files exactly
+`opencine-pins.txt`) is exempt from the TestFlight and Play notes gates: tester
+notes are written once per release at the release gate (owner decision
+2026-10-19).
+
 ```bash
 just tester-notes-window   # recent feat/fix commits to pick from
 just testflight-notes      # check and print
