@@ -4,7 +4,7 @@ New and changed
 
 Fixes
 
-- No other Android-visible changes in this build; the earlier Media playback, storage and portrait readout fixes stay in place.
+- No Android-visible fixes beyond the restored glow; the earlier Media playback, storage and portrait readout fixes stay in place.
 
 What to test
 
