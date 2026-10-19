@@ -226,6 +226,8 @@ class PocketCameraSession(
         control.onNote = { presentControlNote(it) }
         control.noteFor = CorePresentation::note
         control.onChange = { retireChangedNativeCaptureSource(); _status.update(::projectControls) }
+        // Every common write's outcome, including one refused before it was sent, for the field log.
+        control.onWriteFinished = { label, receipt -> Log.i("OpenInstaCine", "control: $label ${receipt.stage}") }
         control.onRecordFinished = { receipt ->
             val stopped = receipt.intent == CameraCommandIntent.StopRecording && receipt.stage == CommandStage.Confirmed
             if (stopped) _mediaCaptured.tryEmit(Unit)
