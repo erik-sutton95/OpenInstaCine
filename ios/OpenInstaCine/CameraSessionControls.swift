@@ -488,13 +488,23 @@ extension CameraSession {
             let target = lunaSession, target.current.recording.value == .idle else { return }
         let admission = LunaCommandAdmission(owner: target.commandOwner, isCurrent: { true })
         let previous = nativeRecordingColor
+        let previousShell = status.colorMode
         let pin = CameraValuePin(value, now: pinNow, settle: 3)
         nativeColorPin = pin; nativeRecordingColor = value
+        // The preview colour science follows the choice at once, as before the shared refactor
+        // (behavior audit II-093); the readback confirms it and a refusal restores it.
+        let shellColor = LunaShellMapping.colorMode(value)
+        pins.color = CameraValuePin(shellColor, now: pinNow, settle: 3)
+        status.colorMode = shellColor
+        applyDecoderColorScience()
         let functionMode = backend.functionMode
         sendControl(value.label, { try LunaProtocol.setColorMode(value, functionMode: functionMode) },
             through: target, suppliedAdmission: admission, onFail: { [weak self] in
                 guard let self, self.lunaSession === target, self.nativeColorPin?.id == pin.id else { return }
                 self.nativeColorPin = nil; self.nativeRecordingColor = previous
+                self.pins.color = nil
+                self.status.colorMode = previousShell
+                self.applyDecoderColorScience()
             })
     }
 

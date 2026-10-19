@@ -356,6 +356,27 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         }
     }
 
+    /// Behavior audit II-093: a native colour pick applies the preview colour science at once and a
+    /// refusal restores it, as the pre-refactor `setColorMode` did.
+    func testNativeColorAppliesThePreviewAtOnceAndARefusalRestoresIt() async throws {
+        let (camera, shell, _) = try await angleShell(program: .manual, iso: 400)
+        shell.status.colorMode = .normal
+        shell.applyDecoderColorScience()
+        let flat = LunaShellMapping.previewColorMode(recording: .iLog, recoveryOff: OperatorPrefs.lunaFlatPreview)
+        shell.setNativeRecordingColor(.iLog)
+        XCTAssertEqual(shell.status.colorMode, .iLog)
+        XCTAssertEqual(shell.decoder.incomingColorMode, flat)
+        try await waitUntil { camera.sent.contains { $0.command == .setPhotographyOptions
+            && (try? LunaPhotographySettings(response: $0.body))?.types.contains(LunaPhotographyType.colorMode.rawValue) == true } }
+        camera.refuses = true
+        shell.setNativeRecordingColor(.standard)
+        XCTAssertEqual(shell.status.colorMode, .normal)
+        try await waitUntil { shell.controlNote != nil }
+        XCTAssertEqual(shell.status.colorMode, .iLog, "a refused colour restores the previous preview")
+        XCTAssertEqual(shell.decoder.incomingColorMode, flat)
+        shell.control.unbind()
+    }
+
     /// CodeRabbit #46: a format the camera refuses keeps the angle; no new 1/N is sent.
     func testRefusedNativeFormatSendsNoRematch() async throws {
         let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
