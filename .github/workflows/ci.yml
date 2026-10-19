@@ -30,6 +30,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Warn when the OpenCine pin is behind
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pin="$(awk '$1 == "OpenCine" { print $2; exit }' opencine-pins.txt)"
+          core_sha="$(git ls-remote https://github.com/erik-sutton95/OpenCine.git refs/heads/main | cut -f1 || true)"
+          if [ -z "$pin" ] || [ -z "$core_sha" ] || [ "$pin" = "$core_sha" ]; then
+            exit 0
+          fi
+          ahead="$(gh api "repos/erik-sutton95/OpenCine/compare/${pin}...${core_sha}" --jq '.ahead_by' 2>/dev/null || true)"
+          if [ -n "$ahead" ] && [ "$ahead" != "0" ]; then
+            echo "::warning::OpenCine pin ${pin:0:7} is ${ahead} commits behind Core main ${core_sha:0:7}"
+          fi
+
       # The app's release-note scripts delegate to the pinned shared validators.
       - name: Check out pinned OpenCine for shared metadata checks
         run: scripts/checkout-opencine.sh
@@ -69,8 +85,24 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]' }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           changed_files="$(git log --diff-merges=combined --format= --name-only "$BASE_SHA..HEAD" | sort -u)"
+          # Owner decision 2026-10-19: tester notes are written once per release at
+          # the release gate, so a pin-only bot branch is exempt.
+          pin_only_bot=false
+          if [ "$changed_files" = "opencine-pins.txt" ]; then
+            if [ "$HEAD_REF" = "bot/pin-core" ] ||
+            { [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$REF_NAME" = "bot/pin-core" ]; }; then
+              pin_only_bot=true
+            fi
+          fi
+          if [ "$pin_only_bot" = true ]; then
+            echo "Pin-only bot change: tester notes are written once per release at the release gate."
+            exit 0
+          fi
           production_files="$(grep -E '^(Sources/|ios/|Package\.swift$|opencine-pins\.txt$|scripts/ios-)' <<< "$changed_files" | grep -vE '^(scripts/ios-release-notes|ios/OpenInstaCine(UI)?Tests/|ios/LunaOfficialUITests/|ios/ci_scripts/)' || true)"
           if [[ -n "$production_files" ]]; then
             if ! grep -Fxq 'ios/TestFlight/WhatToTest.en-US.txt' <<< "$changed_files"; then
@@ -83,8 +115,24 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]' }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           changed_files="$(git log --diff-merges=combined --format= --name-only "$BASE_SHA..HEAD" | sort -u)"
+          # Owner decision 2026-10-19: tester notes are written once per release at
+          # the release gate, so a pin-only bot branch is exempt.
+          pin_only_bot=false
+          if [ "$changed_files" = "opencine-pins.txt" ]; then
+            if [ "$HEAD_REF" = "bot/pin-core" ] ||
+            { [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$REF_NAME" = "bot/pin-core" ]; }; then
+              pin_only_bot=true
+            fi
+          fi
+          if [ "$pin_only_bot" = true ]; then
+            echo "Pin-only bot change: tester notes are written once per release at the release gate."
+            exit 0
+          fi
           production_files="$(grep -E '^(Apps/Android/|Sources/OpenInstaViewCore/|Sources/OpenInstaCineAndroidFacade/|Package\.swift$|opencine-pins\.txt$|scripts/android-|scripts/ci-install-swift-android\.sh$)' <<< "$changed_files" | grep -vE '^(scripts/android-release-notes|Apps/Android/[^/]+/src/(test|androidTest|debug)/)' || true)"
           if [[ -n "$production_files" ]]; then
             if ! grep -Fxq 'Apps/Android/Play/WhatToTest.en-US.txt' <<< "$changed_files"; then
@@ -108,8 +156,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
-      code: ${{ steps.filter.outputs.code }}
-      android: ${{ steps.filter.outputs.android }}
+      # The pin bot dispatches CI on bot/pin-core after a GITHUB_TOKEN push, which
+      # does not trigger pull_request. Run the shared-core jobs as if the pin changed.
+      code: ${{ steps.filter.outputs.code == 'true' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'bot/pin-core') }}
+      android: ${{ steps.filter.outputs.android == 'true' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'bot/pin-core') }}
       handbook: ${{ steps.filter.outputs.handbook }}
     steps:
       # paths-filter fetches the base ref on push / dispatch, so this job keeps the
