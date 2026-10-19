@@ -6,4 +6,8 @@
     <cache-path
         name="opc_diagnostics"
         path="diagnostics/" />
+    <!-- Share copies of the no-backup media cache, which FileProvider cannot name (IA-552). -->
+    <cache-path
+        name="opc_share"
+        path="share/ready/" />
 </paths>
