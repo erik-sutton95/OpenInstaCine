@@ -10,10 +10,14 @@ import XCTest
 @MainActor
 final class AssistInspectorLifecycleTests: XCTestCase {
     func testBlockedRenderKeepsItsSlotAcrossActualInspectorDismissalAndRemount() async throws {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        func mark(_ what: String) { print(String(format: "DIAG-INSPECTOR %+.3f %@", CFAbsoluteTimeGetCurrent() - t0, what)) }
+        mark("test start")
         let model = AppModel()
+        mark("AppModel ready")
         let clock = InspectorPreviewTestClock(advancesUntilFrozen: true)
         let work = InspectorLifecycleWorkProbe()
-        let started = InspectorPreviewTestSignal("First mounted inspector started image work")
+        let started = InspectorPreviewTestSignal("First mounted inspector started image work", seconds: 90)
         let resumed = InspectorPreviewTestSignal("Remounted inspector received a fresh work slot")
         let finished = InspectorPreviewTestSignal("Blocked image work finished")
         let dismissed = InspectorPreviewTestSignal("Original inspector disappeared")
@@ -26,6 +30,20 @@ final class AssistInspectorLifecycleTests: XCTestCase {
             CIContext().createCGImage(
                 CIImage(color: .white).cropped(to: CGRect(x: 0, y: 0, width: 1, height: 1)),
                 from: CGRect(x: 0, y: 0, width: 1, height: 1)))
+        mark("CIContext reference ready")
+        let heartbeatStop = DispatchSemaphore(value: 0)
+        Thread.detachNewThread {
+            while heartbeatStop.wait(timeout: .now() + 1) == .timedOut {
+                let sent = CFAbsoluteTimeGetCurrent()
+                let answered = DispatchSemaphore(value: 0)
+                DispatchQueue.main.async { answered.signal() }
+                let ok = answered.wait(timeout: .now() + 5) == .success
+                print(String(format: "DIAG-INSPECTOR %+.3f heartbeat main=%@ latency=%.3f clockReads=%d work=%d",
+                    CFAbsoluteTimeGetCurrent() - t0, ok ? "ok" : "BLOCKED>5s", CFAbsoluteTimeGetCurrent() - sent,
+                    clock.readCount, work.count))
+            }
+        }
+        defer { heartbeatStop.signal() }
         let renderer = MonitorInspectorImageRenderer(
             now: { clock.now },
             operation: { _, _ in
@@ -34,6 +52,7 @@ final class AssistInspectorLifecycleTests: XCTestCase {
                     work.end()
                     if invocation == 1 { finished.signal() }
                 }
+                print(String(format: "DIAG-INSPECTOR %+.3f operation invocation %d", CFAbsoluteTimeGetCurrent() - t0, invocation))
                 if invocation == 1 {
                     // Initial SwiftUI configuration invalidation can discard a
                     // queued render. Let retries advance until real work enters.
@@ -73,10 +92,13 @@ final class AssistInspectorLifecycleTests: XCTestCase {
             window.isHidden = true
             window.rootViewController = nil
         }
+        mark("window visible")
         model.assist.configureTool = .peaking
         host.view.setNeedsLayout()
         host.view.layoutIfNeeded()
+        mark("inspector laid out, waiting for started")
         try await started.wait()
+        mark("started arrived")
         let admittedAt = clock.now
         probe.onDisappear = { dismissed.signal() }
         probe.onAppear = { remounted.signal() }

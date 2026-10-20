@@ -401,6 +401,8 @@ final class InspectorPreviewTestClock: @unchecked Sendable {
     private var time: UInt64 = 0
     private var advancesUntilFrozen: Bool
     private var nextRead: InspectorPreviewTestSignal?
+    private var reads = 0
+    var readCount: Int { lock.lock(); defer { lock.unlock() }; return reads }
 
     init(advancesUntilFrozen: Bool = false) {
         self.advancesUntilFrozen = advancesUntilFrozen
@@ -423,6 +425,7 @@ final class InspectorPreviewTestClock: @unchecked Sendable {
         get {
             lock.lock()
             defer { lock.unlock() }
+            reads += 1
             if advancesUntilFrozen { time = DispatchTime.now().uptimeNanoseconds }
             nextRead?.signal()
             nextRead = nil
@@ -460,11 +463,13 @@ private final class InspectorRenderInvocationCounter: @unchecked Sendable {
 /// can manufacture a cascade; each caller releases blocked work in defer.
 final class InspectorPreviewTestSignal: Sendable {
     private let name: String
+    private let seconds: Int
     private let events: AsyncStream<Void>
     private let continuation: AsyncStream<Void>.Continuation
 
-    init(_ name: String) {
+    init(_ name: String, seconds: Int = 10) {
         self.name = name
+        self.seconds = seconds
         let pair = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         events = pair.stream
         continuation = pair.continuation
@@ -482,7 +487,7 @@ final class InspectorPreviewTestSignal: Sendable {
                 throw CancellationError()
             }
             group.addTask {
-                try await Task.sleep(for: .seconds(10))
+                try await Task.sleep(for: .seconds(self.seconds))
                 throw WaitFailure(event: self.name)
             }
             defer { group.cancelAll() }
