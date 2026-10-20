@@ -329,6 +329,18 @@ import XCTest
         XCTAssertEqual(service.opens, 0)
     }
 
+    /// SIMULATED: the owning session installs the Core gallery-return hook that drops the live
+    /// decoder's format and waits for an IDR before the shared media service restarts live.
+    func testGalleryReturnFlushesTheLiveDecoder() async throws {
+        let current = OpenInstaCine.CameraSession(backend: AppModel.makeBackend())
+        defer { current.decoder.close() }
+        let hook = try XCTUnwrap(current.backend.prepareMediaLiveReturn,
+            "The owning session must install the Core media-return hook")
+        XCTAssertFalse(current.decoder.awaitingIDR)
+        await hook(MediaBrowseBinding(session: .init(), epoch: .init(1)))
+        XCTAssertTrue(current.decoder.awaitingIDR, "Returning from the gallery waits for a new IDR")
+    }
+
     /// SIMULATED: a live monitor without a registered media service stays unsupported.
     func testUnregisteredLiveMonitorDoesNotInventMediaService() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

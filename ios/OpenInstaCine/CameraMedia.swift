@@ -176,6 +176,12 @@ struct MediaPlaybackSource: Equatable {
 /// Small source/playback compatibility adapters. The gallery consumes mediaLibrary directly.
 extension CameraSession {
     func configureMediaLibrary(service: (any CameraMediaService)? = nil) {
+        // The shared media service hands the live restart back through this hook. Drop the live
+        // format and wait for an IDR first, so a long gallery visit cannot decode against stale
+        // references. Only the backend's owner may bind it (a lease never rebinds callbacks).
+        if ownsBackend {
+            backend.prepareMediaLiveReturn = { [weak self] _ in self?.decoder.flushForRecovery() }
+        }
         let key = mediaCameraID
         if mediaLibrary != nil, mediaLibraryKey == key {
             if mediaLibraryServiceID != service?.sessionID {
