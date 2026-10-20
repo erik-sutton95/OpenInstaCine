@@ -278,7 +278,9 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         camera.sent.filter(isShutterWrite).compactMap { try? LunaPhotographySettings(response: $0.body).videoExposure }
     }
 
-    /// A live Luna shell at 4K25 with Angle on (emulated in Core), bound to `luna`.
+    /// A live Luna shell at 4K25 with Angle on (emulated in Core), bound to `luna`. The session
+    /// carries the backend's admitted port: native format and colour picks are admitted writes,
+    /// which a session without one refuses as expired before they reach the camera.
     private func angleShell(program: LunaExposureProgram, iso: UInt64) async throws
         -> (FakeLuna, OpenInstaCine.CameraSession, AppModel)
     {
@@ -286,7 +288,7 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         camera.program = program.rawValue
         camera.iso = iso
         camera.shutterSeconds = 1.0 / 50
-        let luna = camera.connectedSession()
+        let luna = camera.connectedSession(admittedSends: true)
         let raw = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 25))
         let body = try ProtoMessage.blob(field: 1, value: ProtoMessage.varint(31))
             + ProtoMessage.blob(field: 2, value: ProtoMessage.integer(field: 31, value: raw))
