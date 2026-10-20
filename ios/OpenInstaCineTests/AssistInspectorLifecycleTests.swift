@@ -59,6 +59,7 @@ final class AssistInspectorLifecycleTests: XCTestCase {
                 [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &source),
             kCVReturnSuccess)
         let sourceLease = model.monitorSamples.openSource(.live)
+        defer { model.monitorSamples.closeSource(sourceLease) }
         model.monitorSamples.publish(sourceLease,
             source: try XCTUnwrap(source), transfer: .rec709, reportedTransfer: .rec709, bundle: nil)
         let size = CGSize(width: 874, height: 402)
@@ -81,7 +82,6 @@ final class AssistInspectorLifecycleTests: XCTestCase {
         defer {
             release.signal()
             model.assist.configureTool = nil
-            model.monitorSamples.closeSource(sourceLease)
             window.isHidden = true
             window.rootViewController = nil
             originalKeyWindow?.makeKeyAndVisible()
@@ -135,19 +135,23 @@ final class AssistInspectorLifecycleTests: XCTestCase {
         try await exerciseRapidTabSwitchingAndRemounting()
     }
 
-    func testSceneSelectionFailureCancelsPublicationBeforeFixtureReturns() async throws {
+    func testSceneSelectionFailureRetiresPublicationAndSourceBeforeFixtureReturns() async throws {
         enum SceneFailure: Error { case unavailable }
         var publication: Task<Void, Never>?
+        var sourceLease: LiveFrameSampleBus.Source?
         do {
             try await exerciseRapidTabSwitchingAndRemounting(
                 selectScene: { throw SceneFailure.unavailable },
-                publicationCreated: { publication = $0 })
+                publicationCreated: { publication = $0 },
+                sourceOpened: { sourceLease = $0 })
             XCTFail("The injected scene-selection failure must escape the fixture")
         } catch SceneFailure.unavailable { }
         let task = try XCTUnwrap(publication)
         XCTAssertTrue(task.isCancelled, "A failed scene selection must retire the real publication task")
         task.cancel()
         await task.value
+        let lease = try XCTUnwrap(sourceLease)
+        XCTAssertFalse(lease.isActive, "A failed scene selection must retire the real source lease")
     }
 
     private func exerciseRapidTabSwitchingAndRemounting(
@@ -156,7 +160,8 @@ final class AssistInspectorLifecycleTests: XCTestCase {
                 $0.activationState == .foregroundActive
             })
         },
-        publicationCreated: (Task<Void, Never>) -> Void = { _ in }
+        publicationCreated: (Task<Void, Never>) -> Void = { _ in },
+        sourceOpened: (LiveFrameSampleBus.Source) -> Void = { _ in }
     ) async throws {
         let model = AppModel()
         let size = CGSize(width: 874, height: 402)
@@ -174,6 +179,8 @@ final class AssistInspectorLifecycleTests: XCTestCase {
         }
         CVPixelBufferUnlockBaseAddress(buffer, [])
         let sourceLease = model.monitorSamples.openSource(.live)
+        defer { model.monitorSamples.closeSource(sourceLease) }
+        sourceOpened(sourceLease)
         model.monitorSamples.publish(sourceLease,
             source: buffer, transfer: .rec709, reportedTransfer: .rec709, bundle: nil)
         var publicationCount = 0
@@ -200,7 +207,6 @@ final class AssistInspectorLifecycleTests: XCTestCase {
             "The native inspector fixture must belong to the active window scene")
         defer {
             model.assist.configureTool = nil
-            model.monitorSamples.closeSource(sourceLease)
             window.isHidden = true
             window.rootViewController = nil
             originalKeyWindow?.makeKeyAndVisible()
