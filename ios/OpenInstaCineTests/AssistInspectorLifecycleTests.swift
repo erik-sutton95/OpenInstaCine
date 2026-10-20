@@ -22,6 +22,10 @@ final class AssistInspectorLifecycleTests: XCTestCase {
         let nextRequest = InspectorPreviewTestSignal(
             "Replacement inspector completed its prior request")
         let release = DispatchSemaphore(value: 0)
+        // Work stays blocked across started, dismissed, remounted and remountRequested,
+        // each with its own event wait. Include one more event budget for layout.
+        // This outer hang guard must not expire before the test intentionally releases work.
+        let blockedLifecycleTimeout = Double(InspectorPreviewTestSignal.timeoutSeconds * 5)
         let reference = try XCTUnwrap(
             CIContext().createCGImage(
                 CIImage(color: .white).cropped(to: CGRect(x: 0, y: 0, width: 1, height: 1)),
@@ -40,7 +44,7 @@ final class AssistInspectorLifecycleTests: XCTestCase {
                     clock.freezeAtLastRead()
                     started.signal()
                     XCTAssertEqual(
-                        release.wait(timeout: .now() + 10), .success,
+                        release.wait(timeout: .now() + blockedLifecycleTimeout), .success,
                         "Test did not release the mounted inspector's first worker")
                 } else if invocation == 2 {
                     resumed.signal()
@@ -55,6 +59,7 @@ final class AssistInspectorLifecycleTests: XCTestCase {
                 [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &source),
             kCVReturnSuccess)
         let sourceLease = model.monitorSamples.openSource(.live)
+        defer { model.monitorSamples.closeSource(sourceLease) }
         model.monitorSamples.publish(sourceLease,
             source: try XCTUnwrap(source), transfer: .rec709, reportedTransfer: .rec709, bundle: nil)
         let size = CGSize(width: 874, height: 402)
@@ -62,16 +67,24 @@ final class AssistInspectorLifecycleTests: XCTestCase {
         let host = UIHostingController(
             rootView: InspectorLifecycleHost(model: model, viewport: size, probe: probe)
                 .environment(\.scenePhase, .active))
-        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        let scene = try XCTUnwrap(
+            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first {
+                $0.activationState == .foregroundActive
+            })
+        let originalKeyWindow = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(origin: .zero, size: size)
         window.rootViewController = host
         window.makeKeyAndVisible()
         host.view.frame = window.bounds
+        XCTAssertTrue(window.windowScene === scene,
+            "The native inspector fixture must belong to the active window scene")
         defer {
             release.signal()
             model.assist.configureTool = nil
-            model.monitorSamples.closeSource(sourceLease)
             window.isHidden = true
             window.rootViewController = nil
+            originalKeyWindow?.makeKeyAndVisible()
         }
         model.assist.configureTool = .peaking
         host.view.setNeedsLayout()
@@ -119,6 +132,37 @@ final class AssistInspectorLifecycleTests: XCTestCase {
     /// Hosts the production inspector, including its native menus, scope views
     /// and cancellable image renderer. No decoder or camera session is attached.
     func testRapidTabSwitchingAndRemountingKeepsTheSelectedInspectorAlive() async throws {
+        try await exerciseRapidTabSwitchingAndRemounting()
+    }
+
+    func testSceneSelectionFailureRetiresPublicationAndSourceBeforeFixtureReturns() async throws {
+        enum SceneFailure: Error { case unavailable }
+        var publication: Task<Void, Never>?
+        var sourceLease: LiveFrameSampleBus.Source?
+        do {
+            try await exerciseRapidTabSwitchingAndRemounting(
+                selectScene: { throw SceneFailure.unavailable },
+                publicationCreated: { publication = $0 },
+                sourceOpened: { sourceLease = $0 })
+            XCTFail("The injected scene-selection failure must escape the fixture")
+        } catch SceneFailure.unavailable { }
+        let task = try XCTUnwrap(publication)
+        XCTAssertTrue(task.isCancelled, "A failed scene selection must retire the real publication task")
+        task.cancel()
+        await task.value
+        let lease = try XCTUnwrap(sourceLease)
+        XCTAssertFalse(lease.isActive, "A failed scene selection must retire the real source lease")
+    }
+
+    private func exerciseRapidTabSwitchingAndRemounting(
+        selectScene: () throws -> UIWindowScene = {
+            try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first {
+                $0.activationState == .foregroundActive
+            })
+        },
+        publicationCreated: (Task<Void, Never>) -> Void = { _ in },
+        sourceOpened: (LiveFrameSampleBus.Source) -> Void = { _ in }
+    ) async throws {
         let model = AppModel()
         let size = CGSize(width: 874, height: 402)
         let probe = InspectorLifecycleProbe()
@@ -135,6 +179,8 @@ final class AssistInspectorLifecycleTests: XCTestCase {
         }
         CVPixelBufferUnlockBaseAddress(buffer, [])
         let sourceLease = model.monitorSamples.openSource(.live)
+        defer { model.monitorSamples.closeSource(sourceLease) }
+        sourceOpened(sourceLease)
         model.monitorSamples.publish(sourceLease,
             source: buffer, transfer: .rec709, reportedTransfer: .rec709, bundle: nil)
         var publicationCount = 0
@@ -146,18 +192,24 @@ final class AssistInspectorLifecycleTests: XCTestCase {
                 do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
             }
         }
+        defer { publication.cancel() }
+        publicationCreated(publication)
         let host = UIHostingController(
             rootView: InspectorLifecycleHost(model: model, viewport: size, probe: probe))
-        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+        let scene = try selectScene()
+        let originalKeyWindow = scene.windows.first { $0.isKeyWindow }
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(origin: .zero, size: size)
         window.rootViewController = host
         window.makeKeyAndVisible()
         host.view.frame = window.bounds
+        XCTAssertTrue(window.windowScene === scene,
+            "The native inspector fixture must belong to the active window scene")
         defer {
-            publication.cancel()
             model.assist.configureTool = nil
-            model.monitorSamples.closeSource(sourceLease)
             window.isHidden = true
             window.rootViewController = nil
+            originalKeyWindow?.makeKeyAndVisible()
         }
         let tools = LiveAssistTool.settingsCases.filter(\.hasConfiguration)
         for cycle in 0..<12 {

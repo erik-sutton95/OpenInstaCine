@@ -1,6 +1,7 @@
 import Insta360Apple
 import Insta360AppleTestSupport
 import Insta360Protocol
+import OpenCineCameraControls
 import OpenCineCore
 import OpenCineHostedTestSupport
 import OpenCineMedia
@@ -243,6 +244,14 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         XCTAssertTrue(held, "timed out")
     }
 
+    private func retireFixture(_ camera: FakeLuna, shell: OpenInstaCine.CameraSession) {
+        withExtendedLifetime(camera) {
+            camera.beforeReply = nil
+            shell.lunaSessionOverride?.close(.requested)
+            shell.control.unbind()
+        }
+    }
+
     private static func isShutterWrite(_ request: LunaRequest) -> Bool {
         request.command == .setPhotographyOptions
             && (try? LunaPhotographySettings(response: request.body))?.types.contains(21) == true
@@ -257,6 +266,7 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         camera.iso = 400
         camera.shutterSeconds = 1.0 / 50
         let luna = camera.connectedSession()
+        defer { withExtendedLifetime(camera) { luna.close(.requested) } }
         let raw = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 25))
         let body = try ProtoMessage.blob(field: 1, value: ProtoMessage.varint(31))
             + ProtoMessage.blob(field: 2, value: ProtoMessage.integer(field: 31, value: raw))
@@ -314,11 +324,11 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
         defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
         let (camera, shell, model) = try await angleShell(program: .manual, iso: 400)
+        defer { retireFixture(camera, shell: shell) }
         model.commit(.shutterAngle(90), from: .sheet(nil))
         try await waitUntil { Self.exposures(camera).contains { abs($0.shutterSeconds - 1.0 / 100) < 1e-9 } }
         try await waitUntil { shell.control.pending[.shutter] == nil }
         XCTAssertNil(shell.controlNote)
-        shell.control.unbind()
     }
 
     /// II-069 / II-070: Manual from Auto with Angle remembered sends a manual shutter.
@@ -326,21 +336,21 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
         defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
         let (camera, shell, _) = try await angleShell(program: .automatic, iso: 400)
+        defer { retireFixture(camera, shell: shell) }
         shell.setExpoMode(.manual)
         try await waitUntil { Self.exposures(camera).contains { $0.shutterSeconds > 0 } }
         try await waitUntil { shell.control.pending[.shutter] == nil }
         XCTAssertNil(shell.controlNote)
-        shell.control.unbind()
     }
 
     /// IA-116 twin: Auto ISO with a fixed shutter (shutter priority) reads Manual, not Auto.
     func testShutterPriorityReadsManualInAngleMode() async throws {
         let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
         defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
-        let (_, shell, _) = try await angleShell(program: .shutterPriority, iso: 0)
+        let (camera, shell, _) = try await angleShell(program: .shutterPriority, iso: 0)
+        defer { retireFixture(camera, shell: shell) }
         try await waitUntil { shell.status.expoMode != nil }
         XCTAssertEqual(shell.status.expoMode, .manual)
-        shell.control.unbind()
     }
 
     /// II-062: a native format change keeps 180 degrees for a fixed shutter (Manual and shutter priority).
@@ -350,18 +360,81 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         OperatorPrefs.shutterAngleDegrees = 180
         for (program, iso) in [(LunaExposureProgram.manual, UInt64(400)), (.shutterPriority, 0)] {
             let (camera, shell, _) = try await angleShell(program: program, iso: iso)
+            defer { retireFixture(camera, shell: shell) }
             let next = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 50)
                 .flatMap(LunaVideoResolution.init(rawValue:)))
             shell.setNativeRecordingFormat(next)
             try await waitUntil { Self.exposures(camera).contains { abs($0.shutterSeconds - 1.0 / 100) < 1e-9 } }
-            shell.control.unbind()
+            // The fake's send log precedes its final readback. Keep it alive until the
+            // shutter receipt finishes; unbind retires the UI, not the session's work.
+            try await waitUntil { shell.control.pending[.shutter] == nil }
         }
+    }
+
+    /// Owner 2026-10-20 (Luna Ultra, Angle 180, shutter priority): changing the frame rate flashed
+    /// a derived angle until the camera confirmed. The readout is sampled through the whole native
+    /// sequence, in its worst order: tap (format pin), the camera's format readback beating the ack
+    /// (the shell pin clears, the camera clamps its own speed to 1/125 at 120 fps), the ack and the
+    /// re-sent 1/250, its confirmation. It never leaves 180 degrees.
+    @MainActor private final class SequenceProbe {
+        var gated = false
+        var readouts: [String] = []
+    }
+
+    func testNativeFormatChangeHoldsTheAngleReadout() async throws {
+        let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
+        defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
+        OperatorPrefs.shutterAngleDegrees = 180
+        let (camera, shell, model) = try await angleShell(program: .shutterPriority, iso: 0)
+        defer { retireFixture(camera, shell: shell) }
+        let luna = try XCTUnwrap(shell.lunaSessionOverride)
+        camera.reportsSinglePrecisionShutter = true
+        let probe = SequenceProbe()
+        func sample(_ step: String) { probe.readouts.append("\(step): \(model.shutterAngleReadout(selection: .pending).value)") }
+        sample("before")
+        let raw = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 120))
+        let next = try XCTUnwrap(LunaVideoResolution(rawValue: raw))
+        let cadence = try ProtoMessage.blob(field: 1, value: ProtoMessage.varint(31))
+            + ProtoMessage.blob(field: 2, value: ProtoMessage.integer(field: 31, value: raw))
+            + ProtoMessage.integer(field: 3, value: UInt64(LunaFunctionMode.normalVideo.rawValue))
+        camera.beforeReply = { [weak shell] request in
+            guard !probe.gated, let shell,
+                (try? LunaPhotographySettings(response: request.body))?.types.contains(31) == true else { return }
+            probe.gated = true
+            sample("tap")
+            // The camera's readback beats the ack: new rate, a speed it clamped itself, no shell pin.
+            camera.shutterSeconds = 1.0 / 125
+            luna.ingest(settings: try! LunaPhotographySettings(response: cadence))
+            camera.reportSettings()
+            shell.nativeFormatPin = nil
+            try? await self.waitUntil {
+                shell.control.snapshot?.value(of: .frameRate).value == .frameRate(Rational(120))
+                    && shell.control.snapshot?.value(of: .shutter).value != .shutter(.angle(180))
+            }
+            sample("readback before ack")
+        }
+        shell.setNativeRecordingFormat(next)
+        XCTAssertNotNil(shell.nativeFormatPin)
+        XCTAssertTrue(shell.isFormatPinActive, "A native format change is settling")
+        sample("after tap")
+        try await waitUntil { probe.gated }
+        try await waitUntil { Self.exposures(camera).contains { abs($0.shutterSeconds - 1.0 / 250) < 1e-9 } }
+        sample("re-sent")
+        try await waitUntil {
+            guard shell.control.pending[.shutter] == nil,
+                case .shutter(.angle(let angle))? = shell.control.snapshot?.value(of: .shutter).value else { return false }
+            return abs(angle - 172.8) < 1e-6
+        }
+        sample("confirmed")
+        XCTAssertEqual(probe.readouts.count, 6, "\(probe.readouts)")
+        XCTAssertTrue(probe.readouts.allSatisfy { $0.hasSuffix(": 180°") }, "\(probe.readouts)")
     }
 
     /// Behavior audit II-093: a native colour pick applies the preview colour science at once and a
     /// refusal restores it, as the pre-refactor `setColorMode` did.
     func testNativeColorAppliesThePreviewAtOnceAndARefusalRestoresIt() async throws {
         let (camera, shell, _) = try await angleShell(program: .manual, iso: 400)
+        defer { retireFixture(camera, shell: shell) }
         shell.status.colorMode = .normal
         shell.applyDecoderColorScience()
         let flat = LunaShellMapping.previewColorMode(recording: .iLog, recoveryOff: OperatorPrefs.lunaFlatPreview)
@@ -376,7 +449,6 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         try await waitUntil { shell.controlNote != nil }
         XCTAssertEqual(shell.status.colorMode, .iLog, "a refused colour restores the previous preview")
         XCTAssertEqual(shell.decoder.incomingColorMode, flat)
-        shell.control.unbind()
     }
 
     /// CodeRabbit #46: a format the camera refuses keeps the angle; no new 1/N is sent.
@@ -385,6 +457,7 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
         OperatorPrefs.shutterAngleDegrees = 180
         let (camera, shell, _) = try await angleShell(program: .manual, iso: 400)
+        defer { retireFixture(camera, shell: shell) }
         camera.refuses = true
         let next = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 50)
             .flatMap(LunaVideoResolution.init(rawValue:)))
@@ -392,7 +465,6 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         try await waitUntil { shell.controlNote != nil }
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertFalse(camera.sent.contains(where: Self.isShutterWrite), "a refused format sends no shutter")
-        shell.control.unbind()
     }
 
     func testFormatChangeWithUnknownExposureSendsNoShutter() async throws {
@@ -403,6 +475,7 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         let luna = camera.connectedSession()
         let shell = OpenInstaCine.CameraSession(backend: AppModel.makeBackend(), borrowing: HevcDecoder())
         shell.lunaSessionOverride = luna
+        defer { retireFixture(camera, shell: shell) }
         shell.phase = .live
         shell.control.bind(luna)
         try await waitUntil { shell.control.snapshot != nil }
@@ -418,6 +491,5 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         // Negative window: no hidden shutter SET may follow within it.
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertFalse(camera.sent.contains(where: Self.isShutterWrite), "no hidden shutter SET while exposure is unknown")
-        shell.control.unbind()
     }
 }
