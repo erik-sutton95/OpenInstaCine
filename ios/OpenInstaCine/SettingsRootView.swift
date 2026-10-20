@@ -5,6 +5,7 @@ import OpenCineAppKitApple
 import OpenCineApple
 import OpenCineFrameIOApple
 import OpenCineCameraControls
+import OpenCineCore
 import OpenCineRelayApple
 import OpenInstaViewCore
 import SwiftUI
@@ -134,10 +135,20 @@ struct SettingsRootView: View {
     }
 
     private var availableDisplay: Set<MonitorDisplayChrome.Section> {
-        let capabilities = OsmoMonitorPresentation.capabilities(model.session)
-        return Set(MonitorDisplayChrome.Section.allCases.filter {
+        Self.availableDisplay(
+            capabilities: OsmoMonitorPresentation.capabilities(model.session),
+            codecColor: model.recordingCodecColor)
+    }
+
+    /// The DISP switches for what this camera can draw. The Luna reports no codec, so its live
+    /// surface never shows one and no Codec switch is offered (behavior audit II-297).
+    static func availableDisplay(
+        capabilities: MonitorLayoutCapabilities, codecColor: CaptureCodecColorChoices
+    ) -> Set<MonitorDisplayChrome.Section> {
+        Set(MonitorDisplayChrome.Section.allCases.filter {
             if $0 == .zoomChip { return capabilities.zoom }
             if $0 == .gimbalStick { return capabilities.gimbal }
+            if $0 == .codec { return !codecColor.codecs.isEmpty }
             return true
         })
     }
