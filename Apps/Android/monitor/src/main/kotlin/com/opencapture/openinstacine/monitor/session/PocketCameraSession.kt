@@ -360,7 +360,8 @@ class PocketCameraSession(
 
     private val _recoveryState = MutableStateFlow<SessionRecoveryUi>(SessionRecoveryUi.Idle)
     val recoveryState: StateFlow<SessionRecoveryUi> = _recoveryState.asStateFlow()
-    val isFormatPinActive: Boolean get() = false
+    /** A format change still settling: the shell format pin or the native Luna format pin (iOS twin). */
+    val isFormatPinActive: Boolean get() = pins.format != null || nativeFormatPin != null
     @Volatile var zoomColorHopPending = false
     var zoomPinchPreview: Double? = null
     private var zoomPinchBase = 1.0
