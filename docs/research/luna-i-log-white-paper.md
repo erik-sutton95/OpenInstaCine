@@ -56,7 +56,7 @@ Derived numerical details useful for tests:
 
 The paper's paired anchors support **normalized code = code / 1023**, not substituting a `64...940` normalization into these equations. That does **not** establish how a particular recorded HEVC file or live preview packs RGB/Y'CbCr, whether its video-range flag is correct, or whether a decoder has already expanded legal range. Transport/decoder range conversion must be verified separately and applied exactly once before interpreting the curve.
 
-`MonitorCore` implements the exact expressions internally as the appended `MonitorTransfer.ilog` case. Its existing public monitoring API retains its established clamps: encoded input/output stay in `0...1`, and negative decoded reflectance becomes zero. I-Log scope anchors use the paper black and middle gray, with encoded `1` as the 100-line ceiling; ISO and measured DJI preview maxima do not change that ceiling. The Android rendering bridge uses the neutral identifier `65536`, outside its compatibility camera-byte range. This identifier is not a camera wire enum.
+`MonitorCore` implements the exact expressions internally as the appended `MonitorTransfer.ilog` case. Its existing public monitoring API retains its established clamps: encoded input/output stay in `0...1`, and negative decoded reflectance becomes zero. I-Log scope anchors use the paper black and middle gray. Until 2026-10-20 encoded `1` was the 100-line ceiling at every ISO, so clipping below ISO 400 went unflagged. The ceiling now follows ISO through OpenCine `LunaScopeClip` (see the implementation note). The Android rendering bridge uses the neutral identifier `65536`, outside its compatibility camera-byte range. This identifier is not a camera wire enum.
 
 ## Gamut and exposure calculations
 

@@ -387,6 +387,14 @@ final class CameraSession {
         decoder.onSourceFrame = { [weak self] lease in
             if let buffer = lease.pixelBuffer { self?.considerFaceAF(buffer) }
         }
+        // The scope clip ceiling follows the camera's ISO (I-Log clips lower below ISO 400).
+        // The Luna reports ISO 0 in Auto: nil lets the shared ceiling assume its lowest ISO.
+        if sharedDecoder == nil {
+            decoder.sourceCalibrationProvider = { [weak self] in
+                guard let self, self.status.iso > 0 else { return nil }
+                return self.status.iso
+            }
+        }
         // A decoder handoff (look/scope toggle) needs an IDR. Luna sends a GOP every
         // ~2 s; ask once for an I-frame so the switch is not a two-second hold.
         decoder.onHandoffNeedsIDR = { [weak self] in self?.requestKeyframe(reason: "assist VT start") }
@@ -833,6 +841,7 @@ final class CameraSession {
     func applyDecoderColorScience() {
         decoder.incomingColorMode = LunaShellMapping.previewColorMode(
             recording: status.colorMode, recoveryOff: OperatorPrefs.lunaFlatPreview)
+        decoder.refreshSourceCalibration()
     }
 
     // MARK: - Feed health
