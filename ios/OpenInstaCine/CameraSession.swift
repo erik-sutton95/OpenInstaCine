@@ -353,7 +353,8 @@ final class CameraSession {
     var zoomOptimistic: Double? { zoomPin?.expected }
     /// Highest zoom the body accepts (fw 1.1.15 raised this; see LunaShellMapping).
     @ObservationIgnored var zoomCeiling = LunaShellMapping.defaultZoomCeiling
-    var isFormatPinActive: Bool { pins.format != nil }
+    /// A format change still settling: the shell format pin or the native Luna format pin.
+    var isFormatPinActive: Bool { pins.format != nil || nativeFormatPin != nil }
 
     @ObservationIgnored let decoder: HevcDecoder
     var videoLayer: AVSampleBufferDisplayLayer { decoder.displayLayer }

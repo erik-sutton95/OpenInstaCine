@@ -1,6 +1,7 @@
 import Insta360Apple
 import Insta360AppleTestSupport
 import Insta360Protocol
+import OpenCineCameraControls
 import OpenCineCore
 import OpenCineHostedTestSupport
 import OpenCineMedia
@@ -356,6 +357,63 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
             try await waitUntil { Self.exposures(camera).contains { abs($0.shutterSeconds - 1.0 / 100) < 1e-9 } }
             shell.control.unbind()
         }
+    }
+
+    /// Owner 2026-10-20 (Luna Ultra, Angle 180, shutter priority): changing the frame rate flashed
+    /// a derived angle until the camera confirmed. The readout is sampled through the whole native
+    /// sequence, in its worst order: tap (format pin), the camera's format readback beating the ack
+    /// (the shell pin clears, the camera clamps its own speed to 1/125 at 120 fps), the ack and the
+    /// re-sent 1/250, its confirmation. It never leaves 180 degrees.
+    @MainActor private final class SequenceProbe {
+        var gated = false
+        var readouts: [String] = []
+    }
+
+    func testNativeFormatChangeHoldsTheAngleReadout() async throws {
+        let (usesAngle, degrees) = (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees)
+        defer { (OperatorPrefs.shutterUsesAngle, OperatorPrefs.shutterAngleDegrees) = (usesAngle, degrees) }
+        OperatorPrefs.shutterAngleDegrees = 180
+        let (camera, shell, model) = try await angleShell(program: .shutterPriority, iso: 0)
+        let luna = try XCTUnwrap(shell.lunaSessionOverride)
+        camera.reportsSinglePrecisionShutter = true
+        let probe = SequenceProbe()
+        func sample(_ step: String) { probe.readouts.append("\(step): \(model.shutterAngleReadout(selection: .pending).value)") }
+        sample("before")
+        let raw = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 120))
+        let next = try XCTUnwrap(LunaVideoResolution(rawValue: raw))
+        let cadence = try ProtoMessage.blob(field: 1, value: ProtoMessage.varint(31))
+            + ProtoMessage.blob(field: 2, value: ProtoMessage.integer(field: 31, value: raw))
+            + ProtoMessage.integer(field: 3, value: UInt64(LunaFunctionMode.normalVideo.rawValue))
+        camera.beforeReply = { [weak shell] request in
+            guard !probe.gated, let shell,
+                (try? LunaPhotographySettings(response: request.body))?.types.contains(31) == true else { return }
+            probe.gated = true
+            sample("tap")
+            // The camera's readback beats the ack: new rate, a speed it clamped itself, no shell pin.
+            camera.shutterSeconds = 1.0 / 125
+            luna.ingest(settings: try! LunaPhotographySettings(response: cadence))
+            camera.reportSettings()
+            shell.nativeFormatPin = nil
+            try? await self.waitUntil {
+                shell.control.snapshot?.value(of: .frameRate).value == .frameRate(Rational(120))
+                    && shell.control.snapshot?.value(of: .shutter).value != .shutter(.angle(180))
+            }
+            sample("readback before ack")
+        }
+        shell.setNativeRecordingFormat(next)
+        sample("after tap")
+        try await waitUntil { probe.gated }
+        try await waitUntil { Self.exposures(camera).contains { abs($0.shutterSeconds - 1.0 / 250) < 1e-9 } }
+        sample("re-sent")
+        try await waitUntil {
+            guard shell.control.pending[.shutter] == nil,
+                case .shutter(.angle(let angle))? = shell.control.snapshot?.value(of: .shutter).value else { return false }
+            return abs(angle - 172.8) < 1e-6
+        }
+        sample("confirmed")
+        XCTAssertEqual(probe.readouts.count, 6, "\(probe.readouts)")
+        XCTAssertTrue(probe.readouts.allSatisfy { $0.hasSuffix(": 180°") }, "\(probe.readouts)")
+        shell.control.unbind()
     }
 
     /// Behavior audit II-093: a native colour pick applies the preview colour science at once and a
