@@ -7,10 +7,11 @@ import XCTest
 final class LunaMonitorSourceInputTests: XCTestCase {
     func testActualLunaConfigurationHasOnlyIlogFactsAndKeepsReportedTransfer() {
         let configuration = LiveAssistEngine.configuration
-        XCTAssertTrue(configuration.clipProfile.calibrations.isEmpty)
-        XCTAssertNil(configuration.clipProfile.defaultISO)
+        XCTAssertEqual(Set(configuration.clipProfile.calibrations.keys), [.ilog])
+        XCTAssertEqual(configuration.clipProfile.defaultISO, 100)
+        XCTAssertEqual(configuration.clipProfile.unreportedISO, 100)
         XCTAssertEqual(Set(configuration.lookCurves.keys), [.ilog])
         XCTAssertEqual(configuration.inferTransfer?(16, 247, .rec709), .rec709)
-        XCTAssertNil(OpenInstaViewCore.ScopeExposureCeiling().resolvedISO())
+        XCTAssertEqual(OpenInstaViewCore.ScopeExposureCeiling().resolvedISO(), 100)
     }
 }

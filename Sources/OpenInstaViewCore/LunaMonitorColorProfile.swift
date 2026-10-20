@@ -1,6 +1,8 @@
+import Insta360Protocol
 import OpenCineMedia
 
-/// The bundled Luna I-Log look. No measured preview clip calibration has been supplied.
+/// The bundled Luna I-Log look and the shared Luna I-Log clip per ISO (`LunaScopeClip`, derived,
+/// awaiting a hardware measurement).
 public enum LunaMonitorColorProfile {
     public static let iLogRec709LookCurve = [
         0.0011, 0.0011, 0.0011, 0.0050, 0.0291, 0.0509, 0.0733, 0.0996, 0.1309, 0.1673,
@@ -8,7 +10,7 @@ public enum LunaMonitorColorProfile {
         0.7530, 0.7982, 0.8388, 0.8751, 0.9065, 0.9325, 0.9528, 0.9680, 0.9791, 0.9871,
         0.9918, 0.9958, 0.9994,
     ]
-    public static let value = MonitorColorSourceProfile(
+    public static let value = MonitorColorSourceProfile(clip: LunaScopeClip.profile,
         rec709LookCurves: [.ilog: iLogRec709LookCurve])
 }
 

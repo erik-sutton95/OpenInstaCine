@@ -39,6 +39,8 @@ let package = Package(
                 .product(name: "OpenCineCameraVocabulary", package: "OpenCine"),
                 // Live chrome layout policy (`MonitorLayoutRegion`, `GimbalCluster`).
                 .product(name: "MonitorPresentation", package: "OpenCine"),
+                // Portable Luna values (the I-Log scope clip per ISO, `LunaScopeClip`).
+                .product(name: "Insta360Protocol", package: "OpenCine"),
             ]
         ),
         .testTarget(

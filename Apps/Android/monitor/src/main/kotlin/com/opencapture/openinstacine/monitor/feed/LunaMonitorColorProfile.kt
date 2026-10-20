@@ -1,11 +1,12 @@
 package com.opencapture.openinstacine.monitor.feed
 
+import com.opencapture.opencine.insta360.shell.LunaScopeClip
 import com.opencapture.opencine.media.MonitorColorSourceProfile
 import com.opencapture.opencine.media.MonitorTransfer
 
-/** Luna's bundled I-Log look. No measured preview clip calibration has been supplied. */
+/** Luna's bundled I-Log look and the shared Luna I-Log clip per ISO ([LunaScopeClip], derived, awaiting a hardware measurement). */
 object LunaMonitorColorProfile {
-    val value = MonitorColorSourceProfile(rec709LookCurves = mapOf(
+    val value = MonitorColorSourceProfile(clip = LunaScopeClip.PROFILE, rec709LookCurves = mapOf(
         MonitorTransfer.ILOG to listOf(
         0.0011, 0.0011, 0.0011, 0.0050, 0.0291, 0.0509, 0.0733, 0.0996, 0.1309, 0.1673,
         0.2093, 0.2563, 0.3080, 0.3636, 0.4216, 0.4813, 0.5402, 0.5974, 0.6525, 0.7045,
