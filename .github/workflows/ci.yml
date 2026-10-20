@@ -197,12 +197,13 @@ jobs:
       - name: Swift packages
         run: ${{ inputs.full && 'just core-test' || 'swift test' }}
       # One build of the app and its unit tests; every test run below reuses it without building.
+      # Hosted runners are arm64: an x86_64 simulator slice only doubles the compile.
       - name: Build the app and its tests (iOS Simulator)
         run: |
           just ios-generate
           xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath ~/ci-dd \
-            -skipMacroValidation -skipPackagePluginValidation COMPILATION_CACHE_ENABLE_CACHING=YES build-for-testing
+            -skipMacroValidation -skipPackagePluginValidation COMPILATION_CACHE_ENABLE_CACHING=YES ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build-for-testing
       # Nightly tier: a second private simulator boot (docs/ci.md).
       - name: Original storage oracle on a private native 2x iPad
         if: ${{ inputs.full }}
@@ -243,7 +244,7 @@ jobs:
           device_id="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ && !found { print $2; found = 1 }')"
           xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine \
             -destination "platform=iOS Simulator,id=$device_id" -derivedDataPath ~/ci-dd \
-            -parallel-testing-enabled YES -parallel-testing-worker-count 2 \
+            -parallel-testing-enabled NO \
             -only-testing:OpenInstaCineTests "-skip-testing:OpenInstaCineTests/$SKIP" test-without-building
       - name: Save Xcode package and compilation caches
         if: ${{ success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
