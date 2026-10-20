@@ -132,6 +132,32 @@ final class AssistInspectorLifecycleTests: XCTestCase {
     /// Hosts the production inspector, including its native menus, scope views
     /// and cancellable image renderer. No decoder or camera session is attached.
     func testRapidTabSwitchingAndRemountingKeepsTheSelectedInspectorAlive() async throws {
+        try await exerciseRapidTabSwitchingAndRemounting()
+    }
+
+    func testSceneSelectionFailureCancelsPublicationBeforeFixtureReturns() async throws {
+        enum SceneFailure: Error { case unavailable }
+        var publication: Task<Void, Never>?
+        do {
+            try await exerciseRapidTabSwitchingAndRemounting(
+                selectScene: { throw SceneFailure.unavailable },
+                publicationCreated: { publication = $0 })
+            XCTFail("The injected scene-selection failure must escape the fixture")
+        } catch SceneFailure.unavailable { }
+        let task = try XCTUnwrap(publication)
+        XCTAssertTrue(task.isCancelled, "A failed scene selection must retire the real publication task")
+        task.cancel()
+        await task.value
+    }
+
+    private func exerciseRapidTabSwitchingAndRemounting(
+        selectScene: () throws -> UIWindowScene = {
+            try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first {
+                $0.activationState == .foregroundActive
+            })
+        },
+        publicationCreated: (Task<Void, Never>) -> Void = { _ in }
+    ) async throws {
         let model = AppModel()
         let size = CGSize(width: 874, height: 402)
         let probe = InspectorLifecycleProbe()
@@ -159,12 +185,11 @@ final class AssistInspectorLifecycleTests: XCTestCase {
                 do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
             }
         }
+        defer { publication.cancel() }
+        publicationCreated(publication)
         let host = UIHostingController(
             rootView: InspectorLifecycleHost(model: model, viewport: size, probe: probe))
-        let scene = try XCTUnwrap(
-            UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first {
-                $0.activationState == .foregroundActive
-            })
+        let scene = try selectScene()
         let originalKeyWindow = scene.windows.first { $0.isKeyWindow }
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(origin: .zero, size: size)
@@ -174,7 +199,6 @@ final class AssistInspectorLifecycleTests: XCTestCase {
         XCTAssertTrue(window.windowScene === scene,
             "The native inspector fixture must belong to the active window scene")
         defer {
-            publication.cancel()
             model.assist.configureTool = nil
             model.monitorSamples.closeSource(sourceLease)
             window.isHidden = true
