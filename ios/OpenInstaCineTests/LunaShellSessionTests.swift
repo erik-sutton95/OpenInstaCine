@@ -351,10 +351,18 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         OperatorPrefs.shutterAngleDegrees = 180
         for (program, iso) in [(LunaExposureProgram.manual, UInt64(400)), (.shutterPriority, 0)] {
             let (camera, shell, _) = try await angleShell(program: program, iso: iso)
+            defer {
+                withExtendedLifetime(camera) {
+                    shell.lunaSessionOverride?.close(.requested)
+                }
+            }
             let next = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 50)
                 .flatMap(LunaVideoResolution.init(rawValue:)))
             shell.setNativeRecordingFormat(next)
             try await waitUntil { Self.exposures(camera).contains { abs($0.shutterSeconds - 1.0 / 100) < 1e-9 } }
+            // The fake's send log precedes its final readback. Keep it alive until the
+            // shutter receipt finishes; unbind retires the UI, not the session's work.
+            try await waitUntil { shell.control.pending[.shutter] == nil }
             shell.control.unbind()
         }
     }
@@ -401,6 +409,8 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
             sample("readback before ack")
         }
         shell.setNativeRecordingFormat(next)
+        XCTAssertNotNil(shell.nativeFormatPin)
+        XCTAssertTrue(shell.isFormatPinActive, "A native format change is settling")
         sample("after tap")
         try await waitUntil { probe.gated }
         try await waitUntil { Self.exposures(camera).contains { abs($0.shutterSeconds - 1.0 / 250) < 1e-9 } }
