@@ -116,7 +116,17 @@ class AppModel(
      * Media), the monitor camera's session lifetime and the shared common controls.
      */
     val shell = ShellModel(cameras, session.control).also { shell ->
-        shell.onSceneActivity = { active -> if (active) session.noteSceneBecameActive() else session.noteSceneBecameInactive() }
+        shell.onSceneActivity = { active ->
+            if (active) {
+                session.noteSceneBecameActive()
+                // IA-320: returning to the app retries a failed saved connect as the baseline did,
+                // through the shared model so the card shows the attempt instead of the backend
+                // joining invisibly outside it.
+                cameras.retryCurrentFailures()
+            } else {
+                session.noteSceneBecameInactive()
+            }
+        }
     }
 
     val savedCameras: List<SavedCamera> get() = cameras.state.value.saved

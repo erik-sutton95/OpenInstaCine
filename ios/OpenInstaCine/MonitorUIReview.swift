@@ -409,6 +409,15 @@
 
         func stopScan() {}
 
+        /// Only the scripted camera advertises, and only in the states that announce it.
+        func hasSeen(_ cameraID: UUID) -> Bool {
+            cameraID == UUID(uuidString: "00000000-0000-0000-0000-000000000003")
+                && (state == "saved-nearby" || state.hasPrefix("pair-"))
+        }
+
+        /// Stores nothing, so a saved connect never waits for a sighting.
+        func hasSavedWiFi(cameraID: UUID) -> Bool { false }
+
         func connect(to camera: MonitorCamera) async throws {
             switch state {
             case "connecting", "pair-join": eventHandler?(.phase(.joiningWiFi))

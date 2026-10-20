@@ -131,6 +131,23 @@ class SessionRecoveryPictureTest {
         } finally { onMain { session.close() } }
     }
 
+    /** IA-366: a live link reached outside the episode (a resume reconnect) clears the waiting card. */
+    @Test fun liveOutsideTheEpisodeRetiresTheWaitingCard() {
+        val backend = backend()
+        val session = liveSession(backend)
+        try {
+            beginRecovery(session, backend)
+            onMain { backend.frameGeneration = 3L }
+            frame(backend, 2L)
+            decoderField(session, "lastDecoderAcceptedAt", SystemClock.elapsedRealtime())
+            session.decoder.notePresented(System.nanoTime())
+            assertTrue(waitUntil { session.recoveryState.value is SessionRecoveryUi.WaitingForOperator })
+            onMain { backend.phase.value = ConnectionPhase.SCANNING }
+            onMain { backend.phase.value = ConnectionPhase.LIVE }
+            assertTrue(waitUntil { session.recoveryState.value == SessionRecoveryUi.Idle })
+        } finally { onMain { session.close() } }
+    }
+
     @Test fun sourceReplacementRejectsQueuedOldAndUnknownFrames() {
         val backend = backend()
         val session = liveSession(backend)

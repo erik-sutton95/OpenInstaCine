@@ -478,6 +478,10 @@ class PocketCameraSession(
                     ConnectionPhase.LIVE -> {
                         holdsMonitor = true; resetFrameClock()
                         startGimbalAnglePoll()
+                        // IA-366: a live picture reached outside the bounded episode (a resume
+                        // reconnect) clears the waiting "Camera disconnected" card, as the
+                        // phase-driven baseline did. A running episode publishes its own idle.
+                        if (retiresRecoveryOnLive(recoveryEpisode.isRunning)) retireRecovery()
                     }
                     ConnectionPhase.FAILED -> {
                         resetFrameClock(); stopGimbalAngle()
@@ -1490,5 +1494,10 @@ class PocketCameraSession(
         val LUNA_ZOOM_CHIPS = listOf(1.0, 2.0, 3.0, 6.0, 15.0)
         /** iOS `GimbalStick.doubleTapWindow` (0.35 s) for the feed double tap to Deep Track. */
         const val DOUBLE_TAP_WINDOW_MS = 350L
+        /**
+         * IA-366: any confirmed live picture clears a waiting recovery card unless the bounded
+         * episode is itself retrying; then the episode publishes its own recovery.
+         */
+        internal fun retiresRecoveryOnLive(episodeRunning: Boolean): Boolean = !episodeRunning
     }
 }

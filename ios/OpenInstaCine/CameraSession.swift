@@ -1428,6 +1428,10 @@ extension CameraSession: LunaConnectPort {
 
     func stopScan() { backend.stopScan() }
 
+    func hasSeen(_ cameraID: UUID) -> Bool { backend.hasSeen(cameraID) }
+
+    func hasSavedWiFi(cameraID: UUID) -> Bool { backend.hasSavedWiFi(cameraID: cameraID) }
+
     func connect(to camera: MonitorCamera) async throws {
         descriptors[camera.id] = camera
         let generation = prepareConnection(
