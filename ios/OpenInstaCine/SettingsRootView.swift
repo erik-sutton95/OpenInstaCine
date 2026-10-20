@@ -5,6 +5,7 @@ import OpenCineAppKitApple
 import OpenCineApple
 import OpenCineFrameIOApple
 import OpenCineCameraControls
+import OpenCineCore
 import OpenCineRelayApple
 import OpenInstaViewCore
 import SwiftUI
