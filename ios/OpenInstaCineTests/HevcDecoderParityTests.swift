@@ -63,14 +63,21 @@ final class HevcDecoderParityTests: XCTestCase {
         XCTAssertTrue(decoder.demand.assists.allowsTransferInference)
     }
 
-    func testBindingWithoutCalibrationLeavesSourceISOUnknown() {
+    func testBindingFollowsReportedISOAndAssumesTheLowestISOInAuto() {
         let decoder = HevcDecoder()
         defer { decoder.close() }
         let samples = LiveFrameSampleBus(profile: LiveAssistEngine.configuration.clipProfile)
+        // Before any report the Luna I-Log ceiling assumes the lowest ISO (warns early).
         decoder.bindSourcePublication(samples)
-        XCTAssertNil(samples.exposureCeiling.resolvedISO())
-        XCTAssertNil(decoder.sourceCalibrationProvider)
-        XCTAssertFalse(decoder.refreshSourceCalibration())
-        XCTAssertNil(samples.exposureCeiling.resolvedISO())
+        XCTAssertEqual(samples.exposureCeiling.resolvedISO(), 100)
+        var reported: Int? = 200
+        decoder.sourceCalibrationProvider = { reported }
+        XCTAssertTrue(decoder.refreshSourceCalibration())
+        XCTAssertEqual(samples.exposureCeiling.clipByte(transfer: .ilog), 227)
+        // Auto: the Luna reports ISO 0, which the session passes as nil.
+        reported = nil
+        XCTAssertTrue(decoder.refreshSourceCalibration())
+        XCTAssertEqual(samples.exposureCeiling.resolvedISO(), 100)
+        XCTAssertEqual(samples.exposureCeiling.clipByte(transfer: .ilog), 205)
     }
 }
