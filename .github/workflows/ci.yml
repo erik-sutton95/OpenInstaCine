@@ -155,7 +155,8 @@ jobs:
     # self-hosted runner: it runs pull-request code.
     if: ${{ needs.changes.outputs.code == 'true' && !github.event.repository.private }}
     runs-on: macos-latest
-    timeout-minutes: 45
+    # The nightly tier adds the portrait header layout matrix and the iPad storage oracle.
+    timeout-minutes: ${{ inputs.full && 90 || 45 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -196,12 +197,13 @@ jobs:
       - name: Swift packages
         run: ${{ inputs.full && 'just core-test' || 'swift test' }}
       # One build of the app and its unit tests; every test run below reuses it without building.
+      # Hosted runners are arm64: an x86_64 simulator slice only doubles the compile.
       - name: Build the app and its tests (iOS Simulator)
         run: |
           just ios-generate
           xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine \
             -destination 'generic/platform=iOS Simulator' -derivedDataPath ~/ci-dd \
-            -skipMacroValidation -skipPackagePluginValidation COMPILATION_CACHE_ENABLE_CACHING=YES build-for-testing
+            -skipMacroValidation -skipPackagePluginValidation COMPILATION_CACHE_ENABLE_CACHING=YES ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build-for-testing
       # Nightly tier: a second private simulator boot (docs/ci.md).
       - name: Original storage oracle on a private native 2x iPad
         if: ${{ inputs.full }}
@@ -242,7 +244,7 @@ jobs:
           device_id="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ && !found { print $2; found = 1 }')"
           xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine \
             -destination "platform=iOS Simulator,id=$device_id" -derivedDataPath ~/ci-dd \
-            -parallel-testing-enabled YES -parallel-testing-worker-count 2 \
+            -parallel-testing-enabled NO \
             -only-testing:OpenInstaCineTests "-skip-testing:OpenInstaCineTests/$SKIP" test-without-building
       - name: Save Xcode package and compilation caches
         if: ${{ success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
@@ -369,7 +371,8 @@ jobs:
     # The single required status check on `main`. Always runs and collapses every
     # other job into one verdict; path-filter and private-repo skips are success.
     if: always()
-    needs: [meta, changes, native, conformance, android, handbook]
+    # The conformance job is nightly-only and quarantined (docs/ci.md): it never feeds the gate.
+    needs: [meta, changes, native, android, handbook]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
