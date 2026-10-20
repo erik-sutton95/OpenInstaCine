@@ -488,13 +488,23 @@ extension CameraSession {
             let target = lunaSession, target.current.recording.value == .idle else { return }
         let admission = LunaCommandAdmission(owner: target.commandOwner, isCurrent: { true })
         let previous = nativeRecordingColor
+        let previousShell = status.colorMode
         let pin = CameraValuePin(value, now: pinNow, settle: 3)
         nativeColorPin = pin; nativeRecordingColor = value
+        // The preview colour science follows the choice at once, as before the shared refactor
+        // (behavior audit II-093); the readback confirms it and a refusal restores it.
+        let shellColor = LunaShellMapping.colorMode(value)
+        pins.color = CameraValuePin(shellColor, now: pinNow, settle: 3)
+        status.colorMode = shellColor
+        applyDecoderColorScience()
         let functionMode = backend.functionMode
         sendControl(value.label, { try LunaProtocol.setColorMode(value, functionMode: functionMode) },
             through: target, suppliedAdmission: admission, onFail: { [weak self] in
                 guard let self, self.lunaSession === target, self.nativeColorPin?.id == pin.id else { return }
                 self.nativeColorPin = nil; self.nativeRecordingColor = previous
+                self.pins.color = nil
+                self.status.colorMode = previousShell
+                self.applyDecoderColorScience()
             })
     }
 
@@ -699,14 +709,17 @@ extension CameraSession {
         zoomWriteRevision &+= 1
         let revision = zoomWriteRevision
         zoomWriteTask = Task { @MainActor [weak self] in
+            var last: Double?
             while let self, self.zoomWriteRevision == revision, !Task.isCancelled,
                 let next = self.pendingZoomWrite
             {
                 self.pendingZoomWrite = nil
+                last = next.factor
                 _ = await self.submitLens(.zoom(next.factor), through: next.session, admission: next.admission)
                 try? await Task.sleep(for: .milliseconds(80))
             }
             guard let self, self.zoomWriteRevision == revision else { return }
+            if let last { ControlLiveLog.line(String(format: "control: zoom burst ended at %.2fx", last)) }
             self.zoomWriteTask = nil
             self.scheduleSettingsRefresh()
         }
@@ -740,6 +753,7 @@ extension CameraSession {
             else { scheduleSettingsRefresh() }
             return true
         default:
+            ControlLiveLog.line("control: \(value) \(receipt.stage)")
             noteCommandFailure()
             controlNote = "\(value.key == .zoom ? "Zoom" : "Focus") was not applied by the camera."
             return false

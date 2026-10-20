@@ -278,7 +278,9 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         camera.sent.filter(isShutterWrite).compactMap { try? LunaPhotographySettings(response: $0.body).videoExposure }
     }
 
-    /// A live Luna shell at 4K25 with Angle on (emulated in Core), bound to `luna`.
+    /// A live Luna shell at 4K25 with Angle on (emulated in Core), bound to `luna`. The session
+    /// carries the backend's admitted port: native format and colour picks are admitted writes,
+    /// which a session without one refuses as expired before they reach the camera.
     private func angleShell(program: LunaExposureProgram, iso: UInt64) async throws
         -> (FakeLuna, OpenInstaCine.CameraSession, AppModel)
     {
@@ -286,7 +288,7 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
         camera.program = program.rawValue
         camera.iso = iso
         camera.shutterSeconds = 1.0 / 50
-        let luna = camera.connectedSession()
+        let luna = camera.connectedSession(admittedSends: true)
         let raw = try XCTUnwrap(LunaVideoResolution.rawValue(width: 3840, height: 2160, framesPerSecond: 25))
         let body = try ProtoMessage.blob(field: 1, value: ProtoMessage.varint(31))
             + ProtoMessage.blob(field: 2, value: ProtoMessage.integer(field: 31, value: raw))
@@ -354,6 +356,27 @@ final class ShutterAngleFormatRematchTests: XCTestCase {
             try await waitUntil { Self.exposures(camera).contains { abs($0.shutterSeconds - 1.0 / 100) < 1e-9 } }
             shell.control.unbind()
         }
+    }
+
+    /// Behavior audit II-093: a native colour pick applies the preview colour science at once and a
+    /// refusal restores it, as the pre-refactor `setColorMode` did.
+    func testNativeColorAppliesThePreviewAtOnceAndARefusalRestoresIt() async throws {
+        let (camera, shell, _) = try await angleShell(program: .manual, iso: 400)
+        shell.status.colorMode = .normal
+        shell.applyDecoderColorScience()
+        let flat = LunaShellMapping.previewColorMode(recording: .iLog, recoveryOff: OperatorPrefs.lunaFlatPreview)
+        shell.setNativeRecordingColor(.iLog)
+        XCTAssertEqual(shell.status.colorMode, .iLog)
+        XCTAssertEqual(shell.decoder.incomingColorMode, flat)
+        try await waitUntil { camera.sent.contains { $0.command == .setPhotographyOptions
+            && (try? LunaPhotographySettings(response: $0.body))?.types.contains(LunaPhotographyType.colorMode.rawValue) == true } }
+        camera.refuses = true
+        shell.setNativeRecordingColor(.standard)
+        XCTAssertEqual(shell.status.colorMode, .normal)
+        try await waitUntil { shell.controlNote != nil }
+        XCTAssertEqual(shell.status.colorMode, .iLog, "a refused colour restores the previous preview")
+        XCTAssertEqual(shell.decoder.incomingColorMode, flat)
+        shell.control.unbind()
     }
 
     /// CodeRabbit #46: a format the camera refuses keeps the angle; no new 1/N is sent.
