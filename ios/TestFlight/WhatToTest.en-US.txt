@@ -1,15 +1,15 @@
 New and changed
 
-- In portrait, the large format readout now lines up exactly with the clock at the top of the screen.
+- In landscape, the colour profile now appears beside the codec in the top bar.
 
 Fixes
 
-- With Shutter Angle on, picking an angle, switching Auto to Manual and AE lock set the shutter again, and Auto ISO with a fixed shutter reads M.
-- With Shutter Angle on, changing the frame rate keeps the chosen angle.
-- If the live picture's decoder fails, the picture recovers at the next keyframe instead of staying frozen.
+- Returning from Media refreshes the live picture instead of leaving an old frame on screen.
+- After a failed connection, returning to the app allows another connection attempt.
+- Portrait card-space labels keep their full rounded value near the screen cutout.
 
 What to test
 
-- Turn on Shutter Angle, pick 180 degrees at 25p, then switch EXPOSURE Auto and back to Manual; check the camera follows with no "not applied" note.
-- With Angle at 180 degrees, change 4K25 to 4K50 and check the shutter becomes 1/100.
-- Rotate to portrait and check that the format readout and the clock share the same top edge.
+- Open Media, play a clip and return to Live View. Check that the live picture resumes.
+- Rotate between portrait and landscape. Check the codec, colour profile and free card space stay readable.
+- After a failed connection, leave and return to the app, then retry connecting.
