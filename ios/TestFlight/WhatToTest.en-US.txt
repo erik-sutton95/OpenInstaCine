@@ -1,15 +1,18 @@
 New and changed
 
-- In landscape, the colour profile now appears beside the codec in the top bar.
+- A more consistent OpenCine interface brings camera setup, settings, View Assist and media controls closer together across the apps.
+- In landscape, the colour profile sits beside the codec. Portrait readouts keep their rounded card-space values clear of the screen cutout.
+- Connection diagnostics separate incoming video, decoding and display activity to help investigate live-picture interruptions.
 
 Fixes
 
-- Returning from Media refreshes the live picture instead of leaving an old frame on screen.
-- After a failed connection, returning to the app allows another connection attempt.
-- Portrait card-space labels keep their full rounded value near the screen cutout.
+- Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again.
+- Returning from Media refreshes the live picture. Playback stays paused after buffering or leaving and returning to the app.
+- Sharing several cached clips works together. Monitoring colour follows the selected camera profile, with I-Log highlight warnings adjusted for ISO.
+- Returning after a failed connection allows another attempt. A stalled picture has bounded recovery instead of remaining on Reconnecting indefinitely.
 
 What to test
 
-- Open Media, play a clip and return to Live View. Check that the live picture resumes.
-- Rotate between portrait and landscape. Check the codec, colour profile and free card space stay readable.
-- After a failed connection, leave and return to the app, then retry connecting.
+- At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check the shutter follows from 1/50 to 1/100.
+- In Media, pause and scrub a clip, switch clips, cancel a deletion and share cached clips. Return to Live View and check that the live picture resumes.
+- If the live picture drops out, use Share Diagnostics and report the time, what you were doing and whether camera controls still responded.
