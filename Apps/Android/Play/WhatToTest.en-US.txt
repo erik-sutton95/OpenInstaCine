@@ -1,16 +1,18 @@
 New and changed
 
-- Share several cached clips at once from Media; they reach the share sheet together.
+- A more consistent OpenCine interface brings camera setup, settings, View Assist and media controls closer together across the apps.
+- In landscape, the colour profile sits beside the codec. Portrait readouts keep their rounded card-space values clear of the screen cutout.
+- Connection diagnostics separate incoming video, decoding and display activity to help investigate live-picture interruptions.
 
 Fixes
 
-- With Shutter Angle on, picking an angle, Auto to Manual and AE lock set the shutter again, Auto ISO with a fixed shutter reads M, and a frame-rate change keeps the angle.
-- The EV meter reads the live picture again instead of always showing a dash.
-- Sharing two or more cached clips no longer fails with "Couldn't share these clips."
-- Top bar readouts stay readable over bright pictures, and the space between crossing frame guides with Mask outside frame stays clear again.
+- Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again. The EV meter reads the live picture.
+- Playback keeps Pause through buffering and scrubbing. Sharing several cached clips reaches the share sheet together.
+- Top-bar readouts stay readable over bright pictures, and the space between crossing frame guides stays clear with Mask outside frame.
+- A failed saved connection can retry when you return. Scanning messages follow Bluetooth availability, and Wi-Fi failures offer the right settings.
 
 What to test
 
-- Turn on Shutter Angle, pick 180 degrees at 25p, switch EXPOSURE Auto and back to Manual, then change 4K25 to 4K50; the shutter should follow (1/50, then 1/100).
-- Turn on the EV tool and point the camera at bright and dark scenes; the meter needle should move.
-- Share two or more cached clips from Media, and check Guides 2.39:1 plus 9:16 with Mask outside frame over a bright scene.
+- At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check 1/50 becomes 1/100 and the EV needle responds to bright and dark scenes.
+- Share several cached clips, pause while buffering, then check crossing guides, Mask outside frame and top-bar readability in both orientations.
+- If the live picture drops out, use Share Diagnostics and report the time, what you were doing and whether camera controls still responded.
