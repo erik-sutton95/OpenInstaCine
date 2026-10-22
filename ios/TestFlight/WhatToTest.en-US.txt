@@ -8,8 +8,8 @@ Fixes
 
 - Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again.
 - Returning from Media refreshes the live picture. Playback stays paused after buffering or leaving and returning to the app.
-- Sharing several cached clips works together. Monitoring colour follows the selected camera profile, with I-Log highlight warnings adjusted for ISO.
-- Returning after a failed connection allows another attempt. A stalled picture has bounded recovery instead of remaining on Reconnecting indefinitely.
+- Sharing several cached clips works together. Monitoring colour follows the selected camera profile. I-Log warnings account for ISO; their ceilings still need physical calibration.
+- Returning after a failed saved connection allows another attempt. A stalled picture has bounded recovery instead of remaining on Reconnecting indefinitely.
 
 What to test
 

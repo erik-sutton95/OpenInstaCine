@@ -9,7 +9,7 @@ Fixes
 - Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again. The EV meter reads the live picture.
 - Playback keeps Pause through buffering and scrubbing. Sharing several cached clips reaches the share sheet together.
 - Top-bar readouts stay readable over bright pictures, and the space between crossing frame guides stays clear with Mask outside frame.
-- A failed connection can retry when you return. Scanning messages follow Bluetooth availability, and Wi-Fi failures offer the right settings.
+- A failed saved connection can retry when you return. Scanning messages follow Bluetooth availability, and Wi-Fi failures offer the right settings.
 
 What to test
 
