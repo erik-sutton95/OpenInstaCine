@@ -76,6 +76,8 @@ private final class MonitorPlaybackReviewObserver {
             "galleryOrder": value(library?.displayedRecords.map { $0.asset.filename }),
             "opens": opens, "closes": closes,
             "cover": model.shell.cover == .media ? "media" as Any : null,
+            "monitor": value(model.shell.monitor?.id.uuidString),
+            "route": String(describing: model.shell.route),
             "host": value(identity(host)), "player": value(identity(player)),
             "item": value(itemID), "file": value((item?.asset as? AVURLAsset)?.url.lastPathComponent),
             "ready": host?.playerLayer.isReadyForDisplay ?? false,
