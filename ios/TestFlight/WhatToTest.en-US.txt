@@ -14,5 +14,5 @@ Fixes
 What to test
 
 - At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check the shutter follows from 1/50 to 1/100.
-- In Media, pause a clip, share it and close the share sheet. Check it stays paused, then return to Live View and check the live picture resumes.
-- With VoiceOver on, open Media or Settings over Live View and swipe through. If the live picture drops out, use Share Diagnostics and report the time.
+- In Media, play a clip and tap Share. Check it pauses while the share sheet is up and stays paused after you close it. Then check Live View resumes.
+- With VoiceOver on, open Media or Settings over Live View and swipe through: live controls underneath must not be reachable. Report any dropout with Share Diagnostics.
