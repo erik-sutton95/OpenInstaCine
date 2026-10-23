@@ -111,7 +111,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
             started.signal()
             XCTAssertEqual(release.wait(timeout: .now() + 10), .success)
             return reference
-        })
+        }, workerQoS: inspectorTestWorkerQoS)
         let owner = UUID()
         renderer.activate(owner: owner)
         let work = Task { await renderer.render(owner: owner, source: frame) { LiveImageEffects() } }
@@ -135,7 +135,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
         let live = bus.openSource(.live)
         bus.publish(live, source: try Self.buffer(width: 8, height: 8), transfer: .rec709, bundle: nil)
         let frame = try XCTUnwrap(bus.inspectorFrame)
-        let renderer = MonitorInspectorImageRenderer()
+        let renderer = MonitorInspectorImageRenderer(workerQoS: inspectorTestWorkerQoS)
         let owner = UUID()
         renderer.activate(owner: owner)
         let playback = bus.openSource(.playback)
@@ -160,7 +160,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
     }
 
     func testPreviewImageIsBoundedBeforeRendering() async throws {
-        let renderer = MonitorInspectorImageRenderer()
+        let renderer = MonitorInspectorImageRenderer(workerQoS: inspectorTestWorkerQoS)
         let owner = UUID()
         renderer.activate(owner: owner)
         let buffer = try Self.buffer(width: 640, height: 360)
@@ -229,7 +229,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
                         "Test did not release the first worker; a rejected request may have queued")
                 }
                 return reference
-            })
+            }, workerQoS: inspectorTestWorkerQoS)
         let owner = UUID()
         let remountedOwner = UUID()
         renderer.activate(owner: owner)
@@ -280,7 +280,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
             operation: { _, _ in
                 _ = invocations.increment()
                 return reference
-            })
+            }, workerQoS: inspectorTestWorkerQoS)
         let buffer = try Self.buffer(width: 8, height: 8)
         let firstOwner = UUID()
         renderer.activate(owner: firstOwner)
@@ -329,7 +329,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
                     release.wait(timeout: .now() + 10), .success,
                     "Test did not release the work the renderer was already running")
                 return reference
-            })
+            }, workerQoS: inspectorTestWorkerQoS)
         let buffer = try Self.buffer(width: 8, height: 8)
         let owner = UUID()
         renderer.activate(owner: owner)
@@ -455,6 +455,12 @@ private final class InspectorRenderInvocationCounter: @unchecked Sendable {
     }
 }
 
+/// These tests block the renderer's worker and await its events from the main actor. Production
+/// runs that worker at utility QoS; on a loaded hosted simulator utility work entered 6 s after
+/// admission while the main thread ran within milliseconds (CI trace 2026-10-23), past the event
+/// budget below. The worker therefore runs at the waiter's tier here; admission is unchanged.
+let inspectorTestWorkerQoS: DispatchQoS = .userInitiated
+
 /// Wait for the worker's event, not a presumed utility-queue scheduling delay.
 /// The finite fallback throws out of the test before cancellation assertions
 /// can manufacture a cascade; each caller releases blocked work in defer.
@@ -476,23 +482,83 @@ final class InspectorPreviewTestSignal: Sendable {
         continuation.finish()
     }
 
-    func wait() async throws {
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                for await _ in self.events { return }
-                throw CancellationError()
+    func wait(timeout: Duration = .seconds(timeoutSeconds)) async throws {
+        do {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for await _ in self.events { return }
+                    throw CancellationError()
+                }
+                group.addTask {
+                    try await Task.sleep(for: timeout)
+                    throw WaitFailure(event: self.name)
+                }
+                defer { group.cancelAll() }
+                try await group.next()
             }
-            group.addTask {
-                try await Task.sleep(for: .seconds(Self.timeoutSeconds))
-                throw WaitFailure(event: self.name)
-            }
-            defer { group.cancelAll() }
-            try await group.next()
+        } catch let failure as WaitFailure {
+            // Only a timeout that won records an issue, and it does so before the caller's
+            // defer runs. XCTest reports the last Swift error it observed in the test, and UIKit
+            // teardown throws and swallows internal Gestures errors ("InvalidTransition").
+            XCTFail(failure.description)
+            throw failure
         }
     }
 
     private struct WaitFailure: Error, CustomStringConvertible {
         let event: String
         var description: String { "Inspector synchronization event did not arrive: \(event)" }
+    }
+}
+
+/// The event wait's own failure report: recorded exactly when the wait fails.
+/// Main actor: XCTExpectFailure scopes the test from the main thread.
+@MainActor
+final class InspectorPreviewTestSignalTests: XCTestCase {
+    /// A missed event names itself even when the caller's UIKit teardown throws and swallows
+    /// framework errors afterwards; XCTest would otherwise report the last of those instead.
+    func testTimedOutSignalRecordsTheMissingEventItself() async {
+        let recorded = InspectorSignalIssueCount()
+        XCTExpectFailure("The timeout records its own issue", options: recorded.options())
+        let signal = InspectorPreviewTestSignal("SIMULATED event that never arrives")
+        var thrown = false
+        do { try await signal.wait(timeout: .milliseconds(50)) } catch { thrown = true }
+        XCTAssertTrue(thrown, "A missing event must throw")
+        XCTAssertEqual(recorded.value, 1, "Exactly one issue names the missed event")
+    }
+
+    /// An event and its timeout finishing together: a wait that returns records nothing.
+    func testIssueIsRecordedExactlyWhenTheWaitFails() async {
+        let recorded = InspectorSignalIssueCount()
+        let options = recorded.options()
+        options.isStrict = false
+        XCTExpectFailure("Only waits that fail record their timeout", options: options)
+        var thrown = 0
+        for index in 0..<200 {
+            let signal = InspectorPreviewTestSignal("SIMULATED event \(index)")
+            signal.signal()
+            do { try await signal.wait(timeout: .zero) } catch { thrown += 1 }
+        }
+        XCTAssertEqual(recorded.value, thrown, "Only a wait that failed may record its timeout")
+    }
+}
+
+/// Counts the timeout issues an expected-failure scope receives.
+private final class InspectorSignalIssueCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int { lock.withLock { count } }
+
+    func options() -> XCTExpectedFailure.Options {
+        let options = XCTExpectedFailure.Options()
+        options.issueMatcher = { [self] issue in
+            guard issue.compactDescription.contains("did not arrive: SIMULATED event") else {
+                return false
+            }
+            lock.withLock { count += 1 }
+            return true
+        }
+        return options
     }
 }
