@@ -11,6 +11,19 @@ final class AssistInspectorPreviewTests: XCTestCase {
     /// This test's monitored source (XCTest makes a fresh one per test).
     private let ceiling = ScopeExposureCeiling()
 
+    /// A missed event must name itself even when the caller's UIKit teardown throws and swallows
+    /// framework errors afterwards; XCTest would otherwise report the last of those instead.
+    func testTimedOutSignalRecordsTheMissingEventItself() async {
+        let signal = InspectorPreviewTestSignal("SIMULATED event that never arrives")
+        let options = XCTExpectedFailure.Options()
+        options.issueMatcher = { $0.compactDescription.contains("SIMULATED event that never arrives") }
+        XCTExpectFailure("The timeout records its own issue", options: options)
+        do {
+            try await signal.wait(timeout: .milliseconds(50))
+            XCTFail("A missing event must throw")
+        } catch {}
+    }
+
     func testInspectorRequestsSamplingWithoutEnablingPictureEffects() {
         let original = LiveImageEffects()
         let image = original.withInspectorDemand(.peaking)
@@ -111,7 +124,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
             started.signal()
             XCTAssertEqual(release.wait(timeout: .now() + 10), .success)
             return reference
-        })
+        }, workerQoS: inspectorTestWorkerQoS)
         let owner = UUID()
         renderer.activate(owner: owner)
         let work = Task { await renderer.render(owner: owner, source: frame) { LiveImageEffects() } }
@@ -135,7 +148,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
         let live = bus.openSource(.live)
         bus.publish(live, source: try Self.buffer(width: 8, height: 8), transfer: .rec709, bundle: nil)
         let frame = try XCTUnwrap(bus.inspectorFrame)
-        let renderer = MonitorInspectorImageRenderer()
+        let renderer = MonitorInspectorImageRenderer(workerQoS: inspectorTestWorkerQoS)
         let owner = UUID()
         renderer.activate(owner: owner)
         let playback = bus.openSource(.playback)
@@ -160,7 +173,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
     }
 
     func testPreviewImageIsBoundedBeforeRendering() async throws {
-        let renderer = MonitorInspectorImageRenderer()
+        let renderer = MonitorInspectorImageRenderer(workerQoS: inspectorTestWorkerQoS)
         let owner = UUID()
         renderer.activate(owner: owner)
         let buffer = try Self.buffer(width: 640, height: 360)
@@ -229,7 +242,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
                         "Test did not release the first worker; a rejected request may have queued")
                 }
                 return reference
-            })
+            }, workerQoS: inspectorTestWorkerQoS)
         let owner = UUID()
         let remountedOwner = UUID()
         renderer.activate(owner: owner)
@@ -280,7 +293,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
             operation: { _, _ in
                 _ = invocations.increment()
                 return reference
-            })
+            }, workerQoS: inspectorTestWorkerQoS)
         let buffer = try Self.buffer(width: 8, height: 8)
         let firstOwner = UUID()
         renderer.activate(owner: firstOwner)
@@ -329,7 +342,7 @@ final class AssistInspectorPreviewTests: XCTestCase {
                     release.wait(timeout: .now() + 10), .success,
                     "Test did not release the work the renderer was already running")
                 return reference
-            })
+            }, workerQoS: inspectorTestWorkerQoS)
         let buffer = try Self.buffer(width: 8, height: 8)
         let owner = UUID()
         renderer.activate(owner: owner)
@@ -455,6 +468,12 @@ private final class InspectorRenderInvocationCounter: @unchecked Sendable {
     }
 }
 
+/// These tests block the renderer's worker and await its events from the main actor. Production
+/// runs that worker at utility QoS; on a loaded hosted simulator utility work entered 6 s after
+/// admission while the main thread ran within milliseconds (CI trace 2026-10-23), past the event
+/// budget below. The worker therefore runs at the waiter's tier here; admission is unchanged.
+let inspectorTestWorkerQoS: DispatchQoS = .userInitiated
+
 /// Wait for the worker's event, not a presumed utility-queue scheduling delay.
 /// The finite fallback throws out of the test before cancellation assertions
 /// can manufacture a cascade; each caller releases blocked work in defer.
@@ -476,15 +495,20 @@ final class InspectorPreviewTestSignal: Sendable {
         continuation.finish()
     }
 
-    func wait() async throws {
+    func wait(timeout: Duration = .seconds(timeoutSeconds)) async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 for await _ in self.events { return }
                 throw CancellationError()
             }
             group.addTask {
-                try await Task.sleep(for: .seconds(Self.timeoutSeconds))
-                throw WaitFailure(event: self.name)
+                try await Task.sleep(for: timeout)
+                let failure = WaitFailure(event: self.name)
+                // Record the cause now. XCTest reports the last Swift error it observed in the
+                // test, and UIKit teardown in the caller's defer throws and swallows internal
+                // Gestures errors ("InvalidTransition"), which would otherwise replace this one.
+                XCTFail(failure.description)
+                throw failure
             }
             defer { group.cancelAll() }
             try await group.next()

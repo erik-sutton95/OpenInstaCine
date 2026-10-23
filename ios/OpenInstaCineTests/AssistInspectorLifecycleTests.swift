@@ -50,7 +50,7 @@ final class AssistInspectorLifecycleTests: XCTestCase {
                     resumed.signal()
                 }
                 return reference
-            })
+            }, workerQoS: inspectorTestWorkerQoS)
         model.inspectorPreview = renderer
         var source: CVPixelBuffer?
         XCTAssertEqual(
