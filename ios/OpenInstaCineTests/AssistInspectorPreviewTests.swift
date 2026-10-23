@@ -11,19 +11,6 @@ final class AssistInspectorPreviewTests: XCTestCase {
     /// This test's monitored source (XCTest makes a fresh one per test).
     private let ceiling = ScopeExposureCeiling()
 
-    /// A missed event must name itself even when the caller's UIKit teardown throws and swallows
-    /// framework errors afterwards; XCTest would otherwise report the last of those instead.
-    func testTimedOutSignalRecordsTheMissingEventItself() async {
-        let signal = InspectorPreviewTestSignal("SIMULATED event that never arrives")
-        let options = XCTExpectedFailure.Options()
-        options.issueMatcher = { $0.compactDescription.contains("SIMULATED event that never arrives") }
-        XCTExpectFailure("The timeout records its own issue", options: options)
-        do {
-            try await signal.wait(timeout: .milliseconds(50))
-            XCTFail("A missing event must throw")
-        } catch {}
-    }
-
     func testInspectorRequestsSamplingWithoutEnablingPictureEffects() {
         let original = LiveImageEffects()
         let image = original.withInspectorDemand(.peaking)
@@ -496,27 +483,82 @@ final class InspectorPreviewTestSignal: Sendable {
     }
 
     func wait(timeout: Duration = .seconds(timeoutSeconds)) async throws {
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                for await _ in self.events { return }
-                throw CancellationError()
+        do {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for await _ in self.events { return }
+                    throw CancellationError()
+                }
+                group.addTask {
+                    try await Task.sleep(for: timeout)
+                    throw WaitFailure(event: self.name)
+                }
+                defer { group.cancelAll() }
+                try await group.next()
             }
-            group.addTask {
-                try await Task.sleep(for: timeout)
-                let failure = WaitFailure(event: self.name)
-                // Record the cause now. XCTest reports the last Swift error it observed in the
-                // test, and UIKit teardown in the caller's defer throws and swallows internal
-                // Gestures errors ("InvalidTransition"), which would otherwise replace this one.
-                XCTFail(failure.description)
-                throw failure
-            }
-            defer { group.cancelAll() }
-            try await group.next()
+        } catch let failure as WaitFailure {
+            // Only a timeout that won records an issue, and it does so before the caller's
+            // defer runs. XCTest reports the last Swift error it observed in the test, and UIKit
+            // teardown throws and swallows internal Gestures errors ("InvalidTransition").
+            XCTFail(failure.description)
+            throw failure
         }
     }
 
     private struct WaitFailure: Error, CustomStringConvertible {
         let event: String
         var description: String { "Inspector synchronization event did not arrive: \(event)" }
+    }
+}
+
+/// The event wait's own failure report: recorded exactly when the wait fails.
+/// Main actor: XCTExpectFailure scopes the test from the main thread.
+@MainActor
+final class InspectorPreviewTestSignalTests: XCTestCase {
+    /// A missed event names itself even when the caller's UIKit teardown throws and swallows
+    /// framework errors afterwards; XCTest would otherwise report the last of those instead.
+    func testTimedOutSignalRecordsTheMissingEventItself() async {
+        let recorded = InspectorSignalIssueCount()
+        XCTExpectFailure("The timeout records its own issue", options: recorded.options())
+        let signal = InspectorPreviewTestSignal("SIMULATED event that never arrives")
+        var thrown = false
+        do { try await signal.wait(timeout: .milliseconds(50)) } catch { thrown = true }
+        XCTAssertTrue(thrown, "A missing event must throw")
+        XCTAssertEqual(recorded.value, 1, "Exactly one issue names the missed event")
+    }
+
+    /// An event and its timeout finishing together: a wait that returns records nothing.
+    func testIssueIsRecordedExactlyWhenTheWaitFails() async {
+        let recorded = InspectorSignalIssueCount()
+        let options = recorded.options()
+        options.isStrict = false
+        XCTExpectFailure("Only waits that fail record their timeout", options: options)
+        var thrown = 0
+        for index in 0..<200 {
+            let signal = InspectorPreviewTestSignal("SIMULATED event \(index)")
+            signal.signal()
+            do { try await signal.wait(timeout: .zero) } catch { thrown += 1 }
+        }
+        XCTAssertEqual(recorded.value, thrown, "Only a wait that failed may record its timeout")
+    }
+}
+
+/// Counts the timeout issues an expected-failure scope receives.
+private final class InspectorSignalIssueCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int { lock.withLock { count } }
+
+    func options() -> XCTExpectedFailure.Options {
+        let options = XCTExpectedFailure.Options()
+        options.issueMatcher = { [self] issue in
+            guard issue.compactDescription.contains("did not arrive: SIMULATED event") else {
+                return false
+            }
+            lock.withLock { count += 1 }
+            return true
+        }
+        return options
     }
 }
