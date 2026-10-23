@@ -21,6 +21,7 @@ final class ShareUIFlowTests: OpenCineAppUITesting.ShareUIFlowTests {}
 
 /// Opted-in current-build camera qualification through the common physical driver.
 final class PhysicalMigrationQualificationTests: OpenCineAppUITesting.PhysicalMigrationQualificationTests {}
+final class PhysicalCameraNetworkTests: OpenCineAppUITesting.PhysicalCameraNetworkTests {}
 
 /// SIMULATED graphical conformance uses the same shared assertions as every app.
 final class MonitorScreenshotLayoutTests: OpenCineAppUITesting.MonitorScreenshotLayoutTests {}
