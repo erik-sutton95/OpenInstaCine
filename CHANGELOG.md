@@ -28,7 +28,10 @@ supported capabilities and single-camera iOS policy preserved.
 - Shutter Angle follows angle picks, Auto-to-Manual transitions, AE lock and
   frame-rate changes. Android's EV meter follows the live picture again.
 - Returning from Media refreshes the iOS live decoder. Playback keeps Pause
-  through buffering, scrubbing and app background/return.
+  through buffering, scrubbing, Share and app background/return.
+- Android no longer freezes while the live picture rebuilds after rotating or
+  returning to the app.
+- iOS VoiceOver no longer reaches live controls under a covering screen.
 - Sharing several cached clips stages them together with valid share names.
 - A failed saved connection can retry on app return; scanning reflects Bluetooth
   availability and Android Wi-Fi failures open the relevant settings.

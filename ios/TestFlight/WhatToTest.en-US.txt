@@ -7,12 +7,12 @@ New and changed
 Fixes
 
 - Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again.
-- Returning from Media refreshes the live picture. Playback stays paused after buffering or leaving and returning to the app.
-- Sharing several cached clips works together. Monitoring colour follows the selected camera profile. I-Log warnings account for ISO; their ceilings still need physical calibration.
+- Returning from Media refreshes the live picture. Playback stays paused after Share, buffering, or leaving and returning to the app.
+- Sharing several cached clips works together. VoiceOver no longer reaches live controls under a covering screen. Monitoring colour follows the camera profile.
 - Returning after a failed saved connection allows another attempt. A stalled picture has bounded recovery instead of remaining on Reconnecting indefinitely.
 
 What to test
 
 - At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check the shutter follows from 1/50 to 1/100.
-- In Media, pause and scrub a clip, switch clips, cancel a deletion and share cached clips. Return to Live View and check that the live picture resumes.
-- If the live picture drops out, use Share Diagnostics and report the time, what you were doing and whether camera controls still responded.
+- In Media, pause a clip, share it and close the share sheet. Check it stays paused, then return to Live View and check the live picture resumes.
+- With VoiceOver on, open Media or Settings over Live View and swipe through. If the live picture drops out, use Share Diagnostics and report the time.
