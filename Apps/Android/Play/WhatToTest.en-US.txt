@@ -6,13 +6,13 @@ New and changed
 
 Fixes
 
+- The app no longer freezes or shows App not responding while the live picture rebuilds, for example after rotating or returning to the app.
 - Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again. The EV meter reads the live picture.
-- Playback keeps Pause through buffering and scrubbing. Sharing several cached clips reaches the share sheet together.
-- Top-bar readouts stay readable over bright pictures, and the space between crossing frame guides stays clear with Mask outside frame.
-- A failed saved connection can retry when you return. Scanning messages follow Bluetooth availability, and Wi-Fi failures offer the right settings.
+- Playback keeps Pause through buffering, scrubbing and Share. Sharing several cached clips reaches the share sheet together.
+- A failed saved connection can retry when you return. Top-bar readouts stay readable, and crossing frame guides stay clear with Mask outside frame.
 
 What to test
 
+- Rotate the phone repeatedly and leave and return to the app during Live View. Check the app stays responsive and the live picture returns.
 - At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check 1/50 becomes 1/100 and the EV needle responds to bright and dark scenes.
-- Share several cached clips, pause while buffering, then check crossing guides, Mask outside frame and top-bar readability in both orientations.
-- If the live picture drops out, use Share Diagnostics and report the time, what you were doing and whether camera controls still responded.
+- Share several cached clips and pause while buffering. If the live picture drops out, use Share Diagnostics and report the time.
