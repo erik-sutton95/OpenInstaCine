@@ -47,7 +47,8 @@ struct MediaLibraryView: View {
             open: { presented = $0 }, share: { records, token in
                 guard library.isCurrent(token) else { return }
                 deliveryFiles = records.map { record in record.payload.file }
-            }, thumbnail: { context in
+            }, cachingActive: { false },  // Insta facts carry no transfer progress; cells show it.
+            thumbnail: { context in
                 let record = context.record
                 let file = record.payload.file
                 let grade = MediaCacheGrade.resolve(hasOriginal: context.cached?.originalURL != nil,
