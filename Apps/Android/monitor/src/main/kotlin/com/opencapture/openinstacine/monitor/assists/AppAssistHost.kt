@@ -18,5 +18,5 @@ internal val AppAssistHost = AssistHost(
 )
 
 /** This app's ND help copy, as on its main (the shared [com.opencapture.opencine.cameracontrols.NDAssist.HELP] uses hyphens). */
-private const val ND_HELP =
-    "Meters the live picture against middle gray and suggests a screw-on ND \u2014 stops and ND number \u2014 to balance it. The app cannot set a filter."
+internal const val ND_HELP =
+    "Meters the live picture against middle gray and suggests a screw-on ND (stops and ND number) to balance it. The app cannot set a filter."
