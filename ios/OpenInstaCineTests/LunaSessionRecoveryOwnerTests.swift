@@ -89,6 +89,38 @@ struct LunaSessionRecoveryOwnerTests {
     #expect(session.holdsMonitor)
   }
 
+  /// Hardware pass 7.2a follow-up: iOS suspends the app in the background, but the continuous
+  /// budget clock kept counting, so a return after more than 180 s met "tap Retry" without a
+  /// single attempt. The scene going inactive holds attempts and the budget until it is active.
+  @Test func sceneInactiveHoldsRecoveryAttemptsAndBudgetUntilActive() async {
+    let peer = Peer()
+    peer.live = false
+    let session = peer.session()
+    defer {
+      session.cancelSessionRecovery()
+      session.decoder.close()
+    }
+    session.noteSceneBecameInactive()
+    session.beginSessionRecovery(reason: "SIMULATED drop while backgrounded")
+    // Ten minutes away, in steps so every task the episode starts can sleep and wake.
+    while peer.clock.time < 600 {
+      await peer.clock.settle()
+      peer.clock.advance(to: peer.clock.time + 10)
+    }
+    await peer.clock.settle()
+    #expect(peer.connects == 0, "no attempt while the scene is inactive")
+    #expect(session.sessionRecovery == .retrying(attempt: 1, maxAttempts: 8))
+    #expect(session.holdsMonitor)
+    session.noteSceneBecameActive()
+    #expect(
+      await peer.clock.drive {
+        if case .waitingForOperator = session.sessionRecovery { return true }
+        return false
+      })
+    #expect(peer.connects > 0)
+    #expect(abs(peer.clock.time - 780) < 1e-6, "the budget counts active time only")
+  }
+
   @Test func cardGraceAndDropStormUseSharedOwnerAndOperatorRetry() async {
     let peer = Peer()
     let session = peer.session()
