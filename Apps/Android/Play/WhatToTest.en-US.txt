@@ -1,18 +1,34 @@
+Since open beta build 26
+
 New and changed
 
+- Camera setup, settings, View Assist and Media controls are closer to the other OpenCine apps, with the same look and behavior.
 - Media is much faster on large cards: listing, selecting clips and Select all stay responsive, even while clips cache.
 - The live picture runs more smoothly after connecting, because the screen no longer redraws everything as the timecode advances.
 - Tapping the storage readout steps through free space, free percentage and the camera's remaining record time, then back to free space.
+- In landscape, the colour profile sits beside the codec. Portrait readouts keep their rounded card-space values clear of the screen cutout.
+- Offline, Media says the camera is disconnected and shows the clips cached on this phone. An empty filter says No matching clips.
+- Connection diagnostics separate incoming video, decoding and display activity to help investigate live-picture interruptions.
 
 Fixes
 
-- Reconnecting waits while the app is in the background and resumes when you return, so the live picture comes back without Retry. The card names its 3 minute window.
-- A clip that fails to cache now shows Could not cache that clip, and Cache or Share carries on with the other clips. The selection bar shows the whole count.
+- The app no longer freezes or shows App not responding while the live picture rebuilds, for example after rotating or returning to the app.
+- Reconnecting waits while the app is in the background and resumes when you return, so the live picture comes back without Retry.
+- The reconnect card names its 3-minute window. When the link drops, the signal shows no bars and TalkBack says the live link is down.
+- A failed saved connection can retry when you return. Scanning messages follow Bluetooth availability, and Wi-Fi failures offer the right settings.
+- Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again. Auto ISO with a fixed shutter reads M.
+- The EV meter reads the live picture again instead of always showing a dash.
+- Playback keeps Pause through buffering, scrubbing and Share.
+- Sharing two or more cached clips no longer fails with Couldn't share these clips; they reach the share sheet together.
+- A clip that fails to cache now shows Could not cache that clip, and Cache or Share carries on with the others. The selection bar shows the whole count.
 - With Full Resolution Caching on, a played clip finishes downloading after you close it and reads CACHED. Shared clips keep their camera file names.
+- With two or more frame guides and Mask outside frame on, the space between the crossing frames stays clear again.
 - The open landscape View Assist palette hides the camera values it covers. TalkBack reads each settings switch as one switch with its title.
 
 What to test
 
 - Open Media on a full card. Scroll, select clips, use Select all, then Cache and Share two clips. Check the screen stays responsive and both clips finish or report a failure.
+- Rotate the phone repeatedly and leave and return to the app during Live View. Check the app stays responsive and the live picture returns.
 - In Live View, go Home, record 60 to 90 s with the system camera app, then return: the picture comes back by itself with no Retry.
-- With Full Resolution Caching on, play an uncached clip a few seconds, go back and wait about 30 s: it reads CACHED. In video mode, tap the storage readout through all three steps.
+- At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check 1/50 becomes 1/100 and the EV needle responds to bright and dark scenes.
+- With Full Resolution Caching on, play an uncached clip a few seconds, go back and wait about 30 s: it reads CACHED. Turn on Guides 2.39:1 and 9:16 with Mask outside frame.
