@@ -534,6 +534,7 @@ final class CameraSession {
         if cameraPathLease == nil { cameraPathLease = AppDiagnostics.reporting.beginCameraPath() }
         connectGeneration += 1
         LocalVPNNotice.app.noteIfActive()
+        LocalNetworkAccess.requestBeforeCameraJoin()
         backend.stopScan()
         scanTask?.cancel()
         runTask?.cancel()

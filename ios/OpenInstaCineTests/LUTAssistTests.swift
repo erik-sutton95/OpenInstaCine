@@ -421,7 +421,7 @@ final class LUTAssistTests: XCTestCase {
         XCTAssertEqual(assist.resolvedSource(), .off)
         XCTAssertEqual(OfficialLUTs.app.catalog(true), [.officialAuto])
         XCTAssertEqual(OfficialLUTs.app.catalog(false), [.officialAuto, .iLogRec709])
-        XCTAssertEqual(LUTPickerCopy.photoRec709Caption, "Photo live view is Rec.709 — log conversions are off")
+        XCTAssertEqual(LUTPickerCopy.photoRec709Caption, "Photo live view is Rec.709. Log conversions are off")
     }
 
     func testPlaybackClipColorWinsWhileCameraStaysPhoto() {
