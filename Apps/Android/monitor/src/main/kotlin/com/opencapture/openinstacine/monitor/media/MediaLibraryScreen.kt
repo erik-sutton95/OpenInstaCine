@@ -37,7 +37,9 @@ fun MediaLibraryScreen(model: AppModel, onClose: () -> Unit) {
     fun dismiss() { library.close(); model.session.endMediaBrowse(); onClose() }
     fun file(record: MonitorMediaRecord<LunaMediaLibraryPayload>) = record.payload.file.copy(isStarred = record.favorite)
     val operations = MonitorMediaGalleryOperations<LunaMediaLibraryPayload>(
-        download = if (isLive && library.canTransfer) { { controller.download(it.payload.file) } } else null,
+        // The library throws a failed clip, so the shared gallery says "Could not cache that clip."
+        // and goes on to the next; delivery keeps its own quiet acquire and counts what is missing.
+        download = if (isLive && library.canTransfer) { { library.cacheOriginal(it.asset.id); Unit } } else null,
         delete = if (isLive && library.canDelete) { { controller.delete(it.payload.file); Unit } } else null,
         favorite = { controller.toggleFavorite(it.payload.file) },
     )
