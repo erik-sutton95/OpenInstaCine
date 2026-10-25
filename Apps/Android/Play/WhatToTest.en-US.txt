@@ -1,18 +1,18 @@
 New and changed
 
-- A more consistent OpenCine interface brings camera setup, settings, View Assist and media controls closer together across the apps.
-- In landscape, the colour profile sits beside the codec. Portrait readouts keep their rounded card-space values clear of the screen cutout.
-- Connection diagnostics separate incoming video, decoding and display activity to help investigate live-picture interruptions.
+- Media is much faster on large cards: listing, selecting clips and Select all stay responsive, even while clips cache.
+- The live picture runs more smoothly after connecting, because the screen no longer redraws everything as the timecode advances.
+- Tapping the storage readout steps through free space, free percentage and the camera's remaining record time, then back to free space.
 
 Fixes
 
-- The app no longer freezes or shows App not responding while the live picture rebuilds, for example after rotating or returning to the app.
-- Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again. The EV meter reads the live picture.
-- Playback keeps Pause through buffering, scrubbing and Share. Sharing several cached clips reaches the share sheet together.
-- A failed saved connection can retry when you return. Top-bar readouts stay readable, and crossing frame guides stay clear with Mask outside frame.
+- Reconnecting waits while the app is in the background and resumes when you return, so the live picture comes back without Retry. The card names its 3 minute window.
+- A clip that fails to cache now shows Could not cache that clip, and Cache or Share carries on with the other clips. The selection bar shows the whole count.
+- With Full Resolution Caching on, a played clip finishes downloading after you close it and reads CACHED. Shared clips keep their camera file names.
+- The open landscape View Assist palette hides the camera values it covers. TalkBack reads each settings switch as one switch with its title.
 
 What to test
 
-- Rotate the phone repeatedly and leave and return to the app during Live View. Check the app stays responsive and the live picture returns.
-- At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check 1/50 becomes 1/100 and the EV needle responds to bright and dark scenes.
-- Share several cached clips and pause while buffering. If the live picture drops out, use Share Diagnostics and report the time.
+- Open Media on a full card. Scroll, select clips, use Select all, then Cache and Share two clips. Check the screen stays responsive and both clips finish or report a failure.
+- In Live View, go Home, record 60 to 90 s with the system camera app, then return: the picture comes back by itself with no Retry.
+- With Full Resolution Caching on, play an uncached clip a few seconds, go back and wait about 30 s: it reads CACHED. In video mode, tap the storage readout through all three steps.

@@ -1,18 +1,18 @@
 New and changed
 
-- A more consistent OpenCine interface brings camera setup, settings, View Assist and media controls closer together across the apps.
-- In landscape, the colour profile sits beside the codec. Portrait readouts keep their rounded card-space values clear of the screen cutout.
-- Connection diagnostics separate incoming video, decoding and display activity to help investigate live-picture interruptions.
+- Media is much faster on large cards: listing, selecting clips and Select all stay responsive, even while clips cache.
+- The live picture runs more smoothly after connecting, because the screen no longer redraws everything as the timecode advances.
+- Tapping the storage readout steps through free space, free percentage and the camera's remaining record time, then back to free space.
 
 Fixes
 
-- Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again.
-- Returning from Media refreshes the live picture. Playback stays paused after Share, buffering, or leaving and returning to the app.
-- Sharing several cached clips works together. VoiceOver no longer reaches live controls under a covering screen. Monitoring colour follows the camera profile.
-- Returning after a failed saved connection allows another attempt. A stalled picture has bounded recovery instead of remaining on Reconnecting indefinitely.
+- The Local Network prompt now appears during pairing, before the camera Wi-Fi join, and Allow carries on pairing without relaunching the app.
+- Reconnecting waits while the app is in the background, so the live picture can return without Retry. The card names its 3 minute reconnect window.
+- A clip that fails to cache now says so, and Cache or Share carries on with the other clips instead of stopping quietly.
+- With Full Resolution Caching on, a played clip finishes downloading after you close it and reads CACHED. The open landscape View Assist palette hides the values it covers.
 
 What to test
 
-- At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check the shutter follows from 1/50 to 1/100.
-- In Media, play a clip and tap Share. Check it pauses while the share sheet is up and stays paused after you close it. Then check Live View resumes.
-- With VoiceOver on, open Media or Settings over Live View and swipe through: live controls underneath must not be reachable. Report any dropout with Share Diagnostics.
+- Open Media on a full card. Scroll, select clips, use Select all, then Cache and Share two clips. Check the screen stays responsive and both clips finish or report a failure.
+- Delete and reinstall, then pair: the Local Network prompt comes before the Wi-Fi Join alert, and Allow continues to live view. Go Home for over 3 minutes and return: no Retry needed.
+- With Full Resolution Caching on, play an uncached clip a few seconds, go back and wait about 30 s: it reads CACHED. In video mode, tap the storage readout through all three steps.
