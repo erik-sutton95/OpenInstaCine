@@ -17,4 +17,14 @@ class MediaHostRuleTest {
         assertEquals(listOf("MediaLibraryScreen.kt"), filesUsing("MonitorOperatorMediaScreen("))
         assertEquals(false, "BackHandler" in sources.getValue("MediaLibraryScreen.kt"))
     }
+
+    /** Hardware pass 10.1: Cache gave no word when a clip failed, because the gallery's operation
+     * swallowed the failure. The gallery caches through the library, which throws, so the shared
+     * gallery shows "Could not cache that clip." and goes on to the next clip. */
+    @Test
+    fun galleryCacheReportsFailures() {
+        val screen = sources.getValue("MediaLibraryScreen.kt")
+        assertEquals(false, "controller.download(" in screen)
+        assertEquals(true, "library.cacheOriginal(" in screen)
+    }
 }
