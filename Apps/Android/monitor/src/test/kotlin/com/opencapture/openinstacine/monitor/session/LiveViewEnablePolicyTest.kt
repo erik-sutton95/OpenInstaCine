@@ -53,7 +53,8 @@ class LiveViewEnablePolicyTest {
     fun recoveryDetailCountsAttemptsWithoutNamingSisterApps() {
         val retrying = SessionRecoveryUi.Retrying(attempt = 3, maxAttempts = 8)
         val detail = SessionRecoveryCopy.detail(retrying, "Pocket 4 Pro")
-        assertTrue(detail.contains("attempt 3 of 8"))
+        assertTrue(detail.contains("attempt 3."))
+        assertTrue(detail.contains("Reconnecting for up to 3 minutes"))
         assertTrue(!detail.contains("OpenZCine", ignoreCase = true))
     }
 
