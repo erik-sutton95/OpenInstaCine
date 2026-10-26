@@ -20,6 +20,8 @@ Fixes
 - Returning from Media refreshes the live picture instead of leaving an old frame on screen.
 - Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again. Auto ISO with a fixed shutter reads M.
 - Playback stays paused after Share, buffering, or leaving and returning to the app.
+- Playback controls and media details stay smoother on large cards, and playback scopes update more evenly.
+- Wide clips keep their correct brightness through LUTs, zebra, false color and scopes instead of looking crushed.
 - Sharing several cached clips works together. A clip that fails to cache says so, and Cache or Share carries on with the others.
 - With Full Resolution Caching on, a played clip finishes downloading after you close it and reads CACHED.
 - Monitoring colour follows the selected camera profile, and I-Log highlight warnings account for ISO.
@@ -33,4 +35,4 @@ What to test
 - Delete and reinstall, then pair: the Local Network prompt comes before the Wi-Fi Join alert, and Allow continues to live view.
 - During Live View, go Home for over 3 minutes and return: the picture comes back without Retry. Then open Media, play a clip and return to Live View.
 - At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check the shutter follows from 1/50 to 1/100.
-- With Full Resolution Caching on, play an uncached clip a few seconds, go back and wait about 30 s: it reads CACHED. In video mode, tap the storage readout through all three steps.
+- With Full Resolution Caching on, play an uncached clip briefly, go back and wait: it reads CACHED. Try a wide clip with LUT and scopes: controls stay smooth and brightness natural.
