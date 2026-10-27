@@ -19,6 +19,7 @@ Fixes
 - Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again. Auto ISO with a fixed shutter reads M.
 - The EV meter reads the live picture again instead of always showing a dash.
 - Playback keeps Pause through buffering, scrubbing and Share.
+- Playback stays smoother on large cards; scopes and audio meters update without redrawing the whole player.
 - Sharing two or more cached clips no longer fails with Couldn't share these clips; they reach the share sheet together.
 - A clip that fails to cache now shows Could not cache that clip, and Cache or Share carries on with the others. The selection bar shows the whole count.
 - With Full Resolution Caching on, a played clip finishes downloading after you close it and reads CACHED. Shared clips keep their camera file names.
@@ -31,4 +32,4 @@ What to test
 - Rotate the phone repeatedly and leave and return to the app during Live View. Check the app stays responsive and the live picture returns.
 - In Live View, go Home, record 60 to 90 s with the system camera app, then return: the picture comes back by itself with no Retry.
 - At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check 1/50 becomes 1/100 and the EV needle responds to bright and dark scenes.
-- With Full Resolution Caching on, play an uncached clip a few seconds, go back and wait about 30 s: it reads CACHED. Turn on Guides 2.39:1 and 9:16 with Mask outside frame.
+- With Full Resolution Caching on, play an uncached clip briefly, go back and wait: it reads CACHED. Play with scopes or audio meters. Turn on Guides 2.39:1 and 9:16 with Mask outside frame.
