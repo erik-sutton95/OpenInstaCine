@@ -18,8 +18,13 @@ cat > "$temp_dir/bin/gh" <<'EOF'
 # one repeats. JOB_NAME and PRODUCER_ATTEMPT: the producer's name and run attempt in the run's
 # latest attempt. EARLIER_BUILD: ios-build-1, from an earlier attempt, is also in the run.
 # EXPIRED_TOO: an older, expired artifact of the requested name is listed too.
+# FAIL_CALLS: gh calls (1-based, across every request) that fail as a GitHub 502 would.
 [ "$1" = api ] || { echo "unexpected gh call: $*" >&2; exit 2; }
 echo "$2" >> "$CALLS"
+if [[ ",${FAIL_CALLS:-}," == *",$(wc -l < "$CALLS" | tr -d ' '),"* ]]; then
+  echo "gh: HTTP 502: Bad Gateway" >&2
+  exit 1
+fi
 case "$2" in
   repos/o/r/actions/runs/7/artifacts\?name=*)
     count="$(grep -c '/artifacts?' "$CALLS")"
@@ -97,5 +102,11 @@ EARLIER_BUILD=1 PRODUCER_ATTEMPT=2 expect pass 3 3 queued,in_progress,in_progres
 EARLIER_BUILD=1 PRODUCER_ATTEMPT=1 expect pass 1 1 completed
 # The deadline still bounds a producer that never finishes.
 CI_WAIT_TIMEOUT=0 expect fail 1 0 in_progress
+# A failed jobs request is retried, not taken for a missing producer (call 1 fails).
+FAIL_CALLS=1 expect pass 1 1 in_progress
+# So are a failed artifacts request (call 2) and a failed download (call 5).
+FAIL_CALLS=2,5 expect pass 2 1 in_progress
+# Requests that keep failing end at the deadline.
+CI_WAIT_TIMEOUT=0 FAIL_CALLS=1 expect fail 0 1 in_progress
 
 echo "ci-wait-for-artifact.sh tests passed."
