@@ -29,10 +29,12 @@ check:
     git diff --cached --check
 
 # The CI helper scripts, on recorded output and stand-in tools (also run in the Meta job): the
-# job-summary timing tables and Swift Android SDK install recovery.
+# job-summary timing tables, Swift Android SDK install recovery and the iPad oracle's wait for
+# the native job's build.
 ci-scripts-test:
     python3 scripts/ci-test-timing-test.py
     ./scripts/ci-install-swift-android-test.sh
+    ./scripts/ci-wait-for-artifact-test.sh
 
 lab-setup:
     python3 -m venv .venv

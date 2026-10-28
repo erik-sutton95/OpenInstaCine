@@ -11,9 +11,9 @@ platforms it touches; a skipped job counts as passed in the gate.
 
 | Job | Checks |
 | --- | --- |
-| Meta checks | pin drift warning, gitleaks, Sentry configuration, privacy tests, tester notes format, actionlint |
-| Native Swift/iOS | app Swift package, one `build-for-testing`, unit tests without rebuilding (parallel, two workers); SwiftPM and compilation caches from main |
-| Android | build, unit tests, lint, release checks |
+| Meta checks | pin drift warning, gitleaks, Sentry configuration, privacy tests, tester notes format, CI script tests (timing summary, Swift Android SDK install recovery, the iPad oracle's build wait), actionlint |
+| Native Swift/iOS | app Swift package, one `build-for-testing`, unit tests without rebuilding on one simulator (serial: `-parallel-testing-enabled NO`); SwiftPM and compilation caches from main. The job summary lists per-suite times for the package and unit tests |
+| Android | three parallel jobs: JVM tests (`:monitor:testDebugUnitTest`); debug build and lint (`:app:assembleDebug :app:lintDebug :monitor:lintDebug`); release bundle (`:app:verifyReleaseComponentRegistrars`: R8 release bundle and the registrar check). Together they schedule exactly the task graph of the former single Gradle step (1,335 tasks in `--dry-run`), and the gate fails if any of them fails. Each job summary lists per-task times (`scripts/ci-gradle-task-timing.gradle`), and the JVM tests job per-suite times |
 | Handbook | static site build |
 
 No simulator UI suite, iPad oracle, portrait header layout matrix
@@ -23,10 +23,15 @@ have to edit tester notes (see Release time).
 
 ## Nightly tier: `.github/workflows/nightly.yml`
 
-Every night at 04:00 UTC on `main` (OpenCine 02:30, Pocket 03:15, Z 04:45), and on
-`workflow_dispatch`. It calls `ci.yml` with `full: true`: every job regardless of paths, plus
-the shared conformance scenarios on iOS, the portrait header layout matrix, `just core-test` and
-the original storage oracle on a private 2x iPad. On `main`, OpenCine's
+Every night at 20:00 UTC on `main` (see the cron in `nightly.yml`; a scheduled run that starts
+between 07:00 and 18:59 UTC skips), and on `workflow_dispatch`. It calls `ci.yml` with
+`full: true`: every job regardless of paths, plus the shared conformance scenarios on iOS, the
+portrait header layout matrix, `just core-test` and the original storage oracle on a private 2x
+iPad. The oracle has its own job, **Original storage oracle, native 2x iPad**: it creates its
+iPad while the native job tests the packages and builds, then runs the native job's build
+(artifact `ios-build-for-testing`, one day) without building, and keeps its result bundle and
+simulator setup record (`native-storage-oracle-evidence`). It feeds the CI gate like the native
+job, so a failure fails the nightly. On `main`, OpenCine's
 `scripts/ci-nightly-report.sh` (from OpenCine main, not the pin) keeps one issue,
 **Nightly CI failing on main** (label `ci-nightly`): opened or updated with the failing jobs
 and run link on failure, closed by the
