@@ -24,8 +24,14 @@ check:
     just sentry-test
     ./scripts/ios-release-notes-check.sh
     ./scripts/android-release-notes-check.sh
+    just ci-scripts-test
     git diff --check
     git diff --cached --check
+
+# The CI helper scripts, on stand-in tools (also run in the Meta job): Swift Android SDK
+# install recovery.
+ci-scripts-test:
+    ./scripts/ci-install-swift-android-test.sh
 
 lab-setup:
     python3 -m venv .venv

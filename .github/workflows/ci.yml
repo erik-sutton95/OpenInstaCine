@@ -93,6 +93,9 @@ jobs:
           ./scripts/android-release-notes-check.sh
           ./scripts/android-release-notes-test.sh
 
+      - name: Swift Android SDK install recovery
+        run: ./scripts/ci-install-swift-android-test.sh
+
       - name: Actionlint
         # Digest-pinned for reproducibility. Update the version manually when needed. v1.7.12
         uses: docker://rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
