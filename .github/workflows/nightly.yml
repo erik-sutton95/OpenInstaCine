@@ -48,6 +48,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      actions: read # the iPad oracle job downloads the native job's build from this run
     with:
       full: true
 
