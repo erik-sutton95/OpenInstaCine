@@ -150,6 +150,8 @@ jobs:
               - 'scripts/checkout-opencine.sh'
               - 'scripts/android-*.sh'
               - 'scripts/ci-install-swift-android.sh'
+              # Applied to every Android Gradle invocation in CI.
+              - 'scripts/ci-gradle-task-timing.gradle'
               - 'justfile'
               - '.github/workflows/ci.yml'
             handbook:
@@ -328,11 +330,28 @@ jobs:
           if-no-files-found: warn
 
   android:
-    name: Android
+    name: Android (${{ matrix.part }})
     needs: changes
     if: ${{ needs.changes.outputs.android == 'true' && !github.event.repository.private }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Three Gradle invocations on parallel runners instead of one serial step. Together they
+    # schedule exactly the task graph of the former single step (docs/ci.md); each stages the
+    # Swift core itself. The gate sees one `android` result: failure if any part fails, so every
+    # part stays required.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: JVM tests
+            tasks: :monitor:testDebugUnitTest
+          - part: debug build and lint
+            tasks: :app:assembleDebug :app:lintDebug :monitor:lintDebug
+          # R8 only runs in the release bundle, and :app:verifyReleaseComponentRegistrars
+          # (OpenCine's dex check) fails when it strips the ML Kit ComponentRegistrar
+          # constructors (OPENINSTACINE-ANDROID-1). Unsigned without the Play keystore.
+          - part: release bundle
+            tasks: :app:verifyReleaseComponentRegistrars
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -357,14 +376,26 @@ jobs:
           link-to-sdk: true
       - name: Install Swift Android SDK
         run: ./scripts/ci-install-swift-android.sh
-      # The release bundle is built on every pull request, as OpenZCine does: R8 only runs there, and
-      # :app:verifyReleaseComponentRegistrars (OpenCine's dex check) fails when it strips the ML Kit
-      # ComponentRegistrar constructors (OPENINSTACINE-ANDROID-1). Unsigned without the Play keystore.
-      - name: Build, unit-test, lint, and verify the release bundle
+      # The release bundle part runs on every pull request, as OpenZCine does.
+      - name: Gradle, ${{ matrix.part }}
         working-directory: Apps/Android
         env:
           SWIFT_ANDROID_SDK_ID: swift-6.3.3-RELEASE_android
-        run: ./gradlew :app:assembleDebug :monitor:testDebugUnitTest :app:lintDebug :monitor:lintDebug :app:verifyReleaseComponentRegistrars
+          CI_GRADLE_TASK_TIMING: ${{ runner.temp }}/gradle-task-timing.tsv
+          TASKS: ${{ matrix.tasks }}
+        run: |
+          set -euo pipefail
+          read -ra tasks <<< "$TASKS"
+          ./gradlew --init-script ../../scripts/ci-gradle-task-timing.gradle "${tasks[@]}"
+      # Per-task times and, for the JVM tests, per-suite times in the job summary and the log.
+      # Reporting never decides the verdict; the meta job tests the script.
+      - name: Summarize Gradle timing
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python3 scripts/ci-test-timing.py gradle "$RUNNER_TEMP/gradle-task-timing.tsv" Apps/Android \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
   handbook:
     name: Handbook
