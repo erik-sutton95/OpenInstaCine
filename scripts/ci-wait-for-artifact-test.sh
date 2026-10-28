@@ -13,19 +13,27 @@ echo "build" > "$temp_dir/payload/products.tar"
 
 cat > "$temp_dir/bin/gh" <<'EOF'
 #!/usr/bin/env bash
-# ARTIFACT_AT: the artifact list call (1-based) from which the artifact exists; 0 means never.
-# STATUSES: the producer's status at each jobs call, comma-separated; the last one repeats.
-# JOB_NAME: the producer's name in the run. EXPIRED_TOO: also list an older, expired artifact.
+# ARTIFACT_AT: the artifact list call (1-based) from which ios-build-$PRODUCER_ATTEMPT exists;
+# 0 means never. STATUSES: the producer's status at each jobs call, comma-separated; the last
+# one repeats. JOB_NAME and PRODUCER_ATTEMPT: the producer's name and run attempt in the run's
+# latest attempt. EARLIER_BUILD: ios-build-1, from an earlier attempt, is also in the run.
+# EXPIRED_TOO: an older, expired artifact of the requested name is listed too.
 [ "$1" = api ] || { echo "unexpected gh call: $*" >&2; exit 2; }
 echo "$2" >> "$CALLS"
 case "$2" in
-  repos/o/r/actions/runs/7/artifacts\?name=ios-build*)
+  repos/o/r/actions/runs/7/artifacts\?name=*)
     count="$(grep -c '/artifacts?' "$CALLS")"
+    requested="${2#*name=}"
+    requested="${requested%%&*}"
     listed=""
     if [ "${EXPIRED_TOO:-}" = 1 ]; then
       listed='{"id": 41, "expired": true, "created_at": "2026-10-28T20:30:00Z"}'
     fi
-    if [ "$ARTIFACT_AT" != 0 ] && [ "$count" -ge "$ARTIFACT_AT" ]; then
+    if [ "${EARLIER_BUILD:-}" = 1 ] && [ "$requested" = ios-build-1 ]; then
+      listed="${listed:+$listed, }{\"id\": 31, \"expired\": false, \"created_at\": \"2026-10-28T19:00:00Z\"}"
+    fi
+    if [ "$requested" = "ios-build-${PRODUCER_ATTEMPT}" ] && [ "$ARTIFACT_AT" != 0 ] \
+      && [ "$count" -ge "$ARTIFACT_AT" ]; then
       listed="${listed:+$listed, }{\"id\": 42, \"expired\": false, \"created_at\": \"2026-10-28T20:20:00Z\"}"
     fi
     echo "{\"artifacts\": [$listed]}"
@@ -34,8 +42,8 @@ case "$2" in
     count="$(grep -c '/jobs?' "$CALLS")"
     status="$(echo "$STATUSES" | tr ',' '\n' | sed -n "${count}p")"
     [ -n "$status" ] || status="$(echo "$STATUSES" | tr ',' '\n' | tail -1)"
-    echo "{\"jobs\": [{\"name\": \"Full suite / Meta checks\", \"status\": \"completed\"},
-      {\"name\": \"${JOB_NAME}\", \"status\": \"${status}\"}]}"
+    echo "{\"jobs\": [{\"name\": \"Full suite / Meta checks\", \"status\": \"completed\", \"run_attempt\": 1},
+      {\"name\": \"${JOB_NAME}\", \"status\": \"${status}\", \"run_attempt\": ${PRODUCER_ATTEMPT}}]}"
     ;;
   repos/o/r/actions/artifacts/42/zip) cat "$ARTIFACT_ZIP" ;;
   *) echo "unexpected gh api path: $2" >&2; exit 2 ;;
@@ -51,6 +59,7 @@ expect() {
   rm -rf "$out" "$CALLS"
   touch "$CALLS"
   ARTIFACT_AT="$3" STATUSES="$4" JOB_NAME="${5:-Full suite / Native Swift/iOS}" \
+    PRODUCER_ATTEMPT="${PRODUCER_ATTEMPT:-1}" \
     "$script_dir/ci-wait-for-artifact.sh" ios-build "Native Swift/iOS" "$out" \
     > "$temp_dir/log" 2>&1 || verdict=1
   local polls
@@ -72,15 +81,20 @@ expect pass 1 1 in_progress
 # Uploaded while the producer still runs: keeps polling until it appears.
 expect pass 3 3 queued,in_progress,in_progress
 # The producer finished without it: fails at once instead of waiting for the timeout.
-expect fail 3 0 in_progress,completed
-# The producer finished right after uploading: the second look finds it.
-expect pass 2 2 completed
+expect fail 2 0 in_progress,completed
+# The producer uploaded and finished between two polls: the next poll still finds it.
+expect pass 2 2 in_progress,completed
 # A job not in this run fails rather than waiting.
-expect fail 2 0 in_progress "Full suite / Android"
+expect fail 0 0 in_progress "Full suite / Android"
 # A run started directly (not through nightly.yml) names the job without a caller prefix.
 expect pass 2 2 in_progress "Native Swift/iOS"
 # An expired artifact of the same name is never picked.
 EXPIRED_TOO=1 expect pass 2 2 in_progress
+# A rerun of every job: attempt 1's build is still in the run, but the waiting job waits for the
+# producer's own attempt (2) to upload instead of taking the earlier build (artifact 31).
+EARLIER_BUILD=1 PRODUCER_ATTEMPT=2 expect pass 3 3 queued,in_progress,in_progress
+# A rerun of the waiting job alone: the producer's latest attempt is the one that built.
+EARLIER_BUILD=1 PRODUCER_ATTEMPT=1 expect pass 1 1 completed
 # The deadline still bounds a producer that never finishes.
 CI_WAIT_TIMEOUT=0 expect fail 1 0 in_progress
 

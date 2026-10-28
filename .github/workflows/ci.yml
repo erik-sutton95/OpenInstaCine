@@ -226,7 +226,8 @@ jobs:
             -skipMacroValidation -skipPackagePluginValidation COMPILATION_CACHE_ENABLE_CACHING=YES ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build-for-testing
       # Nightly tier: the iPad oracle job runs this build on its own private iPad, which it boots
       # while this job tests the packages and builds. tar keeps the executable bits an artifact zip
-      # drops; the Xcode version lets that job refuse a build from another Xcode.
+      # drops; the Xcode version lets that job refuse a build from another Xcode. The name carries
+      # the run attempt, so a rerun's oracle waits for this attempt's build, not an earlier one.
       - name: Package the build for the iPad oracle job
         if: ${{ inputs.full }}
         run: |
@@ -238,11 +239,10 @@ jobs:
         if: ${{ inputs.full }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ios-build-for-testing
+          name: ios-build-for-testing-${{ github.run_attempt }}
           path: ${{ runner.temp }}/build-for-testing
           retention-days: 1
           compression-level: 1
-          overwrite: true
           if-no-files-found: error
       # The portrait header layout matrix (MonitorPortraitHeaderClearanceTests) renders the monitor
       # at every size: nightly tier only (docs/ci.md).

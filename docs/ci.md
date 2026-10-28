@@ -29,9 +29,9 @@ between 07:00 and 18:59 UTC skips), and on `workflow_dispatch`. It calls `ci.yml
 portrait header layout matrix, `just core-test` and the original storage oracle on a private 2x
 iPad. The oracle has its own job, **Original storage oracle, native 2x iPad**: it creates its
 iPad while the native job tests the packages and builds, then runs the native job's build
-(artifact `ios-build-for-testing`, one day) without building, and keeps its result bundle and
-simulator setup record (`native-storage-oracle-evidence`). It feeds the CI gate like the native
-job, so a failure fails the nightly. On `main`, OpenCine's
+(artifact `ios-build-for-testing-<run attempt>`, one day) without building, and keeps its
+result bundle and simulator setup record (`native-storage-oracle-evidence`). It feeds the CI
+gate like the native job, so a failure fails the nightly. On `main`, OpenCine's
 `scripts/ci-nightly-report.sh` (from OpenCine main, not the pin) keeps one issue,
 **Nightly CI failing on main** (label `ci-nightly`): opened or updated with the failing jobs
 and run link on failure, closed by the
