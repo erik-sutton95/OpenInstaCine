@@ -28,9 +28,10 @@ check:
     git diff --check
     git diff --cached --check
 
-# The CI helper scripts, on stand-in tools (also run in the Meta job): Swift Android SDK
-# install recovery.
+# The CI helper scripts, on recorded output and stand-in tools (also run in the Meta job): the
+# job-summary timing tables and Swift Android SDK install recovery.
 ci-scripts-test:
+    python3 scripts/ci-test-timing-test.py
     ./scripts/ci-install-swift-android-test.sh
 
 lab-setup:

@@ -93,6 +93,9 @@ jobs:
           ./scripts/android-release-notes-check.sh
           ./scripts/android-release-notes-test.sh
 
+      - name: CI timing summaries
+        run: python3 scripts/ci-test-timing-test.py
+
       - name: Swift Android SDK install recovery
         run: ./scripts/ci-install-swift-android-test.sh
 
@@ -199,8 +202,14 @@ jobs:
             ios-xcode-${{ steps.xcode.outputs.version }}-
       # OpenCine's own CI already runs its Insta360 tests at the pinned commit; the app's PR tier
       # runs only the app package, the nightly tier both (`just core-test`).
+      # The log feeds the per-suite timing table in the job summary.
       - name: Swift packages
-        run: ${{ inputs.full && 'just core-test' || 'swift test' }}
+        env:
+          SWIFT_TESTS: ${{ inputs.full && 'just core-test' || 'swift test' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-ios"
+          $SWIFT_TESTS 2>&1 | tee "$RUNNER_TEMP/native-ios/swift-test.log"
       # One build of the app and its unit tests; every test run below reuses it without building.
       # Hosted runners are arm64: an x86_64 simulator slice only doubles the compile.
       - name: Build the app and its tests (iOS Simulator)
@@ -249,8 +258,19 @@ jobs:
           device_id="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ && !found { print $2; found = 1 }')"
           xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine \
             -destination "platform=iOS Simulator,id=$device_id" -derivedDataPath ~/ci-dd \
-            -parallel-testing-enabled NO \
+            -parallel-testing-enabled NO -resultBundlePath "$RUNNER_TEMP/native-ios/OpenInstaCine.xcresult" \
             -only-testing:OpenInstaCineTests "-skip-testing:OpenInstaCineTests/$SKIP" test-without-building
+      # Per-suite timing for the package tests and the iOS unit tests, in the job summary and the log.
+      # Reporting never decides the verdict; the meta job tests the script.
+      - name: Summarize test timing
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python3 scripts/ci-test-timing.py swift-testing "$RUNNER_TEMP/native-ios/swift-test.log" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 scripts/ci-test-timing.py xcresult "$RUNNER_TEMP/native-ios/OpenInstaCine.xcresult" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Save Xcode package and compilation caches
         if: ${{ success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
