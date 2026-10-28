@@ -455,6 +455,27 @@ jobs:
           link-to-sdk: true
       - name: Install Swift Android SDK
         run: ./scripts/ci-install-swift-android.sh
+      # The build pins NDK 28 (ndkVersion), which the runner image lacks, so the Android Gradle
+      # plugin downloaded it (about 700 MB) inside the Gradle step, where a corrupt download fails
+      # the job (2026-10-28: "Error reading Zip content"). Three parallel jobs make that three times
+      # as likely, so each installs the pinned NDKs up front and tries a failed install again.
+      - name: Install the pinned Android NDK
+        run: |
+          set -euo pipefail
+          versions="$(grep -rhoE --include=build.gradle.kts 'ndkVersion = "[0-9.]+"' Apps/Android ../OpenCine/Android \
+            | grep -oE '[0-9.]+' | sort -u)"
+          [ -n "$versions" ] || { echo "::error::No ndkVersion found in the Gradle builds"; exit 1; }
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          for version in $versions; do
+            for attempt in 1 2 3; do
+              "$sdkmanager" --install "ndk;$version" > /dev/null || true
+              [ -f "$ANDROID_HOME/ndk/$version/source.properties" ] && break
+              echo "::warning::NDK $version install attempt $attempt failed"
+              rm -rf "${ANDROID_HOME:?}/ndk/$version"
+              [ "$attempt" -lt 3 ] || { echo "::error::Could not install NDK $version"; exit 1; }
+            done
+            echo "NDK $version installed"
+          done
       # The release bundle part runs on every pull request, as OpenZCine does.
       - name: Gradle, ${{ matrix.part }}
         working-directory: Apps/Android
