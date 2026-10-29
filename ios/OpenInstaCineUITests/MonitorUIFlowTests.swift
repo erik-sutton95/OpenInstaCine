@@ -880,7 +880,7 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         XCTAssertTrue(app.staticTexts["1 selected"].exists)
         XCTAssertTrue(app.buttons["Remove favorite"].firstMatch.exists)
         capture("SIMULATED-actual-owned-gallery-landscape-selection")
-        app.buttons["Clear selection"].tap()
+        app.buttons["Exit selection"].tap()
         app.staticTexts[first].tap()
         let close = app.buttons["Back to media"]
         XCTAssertTrue(close.waitForExistence(timeout: 5))
@@ -1036,9 +1036,9 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
             first.press(
                 forDuration: 0.4, thenDragTo: fourth, withVelocity: .slow, thenHoldForDuration: 0)
             XCTAssertTrue(app.staticTexts["0 selected"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.buttons["Clear selection"].exists)
+            XCTAssertTrue(app.buttons["Exit selection"].exists)
             XCTAssertFalse(app.buttons["Back to media"].exists)
-            app.buttons["Clear selection"].tap()
+            app.buttons["Exit selection"].tap()
             XCTAssertFalse(app.buttons["Select \(Self.clip(1))"].exists)
             app.terminate()
         }
@@ -1081,7 +1081,7 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
                 withVelocity: .slow,
                 thenHoldForDuration: 0)
             XCTAssertTrue(app.staticTexts["2 selected"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.buttons["Clear selection"].exists)
+            XCTAssertTrue(app.buttons["Exit selection"].exists)
 
             if layout == .list {
                 mediaClipCenter(Self.clip(3)).press(
@@ -1105,7 +1105,7 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
                 after = visibleReviewClips()
             }
             XCTAssertTrue(app.staticTexts[selected].exists)
-            XCTAssertTrue(app.buttons["Clear selection"].exists)
+            XCTAssertTrue(app.buttons["Exit selection"].exists)
             XCTAssertFalse(app.buttons["Back to media"].exists)
             XCTAssertNotEqual(
                 before, after, "\(layout) must scroll natively while selection stays active")
@@ -1125,8 +1125,8 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
                 withVelocity: .slow,
                 thenHoldForDuration: 0)
             XCTAssertTrue(app.staticTexts["0 selected"].waitForExistence(timeout: 5))
-            XCTAssertTrue(app.buttons["Clear selection"].exists)
-            app.buttons["Clear selection"].tap()
+            XCTAssertTrue(app.buttons["Exit selection"].exists)
+            app.buttons["Exit selection"].tap()
             XCTAssertFalse(app.buttons["Select \(Self.clip(1))"].exists)
             app.terminate()
         }
