@@ -22,7 +22,7 @@ Fixes
 - Playback stays paused after Share, buffering, or leaving and returning to the app.
 - Playback controls and media details stay smoother on large cards, and playback scopes update more evenly.
 - Wide clips keep their correct brightness through LUTs, zebra, false color and scopes instead of looking crushed.
-- Sharing several cached clips works together. A clip that fails to cache says so, and Cache or Share carries on with the others.
+- Sharing several cached clips works together. A clip that fails to cache says so, and Cache or Share carries on with the others. Share also waits for a clip the player is still caching.
 - With Full Resolution Caching on, a played clip finishes downloading after you close it and reads CACHED.
 - Monitoring colour follows the selected camera profile, and I-Log highlight warnings account for ISO.
 - Using a volume button as the remote shutter is protected against a rare unexpected quit.
