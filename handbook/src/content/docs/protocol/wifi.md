@@ -64,3 +64,29 @@ TCP, so a different Luna at the same `192.168.42.1` is not mistaken for the
 paired camera.
 
 Once associated, open the [UCD2 control session](../ucd2-transport/).
+
+## Station mode (Wi-Fi and hotspot setups)
+
+The camera can leave its own network and join a router or a phone hotspot. All
+requests go over the encrypted Bluetooth session, after the credential read:
+
+| Step | Message | Body |
+| --- | --- | --- |
+| 1 | `SET_WIFI_MODE` 147 | `place_holder = 1`, `wifi_mode = 1` (station), `country_code` from option 37 |
+| 2 | `PHONE_INFO` 220 | phone type, maker, model, OS version |
+| 3 | `SET_WIFI_CONNECTION_INFO` 112 | `WifiConnectionInfo { ssid = 1, password = 3 }` |
+| 4 | notification 8232 | `CameraWifiConnectionResult`: result 0 is success, 3 a wrong password, 6 not found |
+| 5 | `SET_AVAILABLE_WIFI` 215 | the same `WifiConnectionInfo` |
+
+`SET_WIFI_MODE` with mode 0 (left out, proto3 default) returns the camera to its
+own network. On firmware 1.1.15 the 8232 result names the network but no
+address, so the phone searches its own subnet for TCP 6666 answering the UCD2
+magic, then checks the serial. On that address control and HTTP media work as on
+the camera network, but the live preview is **H.264**, not HEVC.
+
+| Observation | Firmware | Evidence |
+| --- | --- | --- |
+| Router join in about 5 s; control, live preview and HTTP on the router address | 1.1.15 | Verified with the lab tools (2026-10-01) |
+| Live preview on the router address is H.264 High 1280x720 with the camera-network start body | 1.1.15 | Verified (NAL types 7, 8, 5, 1, 9) |
+| The camera network is gone while the camera is in station role | 1.1.15 | Observed |
+| Phone hotspot as the network | | Untested |
