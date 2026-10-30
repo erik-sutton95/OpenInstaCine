@@ -78,8 +78,8 @@ Other Insta360 cameras are not supported.
 iPhone and iPad are the daily driver. Android has the monitor, assists, camera and gimbal control,
 Deep Track and playback. **iOS only today:** LUT bake on export, Frame.io upload, Apple Watch,
 AirPods head tracking and the flat I-Log preview. **Not on the Luna:** live audio control and
-meters (the camera sets audio on its own screen), Multiview, and Wi-Fi or Hotspot setups (the
-Luna only connects over its own network).
+meters (the camera sets audio on its own screen) and Multiview. Cameras › Add setup moves the
+Luna onto a router's Wi-Fi or this phone's hotspot (station mode) as in every OpenCine app.
 
 ## Install
 

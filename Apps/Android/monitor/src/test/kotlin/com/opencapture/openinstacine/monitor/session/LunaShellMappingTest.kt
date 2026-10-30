@@ -220,6 +220,9 @@ class LunaShellMappingTest {
         assertEquals("Video", CameraCommands.shootingModeLabel(CameraCommands.SHOOT_VIDEO, profile = luna.labels))
         val path = "/storage_internal/DCIM/Camera01/VID_20260916_124229_002.mp4"
         assertEquals("http://192.168.42.1$path", luna.media.pathUrlString(0, path))
+        // A Wi-Fi or hotspot setup: files come from where the connection found the camera.
+        assertEquals("http://10.0.0.9$path", m.profile("10.0.0.9").media.pathUrlString(0, path))
+        assertEquals(luna, m.profile("192.168.42.1"))
         assertEquals("20260916124229", MediaFile("/DCIM/Camera01/VID_20260916_124229_002.mp4", "").filenameTimestamp)
         assertEquals("20260814125250", MediaFile("DJI_20260814125250_0034_D.MP4", "").filenameTimestamp)
     }
