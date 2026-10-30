@@ -220,6 +220,10 @@ extension CameraSession {
     func mediaDownloadProgress(for file: MediaFile) -> Double? {
         mediaRecord(for: file).flatMap { mediaLibrary.progress[$0.asset.id] }
     }
+    /// One file's download speed, from the library's one rate source (OpenCine).
+    func mediaDownloadRate(for file: MediaFile) -> MediaTransferRate? {
+        mediaRecord(for: file).flatMap { mediaLibrary.transferRates.rate($0.asset.id) }
+    }
     func mediaRecord(for file: MediaFile) -> MonitorMediaRecord<LunaMediaLibraryPayload>? {
         var content = file; content.isStarred = false
         return mediaLibrary.records.first { record in
