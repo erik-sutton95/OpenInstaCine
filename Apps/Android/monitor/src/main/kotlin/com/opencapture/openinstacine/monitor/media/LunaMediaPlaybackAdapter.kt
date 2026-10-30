@@ -34,6 +34,8 @@ class LunaMediaPlaybackAdapter(
     val downloadProgress: Map<String, Double> get() = library.state.value.records.mapNotNull { record ->
         library.state.value.progress[record.asset.id]?.let { record.payload.file.path to it }
     }.toMap()
+    /** The running download's speed for [file], from the library's one rate source (OpenCine). */
+    fun downloadRate(file: MediaFile): MediaTransferRate? = record(file)?.let { library.transferRates.rate(it.asset.id) }
     fun record(file: MediaFile): MonitorMediaRecord<LunaMediaLibraryPayload>? {
         val content = file.copy(isStarred = false)
         return library.state.value.records.firstOrNull { it.payload.file.copy(isStarred = false) == content }
