@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-30
+
+Public beta, cumulative since open beta build 26 (0.1.0). The operator-facing iOS and
+Android lists are in the [0.1.3 release notes](handbook/src/content/docs/releases/0-1-3.md).
+
 This beta is a parity and reliability update built on the shared OpenCine
 foundation. Camera setup, the monitor, settings, View Assist, media and playback
 follow the same shared components as the other OpenCapture apps, with Luna's
@@ -45,3 +50,14 @@ supported capabilities and single-camera iOS policy preserved.
 Camera/device walkthroughs remain required before the next external beta. The
 notes do not promise new camera support, iOS Multiview or live audio controls.
 Better diagnostics are not a claim that every dropout has been eliminated.
+
+### Public beta additions
+
+- Media grid is staggered: portrait photos stand upright and every item fills the space above it.
+- Caching and downloads show a live speed beside the percentage.
+- Media selection leads with an Exit selection close; the bar keeps All, Share and Delete.
+- Pinch-zoomed playback fills the screen past the clip's letterbox.
+- Landscape Photo moves setup values to the status corner, and the open tools panel keeps the camera values visible beside it.
+- iOS: connecting no longer freezes on Starting live view.
+- Share finishes a clip whose cache the player left running or stopped.
+- Cameras > Add setup connects a Luna over a Wi-Fi network or the phone's hotspot.
