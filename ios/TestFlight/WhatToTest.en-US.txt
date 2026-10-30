@@ -33,7 +33,7 @@ Fixes
 - Monitoring colour follows the selected camera profile, and I-Log highlight warnings account for ISO.
 - The volume-button remote shutter ignores late volume changes and no longer causes a rare unexpected quit.
 - VoiceOver no longer reaches live controls under a covering screen or the hidden buttons of a collapsed landscape palette.
-- The open tools panel keeps the camera values visible beside it instead of hiding them. Portrait card-space labels keep their full value.
+- Portrait card-space labels keep their full value near the cutout.
 
 What to test
 
