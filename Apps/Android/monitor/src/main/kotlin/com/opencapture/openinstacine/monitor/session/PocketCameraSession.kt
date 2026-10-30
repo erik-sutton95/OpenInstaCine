@@ -567,7 +567,9 @@ class PocketCameraSession(
                     com.opencapture.opencine.media.HostShutterPresentation.EMULATED_ANGLE
                     else com.opencapture.opencine.media.HostShutterPresentation.CAMERA_VALUE)
             }
+            /** Camera Wi-Fi, as before Wi-Fi and hotspot setups. */
             override fun connect(id: String) = connect(id, com.opencapture.opencine.insta360.luna.LunaRoute.CameraWiFi())
+            /** Camera Wi-Fi or a Wi-Fi or hotspot setup, with this session's decoder and recovery reset first. */
             override fun connect(id: String, route: com.opencapture.opencine.insta360.luna.LunaRoute) {
                 holdReportingCameraPath()
                 retireRecovery()

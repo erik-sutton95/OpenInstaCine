@@ -266,6 +266,8 @@ extension CameraSession {
     }
     /// One raw original at the existing routed camera address, with no cache or look mutation.
     /// The captured native session/epoch, catalog content and picture request all remain required.
+    /// The photo's original bytes from the camera at ``mediaRoute``, or nil when the camera or
+    /// this connection cannot serve it.
     func originalImageBytes(for file: MediaFile,
         ifCurrent: @escaping @MainActor () -> Bool) async -> Data? {
         guard file.kind == .photo, canReachCameraMedia, let library = mediaLibrary,
@@ -314,6 +316,7 @@ extension CameraSession {
     }
     func shotColor(for file: MediaFile) -> ColorMode? { cameraMedia.shotColor(for: file.path, cameraID: mediaCameraID) }
     func rememberShotColor(_ color: ColorMode, for file: MediaFile) { cameraMedia.rememberShotColor(color, path: file.path, cameraID: mediaCameraID) }
+    /// The first preview path of `file` on the camera at ``mediaRoute``.
     func remotePlaybackURL(for file: MediaFile) -> URL? {
         MediaHTTP.previewPaths(file).lazy.compactMap { MediaHTTP.pathURL(storage: 0, path: $0, route: self.mediaRoute) }.first
     }

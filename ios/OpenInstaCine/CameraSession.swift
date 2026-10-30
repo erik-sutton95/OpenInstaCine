@@ -1455,6 +1455,7 @@ extension CameraSession: LunaConnectPort {
 
     func hasSavedWiFi(cameraID: UUID) -> Bool { backend.hasSavedWiFi(cameraID: cameraID) }
 
+    /// Camera Wi-Fi, as before Wi-Fi and hotspot setups.
     func connect(to camera: MonitorCamera) async throws {
         try await connect(to: camera, route: .cameraWiFi(restoreAccessPoint: false))
     }
@@ -1496,9 +1497,11 @@ extension CameraSession: LunaConnectPort {
 
     func forget(cameraID: UUID) { backend.forget(cameraID: cameraID) }
 
+    /// The password this phone keeps for a Wi-Fi or hotspot setup, or nil when it has none.
     func stationPassword(for network: String, hotspot: Bool) -> String? {
         backend.stationPassword(for: network, hotspot: hotspot)
     }
 
+    /// Keeps an added setup's network and password in the Keychain.
     func saveStation(_ network: LunaStationNetwork) { backend.saveStation(network) }
 }

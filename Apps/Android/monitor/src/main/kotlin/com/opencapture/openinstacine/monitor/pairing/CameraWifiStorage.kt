@@ -27,8 +27,10 @@ val cameraWifiStorage: CameraWifiStorageConfiguration =
 class StationNetworkStorage(context: Context) {
     private val store = SharedNetworkStore(context, STATION_NETWORKS, STATION_NETWORKS)
 
+    /** Every saved setup with its unsealed password, oldest first. */
     fun load(): List<LunaStationNetwork> = store.savedNetworks().map { LunaStationNetwork(it.ssid, it.password, it.hotspot) }
 
+    /** Keeps [network], replacing a saved setup with the same name and kind. */
     fun save(network: LunaStationNetwork) = store.save(network.ssid, network.password, network.hotspot)
 
     private companion object {

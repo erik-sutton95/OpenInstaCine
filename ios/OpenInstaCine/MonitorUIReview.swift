@@ -443,6 +443,7 @@
 
         /// The review cameras' Wi-Fi and hotspot setups have SIMULATED saved passwords.
         func stationPassword(for network: String, hotspot: Bool) -> String? { "SIMULATED-password" }
+        /// Review cameras keep nothing.
         func saveStation(_ network: LunaStationNetwork) {}
 
         func disconnect() {}
