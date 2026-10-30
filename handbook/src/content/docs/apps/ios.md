@@ -149,7 +149,9 @@ applied auto values) and Multiview. Color Recovery is not in the app yet.
 Cameras › Add setup moves a saved Luna onto a router's Wi-Fi or this phone's
 Personal Hotspot: the camera joins over Bluetooth, this phone joins the same
 network, and the app finds the camera there. The Luna cannot list networks, so
-choose this phone's network, a saved one, or Other network.
+choose this phone's network, a saved one, or Other network. A network this
+iPhone knows is secured needs its password; leave it empty only for an open
+network.
 
 Pairing asks for Bluetooth and Local Network access; if either is off, the
 failure offers **Open Settings**. Motion access is only for AirPods head

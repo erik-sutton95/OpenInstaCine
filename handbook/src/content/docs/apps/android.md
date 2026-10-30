@@ -36,7 +36,9 @@ camera and its saved Wi-Fi details. **Privacy** and **Terms** are in Settings.
 phone's hotspot: the camera joins over Bluetooth, this phone joins the same
 network (accept Android's network request when prompted), and the app finds the
 camera there. The Luna cannot list networks, so choose this phone's network, a
-saved one, or Other network. Setup passwords are sealed with a device-only key.
+saved one, or Other network. A network this phone knows is secured needs its
+password; leave it empty only for an open network. Setup passwords are sealed
+with a device-only key.
 
 Upgrading preserves saved cameras, custom names and Wi-Fi details. Earlier
 builds can still read the list, and edits made there are reconciled on the next
