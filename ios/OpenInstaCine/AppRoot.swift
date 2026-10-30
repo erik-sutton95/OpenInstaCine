@@ -56,11 +56,25 @@ final class AppModel {
             if MonitorUIReview.isActive { (port, defaults) = MonitorUIReview.cameras() }
         #endif
         integration = LunaIntegration(port: port)
-        cameras = CamerasModel(
-            integrations: [AppIntegration(integration, slots: IntegrationSlots(nearbyCard: Self.nearbyCard))],
+        // Cameras › Add setup: the shared chooser and Wi-Fi / Hotspot wizard (station mode).
+        let backend = session.backend
+        var addSetup: (@MainActor (OpenCineCore.SavedCamera, @escaping (RouteDraft?) -> Void) -> AddSetupFlow)?
+        var cameras: CamerasModel?
+        addSetup = { camera, done in
+            InstaAddSetup.flow(camera: camera, cameras: cameras!, backend: backend, done: done)
+        }
+        let model = CamerasModel(
+            integrations: [
+                AppIntegration(
+                    integration, slots: IntegrationSlots(nearbyCard: Self.nearbyCard, addSetup: addSetup))
+            ],
             store: Self.camerasStore(defaults))
-        shell = ShellModel(cameras: cameras, control: session.control)
+        cameras = model
+        self.cameras = model
+        shell = ShellModel(cameras: model, control: session.control)
         integration.onDiscoveryFailure = { [weak self] in self?.discoveryFailure = $0 }
+        // A setup that moves the camera is remembered before it moves it.
+        integration.saveRecord = { [weak model] in model?.upsert($0) }
         // One active/inactive per change, however many OS signals report it.
         shell.onSceneActivity = { [weak self] active in
             guard let self else { return }

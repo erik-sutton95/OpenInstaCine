@@ -175,6 +175,14 @@ struct MediaPlaybackSource: Equatable {
 
 /// Small source/playback compatibility adapters. The gallery consumes mediaLibrary directly.
 extension CameraSession {
+    /// Where camera files are fetched: the profile's route, at the address this connection found
+    /// the camera when a Wi-Fi or hotspot setup moved it off its own access point.
+    var mediaRoute: MediaHTTP.Route {
+        var route = profile.media
+        if route.host == LunaProtocol.defaultHost { route.host = backend.cameraHost }
+        return route
+    }
+
     func configureMediaLibrary(service: (any CameraMediaService)? = nil) {
         // The shared media service hands the live restart back through this hook. Drop the live
         // format and wait for an IDR first, so a long gallery visit cannot decode against stale
@@ -262,7 +270,7 @@ extension CameraSession {
         ifCurrent: @escaping @MainActor () -> Bool) async -> Data? {
         guard file.kind == .photo, canReachCameraMedia, let library = mediaLibrary,
             let record = mediaRecord(for: file), let source = backend.session, source.admitsControl,
-            let url = MediaHTTP.pathURL(storage: file.storage, path: file.path, route: profile.media)
+            let url = MediaHTTP.pathURL(storage: file.storage, path: file.path, route: mediaRoute)
         else { return nil }
         let epoch = source.current.epoch, generation = connectGeneration
         let camera = connectedCamera?.id, cameraID = mediaCameraID, transport = cameraMedia.nativeIO
@@ -307,7 +315,7 @@ extension CameraSession {
     func shotColor(for file: MediaFile) -> ColorMode? { cameraMedia.shotColor(for: file.path, cameraID: mediaCameraID) }
     func rememberShotColor(_ color: ColorMode, for file: MediaFile) { cameraMedia.rememberShotColor(color, path: file.path, cameraID: mediaCameraID) }
     func remotePlaybackURL(for file: MediaFile) -> URL? {
-        MediaHTTP.previewPaths(file).lazy.compactMap { MediaHTTP.pathURL(storage: 0, path: $0, route: self.profile.media) }.first
+        MediaHTTP.previewPaths(file).lazy.compactMap { MediaHTTP.pathURL(storage: 0, path: $0, route: self.mediaRoute) }.first
     }
     func localProxySource(for file: MediaFile) -> MediaPlaybackSource? {
         for path in MediaHTTP.proxyPaths(file) {

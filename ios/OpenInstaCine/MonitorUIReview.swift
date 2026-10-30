@@ -436,6 +436,15 @@
             try await Task.sleep(for: .seconds(3600))
         }
 
+        /// Every route shows the same scripted states; nothing moves a camera.
+        func connect(to camera: MonitorCamera, route: LunaRoute) async throws {
+            try await connect(to: camera)
+        }
+
+        /// The review cameras' Wi-Fi and hotspot setups have SIMULATED saved passwords.
+        func stationPassword(for network: String, hotspot: Bool) -> String? { "SIMULATED-password" }
+        func saveStation(_ network: LunaStationNetwork) {}
+
         func disconnect() {}
         func openSession() -> LunaCameraSession { backend.openSession() }
         func forget(cameraID: UUID) {}

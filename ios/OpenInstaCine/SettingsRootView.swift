@@ -15,7 +15,7 @@ import UIKit
 /// Operator-facing Settings help. Never name a sister app or another camera brand.
 enum SettingsHelpCopy {
     static let currentTransport =
-        "Luna uses Bluetooth to pair, then the camera's own 5 GHz Wi-Fi for HEVC. USB-C, hotspot, and HDMI capture are not in this build."
+        "Luna uses Bluetooth to pair, then the camera's own Wi-Fi, or a Wi-Fi or hotspot setup from Cameras › Add setup. USB-C and HDMI capture are not in this build."
     static let themeHelp =
         "Charcoal field-monitor chrome with yellow accents, tuned for low reflection on set."
 }

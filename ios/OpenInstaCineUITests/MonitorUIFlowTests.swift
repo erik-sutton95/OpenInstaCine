@@ -1402,8 +1402,9 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         capture("share-upcoming-destinations")
     }
 
-    /// #406: saved cameras show their setups. Luna joins only its own access point, so the
-    /// camera page offers no Add setup (OsmoCameraPageAdapter sets canAddSetup false).
+    /// #406: saved cameras show their setups; Add setup offers Wi-Fi or Hotspot, the shared
+    /// chooser every OpenCine app shows. The Luna cannot list networks, so the Wi-Fi page says so.
+    /// Chips and Connect are not tapped here because they start a connection.
     func testSavedCameraSetupChipsAndAddSetupFlow() {
         app.launchEnvironment.merge(ReviewLaunch(screen: .cameras).environment) { $1 }
         app.launch()
@@ -1414,8 +1415,37 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
             XCTAssertTrue(app.buttons["cameras.setup.phoneHotspot"].exists)
             XCTAssertEqual(app.buttons.matching(identifier: "cameras.setup.cameraWiFi").count, 2)
             XCTAssertGreaterThanOrEqual(wifi.frame.height, 43.5)
-            XCTAssertEqual(app.buttons.matching(identifier: "cameras.addSetup").count, 0)
+            // Only the Travel camera has a setup left to add.
+            let add = app.buttons["cameras.addSetup"]
+            XCTAssertEqual(app.buttons.matching(identifier: "cameras.addSetup").count, 1)
             capture("camera-setup-chips-\(orientation.rawValue)")
+            for _ in 0..<3 where !add.isHittable { app.scrollViews.firstMatch.swipeUp() }
+            add.tap()
+            XCTAssertTrue(app.staticTexts["How should this camera connect?"].waitForExistence(timeout: 5))
+            let chooseWiFi = app.buttons["addSetup.wifi"]
+            XCTAssertTrue(chooseWiFi.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["addSetup.phoneHotspot"].isHittable)
+            capture("add-setup-choose-\(orientation.rawValue)")
+            chooseWiFi.tap()
+            // Wi-Fi asks for location (iOS names the current network only with it).
+            let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+                .buttons["Allow While Using App"]
+            if allow.waitForExistence(timeout: 3) { allow.tap() }
+            let status = app.descendants(matching: .any)["addSetup.scanStatus"]
+            XCTAssertTrue(status.waitForExistence(timeout: 5))
+            XCTAssertTrue(
+                app.staticTexts["This camera can’t list networks"].exists,
+                "the Luna has no network scan; it never asks to turn the camera on")
+            capture("add-setup-wifi-\(orientation.rawValue)")
+            app.navigationBars.buttons["Add setup"].tap()
+            app.buttons["addSetup.phoneHotspot"].tap()
+            let name = app.textFields["addSetup.hotspotName"]
+            XCTAssertTrue(name.waitForExistence(timeout: 5))
+            capture("add-setup-hotspot-\(orientation.rawValue)")
+            app.navigationBars.buttons["Add setup"].tap()
+            app.navigationBars.buttons["Cancel"].tap()
+            XCTAssertTrue(add.waitForExistence(timeout: 5))
+            app.scrollViews.firstMatch.swipeDown()
         }
     }
 
@@ -1432,9 +1462,8 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         }
     }
 
-    /// Luna joins only the camera's own Wi-Fi. A saved camera carrying a legacy hotspot setup
-    /// connects from that chip without a Personal Hotspot ask: main asked only for this review
-    /// data (no Insta camera could add a hotspot) and then joined the camera Wi-Fi anyway.
+    /// A hotspot setup connects from its chip: the Luna integration moves the camera onto the
+    /// hotspot itself, so the shell never shows the DJI "Turn on Personal Hotspot" ask.
     func testLegacyHotspotSetupConnectsWithoutAHotspotAsk() {
         app.launchEnvironment.merge(ReviewLaunch(screen: .cameras).environment) { $1 }
         app.launch()
