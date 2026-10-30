@@ -170,8 +170,13 @@ class PocketCameraSession(
         reportingCameraPath = null
     }
     private val controls: CameraControls? = backend as? CameraControls
-    /** This session's names and media host (STATE-01: per session, never a launch-time global). */
-    val profile: CameraProfile = LunaShellMapping.profile
+    /**
+     * This session's names and media host (STATE-01: per session, never a launch-time global). Media
+     * follows where the backend reaches the camera: its own access point or a Wi-Fi or hotspot setup.
+     */
+    val profile: CameraProfile
+        get() = (backend as? com.opencapture.opencine.insta360.luna.LunaBackend)?.let { LunaShellMapping.profile(it.cameraHost) }
+            ?: LunaShellMapping.profile
     /** This source's learned picture EV calibration (STATE-01: one meter per session, keyed by source). */
     internal val pictureEV by lazy { com.opencapture.openinstacine.monitor.PictureEVMeter.stored(appContext) }
     val capabilities: Set<CameraCapability> get() = backend.capabilities
@@ -562,17 +567,22 @@ class PocketCameraSession(
                     com.opencapture.opencine.media.HostShutterPresentation.EMULATED_ANGLE
                     else com.opencapture.opencine.media.HostShutterPresentation.CAMERA_VALUE)
             }
-            override fun connect(id: String) {
+            override fun connect(id: String) = connect(id, com.opencapture.opencine.insta360.luna.LunaRoute.CameraWiFi())
+            override fun connect(id: String, route: com.opencapture.opencine.insta360.luna.LunaRoute) {
                 holdReportingCameraPath()
                 retireRecovery()
                 cancelProgrammedMove()
                 synchronized(recoveryFrameLock) {
                     decoder.reset(); videoPackets = 0; hasVideoFormat = false
-                    port.connect(id)
+                    port.connect(id, route)
                 }
             }
         }
     }
+
+    /** Wi-Fi and hotspot setups this phone keeps (Add setup's saved networks), oldest first. */
+    suspend fun savedStations(): List<com.opencapture.opencine.insta360.luna.LunaStationNetwork> =
+        (backend as? com.opencapture.opencine.insta360.luna.LunaBackend)?.stations().orEmpty()
 
     fun configureShutterPresentation(usesAngle: Boolean) {
         (control.state.value.session as? LunaCameraSession)?.configureShutter(if (usesAngle)
