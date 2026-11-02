@@ -117,6 +117,7 @@ fun MediaPhotoViewer(model: AppModel, file: MediaFile, controller: LunaMediaPlay
     coverPresented: Boolean = false, onDeliver: (MediaFile) -> Unit = {},
     opening: MonitorMediaGalleryOpen<LunaMediaLibraryPayload>? = null,
 ) {
+    val context = LocalContext.current
     val library = controller.library
     // A supplied gallery opening retains its original record and source token.
     val admission = opening?.admission ?: remember(library, file.id) { library.actionToken }
@@ -144,7 +145,13 @@ fun MediaPhotoViewer(model: AppModel, file: MediaFile, controller: LunaMediaPlay
         loaders, operations, onClose, admission = admission, coverPresented = coverPresented,
         policy = com.opencapture.opencine.appkit.MonitorMediaPictureLoadPolicy.FIRST_AVAILABLE,
         sourceCurrent = { model.shell.state.value.monitor?.id == source },
-        share = { request -> if (request.isCurrent()) onDeliver(request.record.payload.file) })
+        share = { request -> if (request.isCurrent()) onDeliver(request.record.payload.file) },
+        // The playback page's assist bar: its tool order, this app's assist host and the native
+        // still look (peaking, false colour, zebra on the still itself).
+        usageStore = remember(context) { OperatorPrefs.assistToolUsagePreferences(context) },
+        assists = remember { com.opencapture.opencine.cameracontrols.MonitorOperatorAssistSource(
+            com.opencapture.openinstacine.monitor.assists.AppAssistHost, null, {}, null) },
+        stillLook = remember { com.opencapture.opencine.appkitnative.MonitorBitmapStillLook() })
 }
 
 /** Real one-record SDK/native adapters; complete page behavior belongs to the shared player. */
