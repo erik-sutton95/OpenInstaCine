@@ -49,7 +49,8 @@ extension AppModel {
             isDownloaded: session.isDownloaded, download: { await session.download(file: $0) },
             downloadProgress: session.mediaDownloadProgress(for:),
             localURL: session.localURL(for:), shotColor: session.shotColor(for:),
-            rememberShotColor: { session.rememberShotColor($0, for: $1) })
+            rememberShotColor: { session.rememberShotColor($0, for: $1) },
+            downloadRate: session.mediaDownloadRate(for:))
     }
 
     /// The delivery popup of one selection and the begin of its accepted request.
