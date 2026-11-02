@@ -72,12 +72,13 @@ bullet (caps in `../OpenCine/scripts/tester-notes-limits.sh`).
 
 Notes are written once per release, not in every pull request (owner decision
 2026-10-19): before a release, a notes pull request replaces the file with the
-window since the previous release. Every archive is a TestFlight release, so
+window since the previous release. Every archive uploads to TestFlight, so
 [`ci_pre_xcodebuild.sh`](../ios/ci_scripts/ci_pre_xcodebuild.sh) runs the format
-check and OpenCine's `scripts/tester-notes-release-check.py` before building: the
-archive fails while an earlier successful TestFlight build (its Xcode Cloud commit
-status) already carried the current notes. The Play workflow applies the same check
-to both Play files ([`ci.md`](ci.md#release-time)).
+check before building. TestFlight Internal archives every merge to `main` and keeps
+the version's notes; any other archive workflow also runs OpenCine's
+`scripts/tester-notes-release-check.py`, which fails while an earlier successful
+TestFlight build (its Xcode Cloud commit status) already carried the current notes.
+The Play workflow applies the same split to both Play files ([`ci.md`](ci.md#release-time)).
 
 ```bash
 just tester-notes-window   # recent feat/fix commits to pick from

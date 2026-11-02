@@ -2,8 +2,8 @@
 
 Same model as OpenPocketCine: trunk-based, short PRs into `main`, squash merge,
 annotated `v*` tags for product trains. TestFlight comes from Xcode Cloud on
-`main` ([`testflight-ci.md`](testflight-ci.md)), Play closed testing from GitHub
-Actions on `main` once `ANDROID_PLAY_UPLOAD=true`
+`main` ([`testflight-ci.md`](testflight-ci.md)), Play internal testing from GitHub
+Actions on `main` once `ANDROID_PLAY_UPLOAD=true` and closed testing by dispatch
 ([`android-play-ci.md`](android-play-ci.md)), and sideload APKs from GitHub
 Releases. Sentry: [`sentry-deployment.md`](sentry-deployment.md).
 

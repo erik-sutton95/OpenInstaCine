@@ -3,7 +3,8 @@
 The Android analog of Xcode Cloud, ported from OpenPocketCine:
 [`.github/workflows/android-play.yml`](../.github/workflows/android-play.yml)
 builds a signed App Bundle with a monotonic `versionCode` and uploads it to
-the existing closed-testing track (`Closed testing - Beta`). One-time setup is the
+internal testing on every Android merge, or to the existing closed-testing track
+(`Closed testing - Beta`) on dispatch. One-time setup is the
 [owner checklist](RELEASE.md#owner-checklist).
 
 Status: the Android app builds (`:app:assembleDebug`, signed `assembleRelease`
@@ -22,17 +23,19 @@ release.
 | `versionCode` | `ANDROID_VERSION_CODE_BASE` + `github.run_number` |
 | Sentry DSN / symbols | `SENTRY_DSN_ANDROID` -> `:monitor` `BuildConfig`; OpenCine's `scripts/sentry/sentry-upload.py --platform android` when `SENTRY_UPLOAD_ENABLED=true` |
 | Tester notes | [`Apps/Android/Play/WhatToTest.en-US.txt`](../Apps/Android/Play/WhatToTest.en-US.txt), Play "what's new" (500 characters) [`Apps/Android/Play/whatsnew/whatsnew-en-US`](../Apps/Android/Play/whatsnew/whatsnew-en-US) |
-| Upload | `r0adkll/upload-google-play`, package `com.opencapture.openinstacine`, track `Closed testing - Beta` |
+| Upload | `r0adkll/upload-google-play`, package `com.opencapture.openinstacine`, track `internal` on a merge, the dispatch input otherwise |
 
 It runs on **Run workflow** (or `just android-play-dispatch`) and on pushes to
 `main` that touch Android paths, only in `erik-sutton95/OpenInstaCine`, never on
 `pull_request`, and auto-upload only when the repository variable
 `ANDROID_PLAY_UPLOAD` is exactly `true`. Missing `play-closed` secrets fail the
-job. Automatic uploads and manual dispatches default to the existing Beta track,
-which uses the `openinstacine-beta` Google tester group. `alpha` and `internal`
-remain explicit dispatch options; the default must match the existing track
-name returned by the Play API, including spaces. Renaming that track requires
-updating the workflow and dispatch recipe together.
+job. Automatic uploads go to internal testing (owner decision 2026-11-02), so
+merges never reach outside testers before their hardware pass. Manual
+dispatches default to the existing Beta track, which uses the
+`openinstacine-beta` Google tester group. `alpha` and `internal` remain explicit
+dispatch options; the default must match the existing track name returned by
+the Play API, including spaces. Renaming that track requires updating the
+workflow and dispatch recipe together.
 
 A dispatch without `PLAY_SERVICE_ACCOUNT_JSON` still signs the AAB and
 attaches it as an artifact: that is the file for the first manual Console upload
