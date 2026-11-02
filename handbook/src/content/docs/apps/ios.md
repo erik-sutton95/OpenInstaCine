@@ -144,8 +144,14 @@ Long-press a View Assist toolbar button for its settings.
 
 Not on the Luna: live audio control and meters (the camera sets audio on its own
 screen), aperture (fixed iris), AE and AWB lock (the camera does not report the
-applied auto values), Multiview, and Wi-Fi or Hotspot setups (the Luna only
-connects over its own network). Color Recovery is not in the app yet.
+applied auto values) and Multiview. Color Recovery is not in the app yet.
+
+Cameras › Add setup moves a saved Luna onto a router's Wi-Fi or this phone's
+Personal Hotspot: the camera joins over Bluetooth, this phone joins the same
+network, and the app finds the camera there. The Luna cannot list networks, so
+choose this phone's network, a saved one, or Other network. A network this
+iPhone knows is secured needs its password; leave it empty only for an open
+network.
 
 Pairing asks for Bluetooth and Local Network access; if either is off, the
 failure offers **Open Settings**. Motion access is only for AirPods head

@@ -70,7 +70,7 @@ Parity values:
 | Aperture | Hidden-not-supported | `supportsAperture` false; fixed iris |
 | Head tracking | Luna-adapted | Stick (MOVE) at 30 Hz closed on GET_ANGLE: AirPods rate and acceleration fed forward plus a pull to the exact angle (a SET_ANGLE stream judders at the send rate). 1.8° RMS on a 20° / 3 s sine, ~0.02 s lag; pan tops out at 63 deg/s. Hardware-verified 2026-09-30. Android: not yet |
 | Multiview | Hidden-not-supported | Entry removed from the camera list (`SavedCamerasView.swift`); stages DJI bodies over RTMP |
-| Wi-Fi / Hotspot setups | Hidden-not-supported | `canAddSetup: false`; Luna only connects over its own AP |
+| Wi-Fi / Hotspot setups | Luna-adapted, candidate | Cameras › Add setup is OpenCine's shared chooser and wizard. Over the encrypted Bluetooth session the camera is moved into station mode (cmd 147 STA with its own region, 220 phone info, 112 join, notification 8232 result, 215 remember), the phone joins the network (or hosts the hotspot), and the camera is found by searching the phone's subnet for TCP 6666 answering UCD2; control, H.264 live preview and HTTP media then use that address. Camera Wi-Fi after a setup sends 147 AP first. Router join, LAN control and H.264 preview verified with the lab tools on fw 1.1.15 (2026-10-01); the app path and the hotspot route are untested on hardware. The Luna has no verified network scan, so the wizard says so |
 | Color Recovery | Not yet | Screen protocol code exists (`LunaScreenRecovery.swift`, [luna-color-recovery.md](luna-color-recovery.md)); not exposed in the UI |
 | Android | Luna-adapted, phone-verified | `Apps/Android` (the OpenPocketCine shell as of `9e306c91`, now app-owned code on the shared OpenCine `appkit` shell and no longer synced) runs against a real Luna on a Samsung S25 since 2026-09-30; remaining gaps in Android below |
 
@@ -321,9 +321,9 @@ Gated or skipped for Luna, and why:
   shutter 0 in Auto, Kelvin 0 in AWB), never the applied values, so there is nothing to pin.
   `canLockAutoExposure` is false and `autoWhiteBalanceLock` is null, which hides the long press,
   the AE-L row and the AWB Lock row. Revisit if a Luna status field for applied exposure turns up.
-- Wi-Fi and Hotspot setups: they are DJI station mode (`07/48`, `07/39`, subnet sweep for the DUML
-  identity). `connectionSetup` stays Camera Wi-Fi, `useSetup` is a no-op and Add setup is hidden
-  with Multiview (`supportsMultiview` is false).
+- Wi-Fi and Hotspot setups: at the sync they were DJI station mode (`07/48`, `07/39`, subnet sweep
+  for the DUML identity) and stayed hidden. Since 2026-10-30 they are the Luna's own station mode
+  through OpenCine's shared Add setup (see the table above).
 - Multiview: stays off (button hidden); the new control lease is accepted and ignored.
 - Pure DJI session work not ported: station provisioning, the camera access point restore,
   decoder repair steps and session hold cycles (`decoderRepairStep`, `nextSessionHoldCycles`,
