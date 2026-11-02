@@ -368,8 +368,14 @@ class PocketCameraSession(
     /** A format change still settling: the shell format pin or the native Luna format pin (iOS twin). */
     val isFormatPinActive: Boolean get() = pins.format != null || nativeFormatPin != null
     @Volatile var zoomColorHopPending = false
-    var zoomPinchPreview: Double? = null
-    private var zoomPinchBase = 1.0
+    // The wheel and pinch write while the finger moves (#111), coalesced like iOS `queueZoomWrite`.
+    private val liveZoom = LunaLiveZoom(scope, canWrite = { canWriteZoom() },
+        write = { factor -> controls?.setZoom(factor) ?: false },
+        burstEnded = { last, applied ->
+            if (zoomTarget == last) zoomTarget = null
+            if (!applied) presentControlNote("Zoom did not reach the camera.")
+        })
+    val zoomPinchPreview: Double? get() = liveZoom.preview
     private var zoomTarget: Double? = null
     val zoomOptimistic: Double? get() = zoomTarget
     // Face boxes (iOS `applyDetectedFaces`): on-phone detection while AF-C, dimmed boxes the operator taps to Deep Track.
@@ -479,7 +485,7 @@ class PocketCameraSession(
                 if (value != ConnectionPhase.IDLE && value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED && !incidentSessionActive) beginFeedIncidentSession()
                 if (value == ConnectionPhase.IDLE) releaseReportingCameraPath()
                 else if (value != ConnectionPhase.SCANNING && value != ConnectionPhase.FAILED) holdReportingCameraPath()
-                if (value != ConnectionPhase.LIVE) { cancelProgrammedMove(); retireNativeCaptureRequests() }
+                if (value != ConnectionPhase.LIVE) { cancelProgrammedMove(); retireNativeCaptureRequests(); cancelZoomWrites() }
                 when (value) {
                     ConnectionPhase.LIVE -> {
                         holdsMonitor = true; resetFrameClock()
@@ -985,31 +991,35 @@ class PocketCameraSession(
     fun zoomMax(): Double = zoomStops().lastOrNull() ?: 1.0
     fun zoomNextJump(): Double = CamFov.nextJump(zoomCycleFrom(), zoomStops())
     fun setZoomLens(position: Int) = Unit
+    private fun canWriteZoom() = supportsZoom && phase == ConnectionPhase.LIVE
     fun setZoom(factor: Double) {
-        if (!supportsZoom) return
+        if (!canWriteZoom()) return
         val range = controls?.zoomRange ?: return
         val target = factor.coerceIn(range.start, range.endInclusive)
         zoomTarget = target
         _zoomReadout.value = target
-        scope.launch {
-            val ok = controls.setZoom(target)
-            if (zoomTarget == target) zoomTarget = null
-            if (!ok) presentControlNote("Zoom did not reach the camera.")
-        }
+        liveZoom.queue(target)
     }
     fun setZoomSlider(factor: Double) = setZoom(factor)
     fun setZoomSlew(value: Int) = Unit
     fun setZoomStop() = Unit
+    /** A wheel or pinch sample: the camera follows the finger, the chip reads the factor under it. */
     fun updateZoomPinch(magnification: Double) {
-        if (!supportsZoom) return
-        if (!_zoomPinching.value) { zoomPinchBase = _zoomReadout.value; _zoomPinching.value = true }
-        zoomPinchPreview = (zoomPinchBase * magnification).coerceIn(1.0, zoomMax())
+        if (!canWriteZoom()) return
+        _zoomPinching.value = true
+        _zoomReadout.value = liveZoom.drag(magnification, current = _zoomReadout.value, maximum = zoomMax())
     }
+    /** The finger lifted: the final factor is written last and holds the readout until it lands. */
     fun endZoomPinch() {
-        val preview = zoomPinchPreview
-        zoomPinchPreview = null
         _zoomPinching.value = false
-        if (preview != null) setZoom(preview)
+        val last = liveZoom.end() ?: return
+        _zoomReadout.value = last
+        if (liveZoom.isWriting) zoomTarget = last
+    }
+    private fun cancelZoomWrites() {
+        liveZoom.cancel()
+        zoomTarget = null
+        _zoomPinching.value = false
     }
 
     // Gimbal.
