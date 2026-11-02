@@ -22,6 +22,7 @@ Fixes
 - A failed saved connection can retry when you return. Scanning messages follow Bluetooth availability, and Wi-Fi failures offer the right settings.
 - Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again. Auto ISO with a fixed shutter reads M.
 - The EV meter reads the live picture again instead of always showing a dash.
+- The zoom wheel and pinch move the Luna's lens while your finger moves, not only after you lift it.
 - Playback keeps Pause through buffering, scrubbing and Share.
 - Playback stays smoother on large cards; scopes and audio meters update without redrawing the whole player.
 - Sharing two or more cached clips no longer fails with Couldn't share these clips; they reach the share sheet together.

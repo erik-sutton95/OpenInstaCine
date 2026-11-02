@@ -36,6 +36,8 @@ supported capabilities and single-camera iOS policy preserved.
   through buffering, scrubbing, Share and app background/return.
 - Android no longer freezes while the live picture rebuilds after rotating or
   returning to the app.
+- Android zoom follows the zoom wheel and pinch while the finger moves instead
+  of waiting for it to lift.
 - iOS VoiceOver no longer reaches live controls under a covering screen.
 - Sharing several cached clips stages them together with valid share names.
 - A failed saved connection can retry on app return; scanning reflects Bluetooth
