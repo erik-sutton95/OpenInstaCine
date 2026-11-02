@@ -57,6 +57,7 @@ import com.opencapture.opencine.insta360.luna.LunaIntegration
 import com.opencapture.openinstacine.monitor.assists.LiveAssistState
 import com.opencapture.openinstacine.monitor.assists.createLiveAssistState
 import com.opencapture.openinstacine.monitor.diagnostics.DiagnosticCenter
+import com.opencapture.openinstacine.monitor.pairing.addSetupFlow
 import com.opencapture.openinstacine.monitor.session.PocketCameraSession
 import com.opencapture.openinstacine.monitor.session.SHELL_WAYPOINT_WIDE_HFOV_DEG
 import kotlinx.coroutines.CoroutineScope
@@ -95,21 +96,32 @@ class AppModel(
         { com.opencapture.opencine.runtime.NativeGlBackend.create(it) }, logTag = "OpcInspector")
     override val assist = createLiveAssistState(appContext)
 
+    private val luna = session.lunaPort?.let(::LunaIntegration)
+
     /**
      * Cameras and pairing through the shared OpenCine flow (SHELL-02): the Luna integration over
-     * the session's port, with its nearby cards in this app's words. No integration for a backend that
-     * is not a Luna port (the debug local replay starts itself on the first scan).
+     * the session's port, with its nearby cards in this app's words and its Wi-Fi and hotspot
+     * setups (Add setup). No integration for a backend that is not a Luna port (the debug local
+     * replay starts itself on the first scan).
      */
     override val cameras = CamerasModel(
         listOfNotNull(
-            session.lunaPort?.let { AppIntegration(LunaIntegration(it), IntegrationSlots(nearbyCard = Companion::nearbyCard)) },
+            luna?.let {
+                AppIntegration(it, IntegrationSlots(
+                    nearbyCard = Companion::nearbyCard,
+                    addSetup = { camera, done -> addSetupFlow(this, camera, done) },
+                ))
+            },
         ),
         camerasStore(
             appContext.getSharedPreferences("openpocketcine.cameras", Context.MODE_PRIVATE).stored("document"),
             appContext.getSharedPreferences(LEGACY_CAMERAS, Context.MODE_PRIVATE).stored("records-json"),
         ),
         scope,
-    )
+    ).also { model ->
+        // A setup that moves the camera is remembered before it moves it (iOS parity).
+        luna?.saveRecord = model::upsert
+    }
 
     /**
      * The root over [cameras] (SHELL-03): cameras, pair or the monitor, its cover (Settings or

@@ -506,7 +506,9 @@ final class CameraSession {
                 self.expectedDisconnect = true
                 self.backend.disconnect()
                 self.expectedDisconnect = false
-                try await self.backend.connect(to: descriptor)
+                // A camera a Wi-Fi or hotspot setup moved is reconnected on that setup.
+                try await self.backend.connect(
+                    to: descriptor, route: self.backend.reconnectRoute(for: descriptor.id))
             } catch is CancellationError {
                 return
             } catch {
@@ -1453,7 +1455,13 @@ extension CameraSession: LunaConnectPort {
 
     func hasSavedWiFi(cameraID: UUID) -> Bool { backend.hasSavedWiFi(cameraID: cameraID) }
 
+    /// Camera Wi-Fi, as before Wi-Fi and hotspot setups.
     func connect(to camera: MonitorCamera) async throws {
+        try await connect(to: camera, route: .cameraWiFi(restoreAccessPoint: false))
+    }
+
+    /// Camera Wi-Fi, or a Wi-Fi or hotspot setup that moves the camera onto that network.
+    func connect(to camera: MonitorCamera, route: LunaRoute) async throws {
         descriptors[camera.id] = camera
         let generation = prepareConnection(
             to: FoundCamera(id: camera.id, name: camera.name, model: LunaShellMapping.cameraModel, modelId: nil),
@@ -1462,7 +1470,7 @@ extension CameraSession: LunaConnectPort {
             expectedDisconnect = true
             backend.disconnect()
             expectedDisconnect = false
-            try await backend.connect(to: camera)
+            try await backend.connect(to: camera, route: route)
         } catch {
             if generation == connectGeneration, !(error is CancellationError), phase != .idle {
                 let why = (error as? LocalizedError)?.errorDescription ?? "\(error)"
@@ -1488,4 +1496,12 @@ extension CameraSession: LunaConnectPort {
     }
 
     func forget(cameraID: UUID) { backend.forget(cameraID: cameraID) }
+
+    /// The password this phone keeps for a Wi-Fi or hotspot setup, or nil when it has none.
+    func stationPassword(for network: String, hotspot: Bool) -> String? {
+        backend.stationPassword(for: network, hotspot: hotspot)
+    }
+
+    /// Keeps an added setup's network and password in the Keychain.
+    func saveStation(_ network: LunaStationNetwork) { backend.saveStation(network) }
 }

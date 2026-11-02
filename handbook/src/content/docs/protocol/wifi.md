@@ -64,3 +64,31 @@ TCP, so a different Luna at the same `192.168.42.1` is not mistaken for the
 paired camera.
 
 Once associated, open the [UCD2 control session](../ucd2-transport/).
+
+## Station mode (Wi-Fi and hotspot setups)
+
+The camera can leave its own network and join a router or a phone hotspot. All
+requests go over the encrypted Bluetooth session, after the credential read:
+
+| Step | Message | Body |
+| --- | --- | --- |
+| 1 | `SET_WIFI_MODE` 147 | `place_holder = 1`, `wifi_mode = 1` (station), `country_code` from option 37 |
+| 2 | `PHONE_INFO` 220 | phone type, maker, model, OS version |
+| 3 | `SET_WIFI_CONNECTION_INFO` 112 | `WifiConnectionInfo { ssid = 1, password = 3 }`; a reply of 505 means the camera is still switching roles: wait for notification 8215, then send it again |
+| 4 | notification 8232 | `CameraWifiConnectionResult`: result 0 is success, 1 timeout, 2 connect failed, 3 a wrong password, 4 no address, 6 not found; it echoes the network name and password it tried |
+| 5 | `SET_AVAILABLE_WIFI` 215 | the same `WifiConnectionInfo` |
+
+`SET_WIFI_MODE` with mode 0 (left out, proto3 default) returns the camera to its
+own network. On firmware 1.1.15 the 8232 result names the network but no
+address, so the phone searches its own subnet for TCP 6666 answering the UCD2
+magic, then checks the serial. On that address control and HTTP media work as on
+the camera network, but the live preview is **H.264**, not HEVC.
+
+| Observation | Firmware | Evidence |
+| --- | --- | --- |
+| Router join in about 5 s; control, live preview and HTTP on the router address | 1.1.15 | Verified with the lab tools (2026-10-01) |
+| Live preview on the router address is H.264 High 1280x720 with the camera-network start body | 1.1.15 | Verified (NAL types 7, 8, 5, 1, 9) |
+| The camera network is gone while the camera is in station role | 1.1.15 | Observed |
+| Phone hotspot as the network | | Untested |
+| The camera can answer 112 with 505 (`WIFI_BUSY_SWITCHING`) right after a role switch; the official app waits for 8215 (`CAM_WIFI_START`, up to 38 s) and sends the join again | 1.1.15 app | Official app's provisioning flow; the app does the same |
+| An earlier join's 8232 can arrive during a later one; the echoed name and password tell them apart | 1.1.15 | 8232 echoes field 2 (name and password lengths match the 112 request) |

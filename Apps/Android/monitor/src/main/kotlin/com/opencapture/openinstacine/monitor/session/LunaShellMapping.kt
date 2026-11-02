@@ -2,6 +2,7 @@ package com.opencapture.openinstacine.monitor.session
 
 import com.opencapture.opencine.appkit.label
 import com.opencapture.opencine.core.CameraValuePin
+import com.opencapture.opencine.insta360.luna.LunaBackend
 import com.opencapture.opencine.insta360.luna.LunaSubjectTracking
 import com.opencapture.opencine.insta360.shell.CameraColorProfile
 import com.opencapture.opencine.insta360.shell.CameraFocusMode
@@ -165,8 +166,12 @@ internal object LunaShellMapping {
                 CameraCommands.SHOOT_TIMELAPSE, CameraCommands.SHOOT_HYPERLAPSE,
                 CameraCommands.SHOOT_SUPER_NIGHT, CameraCommands.SHOOT_SLOWMO),
         ),
-        media = com.opencapture.opencine.vocabulary.MediaRoute(host = "192.168.42.1", directPath = true),
+        media = com.opencapture.opencine.vocabulary.MediaRoute(host = LunaBackend.CAMERA_HOST, directPath = true),
     )
+
+    /** [profile] with media from [host]: the camera's own access point, or where a Wi-Fi or hotspot setup found it. */
+    fun profile(host: String): CameraProfile =
+        if (host == LunaBackend.CAMERA_HOST) profile else profile.copy(media = profile.media.copy(host = host))
 
     fun focusOption(mode: CameraFocusMode): FocusOption = when (mode) {
         CameraFocusMode.SINGLE -> FocusOption.SINGLE
