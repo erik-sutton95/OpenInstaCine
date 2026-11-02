@@ -6,8 +6,8 @@ name: CI
 # change, and a skip is success. Do not add those job names to branch protection.
 #
 # Two tiers (docs/ci.md): this is the fast PR tier. nightly.yml calls it with
-# `full: true`, which runs every job regardless of paths and adds the simulator
-# conformance suite and the iPad storage oracle (its own job, beside the native job).
+# `full: true`, which runs every job regardless of paths and adds the portrait header
+# layout matrix and the iPad storage oracle (its own job, beside the native job).
 on:
   push:
     branches: [main]
@@ -366,9 +366,9 @@ jobs:
   conformance:
     name: Shared conformance scenarios, iOS
     needs: changes
-    # Nightly tier, QUARANTINE (docs/ci.md). Hosted macOS, public repositories only, for the same
-    # reasons as `native`: it runs code from the pull request.
-    if: ${{ inputs.full && needs.changes.outputs.code == 'true' && !github.event.repository.private }}
+    # PR tier, feeds the gate (docs/ci.md; out of quarantine since #51). Hosted macOS, public
+    # repositories only, for the same reasons as `native`: it runs code from the pull request.
+    if: ${{ needs.changes.outputs.code == 'true' && !github.event.repository.private }}
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
@@ -526,9 +526,8 @@ jobs:
     # The single required status check on `main`. Always runs and collapses every
     # other job into one verdict; path-filter and private-repo skips are success.
     if: always()
-    # The conformance job is nightly-only and quarantined (docs/ci.md): it never feeds the gate.
     # The iPad oracle is nightly-only and skipped (a pass) on pull requests.
-    needs: [meta, changes, native, ipad-oracle, android, handbook]
+    needs: [meta, changes, native, conformance, ipad-oracle, android, handbook]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
