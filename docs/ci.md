@@ -14,9 +14,10 @@ platforms it touches; a skipped job counts as passed in the gate.
 | Meta checks | pin drift warning, gitleaks, Sentry configuration, privacy tests, tester notes format, CI script tests (timing summary, Swift Android SDK install recovery, the iPad oracle's build wait), actionlint |
 | Native Swift/iOS | app Swift package, one `build-for-testing`, unit tests without rebuilding on one simulator (serial: `-parallel-testing-enabled NO`); SwiftPM and compilation caches from main. The job summary lists per-suite times for the package and unit tests |
 | Android | three parallel jobs: JVM tests (`:monitor:testDebugUnitTest`); debug build and lint (`:app:assembleDebug :app:lintDebug :monitor:lintDebug`); release bundle (`:app:verifyReleaseComponentRegistrars`: R8 release bundle and the registrar check). Together they schedule exactly the task graph of the former single Gradle step (1,335 tasks in `--dry-run`), and the gate fails if any of them fails. Each job installs the pinned NDK before Gradle (retried after a failed download) and its summary lists per-task times (`scripts/ci-gradle-task-timing.gradle`), and the JVM tests job per-suite times |
+| Shared conformance scenarios, iOS | the shared scenarios (`just conformance-ios`: gallery, share, confirmation cancel, chrome edit return, accessibility traversal and coverage) in `OpenInstaCineUIReview` on a private iPhone simulator with accessibility enabled (OpenCine `scripts/ios-private-simulator.py`); same paths as Native Swift/iOS |
 | Handbook | static site build |
 
-No simulator UI suite, iPad oracle, portrait header layout matrix
+No other simulator UI suite, iPad oracle, portrait header layout matrix
 (`MonitorPortraitHeaderClearanceTests`), OpenCine's own Insta360 tests (OpenCine CI runs them at
 the pin) or quarantined test runs here, and pull requests no longer
 have to edit tester notes (see Release time).
@@ -25,8 +26,8 @@ have to edit tester notes (see Release time).
 
 Every night at 20:00 UTC on `main` (see the cron in `nightly.yml`; a scheduled run that starts
 between 07:00 and 18:59 UTC skips), and on `workflow_dispatch`. It calls `ci.yml` with
-`full: true`: every job regardless of paths, plus the shared conformance scenarios on iOS, the
-portrait header layout matrix, `just core-test` and the original storage oracle on a private 2x
+`full: true`: every job regardless of paths (the shared conformance scenarios on iOS included),
+plus the portrait header layout matrix, `just core-test` and the original storage oracle on a private 2x
 iPad. The oracle has its own job, **Original storage oracle, native 2x iPad**: it creates its
 iPad while the native job tests the packages and builds, then runs the native job's build
 (artifact `ios-build-for-testing-<run attempt>`, one day) without building, and keeps its
@@ -44,9 +45,10 @@ Tests with a known hosted flake run only in the nightly tier, each with an open 
 `ci-quarantine`). There are no accepted reds in pull requests: fix the failure, or quarantine
 the test here with its issue in the same pull request.
 
+No test is quarantined now. Add a row per quarantined test:
+
 | Test | Job | Issue |
 | --- | --- | --- |
-| Shared conformance scenarios, iOS (never passed hosted; `simctl list` timeouts) | `conformance` | [#51](https://github.com/erik-sutton95/OpenInstaCine/issues/51), [OpenCine#111](https://github.com/erik-sutton95/OpenCine/issues/111) |
 
 A test leaves quarantine after its issue is fixed and several consecutive nightlies pass.
 
