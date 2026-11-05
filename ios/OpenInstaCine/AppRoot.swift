@@ -111,6 +111,10 @@ final class AppModel {
     static func makeBackend() -> LunaCameraBackend {
         #if targetEnvironment(simulator)
             LunaCameraBackend(useExistingNetwork: true, configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO())
+        #elseif targetEnvironment(macCatalyst)
+            // Bluetooth pairs and reads the camera Wi-Fi. A Mac has no hotspot configuration API,
+            // so the operator joins that network in macOS (LunaWiFi.join says so).
+            LunaCameraBackend(configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO())
         #else
             // One hotspot owner for this backend's lifetime. Luna keeps waiting for a pending
             // native join after its own 35 s timeout (the system Join alert may still be up).
@@ -124,7 +128,10 @@ final class AppModel {
     static let lunaConfiguration = LunaIntegrationConfiguration(
         keychainService: "org.opencine.openinstacine.camera", appName: "OpenInstaCine",
         logPrefix: "OpenInstaCine")
+    // OpenCineWatch has no WatchRelay on Mac Catalyst: a Mac has no paired watch.
+    #if !targetEnvironment(macCatalyst)
     @ObservationIgnored let watchRelay = WatchRelay()
+    #endif
     @ObservationIgnored private var watchRelayActivated = false
     @ObservationIgnored private(set) var watchCommandSource: LunaCommandAdmission?
     @ObservationIgnored private(set) var watchSourceSession: LunaCameraSession?
@@ -653,7 +660,9 @@ final class AppModel {
     func noteLeftLive() {
         operatorSession.close()
         captureSheet = nil
+        #if !targetEnvironment(macCatalyst)
         watchRelay.retireSource()
+        #endif
         watchCommandSource = nil
         watchSourceSession = nil
         watchSourceEpoch = nil
@@ -707,6 +716,7 @@ final class AppModel {
     }
 
     func activateWatchRelay() {
+        #if !targetEnvironment(macCatalyst)
         guard !watchRelayActivated else { return }
         watchRelayActivated = true
         watchRelay.onToggleRecord = { [weak self] in
@@ -749,9 +759,11 @@ final class AppModel {
         }
         watchRelay.activate()
         publishWatchState()
+        #endif
     }
 
     func publishWatchState() {
+        #if !targetEnvironment(macCatalyst)
         let target = session.lunaSession
         let commandSource = target.map {
             LunaCommandAdmission(owner: $0.commandOwner, isCurrent: { true })
@@ -774,6 +786,7 @@ final class AppModel {
                 feedLive: session.decoder.lastPresentedAt != nil,
                 power: control.snapshot?.power ?? .unknown,
                 storage: control.snapshot?.storage ?? .unknown))
+        #endif
     }
 
     // MARK: Remote shutter (A2-32)

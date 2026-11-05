@@ -178,7 +178,7 @@ The `NSLog` wire tracing in `LunaScreenRecovery` is deliberately left in for now
 
 ### Build status
 
-`just apple-build` (iOS Simulator) succeeds, and the `Insta360Apple` scheme builds for Mac Catalyst. The full Catalyst app build currently fails in the untracked `Shared/Apple/MonitorShell/PlaybackAudio.swift`, which uses `MTAudioProcessingTap` symbols unavailable on Catalyst. That is unrelated to Color Recovery and predates this work.
+`just apple-build` (iOS Simulator) succeeds, and the full app builds for Mac Catalyst; the `MTAudioProcessingTap` failure once recorded here no longer occurs.
 
 ## Why the screen's address is required, tested rather than assumed
 
