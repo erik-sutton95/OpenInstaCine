@@ -97,6 +97,8 @@ targets:
       - target: OpenInstaCineWatch
         embed: true
         codeSign: true
+        # The Mac Catalyst module has no paired watch.
+        platformFilter: iOS
     settings:
       base:
         # The app shell (CoreBluetooth / Network / Hotspot glue) uses the Swift 5 language mode to
@@ -114,6 +116,15 @@ targets:
         # rewrites it in place (strips comments, retabs) and the build then fails with
         # "Entitlements file was modified during the build".
         CODE_SIGN_ENTITLEMENTS: OpenInstaCine/OpenInstaCine.entitlements
+        # Mac Catalyst module of the OpenCine Mac dock. Every Mac difference is an sdk=macosx
+        # override, so iOS settings stay as they are. Hotspot and Wi-Fi info do not exist there.
+        SUPPORTS_MACCATALYST: YES
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER: NO
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        "PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]": com.opencapture.openinstacine.module
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": OpenInstaCine/OpenInstaCine-Mac.entitlements
+        "ENABLE_APP_SANDBOX[sdk=macosx*]": YES
+        "LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]": "$(inherited) @executable_path/../Frameworks"
         GCC_PREPROCESSOR_DEFINITIONS: "$(inherited) CI_SILENCE_GL_DEPRECATION=1"
         OTHER_SWIFT_FLAGS: "$(inherited) -Xcc -DCI_SILENCE_GL_DEPRECATION"
         # Same team as OpenZCine, which already has the Hotspot Configuration capability.
@@ -276,8 +287,9 @@ schemes:
   OpenInstaCine:
     build:
       targets:
+        # The Watch app builds through OpenInstaCine's iOS-only dependency: a scheme entry would
+        # also build it, and fail signing, for the Mac Catalyst destination.
         OpenInstaCine: all
-        OpenInstaCineWatch: all
         OpenInstaCineTests: [test]
     test:
       targets:
