@@ -1,0 +1,8 @@
+{
+  "id": "luna",
+  "displayName": "Luna",
+  "inputName": "OpenCine Luna",
+  "version": "0.1.0",
+  "minimumDockVersion": "0.1.0",
+  "bundleName": "OpenInstaCine.app"
+}

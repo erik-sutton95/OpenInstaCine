@@ -7,6 +7,9 @@ import OpenCineAppKit
 import OpenCineAppKitApple
 import OpenCineApple
 import OpenCineCameraControls
+#if targetEnvironment(macCatalyst)
+    import OpenCineVirtualCamera
+#endif
 import OpenCineCore
 import OpenCineFrameIO
 import OpenCineFrameIOApple
@@ -803,6 +806,13 @@ final class AppModel {
         }
         watchRelay.activate()
         publishWatchState()
+        #else
+            // No watch on a Mac. The same clean preview tap feeds this module's webcam input, and
+            // asks for decoded frames whether or not a picture is presented.
+            if let host = DesktopModuleHost.current {
+                session.decoder.needsWatchPreview = true
+                session.decoder.onWatchPreview = { image, _, _ in host.publish(image) }
+            }
         #endif
     }
 
