@@ -194,6 +194,8 @@ final class AppModel {
     /// The problem report sheet, owned by the app root (A2-24): the cameras page and Settings
     /// both open it here, so a draft outlives the camera session and the Settings cover.
     var isProblemReportPresented = false
+    /// Set while this model is a Multiview tile's borrowed Live View: returns to the stage.
+    var multiviewReturn: (() -> Void)?
     var captureSheet: CaptureSheet?
     var captureDrum: CaptureDrumPresentation?
     var keepScreenAwake: Bool = OperatorPrefs.keepScreenAwake {
@@ -687,6 +689,24 @@ final class AppModel {
         if old == .media, new != .media { session.endMediaBrowse() }
     }
     func refreshMedia() { session.refreshMedia() }
+
+    /// Cameras › Multiview, as Pocket: the monitor's camera disconnects first (the phone holds one
+    /// camera access point, and Multiview moves cameras onto a shared network).
+    func openMultiview() {
+        guard cameras.attempts.isEmpty else { return }
+        disconnect()
+    }
+
+    /// Back from Multiview with no camera on the monitor: discovery resumes.
+    func closeMultiview() { integration.retryDiscovery() }
+
+    /// A new Multiview stage: its own connections, the app's passive Luna discovery.
+    func makeMultiviewSession() -> MultiviewSession {
+        let integration = integration
+        return MultiviewSession(
+            makeBackend: { AppModel.makeBackend() },
+            discover: { integration.discover(.passive) })
+    }
 
     /// Closes the monitor's camera (never a camera command), then the app's link.
     func disconnect() {

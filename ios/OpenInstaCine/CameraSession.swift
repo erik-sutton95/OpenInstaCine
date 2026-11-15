@@ -108,6 +108,9 @@ final class CameraSession {
     @ObservationIgnored var clock: HostClock = .live
 
     @ObservationIgnored let backend: LunaCameraBackend
+    /// A Multiview tile's session: the stage's member link owns this camera's connection and its
+    /// repair, so this session never runs its own stall ladder or recovery.
+    @ObservationIgnored var multiviewMember = false
     /// False for a lease (borrowed decoder or controls-only editor) on another session's backend.
     @ObservationIgnored let ownsBackend: Bool
     /// Tests only: the Luna session requests go through instead of the backend's.
@@ -874,7 +877,7 @@ final class CameraSession {
     /// asks for keyframes, restarts live a bounded number of times, then hands the stall to
     /// bounded session recovery so Reconnecting always ends.
     private func watchFeed() {
-        guard case .live = phase, !isBrowsingMedia, !sessionRecovery.isRecovering else {
+        guard case .live = phase, !isBrowsingMedia, !sessionRecovery.isRecovering, !multiviewMember else {
             feedStall = LunaFeedStall()
             return
         }
