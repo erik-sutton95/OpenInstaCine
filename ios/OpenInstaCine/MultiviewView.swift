@@ -59,8 +59,15 @@ extension MultiviewSession: MultiviewScreenHost {
         EmptyModifier()
     }
 
+    /// Live View's assist inspector preview fed by the tile's own samples (Pocket): never a second
+    /// picture view on the tile's decoder, so the tile keeps its picture behind the popup.
     @ViewBuilder func settingsPreview(slot: Int) -> some View {
-        MultiviewTilePicture(tile: tiles[slot], fill: false)
+        let tile = tiles[slot]
+        if let model = tile.controlsModel {
+            AssistInspectorPreview(tool: .lut, pictureEffects: tile.settingsPreviewEffects)
+                .environment(model)
+                .id(ObjectIdentifier(model))
+        }
     }
 
     @ViewBuilder func settingsControls(
@@ -75,14 +82,23 @@ extension MultiviewSession: MultiviewScreenHost {
             )
             .fixedSize(horizontal: false, vertical: true)
             .environment(model)
-            .id(MultiviewPanelIdentity(model: ObjectIdentifier(model), category: sheet))
+            .id(
+                MultiviewPanelIdentity(
+                    model: ObjectIdentifier(model), category: sheet,
+                    described: model.control.snapshot != nil))
         }
     }
 
     @ViewBuilder func liveView(slot: Int, exit: @escaping () -> Void) -> some View {
         if let model = tiles[slot].liveModel {
             LiveViewScreen().environment(model)
-                .onAppear { model.multiviewReturn = exit }
+                .onAppear {
+                    // Pocket: the borrowed monitor returns its loan, then the stage takes the tile back.
+                    model.multiviewReturn = {
+                        model.shell.close()
+                        exit()
+                    }
+                }
         }
     }
 
@@ -93,10 +109,13 @@ extension MultiviewSession: MultiviewScreenHost {
     }
 }
 
-/// The settings controls start again for another camera or category.
+/// The settings controls start again for another camera, category or a camera's first description.
 private struct MultiviewPanelIdentity: Hashable {
     let model: ObjectIdentifier
     let category: CaptureSheet
+    /// The panel captures its field on appear; it appears again once the controls first describe
+    /// the camera.
+    let described: Bool
 }
 
 /// One tile's picture: its decoder's surface, Fit or Fill, while no Live View borrows it.

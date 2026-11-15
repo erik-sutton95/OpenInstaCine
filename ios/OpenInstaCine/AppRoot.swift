@@ -700,6 +700,19 @@ final class AppModel {
     /// Back from Multiview with no camera on the monitor: discovery resumes.
     func closeMultiview() { integration.retryDiscovery() }
 
+    /// A Multiview tile lends its session (picture, status and controls) to this model's monitor,
+    /// as Pocket's `borrowMonitor`: the shell shows it as the monitor (volume-key record, media and
+    /// every other monitor rule follow) and only returns the loan when it closes.
+    func borrowMonitor(
+        _ camera: NearbyCamera, session common: any OpenCineCore.CameraSession,
+        release: @escaping @MainActor () -> Void
+    ) {
+        let saved = OpenCineCore.SavedCamera(
+            id: camera.id, integration: LunaCameraSession.integration, advertisedName: camera.name,
+            model: LunaShellMapping.cameraModel.name)
+        shell.borrow(ConnectedCamera(saved: saved, session: common), release: release)
+    }
+
     /// A new Multiview stage: its own connections, the app's passive Luna discovery.
     func makeMultiviewSession() -> MultiviewSession {
         let integration = integration

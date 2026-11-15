@@ -26,51 +26,106 @@ final class MultiviewSession {
         let link: LunaMemberLink
         let member = MultiviewMember<NearbyCamera>()
         let samples = LiveFrameSampleBus(profile: ScopeExposureCeiling.sourceProfile)
-        /// The tile's picture effects: its Auto LUT.
+        /// The tile's picture effects: its Auto LUT, and the settings preview's sample demand.
         private(set) var effects = MonitorFrameEffects()
         /// A borrowed Live View, while one is open.
         var liveModel: AppModel?
-        /// A settings editor, while one is open.
+        /// A settings editor, while one is open, and the stage's lease it edits under.
         var controlsModel: AppModel?
+        @ObservationIgnored var editorLease: EditorLease?
+        /// The settings popup's preview reads this tile's own samples (Pocket's preview demand):
+        /// no second picture view on the decoder.
+        var previewDemand = false {
+            didSet { if previewDemand != oldValue, liveModel == nil { updateLUT() } }
+        }
+        /// The Auto LUT source the picture was last graded for.
+        @ObservationIgnored private var gradedFor: MultiviewAutoLUT?
 
         init(backend: LunaCameraBackend) {
             self.backend = backend
             session = CameraSession(backend: backend)
             // The stage owns this camera's repair; the session never reconnects it itself.
             session.multiviewMember = true
-            link = LunaMemberLink(port: backend, conversion: MultiviewSession.conversion)
+            link = LunaMemberLink(
+                port: backend, conversion: MultiviewSession.conversion,
+                preview: { MultiviewSession.previewProfile($0, flat: OperatorPrefs.lunaFlatPreview) })
             session.control.bind(link.session)
+            configureSession()
+            // Pocket re-grades when the camera reports its color: the same preview rule as Live View.
+            session.onPreviewColorApplied = { [weak self] in
+                // The member's common session settles on the same report; grade after it.
+                Task { @MainActor [weak self] in self?.followReportedColor() }
+            }
         }
 
         var camera: NearbyCamera? { member.camera }
         var hasPicture: Bool { link.pictureHealth == .live }
 
+        /// The member's session as the monitor's own (`CameraSession.openSession()`): the operator's
+        /// shutter presentation (angle or speed) and the zoom domain.
+        func configureSession() {
+            link.lunaSession.configureShutter(
+                presentation: OperatorPrefs.shutterUsesAngle ? .emulatedAngle : .cameraValue)
+            link.lunaSession.configureLens(zoomDomain: 1...session.zoomCeiling)
+        }
+
+        /// Re-grades the picture when what it carries changed, while no Live View borrows it.
+        func followReportedColor() {
+            guard liveModel == nil, link.autoLUT != gradedFor else { return }
+            updateLUT()
+        }
+
         /// Applies the member's Auto LUT choice to the tile's picture.
         func updateLUT() {
             var next = MonitorFrameEffects()
-            if member.lutEnabled, link.autoLUT.conversion != nil,
+            let source = link.autoLUT
+            if member.lutEnabled, source.conversion != nil,
                 let cube = BundledLunaLUT.iLogToRec709
             {
                 let gpu = cube.colorCube
                 next.lutDimension = gpu.size
                 next.lutRGBA = gpu.rgbaComponents.withUnsafeBytes { Data($0) }
             }
+            next.inspectorSample = previewDemand
+            gradedFor = source
             effects = next
             session.decoder.effects = next
             session.decoder.adoptIncomingTransfer(session.status.monitorTransfer)
             if next.needsGPUFeed { session.decoder.unlockHardwareDecoder() }
         }
 
-        /// Ends the tile's editor (its controls stay bound to the member's session).
-        func retireControls() { controlsModel = nil }
+        /// The settings popup's preview: the tile's own picture (color and Auto LUT), without scope
+        /// or sample demand.
+        var settingsPreviewEffects: MonitorFrameEffects {
+            var result = effects
+            result.inspectorSample = false
+            return result
+        }
+
+        /// Ends the tile's editor and its lease (its controls stay bound to the member's session).
+        func retireControls() {
+            controlsModel?.captureSheet = nil
+            controlsModel?.captureDrum = nil
+            controlsModel = nil
+            editorLease = nil
+            previewDemand = false
+        }
     }
 
     /// This app's four-camera qualification (Pocket's), not a Luna constant.
     static let budget = ResourceBudget(qualifiedEntries: 4)
 
-    /// The conversion this app grades a reported color profile with (the bundled cube).
+    /// The conversion this app grades a picture's color profile with (the bundled cube).
     static func conversion(_ colorProfile: String) -> String? {
         colorProfile == LunaColorMode.iLog.label ? "I-Log to Rec.709" : nil
+    }
+
+    /// What the picture carries for a recorded color profile: Live View's rule
+    /// (`LunaShellMapping.previewColorMode`). Color Recovery bakes Rec.709 into an I-Log recording's
+    /// phone feed unless the operator says it is off (Settings' flat I-Log preview), so only a flat
+    /// preview is graded and an already graded one never twice.
+    static func previewProfile(_ recorded: String, flat: Bool) -> String {
+        recorded == LunaColorMode.iLog.label && !flat ? LunaColorMode.standard.label : recorded
     }
 
     let tiles: [Tile]
@@ -107,6 +162,16 @@ final class MultiviewSession {
                 }),
             budget: Self.budget)
         coordinator.host = self
+        for (slot, tile) in tiles.enumerated() {
+            // Pocket's per-write admission: Live View's borrowed monitor writes as the monitor does;
+            // otherwise only the open editor, while its lease and the stage admit the change.
+            tile.session.multiviewControlAdmission = { [weak self, weak tile] in
+                guard let self, let tile else { return false }
+                if tile.liveModel != nil { return true }
+                guard tile.controlsModel != nil, let lease = tile.editorLease else { return false }
+                return self.coordinator.editorAdmits(lease, slot: slot)
+            }
+        }
         // No search or open of one member reaches a camera another member holds.
         for (slot, tile) in tiles.enumerated() {
             tile.backend.stationHostsInUse = { [weak self] in
@@ -127,14 +192,17 @@ extension MultiviewSession: MultiviewHost {
 
     func lutChanged(slot: Int) { tiles[slot].updateLUT() }
 
-    /// Lends the tile's own session (picture, status, controls) to a Live View model; the stage
-    /// keeps the link and its repair.
+    /// Lends the tile's own session (picture, status, controls) to a Live View model whose shell
+    /// borrows it as the monitor (Pocket's `borrowMonitor`); the stage keeps the link and its
+    /// repair.
     func openLiveView(slot: Int) -> Bool {
         let tile = tiles[slot]
-        guard tile.camera != nil else { return false }
+        guard let camera = tile.camera else { return false }
         let model = AppModel(session: tile.session)
+        model.frameSamples = tile.samples
         model.assist.lutEnabled = tile.member.lutEnabled
         tile.liveModel = model
+        model.borrowMonitor(camera, session: tile.link.session) { [weak self] in self?.closeLiveView() }
         return true
     }
 
@@ -143,6 +211,9 @@ extension MultiviewSession: MultiviewHost {
             tile.member.lutEnabled = tile.liveModel?.assist.lutEnabled ?? tile.member.lutEnabled
             tile.liveModel?.multiviewReturn = nil
             tile.liveModel = nil
+            // The borrowed monitor's shell unbound the shared controls when it closed.
+            tile.session.control.bind(tile.link.session)
+            tile.configureSession()
             tile.updateLUT()
         }
     }
@@ -154,7 +225,10 @@ extension MultiviewSession: MultiviewHost {
     func memberChanged(slot: Int, _ change: MultiviewMemberChange) {
         let tile = tiles[slot]
         switch change {
-        case .camera, .control: tile.retireControls()
+        case .camera:
+            tile.retireControls()
+            tile.configureSession()
+        case .control: tile.retireControls()
         case .removed:
             tile.retireControls()
             tile.session.decoder.reset()
@@ -198,12 +272,19 @@ extension MultiviewSession: MultiviewHost {
             hasPicture: tile.hasPicture, accessibilityValue: tile.hasPicture ? "Live" : "Reconnecting")
     }
 
-    /// Opens a settings editor over the tile's own controls.
+    /// Opens a settings editor over the tile's own controls under the stage's editor lease (Pocket:
+    /// a replaced link or camera, a lost authority or the next editor retires it), with the tile's
+    /// samples as the popup preview's source.
     func openCameraSettings(slot: Int) {
-        closeEditors()
+        // Opening the lease closes every other editor first.
+        let lease = coordinator.openEditorLease(slot: slot)
         let tile = tiles[slot]
-        guard tile.camera != nil, coordinator.controlsAvailable(slot: slot) else { return }
-        tile.controlsModel = AppModel(session: tile.session)
+        guard tile.camera != nil, let lease, coordinator.controlsAvailable(slot: slot) else { return }
+        let model = AppModel(session: tile.session)
+        model.frameSamples = tile.samples
+        tile.controlsModel = model
+        tile.editorLease = lease
+        tile.previewDemand = true
     }
 
     func cameraSettings(slot: Int) -> MultiviewCameraSettingsState? {
