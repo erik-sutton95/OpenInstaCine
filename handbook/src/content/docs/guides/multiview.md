@@ -11,8 +11,9 @@ something that has been observed on a Luna.
 
 Multiview shows up to four Luna cameras on one screen. The cameras and this phone
 join one shared network (a Wi-Fi network or this phone's hotspot); each camera
-keeps its own connection, picture and recording state. See
-[Android differences](#android-differences) for what Android does not offer yet.
+keeps its own connection, picture and recording state. iPhone and Android offer
+the same stage; see [Android differences](#android-differences) for the few
+platform words that differ.
 
 ## Open Multiview
 
@@ -69,15 +70,28 @@ Both the lamp and a tile's recording action follow the **Record confirmation**
 preference in Settings. This is a shared command, not frame-accurate
 synchronized recording.
 
-**Auto LUT** (iPhone) starts on for each newly added camera. It follows the
-camera's reported color profile: I-Log is graded with the bundled I-Log to
-Rec.709 look; Standard, Vivid, HDR and Dolby Vision get no automatic conversion.
-The LUT affects monitoring only.
+**Auto LUT** starts on for each newly added camera. It follows what the picture
+carries, with the same rule as Live View, not the recording profile alone. A
+Luna's Color Recovery can bake Rec.709 into an I-Log recording's phone picture;
+such a picture is never graded a second time. Only an I-Log picture that arrives
+flat gets the bundled I-Log to Rec.709 look. On iPhone the **flat I-Log preview**
+setting says which one you have (on by default, because firmware 1.1.15 sends a
+flat I-Log preview); with it off, an I-Log tile reads **Auto · no conversion
+needed**. Android has no such setting: like Android Live View, it treats the
+I-Log picture as flat. Standard, Vivid, HDR and Dolby Vision get no automatic
+conversion. The LUT affects monitoring only.
 
-**Camera settings** in the toolbar (iPhone) opens the floating settings popup
-with the same Luna controls as Live View. Double-tap a connected tile (iPhone) to
-open its Live View; the lock control becomes a Multiview grid icon that returns to
-the stage. Multiview stays the camera's repair owner while Live View borrows it.
+**Camera settings** in the toolbar opens the floating settings popup with the
+same Luna controls as Live View. Its preview is the tile's own picture, and the
+tile behind the popup keeps showing it. A change reaches a camera only while the
+stage allows it: a group record, a reconnect, the app in the background or a
+newer popup stops changes that have not been sent yet.
+
+Double-tap a connected tile to open its Live View; the lock control becomes a
+Multiview grid icon that returns to the stage. The borrowed Live View is the
+monitor's own (the volume-key shutter and Settings' shutter angle work as in a
+single-camera session), and Multiview stays the camera's repair owner while Live
+View borrows it. Tiles use the same shutter angle or speed setting as Live View.
 
 Layout (Grid or Center stage), the selected main camera and Fit/Fill are
 remembered on this device.
@@ -110,12 +124,14 @@ an Android Keystore key on Android.
 
 ## Android differences
 
-Android shows the same stage, network wizard, camera picker, tile pictures,
-recording, recovery and cleanup. It does not offer these yet:
+Android offers the same stage, network wizard, camera picker, tile pictures with
+Auto LUT, Live View from a tile, the **Camera settings** popup, recording,
+recovery and cleanup.
 
-- Live View from a tile (double-tap does nothing).
-- The **Camera settings** popup.
-- Auto LUT on tiles.
+While the stage is open the single-camera monitor connects nothing on its own,
+also when Android's Wi-Fi join prompt sends the app to the background and back.
+Multiview does not open while a camera is connecting. Closing Multiview lets go
+of the shared Wi-Fi the app asked Android for.
 
 As in Pocket: Android uses **Phone hotspot** instead of Personal Hotspot,
 **Local Wi-Fi** uses the current Wi-Fi when its name matches and otherwise shows
