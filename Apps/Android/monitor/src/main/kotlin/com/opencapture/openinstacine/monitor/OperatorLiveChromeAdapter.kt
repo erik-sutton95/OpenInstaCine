@@ -24,6 +24,6 @@ internal fun rememberOperatorChromeSource(model: AppModel, status: CameraStatus,
     return MonitorOperatorLiveChromeSource(model, model.shell, model.operatorSession,
         model.operatorCaptureSource, OperatorPrefs, model.portraitFeedAspect, model::updatePortraitFeedAspect,
         zoom, MonitorOperatorStickActions(model::updateGimbalStick, model::endGimbalStick,
-            model.session::performGimbalDoubleTap, model.session::flipGimbal),
+            model.session::performGimbalDoubleTap, model.session::flipGimbal), returnToStage = model.multiviewExit,
         status = status, capabilities = capabilities, remoteShutterEnabled = model.remoteShutterEnabled)
 }

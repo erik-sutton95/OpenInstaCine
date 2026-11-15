@@ -71,16 +71,25 @@ import kotlinx.coroutines.launch
 import com.opencapture.monitorui.settings.MonitorSettingsTab
 import com.opencapture.opencine.cameracontrols.PortraitFeedAspect
 
+/**
+ * [borrowing]: a Live View or settings model over a Multiview tile's session (Pocket Android
+ * `AppModel(borrowing:)`, iOS `AppModel(session:)`). Such a model discovers and connects nothing,
+ * keeps its saved cameras in memory, never retries a connect on resume, and never closes the
+ * session it borrows: the stage owns it.
+ */
 class AppModel(
     context: Context,
     val reviewLaunch: com.opencapture.monitorui.ReviewLaunch? = null,
+    borrowing: PocketCameraSession? = null,
 ) : GamepadHost, GimbalChromeHost, CaptureSheetHost, OperatorSetupModel, AutoCloseable {
     private val appContext = context.applicationContext
     init {
         DiagnosticCenter.install(appContext)
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    val session = PocketCameraSession(context)
+    val session = borrowing ?: PocketCameraSession(context)
+    /** This model borrows a Multiview tile's session (see the class comment). */
+    val isBorrowed: Boolean = borrowing != null
     // Internal so the Debug review seed stages into the app's own storage registry.
     internal val mediaStorage = com.opencapture.opencine.appkit.MonitorMediaCacheStorage()
     // Keep the existing on-disk namespace; Settings and gallery share this declared parent.
@@ -96,7 +105,7 @@ class AppModel(
         { com.opencapture.opencine.runtime.NativeGlBackend.create(it) }, logTag = "OpcInspector")
     override val assist = createLiveAssistState(appContext)
 
-    private val luna = session.lunaPort?.let(::LunaIntegration)
+    private val luna = if (isBorrowed) null else session.lunaPort?.let(::LunaIntegration)
 
     /**
      * Cameras and pairing through the shared OpenCine flow (SHELL-02): the Luna integration over
@@ -113,7 +122,7 @@ class AppModel(
                 ))
             },
         ),
-        camerasStore(
+        if (isBorrowed) camerasStore(MemoryString(), MemoryString()) else camerasStore(
             appContext.getSharedPreferences("openpocketcine.cameras", Context.MODE_PRIVATE).stored("document"),
             appContext.getSharedPreferences(LEGACY_CAMERAS, Context.MODE_PRIVATE).stored("records-json"),
         ),
@@ -129,14 +138,18 @@ class AppModel(
      */
     val shell = ShellModel(cameras, session.control).also { shell ->
         shell.onSceneActivity = { active ->
-            if (active) {
-                session.noteSceneBecameActive()
-                // IA-320: returning to the app retries a failed saved connect as the baseline did,
-                // through the shared model so the card shows the attempt instead of the backend
-                // joining invisibly outside it.
-                cameras.retryCurrentFailures()
-            } else {
-                session.noteSceneBecameInactive()
+            // A borrowed tile session is the stage's; while the stage is open the monitor connects
+            // nothing (its system Wi-Fi join prompt pauses and resumes this activity).
+            if (resumesConnections) {
+                if (active) {
+                    session.noteSceneBecameActive()
+                    // IA-320: returning to the app retries a failed saved connect as the baseline did,
+                    // through the shared model so the card shows the attempt instead of the backend
+                    // joining invisibly outside it.
+                    cameras.retryCurrentFailures()
+                } else {
+                    session.noteSceneBecameInactive()
+                }
             }
         }
     }
@@ -627,9 +640,36 @@ class AppModel(
 
     override fun disconnect() {
         focusBoxLocked = false
+        // A borrowed Live View's way out is back to its stage; the connection is the stage's.
+        multiviewExit?.let { return it() }
         shell.close()
-        session.disconnect()
+        if (!isBorrowed) session.disconnect()
     }
+
+    /** Set while this Live View borrows a Multiview tile: the grid icon returns to the stage. */
+    var multiviewExit by mutableStateOf<(() -> Unit)?>(null)
+
+    /**
+     * A Multiview tile lends its session to this model's monitor (Pocket `borrowMonitor`): the shell
+     * shows it as the monitor (volume-key record and every other monitor rule follow) and only
+     * returns the loan when it closes.
+     */
+    fun borrowMonitor(camera: NearbyCamera, common: com.opencapture.opencine.core.CameraSession, release: () -> Unit) {
+        shell.borrow(com.opencapture.opencine.core.ConnectedCamera(
+            SavedCamera(camera.id, LunaFailures.INTEGRATION, advertisedName = camera.name, model = camera.model),
+            common,
+        ), release)
+    }
+
+    /** The borrowed Live View's LUT tool carries the tile's Auto LUT choice in and back out. */
+    fun setBorrowedLut(enabled: Boolean) {
+        if (assist.lutOn != enabled) assist.toggle(com.opencapture.monitorui.MonitorAssistTool.LUT)
+    }
+
+    fun borrowedLutEnabled(): Boolean = assist.lutOn
+
+    /** Whether this model's monitor may connect on its own now: not borrowed, no stage open. */
+    private val resumesConnections: Boolean get() = resumesConnections(isBorrowed, staged = multiview != null)
 
     /**
      * The open Multiview stage. Owned here, not by its screen, so whatever the root composes its
@@ -641,9 +681,13 @@ class AppModel(
     /** The Multiview stage covers the camera home until it closes. */
     val showsMultiview: Boolean get() = multiview != null
 
-    /** iOS `openMultiview`: the single-camera session hands the radio to the stage. */
+    /**
+     * iOS `openMultiview`: the single-camera session hands the radio to the stage. Nothing opens
+     * while a connect attempt runs (the attempt holds the radio), as on iOS and Pocket.
+     */
     fun openMultiview() {
-        if (!MonitorConfiguration.offersMultiview || multiview != null) return
+        if (!opensMultiview(MonitorConfiguration.offersMultiview, multiview != null, isBorrowed,
+                cameras.state.value.attempts.size)) return
         disconnect()
         multiview = com.opencapture.openinstacine.monitor.multiview.MultiviewSession(
             appContext,
@@ -651,6 +695,7 @@ class AppModel(
             discover = { luna?.discover(com.opencapture.opencine.core.DiscoveryMode.PASSIVE) ?: kotlinx.coroutines.flow.emptyFlow() },
             path = MonitorConfiguration.stationPath(appContext),
         ).also {
+            it.appModel = this
             it.recordConfirmation = { recordConfirmationEnabled }
             val store = com.opencapture.opencine.appkit.MultiviewStagePreferencesStore(
                 appContext.getSharedPreferences("multiview-presentation", Context.MODE_PRIVATE), "stage",
@@ -673,12 +718,31 @@ class AppModel(
         inspectorPreview.close()
         gimbalGamepad.stopListening()
         scope.cancel()
+        if (isBorrowed) {
+            // A borrowed monitor returns its loan; the tile's session stays the stage's.
+            if (shell.state.value.monitor?.isBorrowed == true) shell.close()
+            return
+        }
         // The activity ends: its camera session ends with it, without restarting discovery.
         shell.state.value.monitor?.session?.closeNow(SessionCloseReason.REQUESTED)
         session.close()
     }
 
     companion object {
+        /**
+         * Whether a model's monitor connects on its own when the app returns to the foreground: never
+         * a borrowed tile model, and never while a Multiview stage is open (the stage's system Wi-Fi
+         * join prompt pauses and resumes the activity).
+         */
+        internal fun resumesConnections(borrowed: Boolean, staged: Boolean): Boolean = !borrowed && !staged
+
+        /**
+         * Whether Cameras › Multiview opens now: offered, not open yet, not from a borrowed model, and
+         * no connect attempt running (it holds the radio), as on iOS and Pocket.
+         */
+        internal fun opensMultiview(offered: Boolean, open: Boolean, borrowed: Boolean, attempts: Int): Boolean =
+            offered && !open && !borrowed && attempts == 0
+
         /** The records every earlier build reads, kept mirrored (SHELL-02 D11). */
         const val LEGACY_CAMERAS = "openpocketcine.saved-cameras"
 
@@ -687,6 +751,13 @@ class AppModel(
             document,
             SavedCamerasStore.Legacy(legacy, BodyRecordsV0(LunaFailures.INTEGRATION, BodyRecordsV0.Dates.EPOCH_MILLISECONDS), LEGACY_CAMERAS),
         )
+
+        /** Saved cameras a borrowed model keeps in memory only. */
+        private class MemoryString : StoredString {
+            private var value: String? = null
+            override fun read(): String? = value
+            override fun write(value: String) { this.value = value }
+        }
 
         /** A nearby Luna in this app's words (the iPhone app's subtitle, the status it has always shown). */
         fun nearbyCard(camera: NearbyCamera) = NearbyCardCopy(camera.name, "Insta360 · nearby", "Needs approval on the camera")
