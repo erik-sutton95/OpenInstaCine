@@ -631,7 +631,44 @@ class AppModel(
         session.disconnect()
     }
 
+    /**
+     * The open Multiview stage. Owned here, not by its screen, so whatever the root composes its
+     * tiles live until [closeMultiview].
+     */
+    var multiview by mutableStateOf<com.opencapture.openinstacine.monitor.multiview.MultiviewSession?>(null)
+        private set
+
+    /** The Multiview stage covers the camera home until it closes. */
+    val showsMultiview: Boolean get() = multiview != null
+
+    /** iOS `openMultiview`: the single-camera session hands the radio to the stage. */
+    fun openMultiview() {
+        if (!MonitorConfiguration.offersMultiview || multiview != null) return
+        disconnect()
+        multiview = com.opencapture.openinstacine.monitor.multiview.MultiviewSession(
+            appContext,
+            makeBackend = { MonitorConfiguration.createMultiviewMember(appContext) },
+            discover = { luna?.discover(com.opencapture.opencine.core.DiscoveryMode.PASSIVE) ?: kotlinx.coroutines.flow.emptyFlow() },
+            path = MonitorConfiguration.stationPath(appContext),
+        ).also {
+            it.recordConfirmation = { recordConfirmationEnabled }
+            val store = com.opencapture.opencine.appkit.MultiviewStagePreferencesStore(
+                appContext.getSharedPreferences("multiview-presentation", Context.MODE_PRIVATE), "stage",
+            )
+            it.coordinator.presentation.attachPersistence(store::load, store::save)
+        }
+    }
+
+    /** Closes the stage (its members' connections, never a camera command) and resumes discovery. */
+    fun closeMultiview() {
+        multiview?.close()
+        multiview = null
+        session.startScan()
+    }
+
     override fun close() {
+        multiview?.close()
+        multiview = null
         mediaLibrary.close()
         inspectorPreview.close()
         gimbalGamepad.stopListening()
