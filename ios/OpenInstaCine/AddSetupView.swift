@@ -52,7 +52,7 @@ private struct InstaSetupDestination: View {
                         kind: network.hotspot ? .phoneHotspot : .infrastructureNetwork,
                         network: network.ssid, secret: network.password))
                 return true
-            }, close: { done(nil) }, path: path
+            }, close: { done(nil) }, path: path, complete: { done(nil) }
         )
         .presentationBackground(MonitorTheme.background)
     }
