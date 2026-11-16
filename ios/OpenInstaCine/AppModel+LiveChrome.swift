@@ -80,9 +80,15 @@ extension AppModel: LiveChromeHost {
     var liveSignalBars: Int { session.liveSignalBars }
     var liveFPS: String { session.liveFPS }
     var gimbalPanelOpen: Bool { liveGimbalPanel != .none }
-    /// One camera, no Multiview: nothing borrows the session and there is no grid to return to.
-    var multiviewBorrowed: Bool { false }
-    var multiviewExit: (() -> Void)? { nil }
+    /// A Multiview tile's borrowed Live View: the grid icon returns to the stage.
+    var multiviewBorrowed: Bool { multiviewReturn != nil }
+    var multiviewExit: (() -> Void)? {
+        guard let back = multiviewReturn else { return nil }
+        return { [weak self] in
+            self?.shell.close()
+            back()
+        }
+    }
     func openSettings() { shell.open(.settings) }
     func openMedia() { shell.open(.media) }
     func resetFocusPoint() { session.resetFocusPoint() }
