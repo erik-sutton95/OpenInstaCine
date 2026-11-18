@@ -78,7 +78,11 @@ extension CameraSession {
 
     var currentShootingMode: ShootingMode? { ShootingMode.fromStatus(status.shootingMode) }
 
+    /// Whether a Multiview tile's stage admits a settings change now (always outside Multiview).
+    var admitsMultiviewControl: Bool { multiviewControlAdmission?() ?? true }
+
     var canSendControl: Bool {
+        guard admitsMultiviewControl else { return false }
         guard case .live = phase, hasControlLink else {
             controlNote = "Connect the camera to use its controls."
             return false
@@ -147,6 +151,11 @@ extension CameraSession {
                 guard let admission else { return true }
                 return target === self.lunaSession && source?.source == admission.source
                     && source?.admits(target?.commandOwner) == true && target?.current.epoch == epoch
+            }
+            // A Multiview tile's stage may have stopped admitting changes since this was made.
+            guard self.admitsMultiviewControl else {
+                if let onUnsent { onUnsent() } else { onFail?() }
+                return
             }
             do {
                 let reply: Data

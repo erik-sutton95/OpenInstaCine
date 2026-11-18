@@ -81,6 +81,9 @@ targets:
       # pair screens over the Luna integration.
       - package: OpenCine
         product: OpenCineAppKit
+      # Multiview's qualification budget (ResourceBudget).
+      - package: OpenCine
+        product: OpenCineMulticam
       # The shared reporting adapter: the app shell's reporting sink on the Sentry SDK
       # (sentry-cocoa comes with it, at the version OpenCine pins).
       - package: OpenCineSentryApple

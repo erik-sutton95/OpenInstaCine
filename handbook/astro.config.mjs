@@ -38,6 +38,7 @@ export default defineConfig({
             { label: 'Overview', slug: '' },
             { label: 'Setup and build', slug: 'guides/setup' },
             { label: 'Troubleshooting', slug: 'guides/troubleshooting' },
+            { label: 'Multiview', slug: 'guides/multiview' },
           ],
         },
         {

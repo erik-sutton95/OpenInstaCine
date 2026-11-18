@@ -49,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -59,6 +60,7 @@ import com.opencapture.opencine.appkit.AppShell
 import com.opencapture.opencine.appkit.PairingWizard
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.opencine.platform.LocalVPNProbe
+import com.opencapture.opencine.appkit.MultiviewScreen
 import com.opencapture.opencine.appkit.ShellActions
 import com.opencapture.opencine.appkit.ShellBrand
 import com.opencapture.openinstacine.monitor.diagnostics.ManualProblemReportDialog
@@ -185,7 +187,7 @@ private fun OpenInstaCineApp(model: AppModel) {
     LaunchedEffect(model.hdrDisplayActive, activity) {
         MonitorHDRDisplay.apply(activity, enabled = model.hdrDisplayActive)
     }
-    val hideNavigation = showLive && shell.cover == null
+    val hideNavigation = (showLive && shell.cover == null) || model.showsMultiview
     LaunchedEffect(activity, hideNavigation) {
         (activity as? MainActivity)?.hideSystemNavigation = hideNavigation
         (activity as? MainActivity)?.updateSystemBars()
@@ -198,7 +200,7 @@ private fun OpenInstaCineApp(model: AppModel) {
         reports = MonitorReportsOffer(AppDiagnostics.consent, AppDiagnostics.reporting, AppDiagnostics.host.product) {
             model.legal = MonitorLegalPage.PRIVACY
         },
-        reportsAllowed = model.reviewLaunch == null && !showLive && model.legal != MonitorLegalPage.PRIVACY,
+        reportsAllowed = model.reviewLaunch == null && !showLive && !model.showsMultiview && model.legal != MonitorLegalPage.PRIVACY,
         splash = com.opencapture.opencine.appkit.rememberMonitorLaunchSplash(enabled = model.reviewLaunch == null),
         // Knowing about screen recording only dims the HDR boost.
         onScreenRecording = { model.screenCaptured = it },
@@ -207,6 +209,9 @@ private fun OpenInstaCineApp(model: AppModel) {
             val cameras by model.cameras.state.collectAsState()
             val phase by model.session.phaseFlow.collectAsState()
             val radioOn by model.session.radioOn.collectAsState()
+            val stage = model.multiview?.takeIf { !showLive }
+            // The stage is a page over the shell, which keeps its own state underneath.
+            Box(if (stage != null) Modifier.clearAndSetSemantics { } else Modifier) {
             AppShell(
                 model.shell,
                 // The Luna integration declares its nearby tap (pair at once) and setup naming (none).
@@ -214,6 +219,7 @@ private fun OpenInstaCineApp(model: AppModel) {
                 ShellActions(
                     diagnostics = { DiagnosticCenter.shareReport(context, model.session) },
                     reportProblem = { model.problemReportOpen = true },
+                    multiview = if (MonitorConfiguration.offersMultiview) model::openMultiview else null,
                 ),
                 monitor = { LiveViewScreen(model) },
                 page = { cover -> ShellPage(model, cover) },
@@ -236,10 +242,12 @@ private fun OpenInstaCineApp(model: AppModel) {
                     content = { PairingCallouts(model, discovery) { requestBluetoothOn() } },
                 ),
             )
+            }
+            stage?.let { MultiviewScreen(it.coordinator, it, onClose = model::closeMultiview) }
             MonitorConfiguration.identity.sourceLabel?.let { label ->
                 if (showLive) Text(label, color = BrandColors.accent, style = LiveType.mono(10f), modifier = Modifier.align(Alignment.TopCenter).background(BrandColors.background).padding(horizontal = 8.dp, vertical = 3.dp))
             }
-            model.legal?.let { page -> if (!showLive) MonitorLegalDocumentScreen(InstaLegalDocuments, page) { model.legal = null } }
+            model.legal?.let { page -> if (!showLive && stage == null) MonitorLegalDocumentScreen(InstaLegalDocuments, page) { model.legal = null } }
         }
     }
     if (model.problemReportOpen) {

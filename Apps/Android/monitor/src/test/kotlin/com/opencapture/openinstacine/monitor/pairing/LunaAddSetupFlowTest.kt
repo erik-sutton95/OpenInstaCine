@@ -1,6 +1,6 @@
 package com.opencapture.openinstacine.monitor.pairing
 
-import com.opencapture.opencine.appkit.StationNetwork
+import com.opencapture.opencine.core.StationNetwork
 import com.opencapture.opencine.appkit.StationSetupPage
 import com.opencapture.opencine.core.IntegrationID
 import com.opencapture.opencine.core.RouteDraft
