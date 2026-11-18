@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- The monitor's lock button also holds the screen rotation, upside-down landscape
+  included, so a phone mounted inverted no longer flips when it is levelled.
+
 ### Changed
 
 - Android: the zoom chip can now read the Luna Ultra's 15x instead of stopping at 12x, as on

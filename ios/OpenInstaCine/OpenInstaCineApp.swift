@@ -2,9 +2,12 @@ import MonitorUI
 import OpenCineAppKit
 import OpenCineCameraControls
 import SwiftUI
+import UIKit
 
 @main
 struct OpenInstaCineApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         #if DEBUG
             AppDiagnostics.verification.prepareIfRequested()
@@ -25,6 +28,8 @@ struct OpenInstaCineApp: App {
         WindowGroup {
             root
                 .observeMonitorWindowGeometry()
+                // The monitor's lock button also holds the screen rotation.
+                .monitorRotationLock(appDelegate.monitorRotation)
                 // iPad ignores Info.plist `UIStatusBarHidden` after launch unless
                 // the hosting controller prefers it hidden. `~ipad` covers launch.
                 .statusBarHidden(true)
@@ -41,5 +46,17 @@ struct OpenInstaCineApp: App {
         #else
             AppRoot()
         #endif
+    }
+}
+
+/// Answers the app's supported orientations from the monitor's rotation hold, so the lock button
+/// keeps an inverted rig's screen from turning when the phone is levelled.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    let monitorRotation = MonitorRotationLock()
+
+    func application(
+        _ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?
+    ) -> UIInterfaceOrientationMask {
+        monitorRotation.supportedOrientations
     }
 }
