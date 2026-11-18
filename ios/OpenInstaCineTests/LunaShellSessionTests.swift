@@ -119,7 +119,7 @@ final class SessionIsolationTests: XCTestCase {
         XCTAssertEqual(a.zoomReadout, 15)
         XCTAssertEqual(b.zoomReadout, 6)
         XCTAssertEqual(CamFov.displayLabel(factor: a.zoomReadout, ceiling: a.zoomCeiling), "15×")
-        XCTAssertEqual(CamFov.displayLabel(factor: 15), "12×", "the DJI default is unchanged")
+        XCTAssertEqual(CamFov.displayLabel(factor: 25), "18×", "the DJI default stays the 18x lens scale")
 
         // EV calibration: A learns in auto; B (another camera, same transfer) keeps its own.
         let contextA = PictureEVContext(device: "A", transfer: .ilog, profile: "i-log", metering: "matrix")
