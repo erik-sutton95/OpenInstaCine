@@ -85,6 +85,7 @@ internal fun operatorSetupApp(model: AppModel) = OperatorSetupApp(
     lutPicker = { onClose -> LUTPicker(model = model, onClose = onClose) },
     // Every camera bucket, retaining the current gallery's operation fencing and revision.
     cacheSource = { monitorSettingsCacheSource(model.mediaLibrary, model.mediaStorage, model.mediaCacheParent) },
+    cameraPresets = model.cameraPresets,
 )
 
 @Composable

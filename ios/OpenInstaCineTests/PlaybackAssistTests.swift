@@ -728,7 +728,13 @@ final class LiveAssistStateOwnershipTests: XCTestCase {
         let restored = LiveAssistState(looks: MonitorLUTLooks(), storage: storage, keys: keys,
             cleanPinCases: LiveAssistTool.cleanPinCases)
         XCTAssertEqual(storage.data(forKey: keys.assist), legacy, "Opening must not rewrite the historical blob")
-        XCTAssertEqual(try canonical(XCTUnwrap(restored.encodedSnapshot())), canonicalLegacy)
+        // Fields added after this blob (OpenCine's safe-area guides) re-encode at their defaults;
+        // every historical field must still round-trip byte for byte.
+        var reencoded = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: XCTUnwrap(restored.encodedSnapshot())) as? [String: Any])
+        XCTAssertNotNil(reencoded.removeValue(forKey: "guideSafeAreas"))
+        XCTAssertEqual(try JSONSerialization.data(withJSONObject: reencoded, options: [.sortedKeys]), canonicalLegacy)
+        XCTAssertEqual(restored.guideSafeAreas, .standard)
         XCTAssertTrue(restored.instantReview)
         XCTAssertEqual(restored.falseColorScale, .stops)
         XCTAssertEqual(restored.lutExposureStops, -1.5)
