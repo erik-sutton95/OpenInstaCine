@@ -75,6 +75,8 @@ struct SettingsRootView: View {
             information: .init(theme: "Charcoal", protocolName: "Insta360 / BLE + Wi-Fi", version: Self.appVersionText,
                 themeHelp: SettingsHelpCopy.themeHelp, protocolHelp: "Camera control speaks Insta360's protocol over Bluetooth and the camera's Wi-Fi. No Insta360 SDK is bundled or required.",
                 versionHelp: MonitorSettingsCopy.versionHelp(app: "OpenInstaCine")))
+            // A watched feed is another phone's camera: its settings are not this phone's to write.
+            .withCameraPresets(model.isWatchingFeed ? nil : model.cameraPresets)
     }
 
     private func feedback() { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }

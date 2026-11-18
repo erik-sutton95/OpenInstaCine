@@ -3,6 +3,7 @@ package com.opencapture.openinstacine.monitor
 import android.content.Context
 import com.opencapture.openinstacine.monitor.diagnostics.AppDiagnostics
 import androidx.core.content.edit
+import com.opencapture.opencine.appkit.CameraSettingsPresetStore
 import com.opencapture.opencine.cameracontrols.OperatorPreferenceStore
 import com.opencapture.opencine.runtime.MonitorGlesUpscaler
 
@@ -21,4 +22,7 @@ object OperatorPrefs : OperatorPreferenceStore(file = "openpocketcine.operator",
         prefs(context).edit { putString(FEED_UPSCALER, value.label) }
         AppDiagnostics.reporting.noteFeedUpscaler(value.label)
     }
+
+    /** The exposure and white balance presets, in this preferences file. */
+    fun cameraPresetStore(context: Context): CameraSettingsPresetStore = CameraSettingsPresetStore(prefs(context))
 }
