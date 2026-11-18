@@ -154,6 +154,13 @@ class AppModel(
         }
     }
 
+    /**
+     * The monitor camera's exposure and white balance presets (Settings, Controls tab). A recall
+     * takes the Multiview tile's write gate, as every common setting write does.
+     */
+    val cameraPresets = com.opencapture.opencine.appkit.CameraSettingsPresetsModel(
+        OperatorPrefs.cameraPresetStore(appContext), shell) { session.multiviewDispatchAdmission() }
+
     val savedCameras: List<SavedCamera> get() = cameras.state.value.saved
     /**
      * The problem report, owned by the app root (A2-24): the cameras page and Settings both open
