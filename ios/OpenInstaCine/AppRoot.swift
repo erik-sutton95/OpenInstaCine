@@ -310,6 +310,12 @@ final class AppModel {
     }
     @ObservationIgnored lazy var operatorSession = MonitorOperatorSessionModel(
         shell: shell, assist: assist, display: OperatorPrefs.display)
+    /// The monitor camera's exposure and white balance presets (Settings, Controls tab), in the
+    /// operator preferences' defaults. A recall takes the Multiview tile's write gate, as every
+    /// common setting write does (`writeSetting`).
+    @ObservationIgnored lazy var cameraPresets = CameraSettingsPresetsModel(
+        store: CameraSettingsPresetStore(storage: .standard), shell: shell,
+        admission: { [weak self] in self?.session.multiviewDispatchAdmission() })
     var dispLive: MonitorDisplayChrome {
         get { operatorSession.live }
         set { operatorSession.live = newValue }

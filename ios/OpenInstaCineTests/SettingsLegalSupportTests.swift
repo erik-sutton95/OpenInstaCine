@@ -101,6 +101,10 @@ import XCTest
             rows[tab] = rendered.rows
         }
         XCTAssertTrue(["Record confirmation", "Haptics", "Keep screen awake"].allSatisfy { rows[.controls]?.contains($0) == true })
+        // The shared exposure and white balance presets card leads the Controls tab.
+        let controls = rows[.controls] ?? []
+        XCTAssertLessThan(try XCTUnwrap(controls.firstIndex(of: "Camera presets"), "\(controls)"),
+            try XCTUnwrap(controls.firstIndex(of: "Record confirmation"), "\(controls)"))
         XCTAssertTrue(rows[.display]?.contains("HDR display") == true, "\(rows[.display] ?? [])")
         XCTAssertTrue(rows[.storage]?.contains("Full Resolution Caching") == true, "\(rows[.storage] ?? [])")
         XCTAssertTrue(rows[.system]?.contains("Automatic error reports") == true, "\(rows[.system] ?? [])")
