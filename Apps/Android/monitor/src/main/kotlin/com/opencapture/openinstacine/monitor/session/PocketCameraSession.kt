@@ -143,15 +143,32 @@ import com.opencapture.opencine.media.LivePipelineCadence
  * advertises the capability and implements [CameraControls]; everything else is a no-op that
  * leaves the shared sheets on their unavailable state. Historical class name kept for JNI and
  * source compatibility with the upstream shell.
+ *
+ * [memberBackend]: a Multiview tile's session over the member's own connection (iOS
+ * `CameraSession(backend:)` with `multiviewMember`). The stage owns that connection and its
+ * repair: this session never runs its own recovery and never closes the backend. Without one the
+ * session builds and owns the monitor's backend.
  */
 class PocketCameraSession(
     context: Context,
     incidentSink: com.opencapture.opencine.media.FeedIncidentSink = AppDiagnostics.incidents,
     private val nativePinNow: () -> Long = SystemClock::elapsedRealtime,
+    memberBackend: CameraBackend? = null,
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val backend: CameraBackend = MonitorConfiguration.createBackend(appContext)
+    private val backend: CameraBackend = memberBackend ?: MonitorConfiguration.createBackend(appContext)
+    /** A Multiview tile's session: the stage's member link owns its connection and repair. */
+    val multiviewMember: Boolean = memberBackend != null
+
+    /**
+     * A Multiview tile's write gate (iOS `multiviewControlAdmission`, Pocket's control lease): asked
+     * when a settings change is made and again when it goes to the camera, so a change the stage no
+     * longer admits (a group record, a repair, the app in the background, a retired editor) never
+     * reaches it. Null outside Multiview.
+     */
+    @Volatile var multiviewControlAdmission: (() -> Boolean)? = null
+    val admitsMultiviewControl: Boolean get() = multiviewControlAdmission?.invoke() ?: true
     private val reportingOwner = Any()
     private val incidentSessionSink = AppDiagnostics.incidentSink(reportingOwner, incidentSink)
     private var feedIncidents: com.opencapture.opencine.media.FeedIncidentSource? = null
@@ -497,7 +514,8 @@ class PocketCameraSession(
                     }
                     ConnectionPhase.FAILED -> {
                         resetFrameClock(); stopGimbalAngle()
-                        if (holdsMonitor) beginSessionRecovery()
+                        // A Multiview member is repaired by its stage, never by this session.
+                        if (holdsMonitor && !multiviewMember) beginSessionRecovery()
                     }
                     ConnectionPhase.IDLE -> {
                         endFeedIncidentSession()
@@ -637,7 +655,8 @@ class PocketCameraSession(
         closed = true
         retireRecovery()
         cancelProgrammedMove()
-        synchronized(recoveryFrameLock) { backend.close(); decoder.reset() }
+        // A Multiview member's connection is the stage's to close.
+        synchronized(recoveryFrameLock) { if (!multiviewMember) backend.close(); decoder.reset() }
         scope.cancel()
     }
     fun noteSceneBecameInactive() {
@@ -863,6 +882,7 @@ class PocketCameraSession(
     }
 
     private fun canSendControl(): Boolean {
+        if (!admitsMultiviewControl) return false
         if (phase == ConnectionPhase.LIVE && can(CameraCapability.CAMERA_SETTINGS)) return true
         presentControlNote("Connect the camera to use its controls.")
         return false
@@ -879,7 +899,8 @@ class PocketCameraSession(
     ) {
         val link = controls ?: return
         scope.launch {
-            if (!admission()) return@launch
+            // A Multiview tile's stage may have stopped admitting changes since this was made.
+            if (!admission() || !admitsMultiviewControl) { if (!admitsMultiviewControl) onFail(); return@launch }
             val applied = link.request()
             if (!admission()) return@launch
             if (applied) {
@@ -890,6 +911,19 @@ class PocketCameraSession(
                 onFail()
             }
         }
+    }
+
+    /**
+     * One common setting write. A Multiview tile's write carries the stage's gate to the moment it
+     * is sent: the shared control queue asks it again before the camera gets the change.
+     */
+    private fun setControl(value: SettingValue, label: String) {
+        val gate = multiviewControlAdmission
+        val common = control.state.value.session
+        val snapshot = common?.snapshots?.value
+        if (gate == null || common == null || snapshot == null) return control.set(value, label)
+        control.set(value, label, com.opencapture.opencine.core.CommandDispatchAdmission(
+            snapshot.session, snapshot.epoch, isCurrent = gate, submit = { common.submit(it) }))
     }
 
     /** Coalesces rapid drum edits into one send per key per ~120 ms, latest wins (iOS `LunaExposureCoalescer`). */
@@ -939,12 +973,12 @@ class PocketCameraSession(
     fun setIsoIndex(index: Int) {
         if (!canSendControl()) return
         val iso = if (index == 0) ISOValue.Auto else ISOValue.Manual(CameraCommands.isoValue(index) ?: return)
-        control.set(SettingValue.Iso(iso), "ISO ${CameraCommands.isoLabel(index)}")
+        setControl(SettingValue.Iso(iso), "ISO ${CameraCommands.isoLabel(index)}")
     }
 
     fun setShutterDenom(denom: Int) {
         if (!canSendControl() || denom <= 0) return
-        control.set(SettingValue.Shutter(ShutterValue.Duration(Rational(1, denom))), "1/$denom")
+        setControl(SettingValue.Shutter(ShutterValue.Duration(Rational(1, denom))), "1/$denom")
     }
 
     /** Only explicit angle choices write the saved intent; delayed telemetry never does. */
@@ -959,14 +993,14 @@ class PocketCameraSession(
     fun setExpoMode(mode: Int) {
         if (!canSendControl()) return
         if (mode == CameraCommands.EXPO_AUTO) {
-            control.set(SettingValue.Iso(ISOValue.Auto), "Auto exposure")
-            return control.set(SettingValue.Shutter(ShutterValue.Auto), "Auto exposure")
+            setControl(SettingValue.Iso(ISOValue.Auto), "Auto exposure")
+            return setControl(SettingValue.Shutter(ShutterValue.Auto), "Auto exposure")
         }
         // Manual needs a shutter: keep the current one, else the nearest offered 180 degrees.
         val status = _status.value
         val wanted = status.shutterDenom.takeIf { it > 0 } ?: (maxOf(status.fps, 25) * 2)
         val denom = status.availableShutterDenoms.minByOrNull { abs(it - wanted) } ?: wanted
-        control.set(SettingValue.Shutter(ShutterValue.Duration(Rational(1, denom))), "Manual exposure")
+        setControl(SettingValue.Shutter(ShutterValue.Duration(Rational(1, denom))), "Manual exposure")
     }
 
     fun setEv(thirds: Int) {
@@ -1392,13 +1426,13 @@ class PocketCameraSession(
 
     // White balance: kelvin 2000...10000 or auto; the Luna has no tint.
     fun setWhiteBalanceAuto(tint: Int? = null) {
-        if (canSendControl()) control.set(SettingValue.WhiteBalance(WhiteBalanceValue.Auto), "WB Auto")
+        if (canSendControl()) setControl(SettingValue.WhiteBalance(WhiteBalanceValue.Auto), "WB Auto")
     }
     fun setWhiteBalance(kelvin: Int, tint: Int) {
         if (!canSendControl()) return
         // fw 1.1.15 applies kelvin 3.5 to 3.9 s after the SET; the session waits for the readback.
         val clamped = kelvin.coerceIn(2_000, 10_000)
-        control.set(SettingValue.WhiteBalance(WhiteBalanceValue.Kelvin(clamped)), "WB ${clamped}K")
+        setControl(SettingValue.WhiteBalance(WhiteBalanceValue.Kelvin(clamped)), "WB ${clamped}K")
     }
     // AF-S, AF-C and Product Showcase (iOS `setFocusOption`); the shared drum sends AF-C then a track, so the last wins.
     fun setFocusMode(continuous: Boolean) = setFocusOption(if (continuous) FocusOption.CONTINUOUS_DEFAULT else FocusOption.SINGLE)
