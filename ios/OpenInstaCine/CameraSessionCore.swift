@@ -31,7 +31,20 @@ extension CameraSession {
         _ value: SettingValue, label: String, admission: CommandDispatchAdmission?
     ) {
         if let admission { control.set(value, label: label, admission: admission) }
+        else if let gated = multiviewDispatchAdmission() { control.set(value, label: label, admission: gated) }
         else { control.set(value, label: label) }
+    }
+
+    /// A Multiview tile's change carries the stage's write gate to the moment it is sent: the shared
+    /// control queue asks it again before the camera gets the change. Nil outside Multiview.
+    func multiviewDispatchAdmission() -> CommandDispatchAdmission? {
+        guard let gate = multiviewControlAdmission, let target = lunaSession else { return nil }
+        let snapshot = target.current
+        return CommandDispatchAdmission(
+            session: snapshot.session, epoch: snapshot.epoch,
+            // The shared control queue dispatches on the main actor.
+            isCurrent: { MainActor.assumeIsolated { gate() } },
+            submit: { command in await target.submit(command) })
     }
 
     static let notApplied = " was not applied by the camera."
@@ -160,15 +173,15 @@ extension CameraSession {
         guard canSendControl else { return }
         autoExposureLock = nil
         if mode == .auto {
-            control.set(.iso(.auto), label: "Auto exposure")
-            control.set(.shutter(.auto), label: "Auto exposure")
+            writeSetting(.iso(.auto), label: "Auto exposure", admission: nil)
+            writeSetting(.shutter(.auto), label: "Auto exposure", admission: nil)
             return
         }
         // Manual needs a shutter: keep the current one, else the nearest offered 180 degrees.
         let fps = max(status.fps, 25)
         let wanted = status.shutterDenom > 0 ? status.shutterDenom : fps * 2
         let denom = status.availableShutterDenoms.min { abs($0 - wanted) < abs($1 - wanted) } ?? wanted
-        control.set(.shutter(.duration(Rational(1, denom))), label: "Manual exposure")
+        writeSetting(.shutter(.duration(Rational(1, denom))), label: "Manual exposure", admission: nil)
     }
 
     func setWhiteBalanceAuto(tint: Int? = nil) {

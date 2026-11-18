@@ -1449,15 +1449,15 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         }
     }
 
-    /// One camera, no multicam budget: the cameras page offers no Multiview, on main and on the
-    /// integration. (The Pocket station-wizard test this replaced cannot run here.)
-    func testCamerasPageOffersNoMultiview() {
+    /// The cameras page offers Multiview (the grid icon) in both orientations, as Pocket's does; the
+    /// stage and its network wizard open only when it is tapped.
+    func testCamerasPageOffersMultiview() {
         app.launchEnvironment.merge(ReviewLaunch(screen: .cameras).environment) { $1 }
         app.launch()
         for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
             rotate(orientation)
             XCTAssertTrue(app.staticTexts["Your cameras"].firstMatch.waitForExistence(timeout: 10))
-            XCTAssertFalse(app.buttons["cameras.multiview"].exists)
+            XCTAssertTrue(app.buttons["cameras.multiview"].exists)
             XCTAssertFalse(app.descendants(matching: .any)["multiview.setup.wifi"].exists)
         }
     }
