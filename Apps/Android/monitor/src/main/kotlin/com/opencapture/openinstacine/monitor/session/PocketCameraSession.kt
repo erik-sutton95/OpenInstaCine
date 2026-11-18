@@ -918,12 +918,17 @@ class PocketCameraSession(
      * is sent: the shared control queue asks it again before the camera gets the change.
      */
     private fun setControl(value: SettingValue, label: String) {
-        val gate = multiviewControlAdmission
-        val common = control.state.value.session
-        val snapshot = common?.snapshots?.value
-        if (gate == null || common == null || snapshot == null) return control.set(value, label)
-        control.set(value, label, com.opencapture.opencine.core.CommandDispatchAdmission(
-            snapshot.session, snapshot.epoch, isCurrent = gate, submit = { common.submit(it) }))
+        val admission = multiviewDispatchAdmission() ?: return control.set(value, label)
+        control.set(value, label, admission)
+    }
+
+    /** A Multiview tile's write gate as a dispatch admission (iOS `multiviewDispatchAdmission`). Null outside Multiview. */
+    fun multiviewDispatchAdmission(): com.opencapture.opencine.core.CommandDispatchAdmission? {
+        val gate = multiviewControlAdmission ?: return null
+        val common = control.state.value.session ?: return null
+        val snapshot = common.snapshots.value
+        return com.opencapture.opencine.core.CommandDispatchAdmission(
+            snapshot.session, snapshot.epoch, isCurrent = gate, submit = { common.submit(it) })
     }
 
     /** Coalesces rapid drum edits into one send per key per ~120 ms, latest wins (iOS `LunaExposureCoalescer`). */
