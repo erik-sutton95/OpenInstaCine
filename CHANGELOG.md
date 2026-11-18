@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- The monitor's lock button also holds the screen rotation, upside-down landscape
+  included, so a phone mounted inverted no longer flips when it is levelled.
+
 ## [0.1.3] - 2026-10-30
 
 Public beta, cumulative since open beta build 26 (0.1.0). The operator-facing iOS and
