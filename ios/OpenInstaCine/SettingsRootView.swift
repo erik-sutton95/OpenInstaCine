@@ -77,6 +77,7 @@ struct SettingsRootView: View {
                 versionHelp: MonitorSettingsCopy.versionHelp(app: "OpenInstaCine")))
             // A watched feed is another phone's camera: its settings are not this phone's to write.
             .withCameraPresets(model.isWatchingFeed ? nil : model.cameraPresets)
+            .withLiveStream(model.isWatchingFeed ? nil : model.liveStream)
     }
 
     private func feedback() { OperatorSettingsHaptics.selection(enabled: model.hapticsEnabled) }
