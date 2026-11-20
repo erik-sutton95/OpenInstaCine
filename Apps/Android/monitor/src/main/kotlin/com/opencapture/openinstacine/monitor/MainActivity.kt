@@ -10,6 +10,7 @@ import com.opencapture.opencine.vocabulary.MediaHTTP
 import com.opencapture.opencine.appkit.DiscoveryRestart
 import com.opencapture.opencine.appkit.MonitorActivityLaunch
 import com.opencapture.opencine.appkitnative.LiveStreamHostEffects
+import com.opencapture.opencine.appkitnative.LiveStreamRootIndicator
 import com.opencapture.opencine.appkit.MonitorAppRoot
 import com.opencapture.opencine.appkit.MonitorLaunchBrand
 import com.opencapture.opencine.appkit.MonitorReportsOffer
@@ -38,6 +39,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -253,6 +255,11 @@ private fun OpenInstaCineApp(model: AppModel) {
                 if (showLive) Text(label, color = BrandColors.accent, style = LiveType.mono(10f), modifier = Modifier.align(Alignment.TopCenter).background(BrandColors.background).padding(horizontal = 8.dp, vertical = 3.dp))
             }
             model.legal?.let { page -> if (!showLive && stage == null) MonitorLegalDocumentScreen(InstaLegalDocuments, page) { model.legal = null } }
+            // A stream that outlives the monitor (camera lost, Multiview opened) stays visible
+            // and stoppable here; hidden while the monitor shows its Go live control.
+            model.liveStream?.let {
+                LiveStreamRootIndicator(it, Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(top = 8.dp))
+            }
         }
     }
     if (model.problemReportOpen) {

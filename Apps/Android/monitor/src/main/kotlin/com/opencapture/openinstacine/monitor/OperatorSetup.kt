@@ -86,6 +86,7 @@ internal fun operatorSetupApp(model: AppModel) = OperatorSetupApp(
     // Every camera bucket, retaining the current gallery's operation fencing and revision.
     cacheSource = { monitorSettingsCacheSource(model.mediaLibrary, model.mediaStorage, model.mediaCacheParent) },
     cameraPresets = model.cameraPresets,
+    liveStream = { com.opencapture.opencine.appkitnative.liveStreamSettingsSource(model.liveStream) },
 )
 
 @Composable
