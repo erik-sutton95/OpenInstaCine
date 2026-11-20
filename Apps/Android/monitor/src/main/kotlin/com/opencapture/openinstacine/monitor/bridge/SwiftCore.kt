@@ -1,6 +1,7 @@
 package com.opencapture.openinstacine.monitor.bridge
 
 import android.util.Log
+import com.opencapture.opencine.streaming.StreamingNative
 
 /**
  * JNI binding to `libOpenInstaCineAndroid.so`: OpenInstaViewCore plus
@@ -10,6 +11,8 @@ object SwiftCore : com.opencapture.opencine.cameracontrols.MonitorFeedEffectsPac
     override val isAvailable: Boolean by lazy {
         try {
             System.loadLibrary("OpenInstaCineAndroid")
+            // The same library exports live streaming's run controller (OpenCineStreamingAndroid).
+            StreamingNative.load("OpenInstaCineAndroid")
             true
         } catch (e: UnsatisfiedLinkError) {
             // Nothing that reads this flag can work without the core, and the

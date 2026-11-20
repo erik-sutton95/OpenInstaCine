@@ -11,6 +11,10 @@
   with Stop. Untested on hardware.
 - The monitor's lock button also holds the screen rotation, upside-down landscape
   included, so a phone mounted inverted no longer flips when it is levelled.
+- Android: live streaming of the camera picture (with the monitor LUT, without assists) over
+  RTMPS from the Go live control at the top of the monitor, while the camera is on a Wi-Fi or
+  hotspot setup. The stream ends when the app leaves the screen. The Live stream settings card
+  for the service and stream key follows with the next OpenCine update.
 
 ### Changed
 

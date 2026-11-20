@@ -11,6 +11,7 @@ import com.opencapture.opencine.appkitnative.MonitorLiveFeedIntegration
 import com.opencapture.opencine.cameracontrols.rememberMonitorFeedEffectsPlan
 import com.opencapture.opencine.media.FeedEffectsRenderPlan
 import com.opencapture.opencine.runtime.GlesPresentationOptions
+import com.opencapture.opencine.runtime.MonitorCleanPictureTap
 import com.opencapture.opencine.vocabulary.CameraStatus
 import com.opencapture.openinstacine.monitor.OperatorPrefs
 import com.opencapture.openinstacine.monitor.lut.appLutLibrary
@@ -19,8 +20,15 @@ import com.opencapture.openinstacine.monitor.diagnostics.DiagnosticCenter
 import com.opencapture.openinstacine.monitor.session.LunaCameraLUTProfile
 
 /** The shared native feeds on the Luna clip ceiling, this app's crash guard, journal and upscaler. */
-internal val LiveFeed = MonitorLiveFeedIntegration(LunaScopeExposureCeiling.PROFILE, appVulkanCrashGuard,
-    DiagnosticCenter::log, { GlesPresentationOptions(OperatorPrefs.feedUpscaler(it)) })
+internal val LiveFeed = liveFeedIntegration()
+
+/**
+ * [LiveFeed]'s wiring with [cleanPicture], the tap a live stream carries; the monitor's Live View
+ * feeds it (never playback or Multiview).
+ */
+internal fun liveFeedIntegration(cleanPicture: MonitorCleanPictureTap? = null) =
+    MonitorLiveFeedIntegration(LunaScopeExposureCeiling.PROFILE, appVulkanCrashGuard,
+        DiagnosticCenter::log, { GlesPresentationOptions(OperatorPrefs.feedUpscaler(it)) }, cleanPicture = cleanPicture)
 
 /** The live, playback or inspector plan through the Luna camera looks. */
 @Composable

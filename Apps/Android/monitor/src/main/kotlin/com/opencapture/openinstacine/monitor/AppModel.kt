@@ -35,6 +35,12 @@ import com.opencapture.opencine.vocabulary.GimbalRamp
 import com.opencapture.opencine.vocabulary.GimbalSpeed
 import com.opencapture.opencine.vocabulary.VideoFormat
 import com.opencapture.openinstacine.monitor.bridge.SwiftCore
+import com.opencapture.openinstacine.monitor.feed.LiveFeed
+import com.opencapture.openinstacine.monitor.feed.liveFeedIntegration
+import com.opencapture.opencine.appkitnative.LiveStreamCoordinator
+import com.opencapture.opencine.appkitnative.MonitorLiveFeedIntegration
+import com.opencapture.opencine.runtime.MonitorCleanPictureTap
+import com.opencapture.opencine.streaming.StreamingNative
 import com.opencapture.opencine.insta360.shell.CameraRecordFormat
 import com.opencapture.opencine.insta360.shell.ConnectionPhase
 import com.opencapture.opencine.insta360.shell.label
@@ -64,6 +70,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
@@ -104,6 +111,25 @@ class AppModel(
     val inspectorPreview = com.opencapture.opencine.runtime.InspectorPreviewPipeline(scopeBus,
         { com.opencapture.opencine.runtime.NativeGlBackend.create(it) }, logTag = "OpcInspector")
     override val assist = createLiveAssistState(appContext)
+
+    /**
+     * Live streaming of the monitor camera: composed on the monitor's own model when the Swift
+     * library (which exports the stream engine) loaded; never on a borrowed Multiview tile model.
+     */
+    private val streams = !isBorrowed && SwiftCore.isAvailable && StreamingNative.isAvailable
+    /** The clean picture (LUT on, assists off) a live stream carries; this model owns and closes it. */
+    private val cleanPicture: MonitorCleanPictureTap? = if (streams) MonitorCleanPictureTap(appContext) else null
+    /** The Live View's feed wiring: the shared one, plus the clean picture tap when streaming is composed. */
+    internal val liveFeed: MonitorLiveFeedIntegration = cleanPicture?.let(::liveFeedIntegration) ?: LiveFeed
+    /** The Go live control, the stream and its settings values; `null` when streaming is not composed. */
+    val liveStream: LiveStreamCoordinator? =
+        cleanPicture?.let { LiveStreaming.coordinator(appContext, session, it, scope) }?.also { stream ->
+            // Eligibility and quality follow the connection and the decoded picture.
+            scope.launch {
+                combine(session.phaseFlow, session.decoder.hasPicture, session.decoder.isVerticalPicture) { _, _, _ -> }
+                    .collect { stream.refresh() }
+            }
+        }
 
     private val luna = if (isBorrowed) null else session.lunaPort?.let(::LunaIntegration)
 
@@ -719,6 +745,9 @@ class AppModel(
     }
 
     override fun close() {
+        // A running stream ends before its picture tap closes; neither touches the camera.
+        liveStream?.stop()
+        cleanPicture?.close()
         multiview?.close()
         multiview = null
         mediaLibrary.close()
