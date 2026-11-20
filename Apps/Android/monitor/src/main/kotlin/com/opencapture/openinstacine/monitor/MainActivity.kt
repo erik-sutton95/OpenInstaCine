@@ -9,6 +9,7 @@ import com.opencapture.openinstacine.monitor.media.InstaMediaShare
 import com.opencapture.opencine.vocabulary.MediaHTTP
 import com.opencapture.opencine.appkit.DiscoveryRestart
 import com.opencapture.opencine.appkit.MonitorActivityLaunch
+import com.opencapture.opencine.appkitnative.LiveStreamHostEffects
 import com.opencapture.opencine.appkit.MonitorAppRoot
 import com.opencapture.opencine.appkit.MonitorLaunchBrand
 import com.opencapture.opencine.appkit.MonitorReportsOffer
@@ -182,6 +183,10 @@ private fun OpenInstaCineApp(model: AppModel) {
             discovery.request()
         }
     }
+
+    // Live streaming's host rules for the whole app, not only while the monitor shows: the screen
+    // stays awake while a stream runs, and leaving the app ends it with a restart offer.
+    model.liveStream?.let { LiveStreamHostEffects(it) }
 
     val showLive = shell.monitor != null
     LaunchedEffect(model.hdrDisplayActive, activity) {

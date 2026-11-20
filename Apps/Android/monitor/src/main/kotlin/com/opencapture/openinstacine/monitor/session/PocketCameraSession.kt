@@ -351,6 +351,15 @@ class PocketCameraSession(
 
     var connectedCamera: FoundCamera? = null
     var joinedSSID: String? = null
+    /**
+     * How this session last asked the backend to reach the camera (its own Wi-Fi, or a Wi-Fi or
+     * hotspot setup); `null` before any connect and for a backend that is not a Luna port. Live
+     * streaming reads it with [cameraHost]; it never sends anything to the camera.
+     */
+    @Volatile var requestedRoute: com.opencapture.opencine.insta360.luna.LunaRoute? = null
+        private set
+    /** Where the Luna backend reaches the camera now (its access point or a setup's address); `null` otherwise. */
+    val cameraHost: String? get() = (backend as? com.opencapture.opencine.insta360.luna.LunaBackend)?.cameraHost
     /** iOS `supportsFocusMode`: AF-S, AF-C and Product Showcase (option 93). */
     val supportsFocusMode: Boolean get() = controls != null && controlCapabilities().focus.isOffered
     val supportsTapFocus: Boolean get() = controls != null && controlCapabilities().tapFocus.isOffered
@@ -598,6 +607,7 @@ class PocketCameraSession(
                 holdReportingCameraPath()
                 retireRecovery()
                 cancelProgrammedMove()
+                requestedRoute = route
                 synchronized(recoveryFrameLock) {
                     decoder.reset(); videoPackets = 0; hasVideoFormat = false
                     port.connect(id, route)
@@ -753,6 +763,8 @@ class PocketCameraSession(
         override suspend fun connect(attempt: SessionRecoveryEpisode.Attempt): Boolean {
             val id = recoveryCameraId ?: return false
             recoverySource = synchronized(recoveryFrameLock) {
+                // Recovery reconnects over the camera's own Wi-Fi.
+                if (lunaPort != null) requestedRoute = com.opencapture.opencine.insta360.luna.LunaRoute.CameraWiFi()
                 backend.connect(id)
                 backend.frameConnectionGeneration
             }

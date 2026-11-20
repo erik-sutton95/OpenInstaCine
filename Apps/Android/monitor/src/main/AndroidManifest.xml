@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Live streaming's sound, asked for at Go live. No foreground service: leaving the app ends a stream. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Android 15+: drop the HDR panel boost while the screen is being recorded. -->
     <uses-permission android:name="android.permission.DETECT_SCREEN_RECORDING" />

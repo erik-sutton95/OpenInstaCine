@@ -59,6 +59,8 @@ let package = Package(
                 "OpenInstaViewCore",
                 .product(name: "OpenCineCameraVocabulary", package: "OpenCine"),
                 .product(name: "OpenCineJNISupport", package: "OpenCine"),
+                // Live streaming's run controller, exported to Kotlin as `StreamingNative`.
+                .product(name: "OpenCineStreamingAndroid", package: "OpenCine"),
             ]
         ),
         .testTarget(
