@@ -92,6 +92,9 @@ struct LunaSessionRecoveryOwnerTests {
   /// Hardware pass 7.2a follow-up: iOS suspends the app in the background, but the continuous
   /// budget clock kept counting, so a return after more than 180 s met "tap Retry" without a
   /// single attempt. The scene going inactive holds attempts and the budget until it is active.
+  ///
+  /// Deterministic on the manual clock: the clock moves directly and each step waits for the
+  /// sleeper or state it needs, never on a fixed number of yields or on `drive` across a pause.
   @Test func sceneInactiveHoldsRecoveryAttemptsAndBudgetUntilActive() async {
     let peer = Peer()
     peer.live = false
@@ -102,23 +105,23 @@ struct LunaSessionRecoveryOwnerTests {
     }
     session.noteSceneBecameInactive()
     session.beginSessionRecovery(reason: "SIMULATED drop while backgrounded")
-    // Ten minutes away, in steps so every task the episode starts can sleep and wake.
-    while peer.clock.time < 600 {
-      await peer.clock.settle()
-      peer.clock.advance(to: peer.clock.time + 10)
-    }
+    #expect(await peer.clock.until { peer.clock.hasSleeper(endingAt: 2.5) })
+    #expect(!peer.clock.hasSleeper(endingAt: 180), "the card grace runs, the budget does not")
+    // Ten minutes away.
+    peer.clock.advance(to: 600)
     await peer.clock.settle()
     #expect(peer.connects == 0, "no attempt while the scene is inactive")
     #expect(session.sessionRecovery == .retrying(attempt: 1, maxAttempts: 8))
     #expect(session.holdsMonitor)
     session.noteSceneBecameActive()
     #expect(
-      await peer.clock.drive {
-        if case .waitingForOperator = session.sessionRecovery { return true }
-        return false
-      })
-    #expect(peer.connects > 0)
-    #expect(abs(peer.clock.time - 780) < 1e-6, "the budget counts active time only")
+      await peer.clock.until { peer.connects == 1 && peer.clock.hasSleeper(endingAt: 780) },
+      "the scene's return dials and starts the whole 180 s budget")
+    peer.clock.advance(to: 779.9)
+    await peer.clock.settle()
+    #expect(Self.isRetrying(session), "the budget counts active time only")
+    peer.clock.advance(to: 780)
+    #expect(await peer.clock.until { Self.isWaitingForOperator(session) })
   }
 
   /// A running episode that already spent part of its budget keeps only the rest after the
@@ -132,29 +135,45 @@ struct LunaSessionRecoveryOwnerTests {
       session.decoder.close()
     }
     session.beginSessionRecovery(reason: "SIMULATED drop before backgrounding")
-    #expect(await peer.clock.drive { peer.clock.time >= 60 })
-    let connects = peer.connects
-    #expect(connects > 0)
-    let paused = peer.clock.time
+    // Attempt 1 (90 s deadline) polls every 100 ms; the 180 s budget runs from the drop.
+    #expect(
+      await peer.clock.until {
+        peer.connects == 1 && peer.clock.hasSleeper(endingAt: 0.1)
+          && peer.clock.hasSleeper(endingAt: 180)
+      })
+    peer.clock.advance(to: 60)
+    #expect(await peer.clock.until { peer.clock.hasSleeper(endingAt: 60.1) })
     session.noteSceneBecameInactive()
-    while peer.clock.time < paused + 600 {
-      await peer.clock.settle()
-      peer.clock.advance(to: peer.clock.time + 10)
-    }
+    #expect(
+      await peer.clock.until { !peer.clock.hasSleeper(endingAt: 180) },
+      "the scene going inactive stops the budget clock")
+    // Ten minutes away: attempt 1 passes its deadline while the scene is inactive.
+    peer.clock.advance(to: 660)
     await peer.clock.settle()
-    #expect(peer.connects == connects, "no new attempt while inactive")
-    #expect({
-      if case .retrying = session.sessionRecovery { return true }
-      return false
-    }())
-    let resumed = peer.clock.time
+    #expect(peer.connects == 1, "no new attempt while inactive")
+    #expect(session.sessionRecovery == .retrying(attempt: 1, maxAttempts: 8))
     session.noteSceneBecameActive()
     #expect(
-      await peer.clock.drive {
-        if case .waitingForOperator = session.sessionRecovery { return true }
-        return false
-      })
-    #expect(abs(peer.clock.time - resumed - (180 - paused)) < 1e-6, "only the remaining budget runs")
+      await peer.clock.until { peer.connects == 2 && peer.clock.hasSleeper(endingAt: 780) },
+      "the scene's return dials and runs only the 120 s still left")
+    #expect(
+      session.sessionRecovery == .retrying(attempt: 1, maxAttempts: 8),
+      "the attempt that ran out while inactive is not counted")
+    peer.clock.advance(to: 779.9)
+    await peer.clock.settle()
+    #expect(Self.isRetrying(session))
+    peer.clock.advance(to: 780)
+    #expect(await peer.clock.until { Self.isWaitingForOperator(session) })
+  }
+
+  private static func isRetrying(_ session: CameraSession) -> Bool {
+    if case .retrying = session.sessionRecovery { return true }
+    return false
+  }
+
+  private static func isWaitingForOperator(_ session: CameraSession) -> Bool {
+    if case .waitingForOperator = session.sessionRecovery { return true }
+    return false
   }
 
   @Test func cardGraceAndDropStormUseSharedOwnerAndOperatorRetry() async {
@@ -248,6 +267,20 @@ struct LunaSessionRecoveryOwnerTests {
     }
 
     func settle() async { for _ in 0..<64 { await Task.yield() } }
+
+    /// Yields until `done` holds: waits on the episode's own progress, never on time.
+    func until(_ done: () -> Bool) async -> Bool {
+      for _ in 0..<100_000 {
+        if done() { return true }
+        await Task.yield()
+      }
+      return done()
+    }
+
+    /// A sleep is registered that ends at `end` on the manual clock.
+    func hasSleeper(endingAt end: Double) -> Bool {
+      sleepers.contains { abs($0.at - end) < 1e-6 }
+    }
 
     func drive(until done: () -> Bool) async -> Bool {
       for _ in 0..<20_000 {
