@@ -4,6 +4,11 @@
 
 ### Added
 
+- iOS: live streaming of the monitor's camera to Twitch, YouTube, Facebook, Instagram or a Custom
+  server (plain `rtmp://` allowed there with a warning, for TikTok LIVE): Settings, Sharing, Live
+  stream, then Go live over the picture. Camera Wi-Fi blocks it; a shared Wi-Fi network or the
+  phone's hotspot allows it. While the monitor is closed, a Live pill at the top shows the stream
+  with Stop. Untested on hardware.
 - The monitor's lock button also holds the screen rotation, upside-down landscape
   included, so a phone mounted inverted no longer flips when it is levelled.
 - Android: live streaming of the camera picture (with the monitor LUT, without assists) over

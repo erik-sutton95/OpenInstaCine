@@ -38,6 +38,9 @@ final class AppModel {
     /// Why Bluetooth discovery is not running (off or not allowed); the pair wizard shows it as
     /// its failure.
     var discoveryFailure: ConnectionFailure?
+    /// Live streaming (the shared OpenCine coordinator); only the app's root model streams, never
+    /// a Multiview tile's borrowed model.
+    private(set) var liveStream: LiveStreamCoordinator?
 
     init(session: CameraSession? = nil) {
         #if targetEnvironment(simulator)
@@ -48,6 +51,7 @@ final class AppModel {
         #if DEBUG && targetEnvironment(simulator)
             if MonitorUIReview.isActive { cameraMedia = MonitorUIReview.cameraMedia(storage: mediaStorage) }
         #endif
+        let isRoot = session == nil
         let session = session ?? CameraSession(backend: Self.makeBackend(), cameraMedia: cameraMedia, mediaStorage: mediaStorage)
         self.session = session
         var port: any LunaConnectPort = session
@@ -81,6 +85,7 @@ final class AppModel {
             self.assist.inspectorSceneActive = active
             if active { self.session.noteSceneBecameActive() } else { self.session.noteSceneBecameInactive() }
         }
+        if isRoot { liveStream = makeLiveStream() }
     }
 
     /// A nearby Luna as the cameras page and pair page have always shown it.
@@ -951,7 +956,8 @@ struct AppRoot: View {
         .onChange(of: model.relayClient.status) { _, status in
             model.noteWatcherStatusChanged(status)
         }
-        .monitorScreenWake(enabled: model.keepScreenAwake)
+        .monitorScreenWake(enabled: model.keepScreenAwake || model.liveStream?.isRunning == true)
+        .liveStreamLifecycle(model.liveStream)
         .monitorRemoteShutter(enabled: model.remoteShutterEnabled,
             liveViewFront: model.remoteShutterLiveViewFront, subsystem: "OpenInstaCine") { model.remoteShutterRecord() }
         .onChange(of: model.gimbalAnalogHeld) { _, held in

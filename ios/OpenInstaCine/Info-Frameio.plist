@@ -47,6 +47,8 @@
 	<true/>
 	<key>NSMotionUsageDescription</key>
 	<string>OpenInstaCine uses headphone motion so AirPods can aim the gimbal.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>OpenInstaCine uses the microphone for the sound of a live stream you start.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_opc-mon._tcp</string>
