@@ -135,7 +135,8 @@ fun LiveViewScreen(model: AppModel) {
                 model.endGimbalStick()
                 if (reason == MonitorInputBlock.LOCK) session.cancelProgrammedMove()
             }, modifier = modifier, picture = picture)
-        // Go live, its status, notices and warnings at the top center of the picture.
-        model.liveStream?.let { LiveStreamOverlay(it) }
+        // Go live, its status, notices and warnings under the timecode block (top right); they
+        // step aside while the zoom ruler is open.
+        model.liveStream?.let { LiveStreamOverlay(it, hidden = chrome.session.zoomDialOpen) }
     }
 }
