@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Recording in I-Log with Color Recovery no longer stops the take: when the record start pauses
+  the camera's picture, the app keeps asking for a fresh picture instead of restarting live (which
+  ended the recording and dropped back to monitoring). Live is restarted during a take only after
+  30 s without video. Same on Android and in Multiview (OpenCine feed-stall ladder).
+
 ## [0.2.0] - 2026-11-22
 
 Beta, cumulative since 0.1.3. The operator-facing iOS and Android lists are in the

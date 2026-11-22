@@ -884,14 +884,20 @@ final class CameraSession {
 
     /// Luna video is TCP: no loss, but the encoder can pause. The shared `LunaFeedStall` ladder
     /// asks for keyframes, restarts live a bounded number of times, then hands the stall to
-    /// bounded session recovery so Reconnecting always ends.
+    /// bounded session recovery so Reconnecting always ends. While the camera records (or a
+    /// record start or stop is in flight) it only asks for keyframes until the long recording
+    /// bound: a record start with Color Recovery on can pause the encoder, and a restart mid-take
+    /// ended the take (OPENINSTACINE-IOS-S).
     private func watchFeed() {
         guard case .live = phase, !isBrowsingMedia, !sessionRecovery.isRecovering, !multiviewMember else {
             feedStall = LunaFeedStall()
             return
         }
         guard let silence = backend.secondsSinceVideo else { return }
-        switch feedStall.tick(silence: silence, now: ProcessInfo.processInfo.systemUptime) {
+        let recording = status.isRecording || control.recordPending
+        switch feedStall.tick(
+            silence: silence, now: ProcessInfo.processInfo.systemUptime, recording: recording)
+        {
         case .none: break
         case .requestKeyframe: requestKeyframe(reason: "stall")
         case .restartLive:
