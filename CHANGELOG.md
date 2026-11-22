@@ -2,19 +2,39 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-22
+
+Beta, cumulative since 0.1.3. The operator-facing iOS and Android lists are in the
+[0.2.0 release notes](handbook/src/content/docs/releases/0-2-0.md).
+
 ### Added
 
 - iOS: live streaming of the monitor's camera to Twitch, YouTube, Facebook, Instagram or a Custom
   server (plain `rtmp://` allowed there with a warning, for TikTok LIVE): Settings, Sharing, Live
-  stream, then Go live over the picture. Camera Wi-Fi blocks it; a shared Wi-Fi network or the
-  phone's hotspot allows it. While the monitor is closed, a Live pill at the top shows the stream
-  with Stop. Untested on hardware.
+  stream, then Go live. Camera Wi-Fi blocks it; a shared Wi-Fi network or the phone's hotspot
+  allows it. While the monitor is closed, a Live pill at the top shows the stream with Stop.
+  Streamed on an iPhone with a Luna Ultra on firmware 1.2.7 over a home router; the individual
+  services are not each checked yet.
+- Android: live streaming of the camera picture (with the monitor LUT, without assists) over
+  RTMPS, or plain `rtmp://` to a Custom server with a warning, while the camera is on a Wi-Fi or
+  hotspot setup. The Live stream card on Settings, Sharing holds the service and stream key; Go
+  live sits on the monitor and a Live pill with Stop shows while the monitor is closed. The
+  stream ends when the app leaves the screen. Untested on hardware.
+- Live stream quality: when the camera picture is below 1080p, the Live stream card offers
+  1080p upscaled (about 6 Mbps, with the LUT) beside Camera feed.
+- Zoom panel: holding the zoom chip opens one panel on the trailing edge with the current zoom, a
+  vertical ruler (smooth zoom, 0.1x ticks), three preset slots and a preset ramp (Off, or 0.5 s
+  to 10 s) chosen in the camera value popup. Tap a preset to go there; with a ramp the zoom moves
+  over that time. Go live now sits under the timecode and steps aside while the panel is open.
+- Multiview on iOS and Android: up to four Luna cameras on one shared Wi-Fi network or this
+  phone's hotspot, opened from the grid icon on Your cameras, on OpenCine's shared stage (see
+  the handbook's Multiview guide). Untested with cameras.
+- Camera presets: the Settings Controls tab saves the connected camera's exposure and white
+  balance under a name, to recall or delete later, kept per camera model.
+- GUIDES options add Action safe and Title safe lines, each with a size from 50% to 99%, drawn
+  inside every selected frame line on live view and playback.
 - The monitor's lock button also holds the screen rotation, upside-down landscape
   included, so a phone mounted inverted no longer flips when it is levelled.
-- Android: live streaming of the camera picture (with the monitor LUT, without assists) over
-  RTMPS from the Go live control at the top of the monitor, while the camera is on a Wi-Fi or
-  hotspot setup. The stream ends when the app leaves the screen. The Live stream settings card
-  for the service and stream key follows with the next OpenCine update.
 
 ### Changed
 
@@ -31,6 +51,8 @@
   applied; the last step is sent once more first.
 - Long programmed gimbal moves no longer stop partway with Programmed move was not applied when
   the camera leaves one target unanswered.
+- Android: a Wi-Fi or hotspot setup checks the camera's serial number, so it connects to the
+  requested Luna when other cameras share the network instead of the first one that answers.
 
 ## [0.1.3] - 2026-10-30
 
