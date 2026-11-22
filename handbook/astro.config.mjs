@@ -91,6 +91,7 @@ export default defineConfig({
         {
           label: 'Release notes',
           items: [
+            { label: '0.2.0', slug: 'releases/0-2-0' },
             { label: '0.1.3', slug: 'releases/0-1-3' },
             { label: 'Open beta 0.1.0', slug: 'releases/0-1-0' },
           ],

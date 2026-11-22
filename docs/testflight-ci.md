@@ -88,7 +88,7 @@ just testflight-notes      # check and print
 ## Versions
 
 `MARKETING_VERSION` equals Android `openinstacine.versionName` (currently
-`0.1.0`). Testers see `0.1.0 (build)`. Bump only for a new train
+`0.2.0`). Testers see `0.2.0 (build)`. Bump only for a new train
 ([`RELEASE.md`](RELEASE.md)). `just ios-version`.
 
 ## Troubleshooting

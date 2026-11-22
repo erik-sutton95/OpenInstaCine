@@ -1,41 +1,18 @@
-Since open beta build 26
-
 New and changed
 
-- Camera setup, settings, View Assist and Media controls look and behave like the other OpenCine apps.
-- Cameras > Add setup can connect a Luna over your Wi-Fi network or this phone's hotspot. Camera Wi-Fi stays as the other setup.
-- Media is much faster on large cards: listing, selecting clips and Select all stay responsive, even while clips cache.
-- Media grid is staggered: portrait photos stand upright and every item fills the space above it.
-- Caching and downloads show a live speed beside the percentage, for example 18% and 42 MB/s.
-- Selecting clips shows an Exit selection close beside the count, then All, Share and Delete. Media's top corner is now a Back arrow.
-- Pinch-zoomed playback now fills the screen past the clip's letterbox, up to the screen edge.
-- The live picture runs more smoothly after connecting: the screen no longer redraws everything as the timecode advances.
-- Tap the storage readout to step through free space, free percentage and the camera's remaining record time.
-- In landscape, the colour profile sits beside the codec, and Photo mode setup values move to the top corner so captions fit.
-- Offline, Media says the camera is disconnected and shows the clips cached on this phone. An empty filter says No matching clips.
-- Diagnostics separate incoming video, decoding and display activity to help investigate picture interruptions.
+- Go live streams the monitor picture to Twitch, YouTube, Facebook, Instagram or a Custom server over a Wi-Fi or hotspot setup. Set it up in Settings > Sharing > Live stream.
+- Hold the zoom chip for one zoom panel: a ruler for smooth zoom, three presets and a preset ramp. Go live now sits under the timecode, and the chip reads up to 15x.
+- Multiview shows up to four Lunas on one shared network. Camera presets save exposure and white balance, and the lock button also holds rotation.
 
 Fixes
 
-- The app no longer freezes or shows App not responding while the live picture rebuilds, for example after rotating or returning.
-- Reconnecting waits in the background and resumes on return without Retry. The card names its 3-minute window; a dropped link shows no bars.
-- A failed saved connection can retry when you return. Scanning messages follow Bluetooth availability, and Wi-Fi failures offer the right settings.
-- Shutter Angle follows angle picks, Auto-to-Manual changes, AE lock and frame-rate changes again. Auto ISO with a fixed shutter reads M.
-- The EV meter reads the live picture again instead of always showing a dash.
-- The zoom wheel and pinch move the Luna's lens while your finger moves, not only after you lift it.
-- Playback keeps Pause through buffering, scrubbing and Share.
-- Playback stays smoother on large cards; scopes and audio meters update without redrawing the whole player.
-- Sharing two or more cached clips no longer fails with Couldn't share these clips; they reach the share sheet together.
-- A clip that fails to cache shows Could not cache that clip, and Cache or Share carries on with the others. The selection bar shows the whole count.
-- With Full Resolution Caching on, a played clip keeps downloading after you close it and reads CACHED. Shared clips keep camera file names.
-- Sharing a clip you left mid-download in the player, or whose download stopped, finishes its copy instead of failing.
-- With two or more frame guides and Mask outside frame on, the space between the crossing frames stays clear again.
-- TalkBack reads each settings switch as one switch with its title.
+- On Luna firmware 1.2.7, a Wi-Fi or hotspot setup keeps the camera on the network: no picture drop every couple of minutes, and Go live keeps its bitrate.
+- Zoom preset ramps move smoothly, and a zoom step the camera misses no longer stops the ramp or says Zoom was not applied.
+- Long programmed gimbal moves no longer stop partway with Programmed move was not applied.
+- A Wi-Fi or hotspot setup connects to the Luna you chose when other cameras share the network.
 
 What to test
 
-- On a full card, select clips, Share two, then Exit selection. Play a clip, pinch to zoom and pan to the screen edges.
-- Add a Wi-Fi or Hotspot setup for the Luna under Cameras > Add setup and connect with it, then switch back to Camera Wi-Fi.
-- Rotate the phone repeatedly and leave and return to the app during Live View: the app stays responsive and the picture returns.
-- At 180 degrees and 25p, change Auto to Manual, then 25p to 50p. Check 1/50 becomes 1/100 and the EV needle follows the scene.
-- With Full Resolution Caching on, play an uncached clip briefly, go back and Share it. Turn on Guides 2.39:1 and 9:16 with Mask outside frame.
+- On a Wi-Fi or hotspot setup, save a stream key in Settings > Sharing > Live stream, Go live for 10 minutes, then Stop. The picture and stream stay up.
+- Hold the zoom chip: drag the ruler, save three presets, set a ramp and tap between presets. The zoom moves smoothly up to 15x.
+- Save a camera preset in Settings > Controls, change exposure and recall it. Lock the monitor in reverse landscape and turn the phone: it stays.
