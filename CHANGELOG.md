@@ -21,6 +21,17 @@
 - Android: the zoom chip can now read the Luna Ultra's 15x instead of stopping at 12x, as on
   iPhone (the shared zoom readout's default ceiling rose to 18x for the Pocket 4 Pro).
 
+### Fixed
+
+- Luna Ultra firmware 1.2.7: a Wi-Fi or hotspot setup keeps the camera on the network. The
+  firmware leaves it about 60 s after each join, so the picture dropped out every couple of
+  minutes and Go live reached the platform at a low bitrate (OpenCine station keep-alive).
+- Zoom preset ramps move smoothly: zoom steps go to the Luna about 28 times a second instead of
+  6. A zoom step the camera leaves unanswered no longer freezes the ramp or says Zoom was not
+  applied; the last step is sent once more first.
+- Long programmed gimbal moves no longer stop partway with Programmed move was not applied when
+  the camera leaves one target unanswered.
+
 ## [0.1.3] - 2026-10-30
 
 Public beta, cumulative since open beta build 26 (0.1.0). The operator-facing iOS and
