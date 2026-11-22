@@ -438,8 +438,8 @@ Checked against `Adapters/Insta360Protocol` (`LunaProtocol.swift`,
 11. **Grid.** cmd 7 `[128]` if an on-camera grid is wanted (the official toggle
     writes the camera option, not just an overlay).
 12. **Zoom.** Official preset chips are 1 / 2 / 3 / 6 / 15 (ours 1 / 2 / 4 / 8 / 15)
-    and the zoom bar streams SETs every 10 to 25 ms; our 80 ms throttle is
-    fine. Expect zoom to reset to 1.0 on every mode change (8334 field 53).
+    and the zoom bar streams SETs every 10 to 25 ms. Our 80 ms throttle stepped
+    visibly on a preset ramp; 10 ms after each reply is smooth (2026-11-22, fw 1.2.7). Expect zoom to reset to 1.0 on every mode change (8334 field 53).
 13. **Tap-focus box size.** Official box is 0.0869 x 0.1545 (16:9) /
     0.1159 x 0.1545 (4:3), ours 0.15 x 0.27. Coordinates are sensor-frame.
 14. **Audio, stabilization, Stage Mode, Color Recovery, quick EV:** not in the

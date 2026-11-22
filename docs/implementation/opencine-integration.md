@@ -409,7 +409,8 @@ approval on the camera screen.
 
 Luna zoom and AF-S/AF-C now reach the connected `LunaCameraSession` through
 OpenCine's common setting commands. The configured connection ceiling describes
-zoom; the iOS pinch still coalesces latest values at its existing 80 ms cadence.
+zoom; the pinch, dial and preset ramps coalesce latest values with a 10 ms gap after each
+reply (`zoomWriteGap`, Android `LunaLiveZoom.WRITE_GAP_MS`; 80 ms stepped visibly on a ramp).
 Product Showcase stays in the typed Luna extension. Camera reports alone populate
 the shared lens observations; acknowledgement does not confirm a write.
 
