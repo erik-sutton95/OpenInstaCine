@@ -9,7 +9,7 @@ import kotlinx.coroutines.launch
  * Live Luna zoom, the twin of iOS `updateZoomPinch` and `queueZoomWrite` (#111). The zoom wheel
  * and pinch write while the finger moves instead of once on lift. Writes are coalesced: the
  * latest factor wins, at most one write is in flight, and each write is followed by
- * [WRITE_GAP_MS] because the lens cannot follow a 60 Hz drag. Lifting the finger queues the
+ * [WRITE_GAP_MS] because the camera cannot take a 60 Hz drag. Lifting the finger queues the
  * final factor, so it is always the last write of the burst.
  *
  * Confined to the session's main scope, like the rest of the session state.
@@ -59,12 +59,18 @@ internal class LunaLiveZoom(
         worker = scope.launch {
             var last = factor
             var applied = true
+            var retried: Double? = null
             while (true) {
                 val next = pending ?: break
                 pending = null
                 if (!canWrite()) break
                 last = next
+                // The camera leaves the odd zoom SET unanswered (about 2 in 100 on fw 1.2.7): a
+                // newer factor replaces it; the burst's last factor is sent once more.
+                val isRetry = retried == next
                 applied = write(next)
+                if (applied) retried = null
+                else if (pending == null && !isRetry) { retried = next; pending = next }
                 delay(WRITE_GAP_MS)
             }
             burstEnded(last, applied)
@@ -80,7 +86,12 @@ internal class LunaLiveZoom(
     }
 
     companion object {
-        /** iOS `queueZoomWrite` pacing: about 12 writes a second including the round trip. */
-        const val WRITE_GAP_MS = 80L
+        /**
+         * iOS `zoomWriteGap`. The Luna makes a quick jump to each written factor and holds it, so
+         * the write rate is what the picture shows: 80 ms stepped visibly on a preset ramp; 10 ms
+         * (about 28 writes a second with the round trip, close to the official zoom bar) looked
+         * smoothest on fw 1.2.7 (2026-11-22); no gap at all once froze the camera for seconds.
+         */
+        const val WRITE_GAP_MS = 10L
     }
 }

@@ -97,6 +97,7 @@ class LunaLiveZoomTest {
         camera.accepts = false
         zoom.queue(4.0)
         advanceUntilIdle()
+        assertEquals(listOf(4.0, 4.0), camera.writes.map { it.factor }, "the last factor is sent once more")
         assertEquals(listOf(4.0 to false), camera.bursts)
 
         camera.accepts = true
@@ -106,6 +107,31 @@ class LunaLiveZoomTest {
         zoom.cancel()
         zoom.drag(4.0, current = 1.0, maximum = 15.0)
         advanceUntilIdle()
-        assertEquals(listOf(4.0), camera.writes.map { it.factor }, "nothing after the link left live")
+        assertEquals(listOf(4.0, 4.0), camera.writes.map { it.factor }, "nothing after the link left live")
+    }
+
+    /** Luna fw 1.2.7 leaves about 2 in 100 zoom SETs unanswered: a newer factor replaces a miss. */
+    @Test fun aMissedWriteIsReplacedAndAMissedLastWriteIsSentOnceMore() = runTest {
+        val camera = Camera(this)
+        val zoom = camera.zoom(this)
+        camera.accepts = false
+        zoom.queue(2.0)
+        advanceTimeBy(1)
+        zoom.queue(3.0)
+        advanceTimeBy(40)
+        camera.accepts = true
+        advanceUntilIdle()
+        assertEquals(listOf(2.0, 3.0), camera.writes.map { it.factor }, "the missed 2x is not sent again")
+        assertEquals(listOf(3.0 to true), camera.bursts)
+
+        camera.bursts.clear(); camera.writes.clear()
+        var answers = 0
+        val flaky = LunaLiveZoom(this, { true },
+            write = { factor -> delay(30); camera.writes += Write(factor, 0, 0); answers += 1; answers > 1 },
+            burstEnded = { last, applied -> camera.bursts += last to applied })
+        flaky.queue(5.0)
+        advanceUntilIdle()
+        assertEquals(listOf(5.0, 5.0), camera.writes.map { it.factor })
+        assertEquals(listOf(5.0 to true), camera.bursts, "the second send landed, so nothing is reported")
     }
 }

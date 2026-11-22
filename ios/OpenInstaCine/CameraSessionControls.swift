@@ -697,11 +697,20 @@ extension CameraSession {
         queueZoomWrite(min(max(factor, 1), zoomMax), suppliedAdmission: admission)
     }
 
+    /// The pause after each zoom reply. The Luna makes a quick jump (40 to 80 ms) to each written
+    /// factor and holds it, whatever its zoom speed option, so the write rate is what the picture
+    /// shows: an 80 ms gap (about 6 writes a second with the round trip) stepped visibly on a
+    /// preset ramp. fw 1.2.7, 2026-11-22: 10 ms gives about 28 writes a second, close to the
+    /// official zoom bar's 10 to 25 ms, and looked smoothest on a preset ramp; 50 ms steps; no gap
+    /// at all once froze the camera for seconds. A reply the camera leaves out (about 2 in 100)
+    /// is waited for 1 s at most (`LunaCameraSession.Timing.writeTimeout`).
+    static let zoomWriteGap: Duration = .milliseconds(10)
+
     /// DJI slew has no Luna equivalent; the hold disc drives absolute factors.
     func setZoomSlew(_ value: UInt16) {}
     func setZoomStop() {}
 
-    /// Latest-wins at ~12 Hz: the camera lens cannot follow a 60 Hz pinch.
+    /// Latest-wins, one write in flight, then `zoomWriteGap`: the camera cannot take a 60 Hz pinch.
     private func queueZoomWrite(_ factor: Double) {
         queueZoomWrite(factor, suppliedAdmission: nil)
     }
@@ -719,13 +728,26 @@ extension CameraSession {
         let revision = zoomWriteRevision
         zoomWriteTask = Task { @MainActor [weak self] in
             var last: Double?
+            var retried: Double?
             while let self, self.zoomWriteRevision == revision, !Task.isCancelled,
                 let next = self.pendingZoomWrite
             {
                 self.pendingZoomWrite = nil
                 last = next.factor
-                _ = await self.submitLens(.zoom(next.factor), through: next.session, admission: next.admission)
-                try? await Task.sleep(for: .milliseconds(80))
+                // The camera leaves the odd zoom SET unanswered (about 2 in 100 on fw 1.2.7). A
+                // newer factor replaces an unanswered one silently; the burst's last factor is
+                // sent once more, and only that second miss tells the operator.
+                let isRetry = retried == next.factor
+                let applied = await self.submitLens(
+                    .zoom(next.factor), through: next.session, admission: next.admission,
+                    quietWhenUnanswered: !isRetry)
+                if applied {
+                    retried = nil
+                } else if self.pendingZoomWrite == nil, !isRetry {
+                    retried = next.factor
+                    self.pendingZoomWrite = next
+                }
+                try? await Task.sleep(for: Self.zoomWriteGap)
             }
             guard let self, self.zoomWriteRevision == revision else { return }
             if let last { ControlLiveLog.line(String(format: "control: zoom burst ended at %.2fx", last)) }
@@ -738,7 +760,7 @@ extension CameraSession {
     /// Product Showcase stays on the integration-owned extension above.
     private func submitLens(
         _ value: OpenCineCore.SettingValue, through session: LunaCameraSession? = nil,
-        admission: LunaCommandAdmission? = nil
+        admission: LunaCommandAdmission? = nil, quietWhenUnanswered: Bool = false
     ) async -> Bool {
         guard let common = session ?? backend.session else { return false }
         let source = admission.map { _ in LunaCommandAdmission(owner: common.commandOwner, isCurrent: { true }) }
@@ -761,6 +783,9 @@ extension CameraSession {
             if let source { scheduleSettingsRefresh(through: common, source: source, epoch: epoch) }
             else { scheduleSettingsRefresh() }
             return true
+        case .outcomeUnknown where quietWhenUnanswered:
+            ControlLiveLog.line("control: \(value) unanswered, the next write follows")
+            return false
         default:
             ControlLiveLog.line("control: \(value) \(receipt.stage)")
             noteCommandFailure()
