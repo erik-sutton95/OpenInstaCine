@@ -16,7 +16,7 @@ One product version for both apps, two store counters.
 
 | Field | Source | Now |
 | --- | --- | --- |
-| Product version | iOS `MARKETING_VERSION` (`ios/Config/Version.xcconfig`) and Android `openinstacine.versionName` (`Apps/Android/gradle.properties`) | `0.1.0` |
+| Product version | iOS `MARKETING_VERSION` (`ios/Config/Version.xcconfig`) and Android `openinstacine.versionName` (`Apps/Android/gradle.properties`) | `0.2.0` |
 | iOS build | Xcode Cloud counter | |
 | Android Play build | `ANDROID_VERSION_CODE_BASE` + `github.run_number` (`-PversionCode`) | |
 | Android sideload build | `openinstacine.versionCode` (the floor) | `1` |
