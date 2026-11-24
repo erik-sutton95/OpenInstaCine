@@ -16,7 +16,10 @@ enum InstaAddSetup {
         camera: SavedCamera, cameras: CamerasModel, backend: LunaCameraBackend,
         done: @escaping (RouteDraft?) -> Void
     ) -> AddSetupFlow {
-        let chooser = StationNetworkSetupRules.setupChooser(context: .camera(camera))
+        // The routes this device offers: a Mac has no hotspot of its own.
+        let chooser = StationNetworkSetupRules.setupChooser(
+            context: .camera(camera),
+            routes: StationSetupRoute.offered(on: .current, hostRoutes: StationSetupRoute.stationNetworks))
         return AddSetupFlow(
             chooser: chooser,
             onSelect: { _ in },

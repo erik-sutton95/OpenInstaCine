@@ -10,6 +10,11 @@
   camera Wi-Fi in macOS. Its window carries the dock's camera tabs in the title bar and moves like
   any Mac window (needs OpenCine 0.2.0). The iPhone and Android apps are unchanged. Built only, not yet tested
   with a camera.
+- Mac: pairing a Luna moves the camera onto the Mac's network (a router or venue Wi-Fi the Mac
+  reaches by Wi-Fi or Ethernet) instead of asking the operator to join the camera's Wi-Fi in
+  macOS. The network and its password are asked for once and reused for every camera after
+  that, with Change network on the pair page. The iPhone and Android apps are unchanged
+  (OpenCine #403).
 
 ### Fixed
 

@@ -44,6 +44,11 @@ final class AppModel {
     /// Live streaming (the shared OpenCine coordinator); only the app's root model streams, never
     /// a Multiview tile's borrowed model.
     private(set) var liveStream: LiveStreamCoordinator?
+    #if targetEnvironment(macCatalyst)
+        /// The network new cameras join on the Mac: asked for once, then reused (a Mac cannot join a
+        /// camera's own Wi-Fi). Its password stays in the Luna backend's saved setups.
+        let cameraNetwork: CameraNetworkPairing
+    #endif
 
     init(session: CameraSession? = nil) {
         #if targetEnvironment(simulator)
@@ -79,6 +84,15 @@ final class AppModel {
         cameras = model
         self.cameras = model
         shell = ShellModel(cameras: model, control: session.control)
+        #if targetEnvironment(macCatalyst)
+            cameraNetwork = CameraNetworkPairing(
+                store: CameraNetworkStore(defaults: defaults, key: "desktop.cameraNetwork"),
+                password: { backend.stationPassword(for: $0, hotspot: false) },
+                savePassword: {
+                    backend.saveStation(LunaStationNetwork(ssid: $0.ssid, password: $0.password, hotspot: false))
+                },
+                currentNetwork: { await LunaCameraBackend.phoneWiFiName() })
+        #endif
         integration.onDiscoveryFailure = { [weak self] in self?.discoveryFailure = $0 }
         // A setup that moves the camera is remembered before it moves it.
         integration.saveRecord = { [weak model] in model?.upsert($0) }
