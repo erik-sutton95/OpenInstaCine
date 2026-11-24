@@ -6,7 +6,7 @@ derived_data="${MACOS_DERIVED_DATA_PATH:-$repo_root/build/macos/DerivedData}"
 configuration="${MACOS_CONFIGURATION:-Debug}"
 exec xcodebuild \
   -project "$repo_root/ios/OpenInstaCine.xcodeproj" \
-  -scheme OpenInstaCine \
+  -scheme OpenInstaCineMac \
   -configuration "$configuration" \
   -destination 'platform=macOS,variant=Mac Catalyst' \
   -derivedDataPath "$derived_data" \

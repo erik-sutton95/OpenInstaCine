@@ -71,6 +71,11 @@ ios-generate:
 ios-build: ios-generate
     xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'generic/platform=iOS Simulator' -derivedDataPath .local/DD CODE_SIGNING_ALLOWED=NO build
 
+# Build the Mac Catalyst camera module (macos/module.json). MACOS_DERIVED_DATA_PATH moves the build
+# output; extra xcodebuild options (signing) are passed through.
+macos-build *args: ios-generate
+    ./scripts/macos-build.sh {{args}}
+
 # Development-signed build + install + launch on a USB iPhone (devicectl id).
 ios-run device: ios-generate
     xcodebuild -project ios/OpenInstaCine.xcodeproj -scheme OpenInstaCine -destination 'generic/platform=iOS' -derivedDataPath .local/DDdev -allowProvisioningUpdates build

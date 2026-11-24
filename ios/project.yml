@@ -60,8 +60,10 @@ targets:
         product: OpenCineCameraControls
       - package: OpenCine
         product: OpenCineRelay
+      # The OpenCine desktop module host: the Mac Catalyst module only, so the iOS app is unchanged.
       - package: OpenCine
         product: OpenCineVirtualCamera
+        destinationFilters: [macCatalyst]
       - package: OpenCine
         product: OpenCineRelayApple
       - package: OpenCine
@@ -289,13 +291,18 @@ schemes:
   OpenInstaCine:
     build:
       targets:
-        # The Watch app builds through OpenInstaCine's iOS-only dependency: a scheme entry would
-        # also build it, and fail signing, for the Mac Catalyst destination.
         OpenInstaCine: all
+        OpenInstaCineWatch: all
         OpenInstaCineTests: [test]
     test:
       targets:
         - OpenInstaCineTests
+  # Mac Catalyst camera module: the app alone. The iOS scheme names the Watch app, which has no
+  # Mac destination and would ask for a provisioning profile.
+  OpenInstaCineMac:
+    build:
+      targets:
+        OpenInstaCine: all
   OpenInstaCineWatch:
     build:
       targets:
