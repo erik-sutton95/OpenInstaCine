@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Mac: the app also builds as the Luna camera module of the OpenCine desktop app (Mac Catalyst,
+  `just macos-build`, manifest in `macos/module.json`). Started by OpenCine, it feeds the clean
+  camera picture to its own webcam input and runs without a Dock icon; the operator joins the
+  camera Wi-Fi in macOS. The iPhone and Android apps are unchanged. Built only, not yet tested
+  with a camera.
+
 ### Fixed
 
 - Recording in I-Log with Color Recovery no longer stops the take: when the record start pauses
