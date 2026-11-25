@@ -91,7 +91,8 @@ final class AppModel {
                 savePassword: {
                     backend.saveStation(LunaStationNetwork(ssid: $0.ssid, password: $0.password, hotspot: false))
                 },
-                currentNetwork: { await LunaCameraBackend.phoneWiFiName() })
+                // A Mac names its Wi-Fi only through CoreWLAN (OpenCine's ComputerWiFi).
+                currentNetwork: { await ComputerWiFi.currentNetwork() })
         #endif
         integration.onDiscoveryFailure = { [weak self] in self?.discoveryFailure = $0 }
         // A setup that moves the camera is remembered before it moves it.

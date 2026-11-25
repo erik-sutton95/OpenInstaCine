@@ -14,7 +14,9 @@
   reaches by Wi-Fi or Ethernet) instead of asking the operator to join the camera's Wi-Fi in
   macOS. The network and its password are asked for once and reused for every camera after
   that, with Change network on the pair page. The iPhone and Android apps are unchanged
-  (OpenCine #403).
+  (OpenCine #403). The network page names the Mac's current Wi-Fi and the networks it sees
+  nearby (Location allowed); with nothing to list, Other network is its first row and a line
+  says why.
 
 ### Fixed
 
