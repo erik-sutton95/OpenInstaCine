@@ -4,7 +4,13 @@
 
 ### Added
 
-- Mac: the app also builds as the Luna camera module of the OpenCine desktop app (Mac Catalyst,
+- Mac: in the dock the camera window works like a desktop app. The title bar is a toolbar with
+  the tabs, the take (STBY or REC and the timecode), and real Media and Settings buttons. One status
+  row under it shows link, battery, card, format, log profile, mode and audio, and the picture starts
+  below it. There is no interface lock on the Mac. Keys: ⌘R record, ⌘, settings, ⌘⇧M media,
+  ⌘1 to ⌘9 a tab, ⌃⇥ and ⌃⇧⇥ the next and previous tab, D the display overlays. Its tab is named Insta360 (was Luna); the webcam input keeps its name. The iOS
+  and Android apps are unchanged (OpenCine #403).
+- Mac: the app also builds as the Insta360 camera module of the OpenCine desktop app (Mac Catalyst,
   `just macos-build`, manifest in `macos/module.json`). Started by OpenCine, it feeds the clean
   camera picture to its own webcam input and runs without a Dock icon; the operator joins the
   camera Wi-Fi in macOS. Its window carries the dock's camera tabs in the title bar and moves like
