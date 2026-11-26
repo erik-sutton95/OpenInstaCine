@@ -25,5 +25,8 @@ untested control stays untested even when the schema names it. Hardware surveys
 are implementation references, not a statement that either OpenInstaCine app
 supports every surveyed feature.
 
-The Luna Ultra is the only camera surveyed so far. Other Insta360 models share
-parts of the message schema, but nothing here has been checked on them.
+The Luna Ultra is the only camera surveyed so far. The apps also accept the
+Luna Pro (model string "Insta360 Luna Pro"), untested: it is assumed to speak the
+Ultra's protocol, and its zoom (1× to 4×, no 3× telephoto) comes from Insta360's
+published specs. Other Insta360 models share parts of the message schema, but
+nothing here has been checked on them.

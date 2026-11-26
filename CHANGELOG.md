@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Insta360 Luna Pro, untested: the apps connect to a Luna Pro like a Luna Ultra on iOS and
+  Android, name it "Luna Pro" once connected, and show its own zoom: presets 1×, 2× and 4×, up to
+  4×, with no 3× telephoto stop or TELE caption. Nobody has tried one yet; the Pro's model string
+  is taken from Insta360's published specs. Another Insta360 camera is refused by name ("This
+  camera is ... OpenInstaCine currently supports the Insta360 Luna Ultra and Luna Pro."), now on
+  Android too. A nearby camera reads "Luna" plus its serial until it connects, since a Luna does not
+  advertise its model.
+
 ### Fixed
 
 - Recording in I-Log with Color Recovery no longer stops the take: when the record start pauses

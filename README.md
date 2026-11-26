@@ -43,8 +43,10 @@ Free and open source.
 | Camera | Live view | Camera control | Gimbal | Notes |
 | --- | :---: | :---: | :---: | --- |
 | **Insta360 Luna Ultra** | ✅ | ✅ | ✅ | Camera firmware 1.1.15. 720p HEVC live feed at 25 fps, I-Log and Dolby Vision, digital zoom to 15×. |
+| **Insta360 Luna Pro** | untested | untested | untested | Untested: no Luna Pro has connected yet. Same main camera and app support as the Ultra, without the 3× telephoto: zoom to 4× (presets 1×, 2×, 4×), no tele stop. |
 
-✅ works on iOS and Android.
+✅ works on iOS and Android. Untested: supported in the apps from Insta360's published specs, not
+yet tried on the camera; reports welcome.
 Other Insta360 cameras are not supported.
 
 > [!WARNING]
