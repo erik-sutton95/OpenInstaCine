@@ -50,7 +50,9 @@ struct MediaPhotoViewer: View {
             guard request.isCurrent(), session.isDownloaded(file), let url = session.localURL(for: file) else { return nil }
             return await MediaCellImageLoader.shared.downsampled(at: url, maxPixelSize: 4096)
         }, source: { request in
-            guard request.isCurrent(), session.canReachCameraMedia,
+            // Only a camera that shares its files here is asked for the original; otherwise the
+            // photo stays on its preview.
+            guard request.isCurrent(), session.canFetchCameraFiles,
                 let bytes = await session.originalImageBytes(for: request.record.payload.file, ifCurrent: request.isCurrent) else { return nil }
             return await MediaCellImageLoader.shared.downsampled(data: bytes, maxPixelSize: 4096)
         })
