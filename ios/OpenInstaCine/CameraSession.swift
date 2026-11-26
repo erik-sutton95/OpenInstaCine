@@ -297,6 +297,10 @@ final class CameraSession {
     private(set) var cameraGalleryOpen = false
     @ObservationIgnored let cameraMedia: CameraMedia
     var playbackMediaNote: String?
+    /// Camera file refusals ("service restricted") of every transport; this connection reads its
+    /// own host's, made after ``fileRefusalBaseline``.
+    @ObservationIgnored let fileRefusals: CameraFileRefusals
+    @ObservationIgnored var fileRefusalBaseline: UInt64 = 0
 
     // Focus / tracking / face AF
     var focusPoint: CGPoint = CGPoint(x: 0.5, y: 0.5)
@@ -379,9 +383,11 @@ final class CameraSession {
         backend: LunaCameraBackend, profile: CameraLabelProfile = LunaShellMapping.profile,
         borrowing sharedDecoder: HevcDecoder? = nil, cameraMedia: CameraMedia? = nil,
         mediaStorage: MonitorMediaCacheStorage? = nil,
-        controlsOnly: Bool = false
+        controlsOnly: Bool = false, fileRefusals: CameraFileRefusals = .shared
     ) {
         ownsBackend = sharedDecoder == nil && !controlsOnly
+        self.fileRefusals = fileRefusals
+        fileRefusalBaseline = fileRefusals.sequence
         self.profile = profile
         self.cameraMedia = cameraMedia ?? CameraMedia(storage: mediaStorage)
         self.decoder = sharedDecoder ?? HevcDecoder()
@@ -554,6 +560,8 @@ final class CameraSession {
         reconnectTarget = nil
         isReconnecting = preserveMonitor
         connectedCamera = camera
+        // A new connection reads only the camera's file refusals from here on.
+        fileRefusalBaseline = fileRefusals.sequence
         configureMediaLibrary()
         connectionTargetID = camera.id
         if !incidentSessionActive { beginFeedIncidentSession() }
