@@ -46,7 +46,9 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
         mediaRecord(for: file)
     }
     private func playbackCandidates(_ record: MonitorMediaRecord<LunaMediaLibraryPayload>) -> [MonitorPlaybackCandidate] {
-        playbackCandidates(record, cameraRoute: canReachCameraMedia ? mediaRoute : nil)
+        // A camera that does not share its files here is not asked for them: the clip plays from
+        // this device's cache or the player reads ``cameraFileAccessMessage``.
+        playbackCandidates(record, cameraRoute: canFetchCameraFiles ? mediaRoute : nil)
     }
     /// `cameraRoute` is where this connection reaches the camera's files, nil while it cannot.
     func playbackCandidates(_ record: MonitorMediaRecord<LunaMediaLibraryPayload>, cameraRoute: MediaHTTP.Route?)
@@ -133,6 +135,7 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
                 return model.session.mediaLibrary.record(record.asset.id) == nil
             }
         } else { cache = nil; delete = nil }
+        let deletes = delete != nil
         return .init(cacheOriginal: cache, delete: delete,
             favorite: { record in model.session.toggleFavorite(record.payload.file) }, adoptLook: { _, look in
             let value = look.source
@@ -145,7 +148,7 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
                 family: value.family != .other ? value.family : model.assist.monitorFamily,
                 cameraName: value.cameraName,
                 lookProfile: model.session.connectedCamera?.model.captureProfile?.looks ?? LunaShellMapping.lookProfile)
-        })
+        }, access: { record in model.session.playbackAccess(record, deletes: deletes) })
     }
     func values(record: MonitorMediaRecord<LunaMediaLibraryPayload>,
         owner: MonitorOperatorMediaModel<LunaMediaLibraryPayload, LunaPlaybackLook>) -> MonitorPlaybackSourceValues {
@@ -159,11 +162,18 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
             colorLabel: model.session.shotColor(for: file)?.label(in: model.session.profile),
             transfer: transfer,
             clipByte: transfer.map { model.frameSamples.exposureCeiling.clipByte(transfer: $0) },
-            bufferedThroughSeconds: presentation.bufferedThroughSeconds(record: record, owner: owner))
+            bufferedThroughSeconds: presentation.bufferedThroughSeconds(record: record, owner: owner),
+            // Read only when the player fails: a clip on this device still plays.
+            unavailableReason: model.session.isAvailableOffline(file) ? nil : model.session.cameraFileAccessMessage)
     }
 }
 
 @MainActor extension CameraSession {
+    /// The player's Share, Save and Delete for one clip (``CameraFileAccess/playbackAccess``).
+    func playbackAccess(_ record: MonitorMediaRecord<LunaMediaLibraryPayload>, deletes: Bool) -> MonitorMediaGalleryAccess {
+        cameraFileAccess.playbackAccess(onDevice: isDownloaded(record.payload.file), deletes: deletes,
+            deletable: record.asset.deletable)
+    }
     func capturePlaybackPresentation(_ record: MonitorMediaRecord<LunaMediaLibraryPayload>) -> MonitorPlaybackAdmission {
         let owner: MonitorMediaLibraryModel<LunaMediaLibraryPayload> = mediaLibrary
         let token = owner.actionToken, generation = owner.cache.directory.generation
