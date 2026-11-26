@@ -46,6 +46,11 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
         mediaRecord(for: file)
     }
     private func playbackCandidates(_ record: MonitorMediaRecord<LunaMediaLibraryPayload>) -> [MonitorPlaybackCandidate] {
+        playbackCandidates(record, cameraRoute: canReachCameraMedia ? mediaRoute : nil)
+    }
+    /// `cameraRoute` is where this connection reaches the camera's files, nil while it cannot.
+    func playbackCandidates(_ record: MonitorMediaRecord<LunaMediaLibraryPayload>, cameraRoute: MediaHTTP.Route?)
+        -> [MonitorPlaybackCandidate] {
         let file = record.payload.file
         var choices: [MonitorPlaybackCandidate] = []
         func cached(_ source: MediaPlaybackSource) -> MonitorPlaybackCandidate {
@@ -59,7 +64,7 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
             }), mediaLibrary.canTransfer {
                 return .representation(representation.id, mimeType: MediaHTTP.playbackMIMEType(for: path), sourceKey: path)
             }
-            guard let url = MediaHTTP.pathURL(storage: 0, path: path, route: profile.media) else { return nil }
+            guard let cameraRoute, let url = MediaHTTP.pathURL(storage: 0, path: path, route: cameraRoute) else { return nil }
             let io = cameraMedia.nativeIO
             return .download(address: cameraMedia.playbackAddress(file: file, path: path),
                 mimeType: MediaHTTP.playbackMIMEType(for: path), sourceKey: path, role: role,
@@ -70,9 +75,9 @@ typealias LunaPlaybackModel = MonitorMediaPlaybackModel<LunaMediaLibraryPayload,
         }
         // Preserve source choices and Apple native-failure retry order exactly.
         if let proxy = localProxySource(for: file) { choices.append(cached(proxy)) }
-        if canReachCameraMedia { choices += MediaHTTP.proxyPaths(file).compactMap(remote) }
+        if cameraRoute != nil { choices += MediaHTTP.proxyPaths(file).compactMap(remote) }
         if let local = localPlaybackSource(for: file) { choices.append(cached(local)) }
-        if canReachCameraMedia, let original = remote(MediaHTTP.deliveryPath(file)) { choices.append(original) }
+        if cameraRoute != nil, let original = remote(MediaHTTP.deliveryPath(file)) { choices.append(original) }
         return choices
     }
     private func resolvePlaybackLook(record: MonitorMediaRecord<LunaMediaLibraryPayload>, item: MonitorPlaybackItem, previousColor: ColorMode?) async
