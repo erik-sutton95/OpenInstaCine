@@ -10,8 +10,9 @@ approved, reads the camera's Wi-Fi details and disconnects. See the
 ## Scan
 
 Filter by service **BE80**. The camera advertises a short name that ends in its
-serial suffix; OpenInstaCine shows it as **Luna Ultra** plus that suffix. The
-client checks the model (GetOptions field 48) before negotiating.
+serial suffix and no model; OpenInstaCine shows it as **Luna** plus that suffix. The
+client checks the model (GetOptions field 48) before negotiating: the Luna Ultra
+and the Luna Pro (untested) go on, any other camera is refused by name.
 
 ## GATT
 

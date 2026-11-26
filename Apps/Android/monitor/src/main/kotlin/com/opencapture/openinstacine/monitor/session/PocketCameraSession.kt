@@ -59,6 +59,7 @@ import com.opencapture.opencine.insta360.luna.LunaCameraSession
 import com.opencapture.opencine.insta360.luna.LunaConnectPort
 import com.opencapture.opencine.insta360.luna.LUNA_RECOVERY_ATTEMPT_DEADLINE
 import com.opencapture.opencine.insta360.luna.LunaFrameTimecode
+import com.opencapture.opencine.insta360.luna.LunaModel
 import com.opencapture.opencine.insta360.luna.LunaMotionService
 import com.opencapture.opencine.insta360.luna.LunaSubjectTracking
 import com.opencapture.opencine.core.CommandStage
@@ -225,7 +226,7 @@ class PocketCameraSession(
     val controlNote: StateFlow<String?> = _controlNote.asStateFlow()
     fun clearControlNoteIf(note: String) { if (_controlNote.value == note) _controlNote.value = null }
     fun presentControlNote(note: String) { _controlNote.value = note }
-    private fun unavailable(what: String) = presentControlNote("$what is not available on the Luna Ultra yet.")
+    private fun unavailable(what: String) = presentControlNote("$what is not available on the ${lunaModel?.name ?: LunaModel.FAMILY_NAME} yet.")
 
     /** A photo in flight; a record operation in flight is the shared model's `recordPending`. */
     private val _controlBusy = MutableStateFlow(false)
@@ -350,6 +351,11 @@ class PocketCameraSession(
     val liveGimbalWaypoint: GimbalWaypoint? get() = freshGimbalAngle(500)?.let { LunaGimbalAim.waypoint(it, _zoomReadout.value) }
 
     var connectedCamera: FoundCamera? = null
+    /**
+     * The connected body once the backend identified it (OpenCine `LunaModel`, from the connected
+     * camera's reported model); null before. Its presets, ceiling and telephoto drive zoom.
+     */
+    val lunaModel: LunaModel? get() = connectedCamera?.model?.name?.let(LunaModel::identify)
     var joinedSSID: String? = null
     /**
      * How this session last asked the backend to reach the camera (its own Wi-Fi, or a Wi-Fi or
@@ -567,22 +573,17 @@ class PocketCameraSession(
             CameraModel(
                 name = value.modelName, datalinkPort = 0, tcpPoke = false, verified = true, pairingToken = "luna",
                 family = "generic", supportsTapFocus = facts.tapFocus.isOffered, supportsFocusMode = facts.focus.isOffered,
-                usesCapturedLiveEnable = false, zoomStops = lunaZoomStops(), hasGimbal = facts.gimbal.isOffered,
+                usesCapturedLiveEnable = false, zoomStops = lunaZoomStops(value), hasGimbal = facts.gimbal.isOffered,
                 supportsZoom = facts.zoom.isOffered, sendsLiveViewPrepare = false, supportsAperture = facts.iris.isOffered,
                 captureProfile = LunaCameraSession.CAPTURE_PROFILE.copy(labels = profile.labels,
-                    zoom = CameraZoomProfile(stops = lunaZoomStops()), looks = LunaCameraLUTProfile.value),
+                    zoom = CameraZoomProfile(stops = lunaZoomStops(value)), looks = LunaCameraLUTProfile.value),
             ),
             null,
         )
     }
 
-    private fun lunaZoomStops(): List<Double> {
-        val ceiling = controls?.zoomRange?.endInclusive ?: 1.0
-        val stops = LUNA_ZOOM_CHIPS.filter { it <= ceiling }.toMutableList()
-        if (stops.isEmpty()) stops += 1.0
-        if (ceiling > stops.last() + 0.5) stops += ceiling
-        return stops
-    }
+    private fun lunaZoomStops(camera: CameraIdentity): List<Double> =
+        lunaZoomStops(LunaModel.identify(camera.modelName), controls?.zoomRange?.endInclusive ?: 1.0)
 
     // Connection.
     fun startScan() = backend.startScan()
@@ -1036,9 +1037,14 @@ class PocketCameraSession(
     fun getIsoLimit() = Unit
     suspend fun refreshIsoLimit(): Boolean = false
 
-    // Zoom (1x to the camera's reported ceiling, 15x on Luna Ultra).
+    // Zoom (1x to the camera's reported ceiling: 15x on Luna Ultra, 4x on Luna Pro).
     fun zoomCycleFrom(): Double = zoomPinchPreview ?: zoomTarget ?: _zoomReadout.value
     fun zoomStops(): List<Double> = connectedCamera?.model?.zoomStops ?: listOf(1.0)
+    /**
+     * The factors a lens gives without a crop (zoom dial marks, TELE caption): 1x, and the 3x
+     * telephoto on a body with one. A Luna Pro has none; an unidentified body keeps the 3x stop rule.
+     */
+    fun opticalZoomStops(): List<Double> = opticalZoomStops(lunaModel, zoomStops())
     fun zoomMax(): Double = zoomStops().lastOrNull() ?: 1.0
     fun zoomNextJump(): Double = CamFov.nextJump(zoomCycleFrom(), zoomStops())
     fun setZoomLens(position: Int) = Unit
@@ -1564,8 +1570,26 @@ class PocketCameraSession(
     // The Luna exposes no audio controls or level meters.
 
     companion object {
-        /** fw 1.1.15 official presets, same as iOS `LunaShellMapping.zoomChips`; the ceiling is appended when larger. */
-        val LUNA_ZOOM_CHIPS = listOf(1.0, 2.0, 3.0, 6.0, 15.0)
+        /**
+         * fw 1.1.15 official presets (Luna Ultra), same as iOS `LunaShellMapping.zoomChips`, for a body
+         * not identified yet; the ceiling is appended when larger.
+         */
+        val LUNA_ZOOM_CHIPS = LunaModel.ULTRA.zoomPresets
+
+        /**
+         * The zoom chips of [body] (Luna Pro 1, 2, 4: no 3x telephoto; [LUNA_ZOOM_CHIPS] before the
+         * body is known) up to the backend's [ceiling], which is appended when larger.
+         */
+        internal fun lunaZoomStops(body: LunaModel?, ceiling: Double): List<Double> {
+            val stops = (body?.zoomPresets ?: LUNA_ZOOM_CHIPS).filter { it <= ceiling }.toMutableList()
+            if (stops.isEmpty()) stops += 1.0
+            if (ceiling > stops.last() + 0.5) stops += ceiling
+            return stops
+        }
+
+        /** [body]'s lens stops; an unidentified body keeps the 3x-stop rule of [stops]. */
+        internal fun opticalZoomStops(body: LunaModel?, stops: List<Double>): List<Double> =
+            body?.opticalZoomStops ?: if (3.0 in stops) listOf(1.0, 3.0) else listOf(1.0)
         /** iOS `GimbalStick.doubleTapWindow` (0.35 s) for the feed double tap to Deep Track. */
         const val DOUBLE_TAP_WINDOW_MS = 350L
         /**

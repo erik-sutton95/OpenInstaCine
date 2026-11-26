@@ -618,11 +618,16 @@ extension CameraSession {
     // MARK: - Zoom (Luna option 53, a plain factor)
 
     var zoomStops: [Double] {
-        var stops = LunaShellMapping.zoomChips.filter { $0 <= zoomCeiling }
+        var stops = (lunaModel?.zoomPresets ?? LunaShellMapping.zoomChips).filter { $0 <= zoomCeiling }
         if let last = stops.last, zoomCeiling > last + 0.5 { stops.append(zoomCeiling) }
         return stops
     }
     var zoomMax: Double { zoomStops.last ?? 1 }
+    /// The factors a lens gives without a crop: 1x, and the 3x telephoto on a body with one. A
+    /// Luna Pro has no telephoto, so it shows no tele stop or TELE caption.
+    var opticalZoomStops: [Double] {
+        lunaModel?.opticalZoomStops ?? (zoomStops.contains(3) ? [1, 3] : [1])
+    }
 
     var zoomReadout: Double {
         CamFov.readout(

@@ -17,7 +17,7 @@ enum OsmoMonitorPresentation {
     }
 
     static func zoomCaption(_ session: CameraSession) -> String {
-        MonitorZoomCaption.label(factor: session.zoomReadout, opticalStops: session.zoomStops)
+        MonitorZoomCaption.label(factor: session.zoomReadout, opticalStops: session.opticalZoomStops)
     }
 
     /// What the monitor lays out: the Luna integration's projection of the connected camera

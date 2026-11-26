@@ -9,7 +9,8 @@ Read the overview for firmware, survey scope and evidence levels.
 ## Bluetooth and camera Wi-Fi
 
 The camera advertises service **BE80** with a short name ending in its serial
-suffix. OpenInstaCine names it **Luna Ultra** plus that suffix. Pairing,
+suffix. OpenInstaCine names it **Luna** plus that suffix until the connection
+reads the model (then **Luna Ultra**). Pairing,
 approval and the encrypted Wi-Fi credential read are in
 [BLE pairing](../../../protocol/ble/); they work unchanged on firmware 1.1.15.
 

@@ -12,7 +12,7 @@ data class BrandIdentity(val appName: String, val wordmark: String, val accentAr
 
 /** Installed by a thin brand launcher before constructing any shared screen/model. */
 object MonitorConfiguration {
-    var identity = BrandIdentity("OpenInstaCine", "OPENINSTACINE", 0xFFFFCF00, "Insta360 Luna Ultra")
+    var identity = BrandIdentity("OpenInstaCine", "OPENINSTACINE", 0xFFFFCF00, "Insta360 Luna")
         private set
     private var factory: ((Context) -> CameraBackend)? = null
     private var memberFactory: ((Context) -> LunaBackend)? = null

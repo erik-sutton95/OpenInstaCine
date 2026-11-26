@@ -407,7 +407,7 @@
                 .discovered(
                     MonitorCamera(
                         id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!, name: "4D5E6F",
-                        model: LunaProtocol.model, capabilities: [])))
+                        model: LunaModel.familyReportedName, capabilities: [])))
         }
 
         func stopScan() {}
