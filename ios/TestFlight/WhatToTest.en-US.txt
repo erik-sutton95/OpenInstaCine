@@ -6,13 +6,13 @@ New and changed
 
 Fixes
 
+- On a Wi-Fi or hotspot setup, a clip still on the camera says it plays over Camera Wi-Fi instead of Could not open that clip, and Share and Save skip it.
 - On Luna firmware 1.2.7, a Wi-Fi or hotspot setup keeps the camera on the network: no picture drop every couple of minutes, and Go live keeps its bitrate.
 - Zoom preset ramps move smoothly instead of in visible steps.
 - A zoom step the camera misses no longer stops the ramp or says Zoom was not applied.
-- Long programmed gimbal moves no longer stop partway with Programmed move was not applied.
 
 What to test
 
+- On a Wi-Fi or hotspot setup, open a clip that is not on the phone: the player explains, and thumbnails still load. On Camera Wi-Fi the clip plays.
 - On a Wi-Fi or hotspot setup, save a stream key in Settings > Sharing > Live stream, Go live for 10 minutes, then Stop. The picture and stream stay up.
 - Hold the zoom chip: drag the ruler, save three presets, set a ramp and tap between presets. The zoom moves smoothly.
-- Save a camera preset in Settings > Controls, change exposure and recall it. Lock the monitor upside down and turn the phone: it stays.
