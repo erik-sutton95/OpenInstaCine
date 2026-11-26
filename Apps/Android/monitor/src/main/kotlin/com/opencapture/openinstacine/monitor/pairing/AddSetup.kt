@@ -20,7 +20,7 @@ import com.opencapture.opencine.core.SavedCamera
 import com.opencapture.opencine.platform.SharedWiFiPath
 import com.opencapture.openinstacine.monitor.AppModel
 
-/** This app's words and camera access-point naming (`Luna Ultra …`) for OpenCine's station-network wizard. */
+/** This app's words and camera access-point naming (`Luna Ultra …`, `Luna Pro …`) for OpenCine's station-network wizard. */
 val INSTA_STATION_BRAND = StationNetworkBrand(appName = "OpenInstaCine", cameraFamily = "Luna", cameraNetworkPrefix = "luna")
 
 /** A confirmed wizard network as the setup the Luna integration adds and moves the camera to. */
