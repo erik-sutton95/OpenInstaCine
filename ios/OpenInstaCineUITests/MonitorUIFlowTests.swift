@@ -1501,7 +1501,7 @@ final class MonitorUIFlowTests: SharedAppUITestCase {
         app.launchEnvironment.merge(ReviewLaunch(screen: .cameras, state: "saved-nearby").environment) { $1 }
         app.launch()
         rotate(.portrait)
-        let pair = app.buttons["Pair Luna Ultra 4D5E6F"]
+        let pair = app.buttons["Pair Luna 4D5E6F"]
         XCTAssertTrue(pair.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Insta360 · nearby"].exists)
         XCTAssertTrue(app.staticTexts["Needs approval on the camera"].exists)

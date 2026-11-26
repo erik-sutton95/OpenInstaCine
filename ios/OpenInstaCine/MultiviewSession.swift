@@ -66,7 +66,8 @@ final class MultiviewSession {
         func configureSession() {
             link.lunaSession.configureShutter(
                 presentation: OperatorPrefs.shutterUsesAngle ? .emulatedAngle : .cameraValue)
-            link.lunaSession.configureLens(zoomDomain: 1...session.zoomCeiling)
+            link.lunaSession.configureLens(
+                zoomDomain: 1...(backend.connectedModel?.maximumZoom ?? session.zoomCeiling))
         }
 
         /// Re-grades the picture when what it carries changed, while no Live View borrows it.
@@ -265,7 +266,7 @@ extension MultiviewSession: MultiviewHost {
         let status = tile.session.status
         let snapshot = tile.link.snapshot
         return MultiviewTileReadings(
-            name: camera.name, model: LunaShellMapping.cameraModel.name,
+            name: camera.name, model: tile.backend.connectedModel?.name ?? LunaShellMapping.cameraModel.name,
             format: MultiviewReadings.format(status), storage: MultiviewReadings.storage(snapshot.storage),
             timecode: status.timecode, readouts: MultiviewReadings.readouts(status),
             recordingSeconds: status.recordElapsedSec, power: snapshot.power,

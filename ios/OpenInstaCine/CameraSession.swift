@@ -65,6 +65,9 @@ final class CameraSession {
     /// WB Mode AWB Lock. Cleared like `autoExposureLock` when status stops holding it.
     var autoWhiteBalanceLock: AutoWhiteBalanceLock?
     private(set) var connectedCamera: FoundCamera?
+    /// The connected body once the backend identified it (`LunaModel`); `nil` before. Its zoom
+    /// presets, ceiling and telephoto drive the zoom controls.
+    private(set) var lunaModel: LunaModel?
     private(set) var joinedSSID: String?
     /// The shared connection flow's port (`LunaIntegration`) listens here: every backend event
     /// after this session has applied it.
@@ -364,7 +367,8 @@ final class CameraSession {
     @ObservationIgnored var zoomWriteRevision: UInt64 = 0
     var zoomPin: CameraValuePin<Double>?
     var zoomOptimistic: Double? { zoomPin?.expected }
-    /// Highest zoom the body accepts (fw 1.1.15 raised this; see LunaShellMapping).
+    /// Highest zoom the body accepts (fw 1.1.15 raised this; see LunaShellMapping); the
+    /// identified body's own once the connection read it.
     @ObservationIgnored var zoomCeiling = LunaShellMapping.defaultZoomCeiling
     /// A format change still settling: the shell format pin or the native Luna format pin.
     var isFormatPinActive: Bool { pins.format != nil || nativeFormatPin != nil }
@@ -553,7 +557,9 @@ final class CameraSession {
         runTask?.cancel()
         reconnectTarget = nil
         isReconnecting = preserveMonitor
-        connectedCamera = camera
+        // A reconnect of the same camera keeps its identified body until the link reads it again.
+        if connectedCamera?.id != camera.id { identify(nil) }
+        connectedCamera = lunaModel.map { camera.identified(as: $0) } ?? camera
         configureMediaLibrary()
         connectionTargetID = camera.id
         if !incidentSessionActive { beginFeedIncidentSession() }
@@ -684,6 +690,7 @@ final class CameraSession {
             }
         case .information(let info):
             status.firmware = info.firmware
+            identify(LunaModel.identify(info.model))
         case .joinedWiFi(let ssid):
             joinedSSID = ssid
         case .videoAccessUnit(let data, let milliseconds):
@@ -1463,6 +1470,7 @@ final class CameraSession {
 /// recovery and feed exactly as for its own reconnects.
 extension CameraSession: LunaConnectPort {
     var connectedSerial: String? { backend.connectedSerial }
+    var connectedModel: LunaModel? { backend.connectedModel }
     var joinedNetwork: String? { backend.joinedNetwork }
 
     func startScan() async throws { try await backend.startScan() }
@@ -1472,6 +1480,14 @@ extension CameraSession: LunaConnectPort {
     func hasSeen(_ cameraID: UUID) -> Bool { backend.hasSeen(cameraID) }
 
     func hasSavedWiFi(cameraID: UUID) -> Bool { backend.hasSavedWiFi(cameraID: cameraID) }
+
+    /// The body the link read: its name on the connected camera, its presets and zoom ceiling
+    /// (Luna Pro 1x to 4x without a 3x stop). `nil` is a body not known yet.
+    func identify(_ body: LunaModel?) {
+        lunaModel = body
+        zoomCeiling = body?.maximumZoom ?? LunaShellMapping.defaultZoomCeiling
+        if let body, let camera = connectedCamera { connectedCamera = camera.identified(as: body) }
+    }
 
     /// Camera Wi-Fi, as before Wi-Fi and hotspot setups.
     func connect(to camera: MonitorCamera) async throws {

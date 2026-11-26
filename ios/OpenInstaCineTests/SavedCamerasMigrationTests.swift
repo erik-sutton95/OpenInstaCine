@@ -141,6 +141,7 @@ final class SavedCamerasMigrationTests: XCTestCase {
         port.joinedNetwork = "LUNA-AABBCC"
         model.connect(model.nearby[0])
         try await until { port.connects.count == 2 }
+        port.connectedModel = .ultra
         port.finishConnect()
         try await until { model.saved.count == 3 }
 
@@ -152,7 +153,8 @@ final class SavedCamerasMigrationTests: XCTestCase {
         XCTAssertEqual(old[1].lastConnectedAt, connectedAt)
         XCTAssertEqual(old[1].wifiSSID, "Studio")
         XCTAssertEqual(old[1].hotspotSSID, "Rig iPhone")
-        XCTAssertEqual(old[2].advertisedName, "Luna Ultra AABBCC")
+        // A sighting carries the family name; the connection names the body it identified.
+        XCTAssertEqual(old[2].advertisedName, "Luna AABBCC")
         XCTAssertEqual(old[2].modelName, "Luna Ultra")
         XCTAssertEqual(old[2].lastSSID, "LUNA-AABBCC")
         XCTAssertEqual(old[2].lastSetup, .cameraWiFi)

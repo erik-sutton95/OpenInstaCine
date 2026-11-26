@@ -69,7 +69,8 @@ private struct InstaSetupDestination: View {
 /// This app's brand words and Luna services for OpenCine's station-network wizard.
 @MainActor
 enum InstaStationNetwork {
-    /// Luna access points are named after the camera ("Luna Ultra 1A2B3C.OSC").
+    /// Luna access points are named after the camera ("Luna Ultra 1A2B3C.OSC"; a Luna Pro's
+    /// presumably "Luna Pro ...", untested).
     static let brand = StationNetworkBrand(
         appName: "OpenInstaCine", cameraFamily: "Luna", cameraNetworkPrefix: "luna")
 

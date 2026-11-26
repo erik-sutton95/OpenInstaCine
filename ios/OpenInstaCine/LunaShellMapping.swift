@@ -24,20 +24,29 @@ struct LunaControlPins {
 /// Luna ↔ shared monitor vocabulary. Wire numbers stay in `Insta360Protocol`;
 /// everything the shared screens read goes through here.
 enum LunaShellMapping {
-    static let cameraModel = CameraModel(
-        name: "Luna Ultra", datalinkPort: 0, tcpPoke: false, verified: true,
-        captureProfile: CameraCaptureProfile(labels: profile, supportsFocusMode: true,
-            supportsTapFocus: true, supportsAperture: false, hasGimbal: true,
-            supportsZoom: true, zoom: CameraZoomProfile(stops: zoomChips), looks: lookProfile))
+    /// A Luna before its body is known (a sighting advertises no model): the family name, with
+    /// the zoom presets every Luna had before the Luna Pro.
+    static let cameraModel = cameraModel(for: nil)
+
+    /// The monitor's camera model for `body` (`LunaModel`, OpenCine): its name and zoom presets.
+    static func cameraModel(for body: LunaModel?) -> CameraModel {
+        CameraModel(
+            name: body?.name ?? LunaModel.familyName, datalinkPort: 0, tcpPoke: false, verified: true,
+            captureProfile: CameraCaptureProfile(labels: profile, supportsFocusMode: true,
+                supportsTapFocus: true, supportsAperture: false, hasGimbal: true,
+                supportsZoom: true, zoom: CameraZoomProfile(stops: body?.zoomPresets ?? zoomChips),
+                looks: lookProfile))
+    }
     static let lookProfile = CameraLUTProfile(automatic: [.iLog: .iLogRec709],
         selections: [.iLogRec709: .iLogRec709])
 
     /// Observed preview: 1280×720 HEVC at 25 fps.
     static let previewFPS: Double = 25
-    /// fw 1.1.15 verified: 1.0…15.0 (values outside are ignored, not clamped).
-    static let defaultZoomCeiling: Double = 15
-    /// fw 1.1.15 official presets.
-    static let zoomChips: [Double] = [1, 2, 3, 6, 15]
+    /// fw 1.1.15 verified: 1.0…15.0 (values outside are ignored, not clamped). A body the
+    /// connection identified uses its own (`LunaModel.maximumZoom`; Luna Pro 4x).
+    static let defaultZoomCeiling: Double = LunaModel.ultra.maximumZoom
+    /// fw 1.1.15 official presets (Luna Ultra); an identified body uses `LunaModel.zoomPresets`.
+    static let zoomChips: [Double] = LunaModel.ultra.zoomPresets
 
     /// Luna names and media addressing for a session: every file at its own path on the camera AP.
     static let profile = CameraLabelProfile(
