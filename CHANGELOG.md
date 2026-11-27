@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Added
+
+- Mac: the module runs optimized for Mac, so text and controls show at normal Mac size instead of
+  the whole window scaled to 77 %. In the dock the picture is centred below the status row with no
+  dark band above it, a window stays at least 800 by 600, and the scroll wheel steps ISO, shutter,
+  WB and the other dial settings while the pointer rests on one or its popup is open (a mouse
+  detent is one step, a trackpad steps every short distance, down or right is the next value; a
+  fast spin sends the latest value). The iOS and Android apps are unchanged (OpenCine #403).
+- Mac: in the dock the camera window works like a desktop app. The title bar is a toolbar with
+  the tabs, the take (STBY or REC and the timecode), and real Media and Settings buttons. One status
+  row under it shows link, battery, card, format, log profile, mode and audio, and the picture starts
+  below it. There is no interface lock on the Mac. Keys: ⌘R record, ⌘, settings, ⌘⇧M media,
+  ⌘1 to ⌘9 a tab, ⌃⇥ and ⌃⇧⇥ the next and previous tab, D the display overlays. Its tab is named Insta360 (was Luna); the webcam input keeps its name. The iOS
+  and Android apps are unchanged (OpenCine #403).
+- Mac: the app also builds as the Insta360 camera module of the OpenCine desktop app (Mac Catalyst,
+  `just macos-build`, manifest in `macos/module.json`). Started by OpenCine, it feeds the clean
+  camera picture to its own webcam input and runs without a Dock icon; the operator joins the
+  camera Wi-Fi in macOS. Its window carries the dock's camera tabs in the title bar and moves like
+  any Mac window (needs OpenCine 0.2.0). The iPhone and Android apps are unchanged. Built only, not yet tested
+  with a camera.
+- Mac: pairing a Luna moves the camera onto the Mac's network (a router or venue Wi-Fi the Mac
+  reaches by Wi-Fi or Ethernet) instead of asking the operator to join the camera's Wi-Fi in
+  macOS. The network and its password are asked for once and reused for every camera after
+  that, with Change network on the pair page. The iPhone and Android apps are unchanged
+  (OpenCine #403). The network page names the Mac's current Wi-Fi and the networks it sees
+  nearby (Location allowed); with nothing to list, Other network is its first row and a line
+  says why.
+
 ### Fixed
 
 - Recording in I-Log with Color Recovery no longer stops the take: when the record start pauses

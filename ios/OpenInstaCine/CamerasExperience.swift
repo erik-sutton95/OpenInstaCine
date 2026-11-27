@@ -39,11 +39,10 @@ struct LinkExperience: View {
                 pair: {
                     model.shell.beginPairing()
                     if let sighting = model.cameras.nearby.first(where: { $0.id == model.cameras.selection }) {
-                        model.cameras.connect(sighting)
+                        model.pair(sighting)
                     }
                 }),
-            pairingFlow: model.pairingWizard().flow(
-                model.cameras, onDone: { model.shell.endPairing() }, rescan: { model.integration.retryDiscovery() }),
+            pairingFlow: model.pairingFlow(),
             coverPresentation: .shell
         ) { _ in
             LiveViewScreen()
@@ -85,18 +84,34 @@ extension AppModel {
     /// still-looking hint once `CamerasModel.scanLooksEmpty` fires), the session's live label,
     /// a Bluetooth failure, the camera Wi-Fi joined and a local VPN.
     func pairingWizard() -> PairingWizard {
-        PairingWizard(
-            bodies: [
+        #if targetEnvironment(macCatalyst)
+            // The Mac cannot join the camera's Wi-Fi: the camera joins the Mac's network.
+            let bodies = [
+                "Turn the Luna on and keep it near this Mac. It shows up by the last characters of its serial number.",
+                "If the camera asks to allow this Mac, tap Allow on its screen. First-time pairing can wait up to 90 seconds.",
+                "",  // The shared wizard words the Mac's network step.
+                "Exposure, LUTs and scopes go live as soon as the video link is up.",
+            ]
+            let joinLines = [
+                "Leave the camera on. It moves onto your network",
+                "Close the Insta360 app on other phones so the camera is free",
+            ]
+        #else
+            let bodies = [
                 "Turn the Luna on and keep this iPhone nearby. It shows up by the last characters of its serial number.",
                 "If the camera asks to allow this iPhone, tap Allow on its screen. First-time pairing can wait up to 90 seconds.",
                 "We read the camera's Wi-Fi over Bluetooth, then join it for you.",
                 "Exposure, LUTs and scopes go live as soon as the video link is up.",
-            ],
-            approveLines: ["Look for the connection request", "Tap Allow on the camera screen"],
-            joinLines: [
+            ]
+            let joinLines = [
                 "Leave the camera on. It brings up its own 5 GHz Wi-Fi",
                 "Close the Insta360 app on other phones so the camera is free",
-            ],
+            ]
+        #endif
+        return PairingWizard(
+            bodies: bodies,
+            approveLines: ["Look for the connection request", "Tap Allow on the camera screen"],
+            joinLines: joinLines,
             choosing: cameras.scanLooksEmpty
                 ? .init(
                     title: StartupConnectionCopy.scanEmptyTitle, icon: .camera,
@@ -106,6 +121,35 @@ extension AppModel {
             label: liveLabel,
             discoveryFailure: discoveryFailure, joinedNetwork: session.joinedSSID,
             vpnActive: LocalVPNProbe.isActive())
+    }
+
+    /// The wizard with its actions on the pair page. On the Mac, Continue joins the camera to the
+    /// camera network (asked once) and the page shows that network with Change network.
+    func pairingFlow() -> IntegrationPairingFlow {
+        let wizard = pairingWizard()
+        let done = { [weak self] in self?.shell.endPairing() ?? () }
+        let rescan = { [weak self] in self?.integration.retryDiscovery() ?? () }
+        #if targetEnvironment(macCatalyst)
+            return wizard.flow(
+                cameras, host: .mac, stationNetwork: cameraNetwork.network,
+                connect: { [weak self] in self?.pair($0) },
+                content: AnyView(
+                    CameraNetworkPairingView(
+                        pairing: cameraNetwork, model: cameras, brand: InstaStationNetwork.brand,
+                        services: InstaStationNetwork.services(session.backend))),
+                onDone: done, rescan: rescan)
+        #else
+            return wizard.flow(cameras, onDone: done, rescan: rescan)
+        #endif
+    }
+
+    /// Pairs a nearby camera: its own Wi-Fi on iPhone and iPad, the camera network on the Mac.
+    func pair(_ sighting: CamerasModel.Sighting) {
+        #if targetEnvironment(macCatalyst)
+            Task { await cameraNetwork.pair(sighting, in: cameras) }
+        #else
+            cameras.connect(sighting)
+        #endif
     }
 
     /// Main's live label: the scan while choosing, then the session's phase (a connect starts at

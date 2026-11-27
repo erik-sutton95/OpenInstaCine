@@ -26,9 +26,22 @@ struct MediaLibraryView: View {
     private var isLive: Bool { library.canRefresh }
     private var operations: MonitorMediaGalleryOperations<LunaMediaLibraryPayload> {
         if isLive {
-            return .init(download: { record in await session.download(file: record.payload.file) },
+            // Save and Share need the camera's file bytes; while it does not share them here
+            // (``CameraFileAccess``), only items already on this device share. Open stays: the
+            // player says why an on-camera clip cannot play.
+            let session = session
+            var download: (@MainActor (MonitorMediaRecord<LunaMediaLibraryPayload>) async -> Void)?
+            if session.cameraFileAccess.allowsFileTransfer {
+                download = { record in await session.download(file: record.payload.file) }
+            }
+            let access: @MainActor (MonitorMediaRecord<LunaMediaLibraryPayload>) -> MonitorMediaGalleryAccess = { record in
+                let held = session.cameraFileActions(for: record.payload.file)
+                return MonitorMediaGalleryAccess(download: held.download, share: held.share)
+            }
+            return .init(download: download,
                 delete: { record in await session.deleteMedia(record.payload.file) },
-                favorite: { record in session.toggleFavorite(record.payload.file) })
+                favorite: { record in session.toggleFavorite(record.payload.file) },
+                access: access)
         }
         return .init(favorite: { record in session.toggleFavorite(record.payload.file) })
     }

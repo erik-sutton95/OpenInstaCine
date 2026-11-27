@@ -1,5 +1,8 @@
 import Foundation
+import Insta360Apple
 import Insta360Protocol
+import MonitorUI
+import OpenCineCore
 import OpenCineAppKit
 import OpenCineMedia
 import OpenInstaViewCore
@@ -31,9 +34,9 @@ enum MediaOperatorCopy {
     private var storageWinner: [String: Int] = [:]
     private var colorMapCache: (cameraID: String, map: [String: Int])?
     init(fileManager: FileManager = .default, httpConfiguration: URLSessionConfiguration = .ephemeral,
-        storage: MonitorMediaCacheStorage? = nil, cacheRoot: URL? = nil) {
+        storage: MonitorMediaCacheStorage? = nil, cacheRoot: URL? = nil, refusals: CameraFileRefusals = .shared) {
         self.fileManager = fileManager; self.storage = storage ?? MonitorMediaCacheStorage(fileManager: fileManager)
-        nativeIO = LunaNativeMediaIO(configuration: httpConfiguration); rootOverride = cacheRoot
+        nativeIO = LunaNativeMediaIO(configuration: httpConfiguration, refusals: refusals); rootOverride = cacheRoot
     }
     func cacheRoot(cameraID: String) -> URL {
         if let rootOverride { return rootOverride.appendingPathComponent(cameraID, isDirectory: true) }
@@ -183,6 +186,28 @@ extension CameraSession {
         return route
     }
 
+    /// Whether this connection can fetch the camera's files: the route it reached the camera on,
+    /// then any "service restricted" answer since it connected. Without a live connection the
+    /// existing connection rules decide, so this is `.available`.
+    var cameraFileAccess: CameraFileAccess {
+        guard canReachCameraMedia else { return .available }
+        let host = backend.cameraHost
+        var station: LunaStationNetwork?
+        if let id = connectedCamera?.id, case .station(let network) = backend.reconnectRoute(for: id) {
+            station = network
+        }
+        return .resolve(cameraHost: host, station: station,
+            refused: fileRefusals.refused(host: host, after: fileRefusalBaseline))
+    }
+    /// What the operator reads where a camera file action cannot run; nil while it can.
+    var cameraFileAccessMessage: String? { cameraFileAccess.message(host: HostDevice.current) }
+    /// Clip, original and share bytes can come from the camera now.
+    var canFetchCameraFiles: Bool { canReachCameraMedia && cameraFileAccess.allowsFileTransfer }
+    /// Share and Save for one item over this connection (``CameraFileAccess/heldActions(onDevice:)``).
+    func cameraFileActions(for file: MediaFile) -> (share: Bool?, download: Bool?) {
+        cameraFileAccess.heldActions(onDevice: isDownloaded(file))
+    }
+
     func configureMediaLibrary(service: (any CameraMediaService)? = nil) {
         // The shared media service hands the live restart back through this hook. Drop the live
         // format and wait for an IDR first, so a long gallery visit cannot decode against stale
@@ -274,14 +299,14 @@ extension CameraSession {
     /// this connection cannot serve it.
     func originalImageBytes(for file: MediaFile,
         ifCurrent: @escaping @MainActor () -> Bool) async -> Data? {
-        guard file.kind == .photo, canReachCameraMedia, let library = mediaLibrary,
+        guard file.kind == .photo, canFetchCameraFiles, let library = mediaLibrary,
             let record = mediaRecord(for: file), let source = backend.session, source.admitsControl,
             let url = MediaHTTP.pathURL(storage: file.storage, path: file.path, route: mediaRoute)
         else { return nil }
         let epoch = source.current.epoch, generation = connectGeneration
         let camera = connectedCamera?.id, cameraID = mediaCameraID, transport = cameraMedia.nativeIO
         let current: @MainActor () -> Bool = { [weak self] in
-            guard let self, self.canReachCameraMedia, self.mediaLibrary === library,
+            guard let self, self.canFetchCameraFiles, self.mediaLibrary === library,
                 self.backend.session === source, source.admitsControl, source.current.epoch == epoch,
                 self.connectGeneration == generation, self.connectedCamera?.id == camera,
                 self.mediaCameraID == cameraID,
@@ -304,6 +329,10 @@ extension CameraSession {
     }
     func download(file: MediaFile) async {
         guard let id = mediaRecord(for: file)?.asset.id else { return }
+        // The camera does not share its files over this connection: say so, request nothing.
+        if let refusal = cameraFileAccessMessage {
+            playbackMediaNote = refusal; return
+        }
         do { _ = try await mediaLibrary.cacheOriginal(id) }
         catch { playbackMediaNote = MediaOperatorCopy.downloadFailed }
     }

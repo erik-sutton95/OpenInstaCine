@@ -44,7 +44,12 @@ extension AppModel {
                 self?.session === session && session.mediaLibrary === library
                     && session.mediaCameraID == cameraID && directory.generation == generation
             },
-            connected: { if case .live = session.phase { return true }; return false },
+            // A camera that does not share its files here cannot fill the selection's on-camera
+            // clips: the popup skips them instead of starting a copy that fails.
+            connected: {
+                if case .live = session.phase { return session.cameraFileAccess.allowsFileTransfer }
+                return false
+            },
             cameraName: { session.connectedCamera?.model.name },
             isDownloaded: session.isDownloaded, download: { await session.download(file: $0) },
             downloadProgress: session.mediaDownloadProgress(for:),

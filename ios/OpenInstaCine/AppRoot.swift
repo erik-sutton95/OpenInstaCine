@@ -7,6 +7,9 @@ import OpenCineAppKit
 import OpenCineAppKitApple
 import OpenCineApple
 import OpenCineCameraControls
+#if targetEnvironment(macCatalyst)
+    import OpenCineVirtualCamera
+#endif
 import OpenCineCore
 import OpenCineFrameIO
 import OpenCineFrameIOApple
@@ -41,6 +44,11 @@ final class AppModel {
     /// Live streaming (the shared OpenCine coordinator); only the app's root model streams, never
     /// a Multiview tile's borrowed model.
     private(set) var liveStream: LiveStreamCoordinator?
+    #if targetEnvironment(macCatalyst)
+        /// The network new cameras join on the Mac: asked for once, then reused (a Mac cannot join a
+        /// camera's own Wi-Fi). Its password stays in the Luna backend's saved setups.
+        let cameraNetwork: CameraNetworkPairing
+    #endif
 
     init(session: CameraSession? = nil) {
         #if targetEnvironment(simulator)
@@ -76,6 +84,16 @@ final class AppModel {
         cameras = model
         self.cameras = model
         shell = ShellModel(cameras: model, control: session.control)
+        #if targetEnvironment(macCatalyst)
+            cameraNetwork = CameraNetworkPairing(
+                store: CameraNetworkStore(defaults: defaults, key: "desktop.cameraNetwork"),
+                password: { backend.stationPassword(for: $0, hotspot: false) },
+                savePassword: {
+                    backend.saveStation(LunaStationNetwork(ssid: $0.ssid, password: $0.password, hotspot: false))
+                },
+                // A Mac names its Wi-Fi only through CoreWLAN (OpenCine's ComputerWiFi).
+                currentNetwork: { await ComputerWiFi.currentNetwork() })
+        #endif
         integration.onDiscoveryFailure = { [weak self] in self?.discoveryFailure = $0 }
         // A setup that moves the camera is remembered before it moves it.
         integration.saveRecord = { [weak model] in model?.upsert($0) }
@@ -116,6 +134,10 @@ final class AppModel {
     static func makeBackend() -> LunaCameraBackend {
         #if targetEnvironment(simulator)
             LunaCameraBackend(useExistingNetwork: true, configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO())
+        #elseif targetEnvironment(macCatalyst)
+            // Bluetooth pairs and reads the camera Wi-Fi. A Mac has no hotspot configuration API,
+            // so the operator joins that network in macOS (LunaWiFi.join says so).
+            LunaCameraBackend(configuration: lunaConfiguration, mediaIO: LunaNativeMediaIO())
         #else
             // One hotspot owner for this backend's lifetime. Luna keeps waiting for a pending
             // native join after its own 35 s timeout (the system Join alert may still be up).
@@ -129,7 +151,10 @@ final class AppModel {
     static let lunaConfiguration = LunaIntegrationConfiguration(
         keychainService: "org.opencine.openinstacine.camera", appName: "OpenInstaCine",
         logPrefix: "OpenInstaCine")
+    // OpenCineWatch has no WatchRelay on Mac Catalyst: a Mac has no paired watch.
+    #if !targetEnvironment(macCatalyst)
     @ObservationIgnored let watchRelay = WatchRelay()
+    #endif
     @ObservationIgnored private var watchRelayActivated = false
     @ObservationIgnored private(set) var watchCommandSource: LunaCommandAdmission?
     @ObservationIgnored private(set) var watchSourceSession: LunaCameraSession?
@@ -666,7 +691,9 @@ final class AppModel {
     func noteLeftLive() {
         operatorSession.close()
         captureSheet = nil
+        #if !targetEnvironment(macCatalyst)
         watchRelay.retireSource()
+        #endif
         watchCommandSource = nil
         watchSourceSession = nil
         watchSourceEpoch = nil
@@ -751,6 +778,7 @@ final class AppModel {
     }
 
     func activateWatchRelay() {
+        #if !targetEnvironment(macCatalyst)
         guard !watchRelayActivated else { return }
         watchRelayActivated = true
         watchRelay.onToggleRecord = { [weak self] in
@@ -793,9 +821,18 @@ final class AppModel {
         }
         watchRelay.activate()
         publishWatchState()
+        #else
+            // No watch on a Mac. The same clean preview tap feeds this module's webcam input, and
+            // asks for decoded frames whether or not a picture is presented.
+            if let host = DesktopModuleHost.current {
+                session.decoder.needsWatchPreview = true
+                session.decoder.onWatchPreview = { image, _, _ in host.publish(image) }
+            }
+        #endif
     }
 
     func publishWatchState() {
+        #if !targetEnvironment(macCatalyst)
         let target = session.lunaSession
         let commandSource = target.map {
             LunaCommandAdmission(owner: $0.commandOwner, isCurrent: { true })
@@ -818,6 +855,7 @@ final class AppModel {
                 feedLive: session.decoder.lastPresentedAt != nil,
                 power: control.snapshot?.power ?? .unknown,
                 storage: control.snapshot?.storage ?? .unknown))
+        #endif
     }
 
     // MARK: Remote shutter (A2-32)
